@@ -695,16 +695,22 @@
                     <h3 class="font-bold text-gray-900 mb-3">Try asking me:</h3>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <button onclick="processSuggestion('What\'s the weather like today?')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            What's the weather like today?
+                            ☀️ What's the weather?
                         </button>
-                        <button onclick="processSuggestion('Add milk to my shopping list')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            Add milk to my shopping list
+                        <button onclick="processSuggestion('Add 2 pounds of chicken to my shopping list')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
+                            🛒 Add 2 lbs chicken to list
                         </button>
-                        <button onclick="processSuggestion('Remind me to call mom tomorrow')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            Remind me to call mom tomorrow
+                        <button onclick="processSuggestion('Remind me to call mom at 5pm')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
+                            ⏰ Remind me to call mom
                         </button>
                         <button onclick="processSuggestion('My car keys are on the counter')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            My car keys are on the counter
+                            🔑 My keys are on counter
+                        </button>
+                        <button onclick="processSuggestion('What can you do?')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
+                            ❓ What can you do?
+                        </button>
+                        <button onclick="processSuggestion('Plan a weekend trip to Paris')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
+                            ✈️ Plan a trip to Paris
                         </button>
                     </div>
                 </div>
@@ -730,8 +736,18 @@
                     placeholder="Ask anything..."
                     class="flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-500"
                     onkeypress="if(event.key === 'Enter') sendTextInput()"
+                    oninput="toggleSendButton()"
                 />
                 
+                <!-- Send Button (shows when typing) -->
+                <button onclick="sendTextInput()" id="send-btn" class="hidden flex-shrink-0 p-2 rounded-full bg-purple-600 hover:bg-purple-700 transition-all">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+                
+                <!-- Voice Button (shows when not typing) -->
                 <button onclick="toggleListening()" id="voice-btn" class="flex-shrink-0 p-2 rounded-full bg-gray-900 hover:bg-gray-800 transition-all">
                     <svg id="mic-icon-bottom" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
                         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -750,6 +766,1774 @@
         </div>
     </div>
 
-<script src="script.js"></script>
+<script>
+// ========== GEMINI AI INTEGRATION ==========
+let conversationContext = [];
+
+async function askGeminiAI(userMessage) {
+    try {
+        console.log('🤖 Calling Gemini AI with:', userMessage);
+        
+        conversationContext.push({ role: 'user', text: userMessage });
+        if (conversationContext.length > 6) {
+            conversationContext = conversationContext.slice(-6);
+        }
+        
+        const contextMessages = conversationContext.map(msg => 
+            `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`
+        ).join('\n');
+        
+        const systemPrompt = `You are Unify, a helpful voice assistant. The user's name is ${userName || 'User'}.
+
+Your capabilities:
+- Weather (say "check weather")
+- Shopping lists (say "manage shopping")  
+- Reminders (say "set reminder")
+- Memory (remembering where things are)
+
+For casual conversation, be friendly and natural.
+For name corrections like "no, my name is X", extract the name.
+
+Recent conversation:
+${contextMessages}
+
+Respond conversationally and naturally.`;
+
+        console.log('📡 Sending request to /api/chat...');
+        
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: userMessage,
+                systemPrompt: systemPrompt,
+                userName: userName
+            })
+        });
+        
+        console.log('📬 Response status:', response.status, response.statusText);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ API Error Response:', errorText);
+            throw new Error(`AI request failed: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('✅ AI Response received:', data);
+        
+        conversationContext.push({ role: 'assistant', text: data.response || data.text });
+        
+        return data;
+    } catch (error) {
+        console.error('💥 AI error:', error);
+        // Better error handling - try to be helpful
+        return {
+            response: "I'm not quite sure what you mean. Could you try rephrasing that? Or ask 'What can you do?' to see what I can help with!",
+            intent: 'error'
+        };
+    }
+}
+
+async function handleNameCorrection(text) {
+    const patterns = [
+        /(?:no|nah|nope|actually|wrong),?\s*(?:my name is|i'm|i am|it's|call me)\s+([^,.!?]+)/i,
+        /(?:my name is|i'm|i am|it's|call me)\s+([^,.!?]+)/i
+    ];
+    
+    let newName = '';
+    for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+            newName = match[1].trim();
+            break;
+        }
+    }
+    
+    if (!newName) {
+        const aiResponse = await askGeminiAI(`Extract just the name from: "${text}"`);
+        newName = aiResponse.response;
+    }
+    
+    newName = newName.replace(/[?.!,]$/g, '').trim();
+    newName = newName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    
+    const isHarsh = /idiot|stupid|dumb|moron|fool/i.test(text);
+    userName = newName;
+    saveUserData();
+    
+    const response = isHarsh 
+        ? `I apologize! I've updated your name to ${userName}.`
+        : `Got it! I've updated your name to ${userName}.`;
+    
+    addChatMessage(response, false);
+    speak(response);
+}
+
+        // ========== STATE VARIABLES ==========
+        let darkMode = false;
+        let recognition = null;
+        let continuousRecognition = null;
+        let isListening = false;
+        let synth = window.speechSynthesis;
+        let reminders = [];
+        let weather = null;
+        let waitingForLocation = false;
+        let waitingForReminder = false;
+        let chatHistory = [];
+        let micPermissionGranted = false;
+        
+        // New state variables
+        let userName = null;
+        let waitingForName = false;
+        let shoppingList = [];
+        let memoryStore = {}; // Store user's personal information
+
+        // ========== INITIALIZATION ==========
+        window.onload = async () => {
+            await requestMicrophonePermission();
+            loadUserData();
+            checkReminders();
+            
+            // Check if user has a name stored
+            if (!userName) {
+                waitingForName = true;
+                const welcomeMsg = "Hi! I'm Unify. What's your name?";
+                addChatMessage(welcomeMsg, false);
+                speak(welcomeMsg);
+            } else {
+                const welcomeMsg = `Hi ${userName}! How can I help you today?`;
+                addChatMessage(welcomeMsg, false);
+                speak(welcomeMsg);
+                
+                // Add helpful hint after welcome
+                setTimeout(() => {
+                    const hintMsg = `💡 Try saying things like:\n• "What's the weather?"\n• "Add 2 pounds of chicken to my shopping list"\n• "Remind me to call mom at 5pm"\n• "My keys are on the counter"\n\nOr just ask "What can you do?"`;
+                    addChatMessage(hintMsg, false);
+                }, 2000); // Show after 2 seconds
+            }
+        };
+
+        async function requestMicrophonePermission() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => track.stop());
+                micPermissionGranted = true;
+                console.log('Microphone permission granted');
+                initializeSpeechRecognition();
+            } catch (error) {
+                console.error('Microphone permission denied:', error);
+                micPermissionGranted = false;
+                const errorMsg = "Microphone access denied. Please enable it in your browser settings to use voice features.";
+                addChatMessage(errorMsg, false);
+            }
+        }
+
+        // ========== DARK MODE & LIGHT SWITCH ==========
+        function toggleDarkMode() {
+            darkMode = !darkMode;
+            const body = document.body;
+            const card = document.getElementById('main-card');
+            const title = document.getElementById('title');
+            const subtitle = document.getElementById('subtitle');
+            const chatContainer = document.getElementById('chat-container');
+            const lightSwitch = document.getElementById('light-switch');
+            const tubeLight = document.getElementById('tube-light');
+            const weatherEffects = document.getElementById('weather-effects');
+            const receipt = document.getElementById('shopping-receipt');
+            
+            if (darkMode) {
+                // Turn OFF the light (dark mode) - INSTANT
+                lightSwitch.classList.remove('on');
+                tubeLight.classList.remove('on', 'starting');
+                
+                // Clear weather effects in dark mode
+                if (weatherEffects) weatherEffects.innerHTML = '';
+                
+                // Immediate dark mode
+                body.classList.remove('light');
+                body.classList.add('dark');
+                body.style.background = '#000';
+                body.style.filter = 'none';
+                card.className = 'bg-gray-900 bg-opacity-90 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-gray-700 mb-6';
+                title.className = 'text-4xl font-black text-white';
+                subtitle.className = 'text-sm text-gray-300';
+                if (chatContainer) chatContainer.className = 'bg-gray-800 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6';
+                if (receipt) receipt.classList.add('dark-mode');
+            } else {
+                // Turn ON the light (light mode) - DELAYED with tube light startup
+                lightSwitch.classList.add('on');
+                
+                // Start tube light flicker animation
+                tubeLight.classList.add('starting');
+                
+                // Wait for tube light to fully glow before switching to light mode
+                setTimeout(() => {
+                    tubeLight.classList.remove('starting');
+                    tubeLight.classList.add('on');
+                    
+                    // Now switch to light mode after tube light is on
+                    body.classList.remove('dark');
+                    body.classList.add('light');
+                    
+                    // Restore weather effects or default background
+                    if (weather && weather.current) {
+                        createWeatherEffect(weather.current.weather_code, Math.round(weather.current.temperature_2m));
+                    } else {
+                        body.style.background = 'linear-gradient(to bottom right, #fce7f3, #e9d5ff, #c7d2fe)';
+                        body.style.filter = 'none';
+                    }
+                    
+                    card.className = 'bg-white bg-opacity-80 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white border-opacity-50 mb-6';
+                    title.className = 'text-4xl font-black text-gray-900';
+                    subtitle.className = 'text-sm text-gray-600';
+                    if (chatContainer) chatContainer.className = 'bg-gray-50 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6';
+                    if (receipt) receipt.classList.remove('dark-mode');
+                }, 800); // Match the tube light startup animation duration
+            }
+        }
+
+        // ========== CHAT MESSAGE HANDLING ==========
+        function addChatMessage(text, isUser = true) {
+            const chatContainer = document.getElementById('chat-container');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-2 fade-in`;
+            
+            // Convert newlines to <br> tags for proper display
+            const formattedText = escapeHtml(text).replace(/\n/g, '<br>');
+            
+            if (isUser) {
+                messageDiv.innerHTML = `
+                    <div class="bg-purple-500 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md shadow-sm">
+                        <p class="text-sm">${formattedText}</p>
+                    </div>
+                `;
+            } else {
+                const bgClass = darkMode ? 'bg-gray-700' : 'bg-white';
+                const textClass = darkMode ? 'text-gray-200' : 'text-gray-800';
+                
+                messageDiv.innerHTML = `
+                    <div class="flex items-start gap-2 max-w-md">
+                        <div class="${bgClass} rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex-1">
+                            <p class="text-sm ${textClass}">${formattedText}</p>
+                        </div>
+                        <button onclick="speak(\`${text.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`)" class="flex-shrink-0 p-2 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-all">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                            </svg>
+                        </button>
+                    </div>
+                `;
+            }
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            chatHistory.push({ text, isUser });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function toggleSendButton() {
+            const input = document.getElementById('text-input');
+            const sendBtn = document.getElementById('send-btn');
+            const voiceBtn = document.getElementById('voice-btn');
+            
+            if (input.value.trim().length > 0) {
+                // Show send button, hide voice button
+                sendBtn.classList.remove('hidden');
+                voiceBtn.classList.add('hidden');
+            } else {
+                // Show voice button, hide send button
+                sendBtn.classList.add('hidden');
+                voiceBtn.classList.remove('hidden');
+            }
+        }
+
+        function sendTextInput() {
+            const input = document.getElementById('text-input');
+            const text = input.value.trim();
+            if (text) {
+                addChatMessage(text, true);
+                
+                if (waitingForName) {
+                    handleNameInput(text);
+                } else if (waitingForLocation) {
+                    // Validate location input
+                    const cleanLocation = text.trim();
+                    if (cleanLocation.length < 2) {
+                        const msg = "I didn't catch that. Please tell me a city or location name.";
+                        addChatMessage(msg, false);
+                        speak(msg);
+                        input.value = '';
+                        return;
+                    }
+                    // Reject common filler words
+                    const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh'];
+                    if (fillerWords.includes(cleanLocation.toLowerCase())) {
+                        const msg = "I didn't quite catch the location. Could you say it again?";
+                        addChatMessage(msg, false);
+                        speak(msg);
+                        input.value = '';
+                        return;
+                    }
+                    waitingForLocation = false;
+                    getWeatherByCity(cleanLocation);
+                } else if (waitingForReminder) {
+                    waitingForReminder = false;
+                    createReminderFromText(text);
+                } else {
+                    processCommand(text);
+                }
+                
+                input.value = '';
+                toggleSendButton(); // Reset to voice button after sending
+            }
+        }
+
+        // ========== SPEECH RECOGNITION ==========
+        
+        function initializeSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                console.error('Speech recognition not supported in this browser');
+                addChatMessage("Sorry, speech recognition is not supported in your browser. Please try Chrome, Edge, or Safari.", false);
+                return;
+            }
+
+            // Manual recognition - triggered by button only
+            continuousRecognition = new SpeechRecognition();
+            continuousRecognition.continuous = false;  // Changed to false - one utterance at a time
+            continuousRecognition.interimResults = false;  // Changed to false - only final results
+            continuousRecognition.lang = 'en-US';
+
+            continuousRecognition.onresult = (event) => {
+                const last = event.results.length - 1;
+                const text = event.results[last][0].transcript.trim();
+                
+                if (!text) return;
+                
+                addChatMessage(text, true);
+                
+                if (waitingForLocation) {
+                    // Validate location input
+                    const cleanLocation = text.replace(/[?!]/g, '').trim();
+                    
+                    if (cleanLocation.length < 2) {
+                        const msg = "I didn't catch that. Please tell me a city or location name.";
+                        addChatMessage(msg, false);
+                        speak(msg);
+                        return;
+                    }
+                    
+                    const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh', 'weather'];
+                    if (fillerWords.includes(cleanLocation.toLowerCase())) {
+                        const msg = "I didn't quite catch the location. Could you say it again?";
+                        addChatMessage(msg, false);
+                        speak(msg);
+                        return;
+                    }
+                    
+                    waitingForLocation = false;
+                    getWeatherByCity(cleanLocation);
+                    return;
+                }
+                
+                if (waitingForReminder) {
+                    waitingForReminder = false;
+                    createReminderFromText(text);
+                    return;
+                }
+                
+                if (waitingForName) {
+                    handleNameInput(text);
+                    return;
+                }
+                
+                // Process as normal command
+                processCommand(text);
+            };
+
+            continuousRecognition.onerror = (event) => {
+                console.log('Recognition error:', event.error);
+                stopListening();
+            };
+
+            continuousRecognition.onend = () => {
+                stopListening();
+            };
+        }
+
+        function toggleListening() {
+            if (isListening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        function startListening() {
+            if (!continuousRecognition) {
+                addChatMessage("Speech recognition not available. Please use text input.", false);
+                return;
+            }
+            
+            try {
+                isListening = true;
+                continuousRecognition.start();
+                
+                // Update UI
+                document.getElementById('mic-icon-bottom').classList.add('hidden');
+                document.getElementById('waveform-bottom').classList.remove('hidden');
+                document.getElementById('voice-btn').classList.add('bg-purple-600', 'ring-4', 'ring-purple-200');
+                document.getElementById('voice-btn').classList.remove('bg-gray-900');
+                
+            } catch (e) {
+                console.log('Start listening failed:', e);
+                stopListening();
+            }
+        }
+
+        function stopListening() {
+            isListening = false;
+            
+            if (continuousRecognition) {
+                try {
+                    continuousRecognition.stop();
+                } catch (e) {
+                    console.log('Stop failed:', e);
+                }
+            }
+            
+            // Update UI
+            document.getElementById('mic-icon-bottom')?.classList.remove('hidden');
+            document.getElementById('waveform-bottom')?.classList.add('hidden');
+            document.getElementById('voice-btn')?.classList.remove('bg-purple-600', 'ring-4', 'ring-purple-200');
+            document.getElementById('voice-btn')?.classList.add('bg-gray-900');
+        }
+
+        // Remove old recognition code - we only need one now
+        recognition = continuousRecognition;
+
+        // ========== COMMAND PROCESSING ==========
+        function processSuggestion(text) {
+            document.getElementById('text-input').value = text;
+            sendTextInput();
+        }
+
+        async function processCommand(text) {
+            const lower = text.toLowerCase();
+            
+            // Remove common conversational prefixes
+            let cleanText = text;
+            const prefixes = ['hey', 'hi', 'hello', 'ok', 'okay', 'well', 'so', 'um', 'uh'];
+            for (const prefix of prefixes) {
+                const regex = new RegExp(`^${prefix}[,\\s]+`, 'i');
+                cleanText = cleanText.replace(regex, '');
+            }
+
+            if (waitingForLocation) {
+                const cleanLocation = cleanText.replace(/[?!]/g, '').trim();
+                
+                // Validate location
+                if (cleanLocation.length < 2) {
+                    const msg = "I didn't catch that. Please tell me a city or location name.";
+                    addChatMessage(msg, false);
+                    speak(msg);
+                    return;
+                }
+                
+                // Reject common filler words
+                const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh', 'weather'];
+                if (fillerWords.includes(cleanLocation.toLowerCase())) {
+                    const msg = "I didn't quite catch the location. Could you say it again?";
+                    addChatMessage(msg, false);
+                    speak(msg);
+                    return;
+                }
+                
+                waitingForLocation = false;
+                getWeatherByCity(cleanLocation);
+                return;
+            }
+
+            if (waitingForReminder) {
+                waitingForReminder = false;
+                createReminderFromText(cleanText);
+                return;
+            }
+            
+            // Handle location choice selection
+            if (window.waitingForLocationChoice && window.pendingLocationChoices) {
+                window.waitingForLocationChoice = false;
+                const choices = window.pendingLocationChoices;
+                
+                // Check if user said a number (1, 2, 3)
+                const numberMatch = cleanText.match(/\b([1-9])\b/);
+                if (numberMatch) {
+                    const choice = parseInt(numberMatch[1]) - 1;
+                    if (choice >= 0 && choice < choices.length) {
+                        const selected = choices[choice];
+                        const lat = parseFloat(selected.lat);
+                        const lon = parseFloat(selected.lon);
+                        
+                        const addr = selected.address;
+                        let locationName = addr.city || addr.town || addr.village || addr.hamlet || selected.display_name.split(',')[0];
+                        if (addr.state) locationName += `, ${addr.state}`;
+                        if (addr.country) locationName += `, ${addr.country}`;
+                        
+                        window.pendingLocationChoices = null;
+                        await fetchWeather(lat, lon, locationName);
+                        return;
+                    }
+                }
+                
+                // Check if user said the full location name
+                for (const loc of choices) {
+                    const addr = loc.address;
+                    const country = addr.country ? addr.country.toLowerCase() : '';
+                    const state = addr.state ? addr.state.toLowerCase() : '';
+                    
+                    if (cleanText.toLowerCase().includes(country) || cleanText.toLowerCase().includes(state)) {
+                        const lat = parseFloat(loc.lat);
+                        const lon = parseFloat(loc.lon);
+                        
+                        let locationName = addr.city || addr.town || addr.village || addr.hamlet || loc.display_name.split(',')[0];
+                        if (addr.state) locationName += `, ${addr.state}`;
+                        if (addr.country) locationName += `, ${addr.country}`;
+                        
+                        window.pendingLocationChoices = null;
+                        await fetchWeather(lat, lon, locationName);
+                        return;
+                    }
+                }
+                
+                // Didn't understand the choice
+                const msg = "I didn't catch which one you meant. Could you say the number or the country name?";
+                addChatMessage(msg, false);
+                speak(msg);
+                window.waitingForLocationChoice = true;
+                return;
+            }
+            
+            // Check for name change/update commands
+            if (lower.includes('change') && (lower.includes('name') || lower.includes('my name'))) {
+                const msg = "What would you like me to call you?";
+                addChatMessage(msg, false);
+                speak(msg);
+                waitingForName = true;
+                return;
+            }
+            
+            // Check for direct name statements
+            if (lower.match(/^(my name is|i'm|i am|call me|it's)\s+/i)) {
+                handleNameInput(cleanText);
+                return;
+            }
+            
+            // Check for name correction (no, actually, etc.)
+            if (userName && /^(no|nah|nope|actually|wrong)/i.test(cleanText)) {
+                handleNameCorrection(cleanText);
+                return;
+            }
+
+            // Memory Recall - Check BEFORE other commands (high priority)
+            if (cleanText.toLowerCase().match(/where\s+(?:is|are|did|my|the|'s)|my\s+\w+\?$|the\s+\w+\?$/i)) {
+                handleMemoryRecall(cleanText);
+                return;
+            }
+            
+            // Memory Storage (where things are)
+            if ((cleanText.toLowerCase().includes('my ') || cleanText.toLowerCase().includes('i put') || cleanText.toLowerCase().includes('i left')) && 
+                 (cleanText.toLowerCase().includes(' is ') || cleanText.toLowerCase().includes(' are ') || cleanText.toLowerCase().includes(' in ') || cleanText.toLowerCase().includes(' on ') || cleanText.toLowerCase().includes(' at '))) {
+                handleMemoryStorage(cleanText);
+                return;
+            }
+
+            // Shopping List Commands
+            if (cleanText.toLowerCase().includes('add') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('shopping'))) {
+                handleAddToShoppingList(cleanText);
+            }
+            // Handle follow-up additions: "also add", "and add", etc.
+            else if (cleanText.toLowerCase().match(/\b(also|and|plus)\s+add\b/i) || cleanText.toLowerCase().match(/\badd\s+(also|too)\b/i)) {
+                handleAddToShoppingList(cleanText);
+            }
+            // Simple "add X" when shopping list was recently used
+            else if (cleanText.toLowerCase().startsWith('add ') && shoppingList.length > 0) {
+                handleAddToShoppingList(cleanText);
+            }
+            else if (cleanText.toLowerCase().includes('remove') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('from shopping'))) {
+                handleRemoveFromShoppingList(cleanText);
+            }
+            else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('what') || cleanText.toLowerCase().includes('read')) && cleanText.toLowerCase().includes('shopping')) {
+                showShoppingList();
+            }
+            else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('shopping')) {
+                clearShoppingList();
+            }
+            // Weather queries
+            else if (cleanText.toLowerCase().includes('weather') || cleanText.toLowerCase().includes('temperature') || cleanText.toLowerCase().includes('rain') || cleanText.toLowerCase().includes('snow')) {
+                const location = extractLocationFromSentence(cleanText);
+                
+                if (location) {
+                    // User specified a location
+                    getWeatherByCity(location);
+                } else if (weather && weather.current) {
+                    // We have weather data already, answer about it
+                    // Handle specific rain question
+                    if (cleanText.toLowerCase().includes('rain')) {
+                        const willRain = willItRain(weather.current.weather_code);
+                        const celsius = Math.round(weather.current.temperature_2m);
+                        const fahrenheit = Math.round((celsius * 9/5) + 32);
+                        
+                        let rainMsg;
+                        if (willRain) {
+                            rainMsg = `Yes, it looks like rain is expected today. ${getWeatherAdvice(weather)}`;
+                        } else {
+                            rainMsg = `No, it won't rain today. The temperature is ${fahrenheit}°F (${celsius}°C). ${getWeatherAdvice(weather)}`;
+                        }
+                        addChatMessage(rainMsg, false);
+                        speak(rainMsg);
+                    } 
+                    // Handle snow question
+                    else if (cleanText.toLowerCase().includes('snow')) {
+                        const willSnow = willItSnow(weather.current.weather_code);
+                        const celsius = Math.round(weather.current.temperature_2m);
+                        const fahrenheit = Math.round((celsius * 9/5) + 32);
+                        
+                        let snowMsg;
+                        if (willSnow) {
+                            snowMsg = `Yes, snow is expected! ${getWeatherAdvice(weather)}`;
+                        } else {
+                            snowMsg = `No, it won't snow today. The temperature is ${fahrenheit}°F (${celsius}°C). ${getWeatherAdvice(weather)}`;
+                        }
+                        addChatMessage(snowMsg, false);
+                        speak(snowMsg);
+                    }
+                    // General weather info
+                    else {
+                        const celsius = Math.round(weather.current.temperature_2m);
+                        const fahrenheit = Math.round((celsius * 9/5) + 32);
+                        const advice = getWeatherAdvice(weather);
+                        const weatherMsg = `The temperature is ${fahrenheit}°F (${celsius}°C). ${advice}`;
+                        addChatMessage(weatherMsg, false);
+                        speak(weatherMsg);
+                    }
+                } else {
+                    // No location and no cached weather - try to get user's location automatically
+                    addChatMessage("Let me check the weather for you...", false);
+                    speak("Let me check the weather for you");
+                    
+                    if (navigator.geolocation) {
+                        // Set a timeout in case geolocation takes too long
+                        const geoTimeout = setTimeout(() => {
+                            const askMsg = "I couldn't detect your location. Where are you? You can say a city, town, or even just a neighborhood!";
+                            addChatMessage(askMsg, false);
+                            speak(askMsg);
+                            waitingForLocation = true;
+                        }, 5000); // 5 second timeout
+                        
+                        navigator.geolocation.getCurrentPosition(
+                            async (position) => {
+                                clearTimeout(geoTimeout);
+                                const lat = position.coords.latitude;
+                                const lon = position.coords.longitude;
+                                
+                                // Do reverse geocoding to get city name
+                                try {
+                                    const reverseResponse = await fetch(
+                                        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+                                        { headers: { 'User-Agent': 'UnifyVoiceAssistant/1.0' } }
+                                    );
+                                    const reverseData = await reverseResponse.json();
+                                    
+                                    const addr = reverseData.address;
+                                    let cityName = addr.city || addr.town || addr.village || addr.suburb || addr.hamlet || "your location";
+                                    if (addr.state) cityName += `, ${addr.state}`;
+                                    if (addr.country) cityName += `, ${addr.country}`;
+                                    
+                                    fetchWeather(lat, lon, cityName);
+                                } catch (error) {
+                                    console.error('Reverse geocoding failed:', error);
+                                    // Fallback to generic name
+                                    fetchWeather(lat, lon, "your location");
+                                }
+                            },
+                            (error) => {
+                                clearTimeout(geoTimeout);
+                                console.log('Geolocation error:', error);
+                                // Geolocation failed, ask for location
+                                let askMsg;
+                                if (error.code === 1) {
+                                    // Permission denied
+                                    askMsg = "I need location permission to auto-detect your weather. Where are you located?";
+                                } else {
+                                    askMsg = "I couldn't detect your location. Where are you? You can say a city, town, or even just a neighborhood!";
+                                }
+                                addChatMessage(askMsg, false);
+                                speak(askMsg);
+                                waitingForLocation = true;
+                            },
+                            {
+                                enableHighAccuracy: false,
+                                timeout: 5000,
+                                maximumAge: 300000 // Cache for 5 minutes
+                            }
+                        );
+                    } else {
+                        // Geolocation not supported
+                        const askMsg = "Where are you? Just tell me your city or town!";
+                        addChatMessage(askMsg, false);
+                        speak(askMsg);
+                        waitingForLocation = true;
+                    }
+                }
+            }
+            // Reminder queries
+            else if (cleanText.toLowerCase().includes('remind')) {
+                createReminderFromText(cleanText);
+            }
+            // Show reminders
+            else if (cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('list') || cleanText.toLowerCase().includes('my reminder')) {
+                if (reminders.length === 0) {
+                    const msg = "You haven't set any reminders yet. Would you like me to remind you of something?";
+                    addChatMessage(msg, false);
+                    speak(msg);
+                    waitingForReminder = true;
+                } else {
+                    const msg = `You have ${reminders.length} reminder${reminders.length > 1 ? 's' : ''}. Check the list below.`;
+                    addChatMessage(msg, false);
+                    speak(msg);
+                    document.getElementById('reminders-section').classList.remove('hidden');
+                }
+            }
+            // Delete/clear reminders
+            else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('reminder')) {
+                clearAllReminders();
+            }
+            // Help/Features query
+            else if (cleanText.toLowerCase().match(/what (can you do|are your features?|features?|do you have|is your feature)/i) ||
+                     cleanText.toLowerCase().match(/\b(help|capabilities|what are you)\b/i) ||
+                     cleanText.toLowerCase().match(/what (do|can) you (do|offer|provide)/i)) {
+                const helpMsg = `Hey! I'm here to make your life easier. Here's what I can help with:
+
+🌤️ Weather - Ask about weather anywhere!
+  → "What's the weather?"
+  → "Will it rain in Seattle?"
+  → "Temperature in Paris?"
+
+🛒 Shopping Lists - Add items with quantities!
+  → "Add 2 pounds of chicken to my list"
+  → "Add 1 gallon of milk"
+  → "Also add 3 apples"
+
+⏰ Reminders - Never forget again!
+  → "Remind me to call mom at 5pm"
+  → "Remind me tomorrow to buy groceries"
+
+🔑 Memory - I'll remember where you put things!
+  → "My car keys are on the counter"
+  → "Where are my keys?"
+
+✈️ Travel Planning - Plan your trips!
+  → "Plan a 3-day trip to Tokyo"
+
+Just talk to me naturally!`;
+                addChatMessage(helpMsg, false);
+                speak("I can help with weather, shopping lists with quantities, reminders, memory, and travel planning. Just talk to me naturally!");
+            }
+            // Itinerary/Travel Planning - Check BEFORE AI fallback
+            else if (cleanText.toLowerCase().includes('trip') || 
+                     cleanText.toLowerCase().includes('itinerary') || 
+                     cleanText.toLowerCase().includes('itenarary') ||
+                     cleanText.toLowerCase().includes('itenary') ||
+                     cleanText.toLowerCase().includes('vacation') ||
+                     cleanText.toLowerCase().includes('visit') && cleanText.toLowerCase().match(/\b(to|in|for)\b/) ||
+                     (cleanText.toLowerCase().includes('plan') && (cleanText.toLowerCase().includes('travel') || cleanText.toLowerCase().includes('visit')))) {
+                // Use AI to create detailed itinerary
+                const itineraryPrompt = `Create a detailed day-by-day itinerary based on this request: "${text}". 
+
+Format your response as:
+- Clear day-by-day breakdown
+- Specific activities and times
+- Practical suggestions
+- Keep it concise but helpful
+
+Be creative and specific!`;
+                
+                const aiResponse = await askGeminiAI(itineraryPrompt);
+                addChatMessage(aiResponse.response, false);
+                speak("I've created an itinerary for you. Check the chat for details!");
+            }
+            // Use AI for unclear queries and casual chat
+            else {
+                const aiResponse = await askGeminiAI(text);
+                addChatMessage(aiResponse.response, false);
+                speak(aiResponse.response);
+            }
+        }
+
+        // ========== WEATHER FUNCTIONS ==========
+        function createWeatherEffect(weatherCode, temperature) {
+            const container = document.getElementById('weather-effects');
+            container.innerHTML = ''; // Clear existing effects
+            
+            // Snow (codes 71-77)
+            if (weatherCode >= 71 && weatherCode <= 77) {
+                for (let i = 0; i < 50; i++) {
+                    const snowflake = document.createElement('div');
+                    snowflake.className = 'snowflake';
+                    snowflake.textContent = '❄';
+                    snowflake.style.left = Math.random() * 100 + '%';
+                    snowflake.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                    snowflake.style.animationDelay = Math.random() * 5 + 's';
+                    snowflake.style.fontSize = (Math.random() * 10 + 10) + 'px';
+                    container.appendChild(snowflake);
+                }
+                document.body.style.background = 'linear-gradient(to bottom, #B8C6DB, #F5F7FA)';
+            }
+            // Rain (codes 51-67, 80-82)
+            else if ((weatherCode >= 51 && weatherCode <= 67) || (weatherCode >= 80 && weatherCode <= 82)) {
+                for (let i = 0; i < 100; i++) {
+                    const raindrop = document.createElement('div');
+                    raindrop.className = 'raindrop';
+                    raindrop.style.left = Math.random() * 100 + '%';
+                    raindrop.style.animationDuration = (Math.random() * 0.5 + 0.5) + 's';
+                    raindrop.style.animationDelay = Math.random() * 2 + 's';
+                    container.appendChild(raindrop);
+                }
+                // Add clouds for rain
+                for (let i = 1; i <= 3; i++) {
+                    const cloud = document.createElement('div');
+                    cloud.className = `cloud cloud-${i}`;
+                    container.appendChild(cloud);
+                }
+                document.body.style.background = 'linear-gradient(to bottom, #4A5568, #718096)';
+            }
+            // Thunderstorm (codes 95-99)
+            else if (weatherCode >= 95 && weatherCode <= 99) {
+                for (let i = 0; i < 80; i++) {
+                    const raindrop = document.createElement('div');
+                    raindrop.className = 'raindrop';
+                    raindrop.style.left = Math.random() * 100 + '%';
+                    raindrop.style.animationDuration = (Math.random() * 0.3 + 0.3) + 's';
+                    raindrop.style.animationDelay = Math.random() * 1 + 's';
+                    container.appendChild(raindrop);
+                }
+                // Random lightning
+                setInterval(() => {
+                    if (Math.random() > 0.95) {
+                        const lightning = document.createElement('div');
+                        lightning.className = 'lightning';
+                        container.appendChild(lightning);
+                        setTimeout(() => lightning.remove(), 200);
+                    }
+                }, 1000);
+                document.body.style.background = 'linear-gradient(to bottom, #2D3748, #4A5568)';
+            }
+            // Clear/Sunny (code 0-3)
+            else if (weatherCode >= 0 && weatherCode <= 3) {
+                const sun = document.createElement('div');
+                sun.className = 'sun';
+                container.appendChild(sun);
+                
+                // Add some clouds for partly cloudy
+                if (weatherCode > 0) {
+                    for (let i = 1; i <= 2; i++) {
+                        const cloud = document.createElement('div');
+                        cloud.className = `cloud cloud-${i}`;
+                        container.appendChild(cloud);
+                    }
+                }
+                
+                // Hot day effect
+                if (temperature > 30) {
+                    const heatWave = document.createElement('div');
+                    heatWave.className = 'heat-wave';
+                    container.appendChild(heatWave);
+                    document.body.style.background = 'linear-gradient(to bottom, #FDB750, #FFDAA5)';
+                } else {
+                    document.body.style.background = 'linear-gradient(to bottom right, #87CEEB, #E0F6FF, #FFF8DC)';
+                }
+            }
+            // Overcast/Cloudy (codes 45-48 fog, or other cloudy conditions)
+            else {
+                for (let i = 1; i <= 3; i++) {
+                    const cloud = document.createElement('div');
+                    cloud.className = `cloud cloud-${i}`;
+                    container.appendChild(cloud);
+                }
+                document.body.style.background = 'linear-gradient(to bottom, #A0AEC0, #CBD5E0)';
+            }
+            
+            // Freezing cold effect (any weather below 5°C)
+            if (temperature < 5) {
+                document.body.style.filter = 'brightness(0.9) contrast(1.1)';
+                // Add extra snowflakes even if not snowing
+                if (weatherCode < 71 || weatherCode > 77) {
+                    for (let i = 0; i < 20; i++) {
+                        const snowflake = document.createElement('div');
+                        snowflake.className = 'snowflake';
+                        snowflake.textContent = '❄';
+                        snowflake.style.left = Math.random() * 100 + '%';
+                        snowflake.style.animationDuration = (Math.random() * 4 + 3) + 's';
+                        snowflake.style.animationDelay = Math.random() * 5 + 's';
+                        snowflake.style.fontSize = (Math.random() * 8 + 8) + 'px';
+                        snowflake.style.opacity = '0.6';
+                        container.appendChild(snowflake);
+                    }
+                }
+            } else {
+                document.body.style.filter = 'none';
+            }
+        }
+
+        function extractLocationFromSentence(text) {
+            const lower = text.toLowerCase();
+            
+            // Remove common time phrases first
+            let cleanText = text;
+            const timeWords = ['right now', 'now', 'today', 'tomorrow', 'tonight', 'currently', 'at the moment'];
+            timeWords.forEach(word => {
+                cleanText = cleanText.replace(new RegExp(word, 'gi'), '');
+            });
+            
+            const patterns = [
+                /(?:weather|temperature|rain|snow|hot|cold|forecast)\s+(?:in|at|for)\s+([^?]+)/i,
+                /(?:in|at)\s+([^?]+?)\s*(?:weather|temperature|rain|snow|hot|cold)/i,
+                /(?:how'?s?|what'?s?|how is|what is)\s+(?:the\s+)?(?:weather|temperature)\s+(?:in|at|for)\s+([^?]+)/i,
+            ];
+            
+            for (const pattern of patterns) {
+                const match = cleanText.match(pattern);
+                if (match && match[1]) {
+                    let location = match[1].trim();
+                    // Clean up the location string
+                    location = location.replace(/[?.!,;]$/g, '').trim();
+                    if (location.length > 0) return location;
+                }
+            }
+            return null;
+        }
+
+        async function getWeatherByCity(cityName) {
+            try {
+                const searchName = expandStateAbbreviation(cityName.trim());
+                
+                // Get up to 5 results to handle ambiguity better
+                const nominatimResponse = await fetch(
+                    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchName)}&format=json&limit=5&addressdetails=1`,
+                    { headers: { 'User-Agent': 'UnifyVoiceAssistant/1.0' } }
+                );
+                
+                const nominatimData = await nominatimResponse.json();
+                
+                if (!nominatimData || nominatimData.length === 0) {
+                    const errorMsg = `Hmm, I couldn't find "${cityName}". Could you try saying it a different way? Like "Boston" or "Paris, France"?`;
+                    addChatMessage(errorMsg, false);
+                    speak(errorMsg);
+                    return;
+                }
+                
+                // Check if there are multiple distinct locations (different countries/states)
+                const uniqueLocations = [];
+                const seenCountries = new Set();
+                
+                for (const loc of nominatimData) {
+                    const addr = loc.address;
+                    const country = addr.country;
+                    const state = addr.state || '';
+                    const key = `${country}-${state}`;
+                    
+                    // Only add if this country/state combo hasn't been seen
+                    if (!seenCountries.has(key) && uniqueLocations.length < 3) {
+                        seenCountries.add(key);
+                        uniqueLocations.push(loc);
+                    }
+                }
+                
+                // If multiple distinct locations found, ask user to disambiguate
+                if (uniqueLocations.length > 1 && !cityName.includes(',')) {
+                    const options = uniqueLocations.map((loc, index) => {
+                        const addr = loc.address;
+                        let name = addr.city || addr.town || addr.village || addr.hamlet || loc.display_name.split(',')[0];
+                        if (addr.state) name += `, ${addr.state}`;
+                        if (addr.country) name += `, ${addr.country}`;
+                        return `${index + 1}. ${name}`;
+                    }).join('\n');
+                    
+                    const disambigMsg = `I found multiple places called "${cityName}":\n\n${options}\n\nWhich one did you mean? You can say the full name or just the number.`;
+                    addChatMessage(disambigMsg, false);
+                    speak(`I found multiple places called ${cityName}. Which one did you mean?`);
+                    
+                    // Store options for later selection
+                    window.pendingLocationChoices = uniqueLocations;
+                    window.waitingForLocationChoice = true;
+                    return;
+                }
+                
+                // Use the first (best) result
+                const location = nominatimData[0];
+                const latitude = parseFloat(location.lat);
+                const longitude = parseFloat(location.lon);
+                
+                const addr = location.address;
+                let locationName = addr.city || addr.town || addr.village || addr.hamlet || location.display_name.split(',')[0];
+                if (addr.state) locationName += `, ${addr.state}`;
+                if (addr.country) locationName += `, ${addr.country}`;
+                
+                // Pass both original query and resolved location
+                await fetchWeather(latitude, longitude, locationName, cityName.trim());
+                
+            } catch (error) {
+                console.error('Location search error:', error);
+                const errorMsg = `Sorry, I'm having trouble looking that up right now. Mind trying again?`;
+                addChatMessage(errorMsg, false);
+                speak(errorMsg);
+            }
+        }
+
+        async function fetchWeather(lat, lon, resolvedLocation, originalQuery = null) {
+            try {
+                const weatherResponse = await fetch(
+                    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,precipitation&timezone=auto`
+                );
+                weather = await weatherResponse.json();
+                
+                const celsius = Math.round(weather.current.temperature_2m);
+                const fahrenheit = Math.round((celsius * 9/5) + 32);
+                const advice = getWeatherAdvice(weather);
+                
+                // Create weather effects
+                createWeatherEffect(weather.current.weather_code, celsius);
+                
+                // Determine display location
+                let displayLocation = resolvedLocation;
+                if (originalQuery && originalQuery.toLowerCase() !== resolvedLocation.toLowerCase()) {
+                    // Show "Roxbury, MA (Boston, Massachusetts, United States)"
+                    displayLocation = `${originalQuery} (${resolvedLocation})`;
+                }
+                
+                document.getElementById('weather-card').classList.remove('hidden');
+                document.getElementById('location-name').textContent = displayLocation;
+                document.getElementById('temperature').textContent = `${fahrenheit}°F / ${celsius}°C`;
+                document.getElementById('weather-advice').textContent = advice;
+                
+                const weatherMsg = `The temperature in ${displayLocation} is ${fahrenheit}°F (${celsius}°C). ${advice}`;
+                addChatMessage(weatherMsg, false);
+                speak(weatherMsg);
+                
+            } catch (error) {
+                console.error('Weather error:', error);
+                const errorMsg = "Sorry, I couldn't fetch the weather data right now. Please try again later.";
+                addChatMessage(errorMsg, false);
+                speak(errorMsg);
+            }
+        }
+
+        function getWeatherAdvice(weatherData) {
+            const code = weatherData.current.weather_code;
+            const temp = weatherData.current.temperature_2m;
+            
+            if (code >= 51 && code <= 67) return "It's going to rain. Don't forget your umbrella!";
+            if (code >= 71 && code <= 77) return "Snow expected! Dress warm and stay safe!";
+            if (code >= 80 && code <= 99) return "Thunderstorms possible. Stay indoors if you can!";
+            if (temp < 5) return "It's freezing outside! Bundle up with warm layers!";
+            if (temp > 30) return "Hot day ahead! Stay hydrated and seek shade!";
+            if (code === 0) return "Perfect weather! Great day to be outside!";
+            return "Have a wonderful day!";
+        }
+
+        function willItRain(weatherCode) {
+            // Rain codes: 51-67 (drizzle and rain), 80-82 (rain showers), 95-99 (thunderstorms)
+            return (weatherCode >= 51 && weatherCode <= 67) || 
+                   (weatherCode >= 80 && weatherCode <= 82) || 
+                   (weatherCode >= 95 && weatherCode <= 99);
+        }
+
+        function willItSnow(weatherCode) {
+            // Snow codes: 71-77, 85-86
+            return (weatherCode >= 71 && weatherCode <= 77) || 
+                   (weatherCode >= 85 && weatherCode <= 86);
+        }
+
+        function expandStateAbbreviation(location) {
+            const states = {
+                'AL':'Alabama','AK':'Alaska','AZ':'Arizona','AR':'Arkansas','CA':'California','CO':'Colorado',
+                'CT':'Connecticut','DE':'Delaware','FL':'Florida','GA':'Georgia','HI':'Hawaii','ID':'Idaho',
+                'IL':'Illinois','IN':'Indiana','IA':'Iowa','KS':'Kansas','KY':'Kentucky','LA':'Louisiana',
+                'ME':'Maine','MD':'Maryland','MA':'Massachusetts','MI':'Michigan','MN':'Minnesota','MS':'Mississippi',
+                'MO':'Missouri','MT':'Montana','NE':'Nebraska','NV':'Nevada','NH':'New Hampshire','NJ':'New Jersey',
+                'NM':'New Mexico','NY':'New York','NC':'North Carolina','ND':'North Dakota','OH':'Ohio',
+                'OK':'Oklahoma','OR':'Oregon','PA':'Pennsylvania','RI':'Rhode Island','SC':'South Carolina',
+                'SD':'South Dakota','TN':'Tennessee','TX':'Texas','UT':'Utah','VT':'Vermont','VA':'Virginia',
+                'WA':'Washington','WV':'West Virginia','WI':'Wisconsin','WY':'Wyoming'
+            };
+            
+            for (const [abbr, full] of Object.entries(states)) {
+                const regex = new RegExp(`\\b${abbr}\\b`, 'gi');
+                if (regex.test(location)) return location.replace(regex, full);
+            }
+            return location;
+        }
+
+        // ========== REMINDER FUNCTIONS ==========
+        function createReminderFromText(text) {
+            const reminder = {
+                id: Date.now(),
+                text: text,
+                time: extractTime(text),
+                created: new Date().toLocaleString(),
+                alarmTime: calculateAlarmTime(text)
+            };
+            reminders.push(reminder);
+            saveRemindersToStorage();
+            updateRemindersList();
+            const reminderMsg = `Got it! I'll remind you: ${text}`;
+            addChatMessage(reminderMsg, false);
+            speak(reminderMsg);
+            
+            if (reminder.alarmTime) setAlarm(reminder);
+        }
+
+        function extractTime(text) {
+            const lower = text.toLowerCase();
+            if (lower.includes('tomorrow')) return 'tomorrow';
+            if (lower.includes('today')) return 'today';
+            if (lower.includes('tonight')) return 'tonight';
+            const match = lower.match(/(\d{1,2})\s*(am|pm)/);
+            if (match) return match[0];
+            return 'later';
+        }
+
+        function calculateAlarmTime(text) {
+            const lower = text.toLowerCase();
+            const now = new Date();
+            
+            if (lower.includes('tomorrow')) {
+                const tomorrow = new Date(now);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                tomorrow.setHours(9, 0, 0, 0);
+                return tomorrow;
+            }
+            
+            const match = lower.match(/(\d{1,2})\s*(am|pm)/);
+            if (match) {
+                let hour = parseInt(match[1]);
+                const isPM = match[2] === 'pm';
+                if (isPM && hour !== 12) hour += 12;
+                if (!isPM && hour === 12) hour = 0;
+                const alarmTime = new Date(now);
+                alarmTime.setHours(hour, 0, 0, 0);
+                if (alarmTime < now) alarmTime.setDate(alarmTime.getDate() + 1);
+                return alarmTime;
+            }
+            return null;
+        }
+
+        function setAlarm(reminder) {
+            if (!reminder.alarmTime) return;
+            const timeUntilAlarm = reminder.alarmTime - new Date();
+            if (timeUntilAlarm > 0) {
+                setTimeout(() => triggerAlarm(reminder), timeUntilAlarm);
+            }
+        }
+
+        function triggerAlarm(reminder) {
+            const overlay = document.getElementById('alarm-overlay');
+            const notification = document.getElementById('alarm-notification');
+            
+            overlay.classList.remove('hidden');
+            notification.className = 'alarm-notification bg-white rounded-3xl shadow-2xl p-8 max-w-md';
+            notification.innerHTML = `
+                <div class="text-center">
+                    <div class="mb-4">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-purple-600 mx-auto animate-bounce">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                        </svg>
+                    </div>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-2">⏰ Reminder!</h2>
+                    <p class="text-lg text-gray-700 mb-6">${escapeHtml(reminder.text)}</p>
+                    <div class="flex gap-3 justify-center">
+                        <button onclick="snoozeAlarm(${reminder.id})" class="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold rounded-xl transition-all">
+                            Snooze 5min
+                        </button>
+                        <button onclick="dismissAlarm(${reminder.id})" class="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-xl transition-all">
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            `;
+            speak(`Reminder: ${reminder.text}`);
+        }
+
+        function snoozeAlarm(id) {
+            const reminder = reminders.find(r => r.id === id);
+            if (reminder) {
+                reminder.alarmTime = new Date(Date.now() + 5 * 60 * 1000);
+                setAlarm(reminder);
+                saveRemindersToStorage();
+            }
+            dismissAlarm(id);
+        }
+
+        function dismissAlarm(id) {
+            document.getElementById('alarm-overlay').classList.add('hidden');
+            document.getElementById('alarm-notification').classList.add('hidden');
+        }
+
+        function checkReminders() {
+            setInterval(() => {
+                const now = new Date();
+                reminders.forEach(reminder => {
+                    if (reminder.alarmTime && reminder.alarmTime <= now && !reminder.triggered) {
+                        reminder.triggered = true;
+                        triggerAlarm(reminder);
+                    }
+                });
+            }, 1000);
+        }
+
+        function updateRemindersList() {
+            const list = document.getElementById('reminders-list');
+            list.innerHTML = '';
+            
+            if (reminders.length === 0) {
+                document.getElementById('reminders-section').classList.add('hidden');
+                return;
+            }
+            
+            reminders.forEach(r => {
+                const div = document.createElement('div');
+                div.className = 'bg-white p-4 rounded-xl shadow flex justify-between items-start';
+                div.innerHTML = `
+                    <div class="flex-1">
+                        <p class="text-gray-800 font-medium mb-1">${escapeHtml(r.text)}</p>
+                        <p class="text-sm text-gray-500">${escapeHtml(r.time)} • ${escapeHtml(r.created)}</p>
+                    </div>
+                    <button onclick="deleteReminder(${r.id})" class="text-red-500 hover:text-red-700 font-medium ml-4 transition-all">Delete</button>
+                `;
+                list.appendChild(div);
+            });
+            document.getElementById('reminders-section').classList.remove('hidden');
+        }
+
+        function deleteReminder(id) {
+            reminders = reminders.filter(r => r.id !== id);
+            saveRemindersToStorage();
+            updateRemindersList();
+        }
+
+        function clearAllReminders() {
+            if (reminders.length === 0) {
+                const msg = "You don't have any reminders to clear.";
+                addChatMessage(msg, false);
+                speak(msg);
+                return;
+            }
+            reminders = [];
+            saveRemindersToStorage();
+            updateRemindersList();
+            const msg = "All reminders have been cleared.";
+            addChatMessage(msg, false);
+            speak(msg);
+        }
+
+        // ========== NAME HANDLING ==========
+        function handleNameInput(text) {
+            waitingForName = false;
+            // Extract clean name from input
+            let name = text.trim();
+            // Remove common phrases
+            name = name.replace(/^(my name is|i'm|i am|it's|call me)\s+/i, '');
+            name = name.replace(/[?.!,]$/g, '');
+            // Capitalize first letter
+            name = name.charAt(0).toUpperCase() + name.slice(1);
+            
+            userName = name;
+            saveUserData();
+            
+            const response = `Nice to meet you, ${userName}! How can I help you today?`;
+            addChatMessage(response, false);
+            speak(response);
+        }
+
+        // ========== SHOPPING LIST FUNCTIONS ==========
+        function handleAddToShoppingList(text) {
+            const lower = text.toLowerCase();
+            // Extract items after "add" and before "to"
+            let items = text;
+            
+            // Try to extract items between "add" and "to shopping list"
+            const match1 = text.match(/add\s+(.+?)\s+to\s+(?:my\s+)?shopping/i);
+            if (match1) {
+                items = match1[1];
+            } else {
+                // Try just after "add"
+                const match2 = text.match(/(?:add|also|and|plus)\s+(.+)/i);
+                if (match2) {
+                    items = match2[1];
+                }
+            }
+            
+            // Clean up
+            items = items.replace(/to (?:my )?shopping list/gi, '');
+            items = items.replace(/please/gi, '');
+            items = items.replace(/\s+also$/gi, ''); // Remove trailing "also"
+            items = items.replace(/\s+too$/gi, ''); // Remove trailing "too"
+            
+            // Split by common separators
+            const itemArray = items.split(/,| and |\n/).map(item => item.trim()).filter(item => item.length > 0);
+            
+            itemArray.forEach(item => {
+                // Capitalize first letter for better display
+                const formattedItem = item.charAt(0).toUpperCase() + item.slice(1);
+                
+                if (!shoppingList.some(existing => existing.toLowerCase() === item.toLowerCase())) {
+                    shoppingList.push(formattedItem);
+                }
+            });
+            
+            saveUserData();
+            updateShoppingListUI();
+            
+            const msg = itemArray.length === 1 
+                ? `Added ${itemArray[0]} to your shopping list!` 
+                : `Added ${itemArray.join(', ')} to your shopping list!`;
+            addChatMessage(msg, false);
+            speak(msg);
+        }
+
+        function handleRemoveFromShoppingList(text) {
+            const lower = text.toLowerCase();
+            let item = text;
+            
+            // Extract item to remove
+            const match1 = text.match(/remove\s+(.+?)\s+from\s+(?:my\s+)?shopping/i);
+            if (match1) {
+                item = match1[1];
+            } else {
+                const match2 = text.match(/remove\s+(.+)/i);
+                if (match2) {
+                    item = match2[1];
+                }
+            }
+            
+            item = item.replace(/from (?:my )?shopping list/gi, '').trim();
+            
+            const index = shoppingList.findIndex(i => i.toLowerCase().includes(item.toLowerCase()));
+            if (index !== -1) {
+                const removed = shoppingList.splice(index, 1)[0];
+                saveUserData();
+                updateShoppingListUI();
+                const msg = `Removed ${removed} from your shopping list!`;
+                addChatMessage(msg, false);
+                speak(msg);
+            } else {
+                const msg = `I couldn't find "${item}" in your shopping list.`;
+                addChatMessage(msg, false);
+                speak(msg);
+            }
+        }
+
+        function showShoppingList() {
+            if (shoppingList.length === 0) {
+                const msg = "Your shopping list is empty. Would you like to add something?";
+                addChatMessage(msg, false);
+                speak(msg);
+            } else {
+                const items = shoppingList.join(', ');
+                const msg = `You have ${shoppingList.length} item${shoppingList.length > 1 ? 's' : ''} on your shopping list: ${items}`;
+                addChatMessage(msg, false);
+                speak(msg);
+                
+                // Show the receipt
+                document.getElementById('shopping-receipt').classList.remove('hidden');
+            }
+        }
+
+        function clearShoppingList() {
+            if (shoppingList.length === 0) {
+                const msg = "Your shopping list is already empty.";
+                addChatMessage(msg, false);
+                speak(msg);
+                return;
+            }
+            
+            shoppingList = [];
+            saveUserData();
+            updateShoppingListUI();
+            
+            const msg = "Shopping list cleared!";
+            addChatMessage(msg, false);
+            speak(msg);
+        }
+
+        function updateShoppingListUI() {
+            const receipt = document.getElementById('shopping-receipt');
+            const itemsContainer = document.getElementById('receipt-items');
+            const countSpan = document.getElementById('receipt-count');
+            
+            if (shoppingList.length === 0) {
+                itemsContainer.innerHTML = '<div style="text-align: center; color: #999; font-size: 12px; padding: 20px;">No items yet</div>';
+                receipt.classList.add('hidden');
+            } else {
+                receipt.classList.remove('hidden');
+                itemsContainer.innerHTML = shoppingList.map((item, index) => `
+                    <div class="receipt-item">
+                        <div class="receipt-item-text">
+                            <span class="receipt-bullet">•</span>
+                            <span>${escapeHtml(item)}</span>
+                        </div>
+                        <button onclick="removeShoppingItem(${index})" class="receipt-delete">✕</button>
+                    </div>
+                `).join('');
+            }
+            
+            countSpan.textContent = shoppingList.length;
+            
+            // Update dark mode styling
+            if (darkMode) {
+                receipt.classList.add('dark-mode');
+            } else {
+                receipt.classList.remove('dark-mode');
+            }
+        }
+
+        function removeShoppingItem(index) {
+            const removed = shoppingList.splice(index, 1)[0];
+            saveUserData();
+            updateShoppingListUI();
+            const msg = `Removed ${removed}`;
+            speak(msg);
+        }
+
+        // ========== MEMORY SYSTEM ==========
+        function handleMemoryStorage(text) {
+            const lower = text.toLowerCase();
+            
+            // Parse what and where
+            // Patterns: "my X is/are in/on/at Y", "I put my X in/on/at Y", "I left my X in/on/at Y"
+            let thing = null;
+            let location = null;
+            let preposition = null;
+            
+            const patterns = [
+                /my\s+(.+?)\s+(?:is|are)\s+(in|on|at)\s+(.+)/i,
+                /i\s+put\s+(?:my\s+)?(.+?)\s+(in|on|at)\s+(.+)/i,
+                /i\s+left\s+(?:my\s+)?(.+?)\s+(in|on|at)\s+(.+)/i,
+                /(?:my\s+)?(.+?)\s+(?:is|are)\s+(in|on|at)\s+(.+)/i
+            ];
+            
+            for (const pattern of patterns) {
+                const match = text.match(pattern);
+                if (match) {
+                    if (match.length === 4) {
+                        thing = match[1].trim();
+                        preposition = match[2].trim();
+                        location = match[3].trim();
+                    } else {
+                        thing = match[1].trim();
+                        location = match[2].trim();
+                    }
+                    break;
+                }
+            }
+            
+            if (thing && location) {
+                // Clean up
+                thing = thing.replace(/^(the|my|a|an)\s+/i, '');
+                location = location.replace(/[?.!,]$/g, '');
+                
+                // Add preposition to location if we have it
+                const fullLocation = preposition ? `${preposition} ${location}` : location;
+                
+                // Normalize common variations (handle typos and similar items)
+                const normalizedThing = normalizeThing(thing);
+                
+                memoryStore[normalizedThing] = fullLocation;
+                saveUserData();
+                
+                const msg = `Got it! I'll remember that your ${normalizedThing} ${normalizedThing.endsWith('s') ? 'are' : 'is'} ${fullLocation}.`;
+                addChatMessage(msg, false);
+                speak(msg);
+            } else {
+                const msg = "I didn't quite catch that. Try saying something like 'My car keys are on the kitchen counter'";
+                addChatMessage(msg, false);
+                speak(msg);
+            }
+        }
+
+        // Normalize item names to handle common variations
+        function normalizeThing(thing) {
+            thing = thing.toLowerCase().trim();
+            
+            // Common singular to plural mappings
+            const singularToPlural = {
+                'key': 'keys',
+                'glass': 'glasses',
+                'sunglass': 'sunglasses',
+                'headphone': 'headphones',
+                'earbud': 'earbuds'
+            };
+            
+            // Check if it's already plural
+            if (thing.endsWith('s')) {
+                return thing;
+            }
+            
+            // Check for exact singular match
+            if (singularToPlural[thing]) {
+                return singularToPlural[thing];
+            }
+            
+            // Check for compound words (e.g., "car key" -> "car keys")
+            const words = thing.split(' ');
+            const lastWord = words[words.length - 1];
+            
+            if (singularToPlural[lastWord]) {
+                words[words.length - 1] = singularToPlural[lastWord];
+                return words.join(' ');
+            }
+            
+            // If last word doesn't end in 's', add it for common objects
+            if (!lastWord.endsWith('s') && words.length > 0) {
+                words[words.length - 1] = lastWord + 's';
+                return words.join(' ');
+            }
+            
+            return thing;
+        }
+
+        function handleMemoryRecall(text) {
+            const lower = text.toLowerCase();
+            
+            // Parse what they're looking for
+            // Patterns: "where is/are my X", "where did I put X", "where's my X", "do you know where X is", "my X?"
+            let thing = null;
+            
+            const patterns = [
+                /(?:do you know )?where\s+(?:is|are)\s+(?:my\s+|the\s+)?(.+)/i,
+                /(?:do you know )?where\s+did\s+i\s+(?:put|leave)\s+(?:my\s+|the\s+)?(.+)/i,
+                /(?:do you know )?where'?s\s+(?:my\s+|the\s+)?(.+)/i,
+                /where\s+(?:my\s+|the\s+)?(.+?)\s+(?:is|are)/i,
+                /(?:my\s+|the\s+)?(.+)\s+where/i,
+                /^(?:my\s+|the\s+)?(.+)\?$/i  // Just "my car key?"
+            ];
+            
+            for (const pattern of patterns) {
+                const match = text.match(pattern);
+                if (match) {
+                    thing = match[1].trim();
+                    break;
+                }
+            }
+            
+            if (thing) {
+                thing = thing.replace(/[?.!,]$/g, '');
+                thing = thing.replace(/^(the|my|a|an)\s+/i, '');
+                
+                // Try exact match first
+                let location = memoryStore[thing.toLowerCase()];
+                
+                // If no exact match, try fuzzy matching
+                if (!location) {
+                    const match = findBestMemoryMatch(thing);
+                    if (match) {
+                        location = match.location;
+                        thing = match.thing; // Use the stored version
+                    }
+                }
+                
+                if (location) {
+                    const msg = `You told me your ${thing} ${thing.endsWith('s') ? 'are' : 'is'} ${location}.`;
+                    addChatMessage(msg, false);
+                    speak(msg);
+                } else {
+                    const msg = `I don't remember where your ${thing} ${thing.endsWith('s') ? 'are' : 'is'}. You haven't told me about that yet.`;
+                    addChatMessage(msg, false);
+                    speak(msg);
+                }
+            } else {
+                const msg = "What are you looking for?";
+                addChatMessage(msg, false);
+                speak(msg);
+            }
+        }
+
+        // Fuzzy matching helper function
+        function findBestMemoryMatch(query) {
+            query = query.toLowerCase();
+            const keys = Object.keys(memoryStore);
+            
+            // Try to find the best match
+            for (const key of keys) {
+                // Exact match
+                if (key === query) {
+                    return { thing: key, location: memoryStore[key] };
+                }
+                
+                // Singular/plural variations
+                if (key === query + 's' || key + 's' === query) {
+                    return { thing: key, location: memoryStore[key] };
+                }
+                
+                // Remove 's' from both and compare
+                const keySingular = key.replace(/s$/, '');
+                const querySingular = query.replace(/s$/, '');
+                if (keySingular === querySingular) {
+                    return { thing: key, location: memoryStore[key] };
+                }
+                
+                // Partial match (contains)
+                if (key.includes(query) || query.includes(key)) {
+                    return { thing: key, location: memoryStore[key] };
+                }
+                
+                // Word-by-word match
+                const keyWords = key.split(' ');
+                const queryWords = query.split(' ');
+                const matchCount = keyWords.filter(kw => queryWords.some(qw => 
+                    kw === qw || qw === kw + 's' || kw === qw + 's' ||
+                    kw.replace(/s$/, '') === qw.replace(/s$/, '')
+                )).length;
+                if (matchCount >= Math.min(keyWords.length, queryWords.length)) {
+                    return { thing: key, location: memoryStore[key] };
+                }
+            }
+            
+            // Try Levenshtein distance for typos
+            let bestMatch = null;
+            let bestDistance = Infinity;
+            const maxDistance = Math.floor(query.length / 3); // Allow up to 1/3 character differences
+            
+            for (const key of keys) {
+                const distance = levenshteinDistance(query, key);
+                if (distance < bestDistance && distance <= maxDistance) {
+                    bestDistance = distance;
+                    bestMatch = key;
+                }
+            }
+            
+            if (bestMatch) {
+                return { thing: bestMatch, location: memoryStore[bestMatch] };
+            }
+            
+            return null;
+        }
+
+        // Levenshtein distance algorithm for spell checking
+        function levenshteinDistance(str1, str2) {
+            const matrix = [];
+            
+            for (let i = 0; i <= str2.length; i++) {
+                matrix[i] = [i];
+            }
+            
+            for (let j = 0; j <= str1.length; j++) {
+                matrix[0][j] = j;
+            }
+            
+            for (let i = 1; i <= str2.length; i++) {
+                for (let j = 1; j <= str1.length; j++) {
+                    if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                        matrix[i][j] = matrix[i - 1][j - 1];
+                    } else {
+                        matrix[i][j] = Math.min(
+                            matrix[i - 1][j - 1] + 1, // substitution
+                            matrix[i][j - 1] + 1,     // insertion
+                            matrix[i - 1][j] + 1      // deletion
+                        );
+                    }
+                }
+            }
+            
+            return matrix[str2.length][str1.length];
+        }
+
+        // ========== LOCAL STORAGE ==========
+        function saveUserData() {
+            try {
+                const data = {
+                    userName: userName,
+                    shoppingList: shoppingList,
+                    memoryStore: memoryStore,
+                    reminders: reminders
+                };
+                localStorage.setItem('unify_user_data', JSON.stringify(data));
+            } catch (e) {
+                console.error('Failed to save user data:', e);
+            }
+        }
+
+        function loadUserData() {
+            try {
+                const stored = localStorage.getItem('unify_user_data');
+                if (stored) {
+                    const data = JSON.parse(stored);
+                    userName = data.userName || null;
+                    shoppingList = data.shoppingList || [];
+                    memoryStore = data.memoryStore || {};
+                    reminders = data.reminders || [];
+                    
+                    // Restore alarm times for reminders
+                    reminders.forEach(r => {
+                        if (r.alarmTime) {
+                            r.alarmTime = new Date(r.alarmTime);
+                            setAlarm(r);
+                        }
+                    });
+                    
+                    // Update UI
+                    if (reminders.length > 0) updateRemindersList();
+                    if (shoppingList.length > 0) updateShoppingListUI();
+                }
+            } catch (e) {
+                console.error('Failed to load user data:', e);
+            }
+        }
+
+        function saveRemindersToStorage() {
+            saveUserData(); // Use unified save function
+        }
+
+        function loadRemindersFromStorage() {
+            // No longer needed - handled by loadUserData
+        }
+
+        // ========== TEXT-TO-SPEECH ==========
+        function speak(text) {
+            const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+            
+            if (typeof responsiveVoice !== 'undefined') {
+                responsiveVoice.cancel();
+                responsiveVoice.speak(cleanText, "UK English Female", { pitch: 1.1, rate: 1.0, volume: 1 });
+                return;
+            }
+            
+            synth.cancel();
+            setTimeout(() => {
+                const utterance = new SpeechSynthesisUtterance(cleanText);
+                const voices = synth.getVoices();
+                const goodVoice = voices.find(v => 
+                    (v.name.includes('Google') && v.lang.includes('en')) ||
+                    v.name.includes('Samantha') ||
+                    v.name.includes('Karen') ||
+                    v.lang.includes('en-GB')
+                ) || voices[0];
+                
+                if (goodVoice) utterance.voice = goodVoice;
+                utterance.rate = 1.0;
+                utterance.pitch = 1.2;
+                utterance.volume = 1.0;
+                synth.speak(utterance);
+            }, 100);
+        }
+</script>
 </body>
 </html>
