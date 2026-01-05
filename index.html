@@ -1558,27 +1558,67 @@ Just talk to me naturally!`;
                 console.log('✈️ ITINERARY MODE TRIGGERED!');
                 console.log('Input text:', text);
                 
-                // Use AI to create detailed itinerary
-                const itineraryPrompt = `Create a detailed day-by-day itinerary based on this request: "${text}". 
+                // Use AI to create detailed itinerary - PLACES ONLY
+                const itineraryPrompt = `Create a day-by-day itinerary for: "${text}". 
 
-Format your response as a simple, clean list:
-- Use time markers (9am, 12pm, etc.) followed by activity
-- Keep each line concise (one activity per line)
-- Include practical details (location names, what to do)
-- No bold formatting, no asterisks, no special characters
-- Just plain text with dashes for bullets
+FOCUS ONLY ON: Places to visit and activities to do
+DO NOT INCLUDE: Food recommendations, hotels, or restaurants (user can ask separately)
 
-Example format:
-Day 1:
-- 9am: Visit Freedom Trail - Start at Boston Common
-- 12pm: Lunch at Quincy Market - Try clam chowder
-- 2pm: Walk through North End - Italian neighborhood
+Keep it concise (5-7 main attractions per day maximum).
 
-Be specific and helpful!`;
+Format:
+- Time: Place/Activity - What to see/do there
+- Include entry times, duration, travel time between spots
+- Be specific with location names
+- End with a friendly closing
+
+Example:
+Day 1 in Paris:
+- 9am: Eiffel Tower - Go to top for city views (2 hours)
+- 11:30am: Walk to Trocadéro Gardens - Photos and relax (30 min)
+- 12:30pm: Seine River cruise - See major landmarks (1 hour)
+- 2pm: Louvre Museum - Mona Lisa and key exhibits (3 hours)
+- 5:30pm: Notre-Dame Cathedral - Gothic architecture (45 min)
+- 7pm: Champs-Élysées - Evening stroll and Arc de Triomphe
+
+Enjoy exploring Paris! Ask me about restaurants or hotels if you need recommendations.
+
+Now create the itinerary - PLACES ONLY, complete with closing!`;
                 
                 const aiResponse = await askGeminiAI(itineraryPrompt);
                 addChatMessage(aiResponse.response, false);
                 speak("I've created an itinerary for you. Check the chat for details!");
+            }
+            // Food, Hotels, Transport recommendations - FLEXIBLE DETECTION
+            else if (cleanText.toLowerCase().match(/\b(food|restaurant|eat|eating|dining|cuisine|dish|dishes|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i) ||
+                     cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i) ||
+                     cleanText.toLowerCase().match(/\b(transport|transportation|bus|train|taxi|uber|ola|auto|rickshaw|metro|subway|getting around|get around|how to reach|how do i get|travel to)\b/i)) {
+                
+                console.log('🍽️ RECOMMENDATION MODE (Food/Hotels/Transport)');
+                
+                const recommendPrompt = `Answer this question about travel recommendations: "${text}"
+
+Provide 4-6 specific recommendations with brief details.
+Keep it SHORT and COMPLETE.
+
+Format:
+- Name - Brief description (1 line each)
+- Include why it's good
+- End with a friendly note
+
+Example for "Best restaurants in Paris":
+- Le Comptoir du Relais - Classic French bistro, Saint-Germain area
+- L'As du Fallafel - Famous falafel in the Marais, budget-friendly
+- Chez L'Ami Jean - Traditional Basque cuisine, cozy atmosphere
+- Pink Mamma - Trendy Italian, great for groups
+
+Bon appétit! Let me know if you need more suggestions.
+
+Now answer the question completely!`;
+                
+                const aiResponse = await askGeminiAI(recommendPrompt);
+                addChatMessage(aiResponse.response, false);
+                speak("I've got some recommendations for you!");
             }
             // Use AI for unclear queries and casual chat
             else {
