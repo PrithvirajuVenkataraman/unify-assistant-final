@@ -1554,16 +1554,27 @@ Just talk to me naturally!`;
                      cleanText.toLowerCase().includes('vacation') ||
                      cleanText.toLowerCase().includes('visit') && cleanText.toLowerCase().match(/\b(to|in|for)\b/) ||
                      (cleanText.toLowerCase().includes('plan') && (cleanText.toLowerCase().includes('travel') || cleanText.toLowerCase().includes('visit')))) {
+                
+                console.log('✈️ ITINERARY MODE TRIGGERED!');
+                console.log('Input text:', text);
+                
                 // Use AI to create detailed itinerary
                 const itineraryPrompt = `Create a detailed day-by-day itinerary based on this request: "${text}". 
 
-Format your response as:
-- Clear day-by-day breakdown
-- Specific activities and times
-- Practical suggestions
-- Keep it concise but helpful
+Format your response as a simple, clean list:
+- Use time markers (9am, 12pm, etc.) followed by activity
+- Keep each line concise (one activity per line)
+- Include practical details (location names, what to do)
+- No bold formatting, no asterisks, no special characters
+- Just plain text with dashes for bullets
 
-Be creative and specific!`;
+Example format:
+Day 1:
+- 9am: Visit Freedom Trail - Start at Boston Common
+- 12pm: Lunch at Quincy Market - Try clam chowder
+- 2pm: Walk through North End - Italian neighborhood
+
+Be specific and helpful!`;
                 
                 const aiResponse = await askGeminiAI(itineraryPrompt);
                 addChatMessage(aiResponse.response, false);
@@ -1571,6 +1582,13 @@ Be creative and specific!`;
             }
             // Use AI for unclear queries and casual chat
             else {
+                console.log('💬 CASUAL CHAT MODE');
+                console.log('Input text:', text);
+                console.log('Checking conditions:');
+                console.log('  includes trip?', cleanText.toLowerCase().includes('trip'));
+                console.log('  includes itinerary?', cleanText.toLowerCase().includes('itinerary'));
+                console.log('  includes vacation?', cleanText.toLowerCase().includes('vacation'));
+                
                 const aiResponse = await askGeminiAI(text);
                 addChatMessage(aiResponse.response, false);
                 speak(aiResponse.response);
