@@ -1,5 +1,3 @@
-// Updated model: gemini-3-flash-preview - v2
-
 // Vercel Serverless Function for Gemini AI
 export default async function handler(req, res) {
     // Enable CORS
@@ -48,7 +46,7 @@ export default async function handler(req, res) {
                         temperature: 0.7,
                         topK: 40,
                         topP: 0.95,
-                        maxOutputTokens: 1024,
+                        maxOutputTokens: 5000,
                     }
                 })
             }
