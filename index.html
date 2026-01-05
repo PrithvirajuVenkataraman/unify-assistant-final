@@ -651,6 +651,20 @@
                         <div class="switch-toggle"></div>
                     </div>
                 </div>
+                
+                <!-- Feature Request Button -->
+                <div class="flex justify-center mt-4">
+                    <button 
+                        onclick="openFeatureRequest()" 
+                        class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-lg transition-all text-xs font-medium flex items-center gap-2 whitespace-nowrap"
+                        title="Request a Feature">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 20h9"></path>
+                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                        </svg>
+                        Request Feature
+                    </button>
+                </div>
             </div>
 
             <!-- Main Content Area -->
@@ -991,6 +1005,13 @@ async function handleNameCorrection(text) {
                     if (receipt) receipt.classList.remove('dark-mode');
                 }, 800); // Match the tube light startup animation duration
             }
+        }
+
+        // ========== FEATURE REQUEST ==========
+        function openFeatureRequest() {
+            // Google Form for feature requests
+            const formUrl = 'https://forms.gle/h8Wtb3fbwKBnjoYT8';
+            window.open(formUrl, '_blank');
         }
 
         // ========== CHAT MESSAGE HANDLING ==========
@@ -1514,6 +1535,12 @@ async function handleNameCorrection(text) {
             // Delete/clear reminders
             else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('reminder')) {
                 clearAllReminders();
+            }
+            // Creator Info
+            else if (cleanText.toLowerCase().match(/\b(who (created|made|built|developed) (you|this|unify)|who (is|are) (your|the) (creator|developer|maker|author)|tell me about (your|the) creator|who owns (you|this))\b/i)) {
+                const creatorMsg = `I was created by Prithviraju Venkataraman, a developer passionate about AI and voice interfaces. I was built to help his family mainly with travel planning, weather updates, shopping lists, reminders, and more but later on thought, why not make this as a Vibe Coded Project! Cool isn't it? If you see any bugs or room for improvement, click on Request feature.`;
+                addChatMessage(creatorMsg, false);
+                speak("I was created by Prithviraju Venkataraman. This started as a family project and became a Vibe Coded Project!");
             }
             // Help/Features query
             else if (cleanText.toLowerCase().match(/what (can you do|are your features?|features?|do you have|is your feature)/i) ||
