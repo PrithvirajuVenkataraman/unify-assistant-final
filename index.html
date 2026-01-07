@@ -1410,6 +1410,40 @@ async function handleNameCorrection(text) {
         async function processCommand(text) {
             const lower = text.toLowerCase();
             
+            // Auto-close cards when topic changes
+            const isWeatherQuery = lower.includes('weather') || lower.includes('temperature') || 
+                                   lower.includes('rain') || lower.includes('snow') || 
+                                   lower.includes('forecast') || lower.includes('hot') || lower.includes('cold');
+            
+            const isShoppingQuery = lower.includes('shopping') || lower.includes('grocery') || 
+                                    (lower.includes('add') && lower.includes('list'));
+            
+            const isReminderQuery = lower.includes('remind') || lower.includes('reminder');
+            
+            // Close weather card if not asking about weather
+            if (!isWeatherQuery && !waitingForLocation) {
+                const weatherCard = document.getElementById('weather-card');
+                if (weatherCard && !weatherCard.classList.contains('hidden')) {
+                    weatherCard.classList.add('hidden');
+                }
+            }
+            
+            // Close shopping receipt if not asking about shopping
+            if (!isShoppingQuery) {
+                const shoppingReceipt = document.getElementById('shopping-receipt');
+                if (shoppingReceipt && !shoppingReceipt.classList.contains('hidden')) {
+                    shoppingReceipt.classList.add('hidden');
+                }
+            }
+            
+            // Close reminders section if not asking about reminders
+            if (!isReminderQuery) {
+                const remindersSection = document.getElementById('reminders-section');
+                if (remindersSection && !remindersSection.classList.contains('hidden')) {
+                    remindersSection.classList.add('hidden');
+                }
+            }
+            
             // Remove common conversational prefixes
             let cleanText = text;
             const prefixes = ['hey', 'hi', 'hello', 'ok', 'okay', 'well', 'so', 'um', 'uh'];
