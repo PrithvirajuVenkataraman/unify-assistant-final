@@ -1145,6 +1145,7 @@ async function handleNameCorrection(text) {
         // ========== SPEECH RECOGNITION ==========
         
         let isProcessing = false; // Prevent duplicate processing
+        let speechTimeout = null; // Timeout for collecting complete sentence
         
         function initializeSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1156,25 +1157,39 @@ async function handleNameCorrection(text) {
 
             // Manual recognition - triggered by button only
             continuousRecognition = new SpeechRecognition();
-            continuousRecognition.continuous = false;  // Changed to false - one utterance at a time
-            continuousRecognition.interimResults = false;  // Changed to false - only final results
+            continuousRecognition.continuous = true;  // Keep listening
+            continuousRecognition.interimResults = true;  // Get interim results
             continuousRecognition.lang = 'en-US';
 
             continuousRecognition.onresult = async (event) => {
+                // Get the latest result
                 const last = event.results.length - 1;
-                const text = event.results[last][0].transcript.trim();
+                const result = event.results[last];
+                const text = result[0].transcript.trim();
                 
                 if (!text) return;
                 
-                // Prevent duplicate processing
-                if (isProcessing) {
-                    console.log('⏸️ Already processing, ignoring:', text);
-                    return;
+                // Clear any existing timeout
+                if (speechTimeout) {
+                    clearTimeout(speechTimeout);
                 }
                 
-                isProcessing = true;
-                
-                addChatMessage(text, true);
+                // If it's a final result, process after short delay
+                if (result.isFinal) {
+                    console.log('✅ Final result:', text);
+                    
+                    // Stop listening immediately
+                    stopListening();
+                    
+                    // Prevent duplicate processing
+                    if (isProcessing) {
+                        console.log('⏸️ Already processing, ignoring:', text);
+                        return;
+                    }
+                    
+                    isProcessing = true;
+                    
+                    addChatMessage(text, true);
                 
                 try {
                     if (waitingForLocation) {
