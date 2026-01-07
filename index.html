@@ -1883,10 +1883,64 @@ Now answer about the local food culture and famous dishes!`;
                     }
                     
                     // Continue with original query + preference
-                    text = originalQuery + preference;
+                    const finalQuery = originalQuery + preference;
+                    const queryType = wasHotelQuery ? 'hotel' : 'food';
+                    
+                    const recommendPrompt = queryType === 'hotel' ? 
+                    `Answer this question about hotel recommendations: "${finalQuery}"
+
+Provide 4-6 specific hotel recommendations with these details for EACH:
+- Hotel name - Brief description
+- Price range (Budget/Mid-range/Luxury)
+- Restaurant type: [Pure Veg / Non-Veg / Both]
+- Local specialty dish if available
+- Why it's recommended
+
+Keep it SHORT and COMPLETE.
+
+${finalQuery.includes('vegetarian') || finalQuery.includes('pure veg') ? 'IMPORTANT: Only suggest hotels with PURE VEGETARIAN restaurants.' : ''}
+
+Example format:
+- The Saradharam - Near Nataraja Temple, traditional stay | Mid-range | Pure Veg restaurant | Try: Chettinad meals | Perfect for temple visits
+- Hotel Akshaya - Modern, family-friendly | Budget | Both Veg & Non-Veg | Try: Local biryani | Central location
+
+End with: "I hope you have a comfortable stay! Let me know if you need restaurant suggestions."
+
+Now answer completely!` :
+
+                    `Answer this question about travel recommendations: "${finalQuery}"
+
+Provide 4-6 specific recommendations with brief details.
+Keep it SHORT and COMPLETE.
+
+${finalQuery.includes('vegetarian') || finalQuery.includes('pure veg') ? 'IMPORTANT: Only suggest VEGETARIAN/VEG restaurants. Mark each as [Pure Veg].' : 'Mark each restaurant as [Pure Veg] or [Non-Veg].'}
+
+${queryType === 'food' ? 'Also mention the local specialty dish for the region!' : ''}
+
+Format:
+- Name - Brief description | [Veg Type] | Try: [Local specialty]
+- Include why it's good
+- End with a friendly note
+
+Example for "Best restaurants in Paris":
+- Le Comptoir du Relais - Classic French bistro | [Non-Veg] | Try: Coq au vin
+- L'As du Fallafel - Famous in Marais | [Veg] | Try: Falafel wrap | Budget-friendly
+
+Bon appétit! Let me know if you need more suggestions.
+
+Now answer the question completely!`;
+                    
+                    const aiResponse = await callAIWithTyping(recommendPrompt);
+                    addChatMessage(aiResponse.response, false);
+                    speak(queryType === 'hotel' ? "I've got some hotel recommendations for you!" : "I've got some recommendations for you!");
+                    
+                    // Save to history
+                    saveToHistory(finalQuery, aiResponse.response);
+                    return; // EXIT after handling veg preference
                 }
                 
-                // Determine if this is hotel or food query
+                // If we get here, it's a NEW query (not continuing from veg preference)
+                // Determine query type from the current text
                 const queryType = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation)\b/i) ? 'hotel' : 
                                   cleanText.toLowerCase().match(/\b(transport|bus|train|taxi)\b/i) ? 'transport' : 'food';
                 
