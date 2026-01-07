@@ -1233,6 +1233,7 @@ async function handleNameCorrection(text) {
                     // Always clear processing flag
                     isProcessing = false;
                 }
+                } // Close isFinal check
             };
 
             continuousRecognition.onerror = (event) => {
