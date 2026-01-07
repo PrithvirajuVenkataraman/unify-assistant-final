@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Unify Personal Assistant</title>
+    <title>Unify Voice Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js?key=jQZ2zpcE"></script>
     <style>
@@ -624,16 +624,16 @@
 
     <div class="min-h-screen pb-32">
         <div id="bg-effects" class="fixed inset-0 overflow-hidden pointer-events-none">
-            <div class="absolute top-20 left-20 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
-            <div class="absolute bottom-20 right-20 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" style="animation-delay: 1s;"></div>
-            <div class="absolute top-1/2 left-1/2 w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" style="animation-delay: 2s;"></div>
+            <div class="absolute top-20 left-20 w-72 h-72 bg-slate-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
+            <div class="absolute bottom-20 right-20 w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style="animation-delay: 1s;"></div>
+            <div class="absolute top-1/2 left-1/2 w-72 h-72 bg-violet-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style="animation-delay: 2s;"></div>
         </div>
 
         <div class="max-w-4xl mx-auto relative z-10 p-6">
             <!-- Header -->
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-3">
-                    <div class="p-3 rounded-2xl bg-gradient-to-r from-pink-500 to-purple-500 shadow-lg">
+                    <div class="p-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg">
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
                             <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
                             <path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path>
@@ -740,7 +740,7 @@
                 />
                 
                 <!-- Send Button (shows when typing) -->
-                <button onclick="sendTextInput()" id="send-btn" class="hidden flex-shrink-0 p-2 rounded-full bg-purple-600 hover:bg-purple-700 transition-all">
+                <button onclick="sendTextInput()" id="send-btn" class="hidden flex-shrink-0 p-2 rounded-full bg-indigo-600 hover:bg-indigo-700 transition-all">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
                         <line x1="22" y1="2" x2="11" y2="13"></line>
                         <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -770,7 +770,7 @@
     <!-- History Button (Higher) -->
     <button 
         onclick="showHistoryPanel()" 
-        class="fixed bottom-20 right-6 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg transition-all text-sm font-medium flex items-center gap-2 z-50 hover:scale-105"
+        class="fixed bottom-16 right-6 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg transition-all text-sm font-medium flex items-center gap-2 z-50 hover:scale-105"
         title="View Conversation History">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"></circle>
@@ -1050,7 +1050,7 @@ async function handleNameCorrection(text) {
             
             if (isUser) {
                 messageDiv.innerHTML = `
-                    <div class="bg-purple-500 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md shadow-sm relative group">
+                    <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md shadow-sm relative group">
                         <p class="text-sm">${formattedText}</p>
                         <button onclick="deleteMessage(this)" class="hidden group-hover:block absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-sm hover:bg-red-600 transition-all shadow-lg">×</button>
                     </div>
@@ -2967,4 +2967,3 @@ loadHistory();
 </script>
 </body>
 </html>
-
