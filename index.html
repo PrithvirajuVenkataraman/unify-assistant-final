@@ -1711,31 +1711,51 @@ Just talk to me naturally!`;
                 console.log('Input text:', text);
                 
                 // Use AI to create detailed itinerary - PLACES ONLY
-                const itineraryPrompt = `Create a day-by-day itinerary for: "${text}". 
+                const itineraryPrompt = `Create a beautifully formatted day-by-day itinerary for: "${text}". 
 
 FOCUS ONLY ON: Places to visit and activities to do
 DO NOT INCLUDE: Food recommendations, hotels, or restaurants (user can ask separately)
 
 Keep it concise (5-7 main attractions per day maximum).
 
-Format:
-- Time: Place/Activity - What to see/do there
-- Include entry times, duration, travel time between spots
-- Be specific with location names
-- End with a friendly closing
+Format with visual appeal:
+**Day [number] in [City]:**
+
+🕐 **[Time]:** [Place/Activity]
+   - What to see/do there
+   - Duration and any entry info
+   - Travel time to next spot
+
+Use emojis strategically:
+- 🕐 🕑 🕒 for times
+- 🏛️ for temples/historic sites
+- 🌳 for parks/nature
+- 🎨 for museums/art
+- 🏖️ for beaches
+- ⛰️ for mountains
+- 🚶 for walking areas
 
 Example:
-Day 1 in Paris:
-- 9am: Eiffel Tower - Go to top for city views (2 hours)
-- 11:30am: Walk to Trocadéro Gardens - Photos and relax (30 min)
-- 12:30pm: Seine River cruise - See major landmarks (1 hour)
-- 2pm: Louvre Museum - Mona Lisa and key exhibits (3 hours)
-- 5:30pm: Notre-Dame Cathedral - Gothic architecture (45 min)
-- 7pm: Champs-Élysées - Evening stroll and Arc de Triomphe
+**Day 1 in Chidambaram:**
 
-Enjoy exploring Paris! Ask me about restaurants or hotels if you need recommendations.
+🕐 **6:00am:** 🏛️ Thillai Nataraja Temple
+   - Witness morning rituals and explore stunning Dravidian architecture
+   - Duration: 3 hours
+   - Gold-roofed sanctum is a must-see
 
-Now create the itinerary - PLACES ONLY, complete with closing!`;
+🕒 **9:30am:** 🏛️ Thillai Kali Amman Temple  
+   - Significant temple dedicated to Goddess Kali
+   - Duration: 1 hour
+   - 🚗 Travel time: 15 mins
+
+🕙 **11:00am:** 🌳 Pichavaram Mangrove Forest
+   - Rowboat through world's second-largest mangrove forest
+   - Duration: 2.5 hours
+   - 🚗 Travel time: 40 mins
+
+End with: "Enjoy exploring the beauty of [City]! Ask me about restaurants or hotels if you need recommendations."
+
+Now create the itinerary with beautiful formatting and emojis!`;
                 
                 const aiResponse = await callAIWithTyping(itineraryPrompt);
                 addChatMessage(aiResponse.response, false);
@@ -1744,8 +1764,62 @@ Now create the itinerary - PLACES ONLY, complete with closing!`;
                 // Save to history
                 saveToHistory(text, aiResponse.response);
             }
+            // Local Food Specialties / Culture Questions - BROAD DETECTION
+            // Catches: "Food in X?", "What to eat in X?", "X cuisine?", "Famous dishes in X?"
+            else if (
+                // Pattern 1: "[adjective] food/cuisine/dishes in [place]"
+                (cleanText.toLowerCase().match(/\b(food|cuisine|dishes?|specialt(y|ies))\s+(in|of|from)\s+\w+/i)) ||
+                // Pattern 2: "[place] food/cuisine/dishes"
+                (cleanText.toLowerCase().match(/\w+\s+(food|cuisine|dishes?|specialt(y|ies))/i) && cleanText.split(' ').length <= 6) ||
+                // Pattern 3: "what to eat/try in [place]"
+                (cleanText.toLowerCase().match(/what\s+(to|should|can|do)\s+(eat|try|have)/i)) ||
+                // Pattern 4: "famous/special/local/traditional [food terms]"
+                (cleanText.toLowerCase().match(/\b(famous|special|local|traditional|authentic|signature|must.try|typical)\b/i) && 
+                 cleanText.toLowerCase().match(/\b(food|dish|dishes|cuisine|eat)\b/i)) ||
+                // Pattern 5: Simple "food in [place]" or "[place] food"
+                (cleanText.toLowerCase().match(/\b(food|cuisine)\b/i) && !cleanText.toLowerCase().match(/\b(restaurant|hotel|where|best)\b/i))
+            ) {
+                
+                console.log('🍲 LOCAL FOOD SPECIALTY MODE');
+                
+                // This is asking about local food culture, not specific restaurants
+                const specialtyPrompt = `Answer this question about local food and specialties: "${text}"
+
+Provide information about the LOCAL FOOD CULTURE and FAMOUS DISHES of the region mentioned.
+
+Format:
+🍽️ **Famous Local Dishes:**
+- Dish name - Brief description and what makes it special
+- Where it's typically served (occasion/context)
+
+Include 5-7 signature dishes that represent the local cuisine.
+
+Example for "What's the food like in Chidambaram?":
+🍽️ **Famous Chidambaram/Tamil Nadu Dishes:**
+- Idli & Sambar - Soft steamed rice cakes with lentil stew, breakfast staple
+- Dosa - Crispy rice crepe, served with chutneys and sambar
+- Chettinad Chicken - Fiery red curry with aromatic spices, regional specialty
+- Pongal - Savory rice and lentil dish, comfort food
+- Filter Coffee - Strong South Indian coffee, cultural icon
+
+🌶️ **What Makes It Special:**
+Tamil Nadu cuisine is known for rice-based dishes, fermented batters, and bold use of spices like curry leaves, mustard seeds, and tamarind.
+
+💡 **Pro Tip:** Best enjoyed at local eateries and traditional homes. Try eating on a banana leaf for authentic experience!
+
+If you'd like specific restaurant recommendations, just ask!
+
+Now answer about the local food culture and famous dishes!`;
+                
+                const aiResponse = await callAIWithTyping(specialtyPrompt);
+                addChatMessage(aiResponse.response, false);
+                speak("Let me tell you about the local food specialties!");
+                
+                // Save to history
+                saveToHistory(text, aiResponse.response);
+            }
             // Food, Hotels, Transport recommendations - FLEXIBLE DETECTION
-            else if (cleanText.toLowerCase().match(/\b(food|restaurant|eat|eating|dining|cuisine|dish|dishes|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i) ||
+            else if (cleanText.toLowerCase().match(/\b(restaurant|eat|eating|dining|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i) ||
                      cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i) ||
                      cleanText.toLowerCase().match(/\b(transport|transportation|bus|train|taxi|uber|ola|auto|rickshaw|metro|subway|getting around|get around|how to reach|how do i get|travel to)\b/i)) {
                 
@@ -1753,6 +1827,7 @@ Now create the itinerary - PLACES ONLY, complete with closing!`;
                 
                 // Check if it's a restaurant/food query
                 const isFoodQuery = cleanText.toLowerCase().match(/\b(food|restaurant|eat|eating|dining|cuisine|dish|dishes|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i);
+                const isHotelQuery = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i);
                 
                 // Check if user already specified preference
                 const hasVegPref = cleanText.toLowerCase().match(/\b(veg|vegetarian|pure veg|only veg|veg only)\b/i);
@@ -1762,6 +1837,7 @@ Now create the itinerary - PLACES ONLY, complete with closing!`;
                 if (isFoodQuery && !hasVegPref && !hasNonVegPref && !window.waitingForVegPreference) {
                     window.pendingFoodQuery = text;
                     window.waitingForVegPreference = true;
+                    window.isHotelQuery = false;
                     
                     const prefMsg = "Would you prefer:\n1. Pure Veg\n2. Non-Veg\n3. Anything is fine\n\nYou can say the number or the preference!";
                     addChatMessage(prefMsg, false);
@@ -1769,25 +1845,40 @@ Now create the itinerary - PLACES ONLY, complete with closing!`;
                     return;
                 }
                 
+                // If it's a hotel query, ask for food preference
+                if (isHotelQuery && !hasVegPref && !hasNonVegPref && !window.waitingForVegPreference) {
+                    window.pendingFoodQuery = text;
+                    window.waitingForVegPreference = true;
+                    window.isHotelQuery = true;
+                    
+                    const prefMsg = "For hotel restaurants, would you prefer:\n1. Pure Veg\n2. Non-Veg\n3. Anything is fine\n\nYou can say the number or the preference!";
+                    addChatMessage(prefMsg, false);
+                    speak("For hotel restaurants, would you prefer pure veg, non veg, or anything is fine?");
+                    return;
+                }
+                
                 // Handle veg preference response
                 if (window.waitingForVegPreference) {
                     window.waitingForVegPreference = false;
                     const originalQuery = window.pendingFoodQuery;
+                    const wasHotelQuery = window.isHotelQuery;
                     window.pendingFoodQuery = null;
+                    window.isHotelQuery = false;
                     
                     let preference = '';
                     if (cleanText.match(/\b(1|one|veg|vegetarian|pure veg)\b/i)) {
-                        preference = ' (pure vegetarian options only)';
+                        preference = wasHotelQuery ? ' (hotels with pure vegetarian restaurants)' : ' (pure vegetarian options only)';
                     } else if (cleanText.match(/\b(2|two|non-veg|non veg|meat)\b/i)) {
-                        preference = ' (non-vegetarian options)';
+                        preference = wasHotelQuery ? ' (hotels with non-vegetarian restaurants)' : ' (non-vegetarian options)';
                     } else if (cleanText.match(/\b(3|three|anything|any|both|either)\b/i)) {
-                        preference = ' (both veg and non-veg options)';
+                        preference = wasHotelQuery ? ' (hotels with both veg and non-veg options)' : ' (both veg and non-veg options)';
                     } else {
                         // Didn't understand, ask again
                         const msg = "I didn't catch that. Please say 1 for Pure Veg, 2 for Non-Veg, or 3 for Anything.";
                         addChatMessage(msg, false);
                         speak(msg);
                         window.waitingForVegPreference = true;
+                        window.isHotelQuery = wasHotelQuery;
                         return;
                     }
                     
@@ -1795,23 +1886,49 @@ Now create the itinerary - PLACES ONLY, complete with closing!`;
                     text = originalQuery + preference;
                 }
                 
-                const recommendPrompt = `Answer this question about travel recommendations: "${text}"
+                // Determine if this is hotel or food query
+                const queryType = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation)\b/i) ? 'hotel' : 
+                                  cleanText.toLowerCase().match(/\b(transport|bus|train|taxi)\b/i) ? 'transport' : 'food';
+                
+                const recommendPrompt = queryType === 'hotel' ? 
+                `Answer this question about hotel recommendations: "${text}"
+
+Provide 4-6 specific hotel recommendations with these details for EACH:
+- Hotel name - Brief description
+- Price range (Budget/Mid-range/Luxury)
+- Restaurant type: [Pure Veg / Non-Veg / Both]
+- Local specialty dish if available
+- Why it's recommended
+
+Keep it SHORT and COMPLETE.
+
+${text.includes('vegetarian') || text.includes('pure veg') ? 'IMPORTANT: Only suggest hotels with PURE VEGETARIAN restaurants.' : ''}
+
+Example format:
+- The Saradharam - Near Nataraja Temple, traditional stay | Mid-range | Pure Veg restaurant | Try: Chettinad meals | Perfect for temple visits
+- Hotel Akshaya - Modern, family-friendly | Budget | Both Veg & Non-Veg | Try: Local biryani | Central location
+
+End with: "I hope you have a comfortable stay! Let me know if you need restaurant suggestions."
+
+Now answer completely!` :
+
+                `Answer this question about travel recommendations: "${text}"
 
 Provide 4-6 specific recommendations with brief details.
 Keep it SHORT and COMPLETE.
 
-${text.includes('vegetarian') || text.includes('veg') ? 'IMPORTANT: Only suggest VEGETARIAN/VEG restaurants.' : ''}
+${text.includes('vegetarian') || text.includes('pure veg') ? 'IMPORTANT: Only suggest VEGETARIAN/VEG restaurants. Mark each as [Pure Veg].' : 'Mark each restaurant as [Pure Veg] or [Non-Veg].'}
+
+${queryType === 'food' ? 'Also mention the local specialty dish for the region!' : ''}
 
 Format:
-- Name - Brief description (1 line each)
+- Name - Brief description | [Veg Type] | Try: [Local specialty]
 - Include why it's good
 - End with a friendly note
 
 Example for "Best restaurants in Paris":
-- Le Comptoir du Relais - Classic French bistro, Saint-Germain area
-- L'As du Fallafel - Famous falafel in the Marais, budget-friendly
-- Chez L'Ami Jean - Traditional Basque cuisine, cozy atmosphere
-- Pink Mamma - Trendy Italian, great for groups
+- Le Comptoir du Relais - Classic French bistro | [Non-Veg] | Try: Coq au vin
+- L'As du Fallafel - Famous in Marais | [Veg] | Try: Falafel wrap | Budget-friendly
 
 Bon appétit! Let me know if you need more suggestions.
 
@@ -1819,7 +1936,7 @@ Now answer the question completely!`;
                 
                 const aiResponse = await callAIWithTyping(recommendPrompt);
                 addChatMessage(aiResponse.response, false);
-                speak("I've got some recommendations for you!");
+                speak(queryType === 'hotel' ? "I've got some hotel recommendations for you!" : "I've got some recommendations for you!");
                 
                 // Save to history
                 saveToHistory(text, aiResponse.response);
