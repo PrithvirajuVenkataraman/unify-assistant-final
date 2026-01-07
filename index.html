@@ -1818,6 +1818,88 @@ Now answer about the local food culture and famous dishes!`;
                 // Save to history
                 saveToHistory(text, aiResponse.response);
             }
+            // Handle veg preference response - CHECK FIRST, BEFORE PATTERN MATCHING
+            if (window.waitingForVegPreference) {
+                window.waitingForVegPreference = false;
+                const originalQuery = window.pendingFoodQuery;
+                const wasHotelQuery = window.isHotelQuery;
+                window.pendingFoodQuery = null;
+                window.isHotelQuery = false;
+                
+                let preference = '';
+                if (cleanText.match(/\b(1|one|veg|vegetarian|pure veg)\b/i)) {
+                    preference = wasHotelQuery ? ' (hotels with pure vegetarian restaurants)' : ' (pure vegetarian options only)';
+                } else if (cleanText.match(/\b(2|two|non-veg|non veg|meat)\b/i)) {
+                    preference = wasHotelQuery ? ' (hotels with non-vegetarian restaurants)' : ' (non-vegetarian options)';
+                } else if (cleanText.match(/\b(3|three|anything|any|both|either)\b/i)) {
+                    preference = wasHotelQuery ? ' (hotels with both veg and non-veg options)' : ' (both veg and non-veg options)';
+                } else {
+                    // Didn't understand, ask again
+                    const msg = "I didn't catch that. Please say 1 for Pure Veg, 2 for Non-Veg, or 3 for Anything.";
+                    addChatMessage(msg, false);
+                    speak(msg);
+                    window.waitingForVegPreference = true;
+                    window.isHotelQuery = wasHotelQuery;
+                    window.pendingFoodQuery = originalQuery;
+                    return;
+                }
+                
+                // Continue with original query + preference
+                const finalQuery = originalQuery + preference;
+                const queryType = wasHotelQuery ? 'hotel' : 'food';
+                
+                const recommendPrompt = queryType === 'hotel' ? 
+                `Answer this question about hotel recommendations: "${finalQuery}"
+
+Provide 4-6 specific hotel recommendations with these details for EACH:
+- Hotel name - Brief description
+- Price range (Budget/Mid-range/Luxury)
+- Restaurant type: [Pure Veg / Non-Veg / Both]
+- Local specialty dish if available
+- Why it's recommended
+
+Keep it SHORT and COMPLETE.
+
+${finalQuery.includes('vegetarian') || finalQuery.includes('pure veg') ? 'IMPORTANT: Only suggest hotels with PURE VEGETARIAN restaurants.' : ''}
+
+Example format:
+- The Saradharam - Near Nataraja Temple, traditional stay | Mid-range | Pure Veg restaurant | Try: Chettinad meals | Perfect for temple visits
+- Hotel Akshaya - Modern, family-friendly | Budget | Both Veg & Non-Veg | Try: Local biryani | Central location
+
+End with: "I hope you have a comfortable stay! Let me know if you need restaurant suggestions."
+
+Now answer completely!` :
+
+                `Answer this question about travel recommendations: "${finalQuery}"
+
+Provide 4-6 specific recommendations with brief details.
+Keep it SHORT and COMPLETE.
+
+${finalQuery.includes('vegetarian') || finalQuery.includes('pure veg') ? 'IMPORTANT: Only suggest VEGETARIAN/VEG restaurants. Mark each as [Pure Veg].' : 'Mark each restaurant as [Pure Veg] or [Non-Veg].'}
+
+${queryType === 'food' ? 'Also mention the local specialty dish for the region!' : ''}
+
+Format:
+- Name - Brief description | [Veg Type] | Try: [Local specialty]
+- Include why it's good
+- End with a friendly note
+
+Example for "Best restaurants in Paris":
+- Le Comptoir du Relais - Classic French bistro | [Non-Veg] | Try: Coq au vin
+- L'As du Fallafel - Famous in Marais | [Veg] | Try: Falafel wrap | Budget-friendly
+
+Bon appétit! Let me know if you need more suggestions.
+
+Now answer the question completely!`;
+                
+                const aiResponse = await callAIWithTyping(recommendPrompt);
+                addChatMessage(aiResponse.response, false);
+                speak(queryType === 'hotel' ? "I've got some hotel recommendations for you!" : "I've got some recommendations for you!");
+                
+                // Save to history
+                saveToHistory(finalQuery, aiResponse.response);
+                return; // EXIT - don't process further
+            }
             // Food, Hotels, Transport recommendations - FLEXIBLE DETECTION
             else if (cleanText.toLowerCase().match(/\b(restaurant|eat|eating|dining|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i) ||
                      cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i) ||
@@ -1855,88 +1937,6 @@ Now answer about the local food culture and famous dishes!`;
                     addChatMessage(prefMsg, false);
                     speak("For hotel restaurants, would you prefer pure veg, non veg, or anything is fine?");
                     return;
-                }
-                
-                // Handle veg preference response
-                if (window.waitingForVegPreference) {
-                    window.waitingForVegPreference = false;
-                    const originalQuery = window.pendingFoodQuery;
-                    const wasHotelQuery = window.isHotelQuery;
-                    window.pendingFoodQuery = null;
-                    window.isHotelQuery = false;
-                    
-                    let preference = '';
-                    if (cleanText.match(/\b(1|one|veg|vegetarian|pure veg)\b/i)) {
-                        preference = wasHotelQuery ? ' (hotels with pure vegetarian restaurants)' : ' (pure vegetarian options only)';
-                    } else if (cleanText.match(/\b(2|two|non-veg|non veg|meat)\b/i)) {
-                        preference = wasHotelQuery ? ' (hotels with non-vegetarian restaurants)' : ' (non-vegetarian options)';
-                    } else if (cleanText.match(/\b(3|three|anything|any|both|either)\b/i)) {
-                        preference = wasHotelQuery ? ' (hotels with both veg and non-veg options)' : ' (both veg and non-veg options)';
-                    } else {
-                        // Didn't understand, ask again
-                        const msg = "I didn't catch that. Please say 1 for Pure Veg, 2 for Non-Veg, or 3 for Anything.";
-                        addChatMessage(msg, false);
-                        speak(msg);
-                        window.waitingForVegPreference = true;
-                        window.isHotelQuery = wasHotelQuery;
-                        return;
-                    }
-                    
-                    // Continue with original query + preference
-                    const finalQuery = originalQuery + preference;
-                    const queryType = wasHotelQuery ? 'hotel' : 'food';
-                    
-                    const recommendPrompt = queryType === 'hotel' ? 
-                    `Answer this question about hotel recommendations: "${finalQuery}"
-
-Provide 4-6 specific hotel recommendations with these details for EACH:
-- Hotel name - Brief description
-- Price range (Budget/Mid-range/Luxury)
-- Restaurant type: [Pure Veg / Non-Veg / Both]
-- Local specialty dish if available
-- Why it's recommended
-
-Keep it SHORT and COMPLETE.
-
-${finalQuery.includes('vegetarian') || finalQuery.includes('pure veg') ? 'IMPORTANT: Only suggest hotels with PURE VEGETARIAN restaurants.' : ''}
-
-Example format:
-- The Saradharam - Near Nataraja Temple, traditional stay | Mid-range | Pure Veg restaurant | Try: Chettinad meals | Perfect for temple visits
-- Hotel Akshaya - Modern, family-friendly | Budget | Both Veg & Non-Veg | Try: Local biryani | Central location
-
-End with: "I hope you have a comfortable stay! Let me know if you need restaurant suggestions."
-
-Now answer completely!` :
-
-                    `Answer this question about travel recommendations: "${finalQuery}"
-
-Provide 4-6 specific recommendations with brief details.
-Keep it SHORT and COMPLETE.
-
-${finalQuery.includes('vegetarian') || finalQuery.includes('pure veg') ? 'IMPORTANT: Only suggest VEGETARIAN/VEG restaurants. Mark each as [Pure Veg].' : 'Mark each restaurant as [Pure Veg] or [Non-Veg].'}
-
-${queryType === 'food' ? 'Also mention the local specialty dish for the region!' : ''}
-
-Format:
-- Name - Brief description | [Veg Type] | Try: [Local specialty]
-- Include why it's good
-- End with a friendly note
-
-Example for "Best restaurants in Paris":
-- Le Comptoir du Relais - Classic French bistro | [Non-Veg] | Try: Coq au vin
-- L'As du Fallafel - Famous in Marais | [Veg] | Try: Falafel wrap | Budget-friendly
-
-Bon appétit! Let me know if you need more suggestions.
-
-Now answer the question completely!`;
-                    
-                    const aiResponse = await callAIWithTyping(recommendPrompt);
-                    addChatMessage(aiResponse.response, false);
-                    speak(queryType === 'hotel' ? "I've got some hotel recommendations for you!" : "I've got some recommendations for you!");
-                    
-                    // Save to history
-                    saveToHistory(finalQuery, aiResponse.response);
-                    return; // EXIT after handling veg preference
                 }
                 
                 // If we get here, it's a NEW query (not continuing from veg preference)
