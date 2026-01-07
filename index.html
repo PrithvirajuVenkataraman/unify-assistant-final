@@ -1144,6 +1144,8 @@ async function handleNameCorrection(text) {
 
         // ========== SPEECH RECOGNITION ==========
         
+        let isProcessing = false; // Prevent duplicate processing
+        
         function initializeSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
@@ -1158,51 +1160,64 @@ async function handleNameCorrection(text) {
             continuousRecognition.interimResults = false;  // Changed to false - only final results
             continuousRecognition.lang = 'en-US';
 
-            continuousRecognition.onresult = (event) => {
+            continuousRecognition.onresult = async (event) => {
                 const last = event.results.length - 1;
                 const text = event.results[last][0].transcript.trim();
                 
                 if (!text) return;
                 
+                // Prevent duplicate processing
+                if (isProcessing) {
+                    console.log('⏸️ Already processing, ignoring:', text);
+                    return;
+                }
+                
+                isProcessing = true;
+                
                 addChatMessage(text, true);
                 
-                if (waitingForLocation) {
-                    // Validate location input
-                    const cleanLocation = text.replace(/[?!]/g, '').trim();
-                    
-                    if (cleanLocation.length < 2) {
-                        const msg = "I didn't catch that. Please tell me a city or location name.";
-                        addChatMessage(msg, false);
-                        speak(msg);
+                try {
+                    if (waitingForLocation) {
+                        // Validate location input
+                        const cleanLocation = text.replace(/[?!]/g, '').trim();
+                        
+                        if (cleanLocation.length < 2) {
+                            const msg = "I didn't catch that. Please tell me a city or location name.";
+                            addChatMessage(msg, false);
+                            speak(msg);
+                            return;
+                        }
+                        
+                        const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh', 'weather'];
+                        if (fillerWords.includes(cleanLocation.toLowerCase())) {
+                            const msg = "I didn't quite catch the location. Could you say it again?";
+                            addChatMessage(msg, false);
+                            speak(msg);
+                            return;
+                        }
+                        
+                        waitingForLocation = false;
+                        await getWeatherByCity(cleanLocation);
                         return;
                     }
                     
-                    const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh', 'weather'];
-                    if (fillerWords.includes(cleanLocation.toLowerCase())) {
-                        const msg = "I didn't quite catch the location. Could you say it again?";
-                        addChatMessage(msg, false);
-                        speak(msg);
+                    if (waitingForReminder) {
+                        waitingForReminder = false;
+                        await createReminderFromText(text);
                         return;
                     }
                     
-                    waitingForLocation = false;
-                    getWeatherByCity(cleanLocation);
-                    return;
+                    if (waitingForName) {
+                        await handleNameInput(text);
+                        return;
+                    }
+                    
+                    // Process as normal command
+                    await processCommand(text);
+                } finally {
+                    // Always clear processing flag
+                    isProcessing = false;
                 }
-                
-                if (waitingForReminder) {
-                    waitingForReminder = false;
-                    createReminderFromText(text);
-                    return;
-                }
-                
-                if (waitingForName) {
-                    handleNameInput(text);
-                    return;
-                }
-                
-                // Process as normal command
-                processCommand(text);
             };
 
             continuousRecognition.onerror = (event) => {
