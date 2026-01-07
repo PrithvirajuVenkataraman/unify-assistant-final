@@ -681,10 +681,25 @@
                     </div>
                 </div>
                 
-                <!-- Light Switch (Back to Original Position) -->
-                <div class="light-switch-container" onclick="toggleDarkMode()">
-                    <div id="light-switch" class="light-switch on">
-                        <div class="switch-toggle"></div>
+                <!-- Top Right Controls -->
+                <div class="flex items-center gap-3">
+                    <!-- History Button -->
+                    <button 
+                        onclick="showHistoryPanel()" 
+                        class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow-lg transition-all text-sm font-medium flex items-center gap-2"
+                        title="View Conversation History">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        History
+                    </button>
+                    
+                    <!-- Light Switch (Back to Original Position) -->
+                    <div class="light-switch-container" onclick="toggleDarkMode()">
+                        <div id="light-switch" class="light-switch on">
+                            <div class="switch-toggle"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -817,6 +832,20 @@
 <script>
 // ========== GEMINI AI INTEGRATION ==========
 let conversationContext = [];
+
+// Wrapper for AI calls with typing indicator
+async function callAIWithTyping(message, hideIndicator = true) {
+    showTypingIndicator();
+    try {
+        const response = await askGeminiAI(message);
+        if (hideIndicator) hideTypingIndicator();
+        return response;
+    } catch (error) {
+        hideTypingIndicator();
+        showError('AI request failed. Please try again.');
+        throw error;
+    }
+}
 
 async function askGeminiAI(userMessage) {
     try {
@@ -1149,8 +1178,9 @@ async function handleNameCorrection(text) {
             
             if (isUser) {
                 messageDiv.innerHTML = `
-                    <div class="bg-purple-500 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md shadow-sm">
+                    <div class="bg-purple-500 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md shadow-sm relative group">
                         <p class="text-sm">${formattedText}</p>
+                        <button onclick="deleteMessage(this)" class="hidden group-hover:block absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-sm hover:bg-red-600 transition-all shadow-lg">×</button>
                     </div>
                 `;
             } else {
@@ -1550,19 +1580,13 @@ async function handleNameCorrection(text) {
                     avatarThinking();
                     
                     if (navigator.geolocation) {
-                        // Set a timeout in case geolocation takes too long
-                        const geoTimeout = setTimeout(() => {
-                            const askMsg = "I couldn't detect your location automatically. Where are you? You can say a city, town, or neighborhood!";
-                            addChatMessage(askMsg, false);
-                            speak(askMsg);
-                            waitingForLocation = true;
-                        }, 8000); // 8 second timeout
-                        
+                        // Request location with better options
                         navigator.geolocation.getCurrentPosition(
                             async (position) => {
-                                clearTimeout(geoTimeout);
                                 const lat = position.coords.latitude;
                                 const lon = position.coords.longitude;
+                                
+                                console.log('✅ Got location:', lat, lon);
                                 
                                 // Do reverse geocoding to get city name
                                 try {
@@ -1577,6 +1601,7 @@ async function handleNameCorrection(text) {
                                     if (addr.state) cityName += `, ${addr.state}`;
                                     if (addr.country) cityName += `, ${addr.country}`;
                                     
+                                    console.log('📍 Location detected:', cityName);
                                     fetchWeather(lat, lon, cityName);
                                 } catch (error) {
                                     console.error('Reverse geocoding failed:', error);
@@ -1585,26 +1610,28 @@ async function handleNameCorrection(text) {
                                 }
                             },
                             (error) => {
-                                clearTimeout(geoTimeout);
-                                console.log('Geolocation error:', error);
+                                console.log('❌ Geolocation error:', error.code, error.message);
                                 // Geolocation failed, ask for location
                                 let askMsg;
                                 if (error.code === 1) {
                                     // Permission denied
-                                    askMsg = "📍 I need location permission to detect your weather automatically. You can enable it in your browser settings, or just tell me your city!";
+                                    askMsg = "📍 Location permission was denied. Please tell me your city, or check your browser settings to enable location access.";
                                 } else if (error.code === 2) {
                                     // Position unavailable
-                                    askMsg = "I couldn't get your exact location. Where are you? You can say a city or neighborhood!";
+                                    askMsg = "I couldn't determine your location. Where are you? Just say your city!";
+                                } else if (error.code === 3) {
+                                    // Timeout
+                                    askMsg = "Location detection is taking too long. Where are you located?";
                                 } else {
-                                    askMsg = "Location detection timed out. Where are you located?";
+                                    askMsg = "I couldn't detect your location. Where are you?";
                                 }
                                 addChatMessage(askMsg, false);
                                 speak(askMsg);
                                 waitingForLocation = true;
                             },
                             {
-                                enableHighAccuracy: true, // Use GPS if available
-                                timeout: 7000, // 7 seconds
+                                enableHighAccuracy: false, // Faster, less battery
+                                timeout: 15000, // 15 seconds (increased from 7)
                                 maximumAge: 300000 // Cache for 5 minutes
                             }
                         );
@@ -1746,9 +1773,12 @@ Enjoy exploring Paris! Ask me about restaurants or hotels if you need recommenda
 
 Now create the itinerary - PLACES ONLY, complete with closing!`;
                 
-                const aiResponse = await askGeminiAI(itineraryPrompt);
+                const aiResponse = await callAIWithTyping(itineraryPrompt);
                 addChatMessage(aiResponse.response, false);
                 speak("I've created an itinerary for you. Check the chat for details!");
+                
+                // Save to history
+                saveToHistory(text, aiResponse.response);
             }
             // Food, Hotels, Transport recommendations - FLEXIBLE DETECTION
             else if (cleanText.toLowerCase().match(/\b(food|restaurant|eat|eating|dining|cuisine|dish|dishes|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i) ||
@@ -1777,9 +1807,12 @@ Bon appétit! Let me know if you need more suggestions.
 
 Now answer the question completely!`;
                 
-                const aiResponse = await askGeminiAI(recommendPrompt);
+                const aiResponse = await callAIWithTyping(recommendPrompt);
                 addChatMessage(aiResponse.response, false);
                 speak("I've got some recommendations for you!");
+                
+                // Save to history
+                saveToHistory(text, aiResponse.response);
             }
             // Use AI for unclear queries and casual chat
             else {
@@ -1790,9 +1823,12 @@ Now answer the question completely!`;
                 console.log('  includes itinerary?', cleanText.toLowerCase().includes('itinerary'));
                 console.log('  includes vacation?', cleanText.toLowerCase().includes('vacation'));
                 
-                const aiResponse = await askGeminiAI(text);
+                const aiResponse = await callAIWithTyping(text);
                 addChatMessage(aiResponse.response, false);
                 speak(aiResponse.response);
+                
+                // Save to history
+                saveToHistory(text, aiResponse.response);
             }
         }
 
@@ -2770,6 +2806,222 @@ Now answer the question completely!`;
                 synth.speak(utterance);
             }, 100);
         }
+// ========== UX IMPROVEMENTS ==========
+
+// 1. TYPING INDICATOR
+function showTypingIndicator() {
+    const chatContainer = document.getElementById('chat-container');
+    
+    // Remove existing typing indicator if any
+    hideTypingIndicator();
+    
+    const typingDiv = document.createElement('div');
+    typingDiv.id = 'typing-indicator';
+    typingDiv.className = 'flex justify-start items-start gap-2 fade-in';
+    typingDiv.innerHTML = `
+        <div class="bg-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+            <div class="flex gap-1">
+                <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms;"></div>
+                <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms;"></div>
+                <div class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 300ms;"></div>
+            </div>
+        </div>
+    `;
+    chatContainer.appendChild(typingDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function hideTypingIndicator() {
+    const typingIndicator = document.getElementById('typing-indicator');
+    if (typingIndicator) {
+        typingIndicator.remove();
+    }
+}
+
+// 2. DELETE MESSAGE FUNCTION
+function deleteMessage(button) {
+    if (confirm('Delete this message?')) {
+        const messageDiv = button.closest('.flex');
+        messageDiv.style.transition = 'all 0.2s';
+        messageDiv.style.opacity = '0';
+        messageDiv.style.transform = 'scale(0.8)';
+        setTimeout(() => messageDiv.remove(), 200);
+    }
+}
+
+// 3. CONVERSATION HISTORY & SEARCH
+let conversationHistory = [];
+
+function saveToHistory(userMessage, aiResponse) {
+    conversationHistory.push({
+        timestamp: new Date().toISOString(),
+        user: userMessage,
+        ai: aiResponse,
+        date: new Date().toLocaleDateString()
+    });
+    
+    // Save to localStorage
+    localStorage.setItem('unify_history', JSON.stringify(conversationHistory));
+}
+
+function loadHistory() {
+    const saved = localStorage.getItem('unify_history');
+    if (saved) {
+        conversationHistory = JSON.parse(saved);
+    }
+}
+
+function searchHistory(query) {
+    const results = conversationHistory.filter(conv => 
+        conv.user.toLowerCase().includes(query.toLowerCase()) ||
+        conv.ai.toLowerCase().includes(query.toLowerCase())
+    );
+    return results;
+}
+
+function showHistoryPanel() {
+    // Create history panel HTML
+    const panel = document.createElement('div');
+    panel.id = 'history-panel';
+    panel.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
+    panel.innerHTML = `
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+            <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-gray-900">Conversation History</h2>
+                <button onclick="closeHistoryPanel()" class="text-gray-500 hover:text-gray-700 text-2xl">×</button>
+            </div>
+            <div class="p-4 border-b border-gray-200">
+                <input 
+                    type="text" 
+                    id="history-search" 
+                    placeholder="Search conversations..." 
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    oninput="filterHistory(this.value)"
+                />
+            </div>
+            <div id="history-list" class="flex-1 overflow-y-auto p-4 space-y-4">
+                ${renderHistoryList()}
+            </div>
+            <div class="p-4 border-t border-gray-200 flex gap-2">
+                <button onclick="exportHistory()" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600">Export</button>
+                <button onclick="clearHistory()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Clear All</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(panel);
+}
+
+function renderHistoryList(filtered = conversationHistory) {
+    if (filtered.length === 0) {
+        return '<p class="text-gray-500 text-center">No conversations yet</p>';
+    }
+    
+    return filtered.map((conv, index) => `
+        <div class="bg-gray-50 rounded-lg p-3 space-y-2">
+            <div class="text-xs text-gray-500">${conv.date} ${new Date(conv.timestamp).toLocaleTimeString()}</div>
+            <div class="text-sm">
+                <div class="font-semibold text-purple-600">You:</div>
+                <div class="text-gray-700">${escapeHtml(conv.user)}</div>
+            </div>
+            <div class="text-sm">
+                <div class="font-semibold text-blue-600">Unify:</div>
+                <div class="text-gray-700">${escapeHtml(conv.ai.substring(0, 150))}${conv.ai.length > 150 ? '...' : ''}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function filterHistory(query) {
+    const results = query ? searchHistory(query) : conversationHistory;
+    document.getElementById('history-list').innerHTML = renderHistoryList(results);
+}
+
+function closeHistoryPanel() {
+    const panel = document.getElementById('history-panel');
+    if (panel) panel.remove();
+}
+
+function exportHistory() {
+    const dataStr = JSON.stringify(conversationHistory, null, 2);
+    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `unify-history-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+}
+
+function clearHistory() {
+    if (confirm('Clear all conversation history? This cannot be undone.')) {
+        conversationHistory = [];
+        localStorage.removeItem('unify_history');
+        closeHistoryPanel();
+        alert('History cleared!');
+    }
+}
+
+// 4. ERROR VISUAL FEEDBACK
+function showError(message) {
+    const chatContainer = document.getElementById('chat-container');
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'flex justify-center items-center fade-in';
+    errorDiv.innerHTML = `
+        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-sm flex items-center gap-2 animate-shake">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span class="text-sm">${escapeHtml(message)}</span>
+        </div>
+    `;
+    chatContainer.appendChild(errorDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // Remove after 5 seconds
+    setTimeout(() => {
+        errorDiv.style.opacity = '0';
+        setTimeout(() => errorDiv.remove(), 300);
+    }, 5000);
+}
+
+// Add shake animation to CSS
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+        20%, 40%, 60%, 80% { transform: translateX(5px); }
+    }
+    .animate-shake {
+        animation: shake 0.5s;
+    }
+`;
+document.head.appendChild(style);
+
+// Load history on page load
+loadHistory();
+
+// ========== USAGE INSTRUCTIONS ==========
+
+/*
+1. TYPING INDICATOR:
+   - Call showTypingIndicator() before AI response
+   - Call hideTypingIndicator() before showing response
+
+2. DELETE MESSAGES:
+   - Already integrated in addChatMessage() with delete button
+   - Shows on hover over user messages
+
+3. CONVERSATION HISTORY:
+   - Call saveToHistory(userMsg, aiMsg) after each exchange
+   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
+   - Search, export, and clear functions included
+
+4. ERROR FEEDBACK:
+   - Call showError("Error message") instead of addChatMessage for errors
+   - Visual shake animation + auto-dismiss
+*/
 </script>
 </body>
 </html>
