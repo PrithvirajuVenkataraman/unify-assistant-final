@@ -429,6 +429,35 @@
             margin-bottom: 15px;
         }
         
+        .receipt-store {
+            font-size: 16px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            color: #4F46E5;
+        }
+        
+        .receipt-divider {
+            font-size: 12px;
+            color: #999;
+            letter-spacing: 1px;
+            margin: 10px 0;
+        }
+        
+        .receipt-thank-you {
+            text-align: center;
+            font-size: 11px;
+            font-style: italic;
+            color: #666;
+            margin: 10px 0;
+        }
+        
+        .receipt-count-number {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4F46E5;
+        }
+        
         .shopping-receipt.dark-mode .receipt-header {
             border-bottom-color: #4B5563;
         }
@@ -598,8 +627,10 @@
     <!-- Shopping List Receipt -->
     <div id="shopping-receipt" class="shopping-receipt hidden">
         <div class="receipt-header">
+            <div class="receipt-store">🛒 UNIFY MARKET</div>
             <div class="receipt-title">SHOPPING LIST</div>
-            <div class="receipt-subtitle">Your Items</div>
+            <div class="receipt-subtitle" id="receipt-date">---</div>
+            <div class="receipt-divider">- - - - - - - - - - - - - - - -</div>
         </div>
         <div id="receipt-items" class="receipt-items">
             <div style="text-align: center; color: #999; font-size: 12px; padding: 20px;">
@@ -607,8 +638,13 @@
             </div>
         </div>
         <div class="receipt-footer">
-            <div class="receipt-total">TOTAL: <span id="receipt-count">0</span> ITEMS</div>
-            <button onclick="clearShoppingList()" class="receipt-clear-btn">Clear All</button>
+            <div class="receipt-divider">- - - - - - - - - - - - - - - -</div>
+            <div class="receipt-total">
+                <span>TOTAL ITEMS:</span>
+                <span id="receipt-count" class="receipt-count-number">0</span>
+            </div>
+            <div class="receipt-thank-you">Thank you for shopping!</div>
+            <button onclick="clearShoppingList()" class="receipt-clear-btn">🗑️ Clear All</button>
         </div>
     </div>
     
@@ -1571,30 +1607,8 @@ async function handleNameCorrection(text) {
                     }
                 }
             }
-            // Reminder queries
-            else if (cleanText.toLowerCase().includes('remind')) {
-                createReminderFromText(cleanText);
-            }
-            // Show reminders
-            else if (cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('list') || cleanText.toLowerCase().includes('my reminder')) {
-                if (reminders.length === 0) {
-                    const msg = "You haven't set any reminders yet. Would you like me to remind you of something?";
-                    addChatMessage(msg, false);
-                    speak(msg);
-                    waitingForReminder = true;
-                } else {
-                    const msg = `You have ${reminders.length} reminder${reminders.length > 1 ? 's' : ''}. Check the list below.`;
-                    addChatMessage(msg, false);
-                    speak(msg);
-                    document.getElementById('reminders-section').classList.remove('hidden');
-                }
-            }
-            // Delete/clear reminders
-            else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('reminder')) {
-                clearAllReminders();
-            }
-            // Shopping List Commands
-            else if (cleanText.toLowerCase().includes('add') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('shopping'))) {
+            // Shopping List Commands - SEPARATE CHECK (not else if!)
+            if (cleanText.toLowerCase().includes('add') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('shopping') || cleanText.toLowerCase().includes('to my list') || cleanText.toLowerCase().includes('to list'))) {
                 handleAddToShoppingList(cleanText);
             }
             // Handle follow-up additions: "also add", "and add", etc.
@@ -1613,6 +1627,29 @@ async function handleNameCorrection(text) {
             }
             else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('shopping')) {
                 clearShoppingList();
+            }
+            // Reminder queries - SEPARATE CHECK
+            else if (cleanText.toLowerCase().includes('remind')) {
+                createReminderFromText(cleanText);
+            }
+            // Show reminders - Make more specific to avoid matching "shopping list"
+            else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('my reminder') || cleanText.toLowerCase().includes('list reminder')) && 
+                     !cleanText.toLowerCase().includes('shopping')) {
+                if (reminders.length === 0) {
+                    const msg = "You haven't set any reminders yet. Would you like me to remind you of something?";
+                    addChatMessage(msg, false);
+                    speak(msg);
+                    waitingForReminder = true;
+                } else {
+                    const msg = `You have ${reminders.length} reminder${reminders.length > 1 ? 's' : ''}. Check the list below.`;
+                    addChatMessage(msg, false);
+                    speak(msg);
+                    document.getElementById('reminders-section').classList.remove('hidden');
+                }
+            }
+            // Delete/clear reminders
+            else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('reminder')) {
+                clearAllReminders();
             }
             // Memory Recall - More specific pattern to avoid matching weather
             else if (cleanText.toLowerCase().match(/where\s+(is|are|did\s+i\s+put|did\s+i\s+leave)\s+(my|the)/i) || 
@@ -2423,6 +2460,20 @@ Now answer the question completely!`;
             const receipt = document.getElementById('shopping-receipt');
             const itemsContainer = document.getElementById('receipt-items');
             const countSpan = document.getElementById('receipt-count');
+            const dateSpan = document.getElementById('receipt-date');
+            
+            // Update date/time
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric' 
+            });
+            const timeStr = now.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+            dateSpan.textContent = `${dateStr} ${timeStr}`;
             
             if (shoppingList.length === 0) {
                 itemsContainer.innerHTML = '<div style="text-align: center; color: #999; font-size: 12px; padding: 20px;">No items yet</div>';
@@ -2435,7 +2486,7 @@ Now answer the question completely!`;
                             <span class="receipt-bullet">•</span>
                             <span>${escapeHtml(item)}</span>
                         </div>
-                        <button onclick="removeShoppingItem(${index})" class="receipt-delete">✕</button>
+                        <button onclick="removeShoppingItem(${index})" class="receipt-delete" title="Remove item">✕</button>
                     </div>
                 `).join('');
             }
