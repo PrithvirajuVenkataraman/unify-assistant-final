@@ -1543,17 +1543,20 @@ async function handleNameCorrection(text) {
                     }
                 } else {
                     // No location and no cached weather - try to get user's location automatically
-                    addChatMessage("Let me check the weather for you...", false);
-                    speak("Let me check the weather for you");
+                    addChatMessage("🌍 Detecting your location...", false);
+                    speak("Detecting your location");
+                    
+                    // Show avatar thinking
+                    avatarThinking();
                     
                     if (navigator.geolocation) {
                         // Set a timeout in case geolocation takes too long
                         const geoTimeout = setTimeout(() => {
-                            const askMsg = "I couldn't detect your location. Where are you? You can say a city, town, or even just a neighborhood!";
+                            const askMsg = "I couldn't detect your location automatically. Where are you? You can say a city, town, or neighborhood!";
                             addChatMessage(askMsg, false);
                             speak(askMsg);
                             waitingForLocation = true;
-                        }, 5000); // 5 second timeout
+                        }, 8000); // 8 second timeout
                         
                         navigator.geolocation.getCurrentPosition(
                             async (position) => {
@@ -1588,23 +1591,26 @@ async function handleNameCorrection(text) {
                                 let askMsg;
                                 if (error.code === 1) {
                                     // Permission denied
-                                    askMsg = "I need location permission to auto-detect your weather. Where are you located?";
+                                    askMsg = "📍 I need location permission to detect your weather automatically. You can enable it in your browser settings, or just tell me your city!";
+                                } else if (error.code === 2) {
+                                    // Position unavailable
+                                    askMsg = "I couldn't get your exact location. Where are you? You can say a city or neighborhood!";
                                 } else {
-                                    askMsg = "I couldn't detect your location. Where are you? You can say a city, town, or even just a neighborhood!";
+                                    askMsg = "Location detection timed out. Where are you located?";
                                 }
                                 addChatMessage(askMsg, false);
                                 speak(askMsg);
                                 waitingForLocation = true;
                             },
                             {
-                                enableHighAccuracy: false,
-                                timeout: 5000,
+                                enableHighAccuracy: true, // Use GPS if available
+                                timeout: 7000, // 7 seconds
                                 maximumAge: 300000 // Cache for 5 minutes
                             }
                         );
                     } else {
                         // Geolocation not supported
-                        const askMsg = "Where are you? Just tell me your city or town!";
+                        const askMsg = "Your browser doesn't support location detection. Just tell me your city or town!";
                         addChatMessage(askMsg, false);
                         speak(askMsg);
                         waitingForLocation = true;
@@ -1908,6 +1914,14 @@ Now answer the question completely!`;
         function extractLocationFromSentence(text) {
             const lower = text.toLowerCase();
             
+            // Check for "current location" keywords - return null to trigger geolocation
+            const currentLocationKeywords = ['my location', 'current location', 'my current location', 'here', 'where i am', 'my area', 'this location'];
+            for (const keyword of currentLocationKeywords) {
+                if (lower.includes(keyword)) {
+                    return null; // Will trigger geolocation
+                }
+            }
+            
             // Remove common time phrases first
             let cleanText = text;
             const timeWords = ['right now', 'now', 'today', 'tomorrow', 'tonight', 'currently', 'at the moment'];
@@ -1927,6 +1941,15 @@ Now answer the question completely!`;
                     let location = match[1].trim();
                     // Clean up the location string
                     location = location.replace(/[?.!,;]$/g, '').trim();
+                    
+                    // Double-check it's not a current location keyword
+                    const locationLower = location.toLowerCase();
+                    for (const keyword of currentLocationKeywords) {
+                        if (locationLower.includes(keyword)) {
+                            return null; // Trigger geolocation
+                        }
+                    }
+                    
                     if (location.length > 0) return location;
                 }
             }
