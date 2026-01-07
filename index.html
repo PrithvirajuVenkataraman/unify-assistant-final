@@ -622,42 +622,6 @@
     <div id="alarm-overlay" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50"></div>
     <div id="alarm-notification" class="hidden"></div>
 
-    <!-- Animated Avatar Character - Realistic 3D Style -->
-    <div id="avatar-container" class="fixed bottom-20 left-8 z-40">
-        <div id="avatar" class="relative transition-all duration-500">
-            <!-- Character Image -->
-            <div class="relative">
-                <!-- Avatar Image - Using a placeholder, you can replace with your own -->
-                <img 
-                    id="avatar-img" 
-                    src="https://api.dicebear.com/7.x/avataaars/svg?seed=Unify&backgroundColor=transparent&scale=100" 
-                    alt="Unify Avatar"
-                    class="w-32 h-32 drop-shadow-2xl transition-all duration-300"
-                    style="filter: drop-shadow(0 10px 30px rgba(0,0,0,0.3));"
-                />
-                
-                <!-- Animated Elements Overlay -->
-                <div id="avatar-overlay" class="absolute inset-0 pointer-events-none">
-                    <!-- Wave Hand Emoji (appears during wave) -->
-                    <div id="wave-hand" class="hidden absolute -right-8 top-8 text-4xl transition-transform duration-300">
-                        👋
-                    </div>
-                    
-                    <!-- Thinking Emoji (appears during thinking) -->
-                    <div id="thinking-emoji" class="hidden absolute -top-2 right-0 text-2xl">
-                        🤔
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Speech Bubble -->
-            <div id="avatar-bubble" class="hidden absolute bottom-full left-1/2 transform -translate-x-1/2 mb-4 bg-white rounded-2xl shadow-2xl px-5 py-3 text-sm whitespace-nowrap z-50 border-2 border-purple-200">
-                <div class="text-gray-800 font-semibold">Hi! I'm Unify!</div>
-                <div class="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-4 h-4 bg-white border-r-2 border-b-2 border-purple-200"></div>
-            </div>
-        </div>
-    </div>
-
     <div class="min-h-screen pb-32">
         <div id="bg-effects" class="fixed inset-0 overflow-hidden pointer-events-none">
             <div class="absolute top-20 left-20 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
@@ -681,25 +645,10 @@
                     </div>
                 </div>
                 
-                <!-- Top Right Controls -->
-                <div class="flex items-center gap-3">
-                    <!-- History Button -->
-                    <button 
-                        onclick="showHistoryPanel()" 
-                        class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow-lg transition-all text-sm font-medium flex items-center gap-2"
-                        title="View Conversation History">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 16 14"></polyline>
-                        </svg>
-                        History
-                    </button>
-                    
-                    <!-- Light Switch (Back to Original Position) -->
-                    <div class="light-switch-container" onclick="toggleDarkMode()">
-                        <div id="light-switch" class="light-switch on">
-                            <div class="switch-toggle"></div>
-                        </div>
+                <!-- Light Switch -->
+                <div class="light-switch-container" onclick="toggleDarkMode()">
+                    <div id="light-switch" class="light-switch on">
+                        <div class="switch-toggle"></div>
                     </div>
                 </div>
             </div>
@@ -817,7 +766,20 @@
         </div>
     </div>
 
-    <!-- Fixed Feature Request Button - Bottom Right -->
+    <!-- Fixed Buttons - Right Side Stack -->
+    <!-- History Button (Higher) -->
+    <button 
+        onclick="showHistoryPanel()" 
+        class="fixed bottom-24 right-6 px-5 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-2xl transition-all font-medium flex items-center gap-2 z-50 hover:scale-110"
+        title="View Conversation History">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        History
+    </button>
+    
+    <!-- Feature Request Button (Lower) -->
     <button 
         onclick="openFeatureRequest()" 
         class="fixed bottom-6 right-6 px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-2xl transition-all font-medium flex items-center gap-2 z-50 hover:scale-110"
@@ -1077,96 +1039,6 @@ async function handleNameCorrection(text) {
             window.open(formUrl, '_blank');
         }
 
-        // ========== AVATAR ANIMATIONS ==========
-        function avatarWave() {
-            const avatar = document.getElementById('avatar-img');
-            const waveHand = document.getElementById('wave-hand');
-            
-            // Show wave hand and animate
-            waveHand.classList.remove('hidden');
-            waveHand.style.transform = 'rotate(-20deg)';
-            
-            setTimeout(() => {
-                waveHand.style.transform = 'rotate(20deg)';
-                setTimeout(() => {
-                    waveHand.style.transform = 'rotate(-20deg)';
-                    setTimeout(() => {
-                        waveHand.style.transform = 'rotate(20deg)';
-                        setTimeout(() => {
-                            waveHand.classList.add('hidden');
-                            waveHand.style.transform = 'rotate(0deg)';
-                        }, 250);
-                    }, 250);
-                }, 250);
-            }, 250);
-        }
-
-        function avatarNod() {
-            const avatar = document.getElementById('avatar-img');
-            // Nod animation - slight rotation
-            avatar.style.transform = 'rotate(3deg) translateY(2px)';
-            setTimeout(() => {
-                avatar.style.transform = 'rotate(-3deg) translateY(-2px)';
-                setTimeout(() => {
-                    avatar.style.transform = 'rotate(2deg) translateY(2px)';
-                    setTimeout(() => {
-                        avatar.style.transform = 'rotate(0deg) translateY(0)';
-                    }, 150);
-                }, 150);
-            }, 150);
-        }
-
-        function avatarLookAtChat() {
-            const avatar = document.getElementById('avatar-img');
-            // Turn slightly to look at chat
-            avatar.style.transform = 'rotate(5deg) translateX(5px)';
-        }
-
-        function avatarLookCenter() {
-            const avatar = document.getElementById('avatar-img');
-            avatar.style.transform = 'rotate(0deg) translateX(0)';
-        }
-
-        function avatarThinking() {
-            const thinkingEmoji = document.getElementById('thinking-emoji');
-            const avatar = document.getElementById('avatar-img');
-            
-            // Show thinking emoji
-            thinkingEmoji.classList.remove('hidden');
-            avatar.style.transform = 'scale(0.95) translateY(5px)';
-            
-            setTimeout(() => {
-                thinkingEmoji.classList.add('hidden');
-                avatar.style.transform = 'scale(1) translateY(0)';
-            }, 1500);
-        }
-
-        function avatarJump() {
-            const avatar = document.getElementById('avatar');
-            avatar.style.transform = 'translateY(-25px) scale(1.05)';
-            setTimeout(() => {
-                avatar.style.transform = 'translateY(0) scale(1)';
-            }, 400);
-        }
-
-        function showAvatarBubble(text) {
-            const bubble = document.getElementById('avatar-bubble');
-            bubble.querySelector('div').textContent = text;
-            bubble.classList.remove('hidden');
-            setTimeout(() => {
-                bubble.classList.add('hidden');
-            }, 2500);
-        }
-
-        // Wave on page load
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                avatarWave();
-                showAvatarBubble("Hi! I'm Unify!");
-                setTimeout(() => avatarJump(), 1000);
-            }, 1000);
-        });
-
         // ========== CHAT MESSAGE HANDLING ==========
         function addChatMessage(text, isUser = true) {
             const chatContainer = document.getElementById('chat-container');
@@ -1233,10 +1105,6 @@ async function handleNameCorrection(text) {
             const input = document.getElementById('text-input');
             const text = input.value.trim();
             if (text) {
-                // Avatar looks at chat and nods
-                avatarLookAtChat();
-                setTimeout(() => avatarNod(), 200);
-                
                 addChatMessage(text, true);
                 
                 if (waitingForName) {
@@ -1271,9 +1139,6 @@ async function handleNameCorrection(text) {
                 
                 input.value = '';
                 toggleSendButton(); // Reset to voice button after sending
-                
-                // Avatar looks back to center after a moment
-                setTimeout(() => avatarLookCenter(), 2000);
             }
         }
 
@@ -1609,9 +1474,6 @@ async function handleNameCorrection(text) {
                     // No location and no cached weather - try to get user's location automatically
                     addChatMessage("🌍 Detecting your location...", false);
                     speak("Detecting your location");
-                    
-                    // Show avatar thinking
-                    avatarThinking();
                     
                     if (navigator.geolocation) {
                         // Request location with better options
