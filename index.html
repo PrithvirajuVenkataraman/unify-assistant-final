@@ -622,6 +622,42 @@
     <div id="alarm-overlay" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50"></div>
     <div id="alarm-notification" class="hidden"></div>
 
+    <!-- Animated Avatar Character - Realistic 3D Style -->
+    <div id="avatar-container" class="fixed bottom-20 left-8 z-40">
+        <div id="avatar" class="relative transition-all duration-500">
+            <!-- Character Image -->
+            <div class="relative">
+                <!-- Avatar Image - Using a placeholder, you can replace with your own -->
+                <img 
+                    id="avatar-img" 
+                    src="https://api.dicebear.com/7.x/avataaars/svg?seed=Unify&backgroundColor=transparent&scale=100" 
+                    alt="Unify Avatar"
+                    class="w-32 h-32 drop-shadow-2xl transition-all duration-300"
+                    style="filter: drop-shadow(0 10px 30px rgba(0,0,0,0.3));"
+                />
+                
+                <!-- Animated Elements Overlay -->
+                <div id="avatar-overlay" class="absolute inset-0 pointer-events-none">
+                    <!-- Wave Hand Emoji (appears during wave) -->
+                    <div id="wave-hand" class="hidden absolute -right-8 top-8 text-4xl transition-transform duration-300">
+                        👋
+                    </div>
+                    
+                    <!-- Thinking Emoji (appears during thinking) -->
+                    <div id="thinking-emoji" class="hidden absolute -top-2 right-0 text-2xl">
+                        🤔
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Speech Bubble -->
+            <div id="avatar-bubble" class="hidden absolute bottom-full left-1/2 transform -translate-x-1/2 mb-4 bg-white rounded-2xl shadow-2xl px-5 py-3 text-sm whitespace-nowrap z-50 border-2 border-purple-200">
+                <div class="text-gray-800 font-semibold">Hi! I'm Unify!</div>
+                <div class="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-4 h-4 bg-white border-r-2 border-b-2 border-purple-200"></div>
+            </div>
+        </div>
+    </div>
+
     <div class="min-h-screen pb-32">
         <div id="bg-effects" class="fixed inset-0 overflow-hidden pointer-events-none">
             <div class="absolute top-20 left-20 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
@@ -1012,6 +1048,96 @@ async function handleNameCorrection(text) {
             window.open(formUrl, '_blank');
         }
 
+        // ========== AVATAR ANIMATIONS ==========
+        function avatarWave() {
+            const avatar = document.getElementById('avatar-img');
+            const waveHand = document.getElementById('wave-hand');
+            
+            // Show wave hand and animate
+            waveHand.classList.remove('hidden');
+            waveHand.style.transform = 'rotate(-20deg)';
+            
+            setTimeout(() => {
+                waveHand.style.transform = 'rotate(20deg)';
+                setTimeout(() => {
+                    waveHand.style.transform = 'rotate(-20deg)';
+                    setTimeout(() => {
+                        waveHand.style.transform = 'rotate(20deg)';
+                        setTimeout(() => {
+                            waveHand.classList.add('hidden');
+                            waveHand.style.transform = 'rotate(0deg)';
+                        }, 250);
+                    }, 250);
+                }, 250);
+            }, 250);
+        }
+
+        function avatarNod() {
+            const avatar = document.getElementById('avatar-img');
+            // Nod animation - slight rotation
+            avatar.style.transform = 'rotate(3deg) translateY(2px)';
+            setTimeout(() => {
+                avatar.style.transform = 'rotate(-3deg) translateY(-2px)';
+                setTimeout(() => {
+                    avatar.style.transform = 'rotate(2deg) translateY(2px)';
+                    setTimeout(() => {
+                        avatar.style.transform = 'rotate(0deg) translateY(0)';
+                    }, 150);
+                }, 150);
+            }, 150);
+        }
+
+        function avatarLookAtChat() {
+            const avatar = document.getElementById('avatar-img');
+            // Turn slightly to look at chat
+            avatar.style.transform = 'rotate(5deg) translateX(5px)';
+        }
+
+        function avatarLookCenter() {
+            const avatar = document.getElementById('avatar-img');
+            avatar.style.transform = 'rotate(0deg) translateX(0)';
+        }
+
+        function avatarThinking() {
+            const thinkingEmoji = document.getElementById('thinking-emoji');
+            const avatar = document.getElementById('avatar-img');
+            
+            // Show thinking emoji
+            thinkingEmoji.classList.remove('hidden');
+            avatar.style.transform = 'scale(0.95) translateY(5px)';
+            
+            setTimeout(() => {
+                thinkingEmoji.classList.add('hidden');
+                avatar.style.transform = 'scale(1) translateY(0)';
+            }, 1500);
+        }
+
+        function avatarJump() {
+            const avatar = document.getElementById('avatar');
+            avatar.style.transform = 'translateY(-25px) scale(1.05)';
+            setTimeout(() => {
+                avatar.style.transform = 'translateY(0) scale(1)';
+            }, 400);
+        }
+
+        function showAvatarBubble(text) {
+            const bubble = document.getElementById('avatar-bubble');
+            bubble.querySelector('div').textContent = text;
+            bubble.classList.remove('hidden');
+            setTimeout(() => {
+                bubble.classList.add('hidden');
+            }, 2500);
+        }
+
+        // Wave on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                avatarWave();
+                showAvatarBubble("Hi! I'm Unify!");
+                setTimeout(() => avatarJump(), 1000);
+            }, 1000);
+        });
+
         // ========== CHAT MESSAGE HANDLING ==========
         function addChatMessage(text, isUser = true) {
             const chatContainer = document.getElementById('chat-container');
@@ -1077,6 +1203,10 @@ async function handleNameCorrection(text) {
             const input = document.getElementById('text-input');
             const text = input.value.trim();
             if (text) {
+                // Avatar looks at chat and nods
+                avatarLookAtChat();
+                setTimeout(() => avatarNod(), 200);
+                
                 addChatMessage(text, true);
                 
                 if (waitingForName) {
@@ -1111,6 +1241,9 @@ async function handleNameCorrection(text) {
                 
                 input.value = '';
                 toggleSendButton(); // Reset to voice button after sending
+                
+                // Avatar looks back to center after a moment
+                setTimeout(() => avatarLookCenter(), 2000);
             }
         }
 
@@ -1360,42 +1493,8 @@ async function handleNameCorrection(text) {
                 return;
             }
 
-            // Memory Recall - Check BEFORE other commands (high priority)
-            if (cleanText.toLowerCase().match(/where\s+(?:is|are|did|my|the|'s)|my\s+\w+\?$|the\s+\w+\?$/i)) {
-                handleMemoryRecall(cleanText);
-                return;
-            }
-            
-            // Memory Storage (where things are)
-            if ((cleanText.toLowerCase().includes('my ') || cleanText.toLowerCase().includes('i put') || cleanText.toLowerCase().includes('i left')) && 
-                 (cleanText.toLowerCase().includes(' is ') || cleanText.toLowerCase().includes(' are ') || cleanText.toLowerCase().includes(' in ') || cleanText.toLowerCase().includes(' on ') || cleanText.toLowerCase().includes(' at '))) {
-                handleMemoryStorage(cleanText);
-                return;
-            }
-
-            // Shopping List Commands
-            if (cleanText.toLowerCase().includes('add') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('shopping'))) {
-                handleAddToShoppingList(cleanText);
-            }
-            // Handle follow-up additions: "also add", "and add", etc.
-            else if (cleanText.toLowerCase().match(/\b(also|and|plus)\s+add\b/i) || cleanText.toLowerCase().match(/\badd\s+(also|too)\b/i)) {
-                handleAddToShoppingList(cleanText);
-            }
-            // Simple "add X" when shopping list was recently used
-            else if (cleanText.toLowerCase().startsWith('add ') && shoppingList.length > 0) {
-                handleAddToShoppingList(cleanText);
-            }
-            else if (cleanText.toLowerCase().includes('remove') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('from shopping'))) {
-                handleRemoveFromShoppingList(cleanText);
-            }
-            else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('what') || cleanText.toLowerCase().includes('read')) && cleanText.toLowerCase().includes('shopping')) {
-                showShoppingList();
-            }
-            else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('shopping')) {
-                clearShoppingList();
-            }
-            // Weather queries
-            else if (cleanText.toLowerCase().includes('weather') || cleanText.toLowerCase().includes('temperature') || cleanText.toLowerCase().includes('rain') || cleanText.toLowerCase().includes('snow')) {
+            // Weather queries - Check BEFORE memory recall to avoid conflicts
+            if (cleanText.toLowerCase().includes('weather') || cleanText.toLowerCase().includes('temperature') || cleanText.toLowerCase().includes('rain') || cleanText.toLowerCase().includes('snow')) {
                 const location = extractLocationFromSentence(cleanText);
                 
                 if (location) {
@@ -1533,6 +1632,37 @@ async function handleNameCorrection(text) {
             // Delete/clear reminders
             else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('reminder')) {
                 clearAllReminders();
+            }
+            // Shopping List Commands
+            else if (cleanText.toLowerCase().includes('add') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('shopping'))) {
+                handleAddToShoppingList(cleanText);
+            }
+            // Handle follow-up additions: "also add", "and add", etc.
+            else if (cleanText.toLowerCase().match(/\b(also|and|plus)\s+add\b/i) || cleanText.toLowerCase().match(/\badd\s+(also|too)\b/i)) {
+                handleAddToShoppingList(cleanText);
+            }
+            // Simple "add X" when shopping list was recently used
+            else if (cleanText.toLowerCase().startsWith('add ') && shoppingList.length > 0) {
+                handleAddToShoppingList(cleanText);
+            }
+            else if (cleanText.toLowerCase().includes('remove') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('from shopping'))) {
+                handleRemoveFromShoppingList(cleanText);
+            }
+            else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('what') || cleanText.toLowerCase().includes('read')) && cleanText.toLowerCase().includes('shopping')) {
+                showShoppingList();
+            }
+            else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('shopping')) {
+                clearShoppingList();
+            }
+            // Memory Recall - More specific pattern to avoid matching weather
+            else if (cleanText.toLowerCase().match(/where\s+(is|are|did\s+i\s+put|did\s+i\s+leave)\s+(my|the)/i) || 
+                     cleanText.toLowerCase().match(/\b(find|locate)\s+(my|the)\s+\w+/i)) {
+                handleMemoryRecall(cleanText);
+            }
+            // Memory Storage (where things are)
+            else if ((cleanText.toLowerCase().includes('my ') || cleanText.toLowerCase().includes('i put') || cleanText.toLowerCase().includes('i left')) && 
+                     (cleanText.toLowerCase().includes(' is ') || cleanText.toLowerCase().includes(' are ') || cleanText.toLowerCase().includes(' in ') || cleanText.toLowerCase().includes(' on ') || cleanText.toLowerCase().includes(' at '))) {
+                handleMemoryStorage(cleanText);
             }
             // Creator Info
             else if (cleanText.toLowerCase().match(/\b(who (created|made|built|developed) (you|this|unify)|who (is|are) (your|the) (creator|developer|maker|author)|tell me about (your|the) creator|who owns (you|this))\b/i)) {
