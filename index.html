@@ -618,6 +618,84 @@
                 max-height: 250px;
             }
         }
+        
+        /* Quick Reply Suggestions */
+        .quick-reply-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            background: white;
+            border: 2px solid #E5E7EB;
+            border-radius: 20px;
+            font-size: 14px;
+            color: #374151;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+        
+        .quick-reply-btn:hover {
+            border-color: #8B5CF6;
+            color: #8B5CF6;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+        }
+        
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        
+        /* Loading State Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            backdrop-filter: blur(4px);
+        }
+        
+        .loading-card {
+            background: white;
+            padding: 24px 32px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid #E5E7EB;
+            border-top-color: #8B5CF6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        .loading-text {
+            font-size: 16px;
+            color: #374151;
+            font-weight: 500;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -754,16 +832,37 @@
         </div>
     </div>
 
+    <!-- Quick Reply Suggestions -->
+    <div id="quick-replies" class="fixed bottom-24 left-0 right-0 z-30 hidden">
+        <div class="max-w-4xl mx-auto px-4">
+            <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                <!-- Suggestions will be added here dynamically -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-card">
+            <div class="loading-spinner"></div>
+            <div class="loading-text" id="loading-text">Processing...</div>
+        </div>
+    </div>
+
     <!-- ChatGPT-style Input at Bottom -->
     <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
         <div class="max-w-4xl mx-auto p-4">
             <div class="flex items-center gap-3 bg-gray-50 rounded-full border-2 border-gray-200 px-4 py-3 hover:border-purple-300 transition-all">
-                <button onclick="toggleListening()" class="flex-shrink-0">
+                <button onclick="toggleListening()" class="flex-shrink-0 relative group" title="Help & Tips">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-600 hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
                         <line x1="12" y1="8" x2="12" y2="12"></line>
                         <line x1="12" y1="16" x2="12.01" y2="16"></line>
                     </svg>
+                    <!-- Tooltip -->
+                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                        Help & Tips
+                    </div>
                 </button>
                 
                 <input 
@@ -828,18 +927,128 @@
     </button>
 
 <script>
+// ========== LOADING STATES ==========
+function showLoading(message = 'Processing...') {
+    const overlay = document.getElementById('loading-overlay');
+    const text = document.getElementById('loading-text');
+    if (overlay && text) {
+        text.textContent = message;
+        overlay.classList.remove('hidden');
+    }
+}
+
+function hideLoading() {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+        overlay.classList.add('hidden');
+    }
+}
+
+// ========== QUICK REPLY SUGGESTIONS ==========
+function showQuickReplies(suggestions) {
+    const container = document.getElementById('quick-replies');
+    if (!container || !suggestions || suggestions.length === 0) {
+        hideQuickReplies();
+        return;
+    }
+    
+    const buttonsHtml = suggestions.map(suggestion => `
+        <button class="quick-reply-btn" onclick="handleQuickReply('${suggestion.text.replace(/'/g, "\\'")}')">
+            ${suggestion.icon || '💬'} ${suggestion.text}
+        </button>
+    `).join('');
+    
+    container.querySelector('div > div').innerHTML = buttonsHtml;
+    container.classList.remove('hidden');
+    
+    // Auto-hide after 30 seconds
+    setTimeout(hideQuickReplies, 30000);
+}
+
+function hideQuickReplies() {
+    const container = document.getElementById('quick-replies');
+    if (container) {
+        container.classList.add('hidden');
+    }
+}
+
+function handleQuickReply(text) {
+    hideQuickReplies();
+    document.getElementById('text-input').value = text;
+    sendTextInput();
+}
+
+// Suggest context-aware quick replies based on last response
+function suggestQuickReplies(context) {
+    const suggestions = [];
+    
+    // After weather
+    if (context.includes('weather') || context.includes('temperature')) {
+        suggestions.push(
+            { icon: '🏨', text: 'Hotels nearby' },
+            { icon: '🍽️', text: 'Best restaurants' },
+            { icon: '🗺️', text: 'Things to do' }
+        );
+    }
+    // After itinerary
+    else if (context.includes('itinerary') || context.includes('Day 1')) {
+        suggestions.push(
+            { icon: '🏨', text: 'Hotels' },
+            { icon: '🍽️', text: 'Restaurants' },
+            { icon: '🍲', text: 'Local food specialties' }
+        );
+    }
+    // After hotel recommendations
+    else if (context.includes('hotel') || context.includes('stay')) {
+        suggestions.push(
+            { icon: '🍽️', text: 'Restaurants' },
+            { icon: '🗺️', text: 'Things to do' },
+            { icon: '🌤️', text: 'Weather' }
+        );
+    }
+    // After restaurant recommendations
+    else if (context.includes('restaurant') || context.includes('[Pure Veg]') || context.includes('[Non-Veg]')) {
+        suggestions.push(
+            { icon: '🏨', text: 'Hotels' },
+            { icon: '🗺️', text: 'Plan an itinerary' },
+            { icon: '🚗', text: 'Transport options' }
+        );
+    }
+    // After shopping list
+    else if (context.includes('shopping') || context.includes('Added')) {
+        suggestions.push(
+            { icon: '📝', text: 'Show shopping list' },
+            { icon: '🛒', text: 'Add more items' },
+            { icon: '🗑️', text: 'Clear list' }
+        );
+    }
+    // Default suggestions
+    else {
+        suggestions.push(
+            { icon: '🌤️', text: 'Weather' },
+            { icon: '🗺️', text: 'Plan a trip' },
+            { icon: '🛒', text: 'Shopping list' }
+        );
+    }
+    
+    showQuickReplies(suggestions);
+}
+
 // ========== GEMINI AI INTEGRATION ==========
 let conversationContext = [];
 
-// Wrapper for AI calls with typing indicator
-async function callAIWithTyping(message, hideIndicator = true) {
+// Wrapper for AI calls with loading indicator
+async function callAIWithTyping(message, loadingMessage = 'Thinking...', hideIndicator = true) {
     showTypingIndicator();
+    showLoading(loadingMessage);
     try {
         const response = await askGeminiAI(message);
         if (hideIndicator) hideTypingIndicator();
+        hideLoading();
         return response;
     } catch (error) {
         hideTypingIndicator();
+        hideLoading();
         showError('AI request failed. Please try again.');
         throw error;
     }
@@ -902,9 +1111,11 @@ Respond conversationally and naturally.`;
         return data;
     } catch (error) {
         console.error('💥 AI error:', error);
+        console.error('Error details:', error.message, error.stack);
         // Better error handling - try to be helpful
+        showError(`AI request failed: ${error.message}`);
         return {
-            response: "I'm not quite sure what you mean. Could you try rephrasing that? Or ask 'What can you do?' to see what I can help with!",
+            response: "I'm having trouble connecting to my AI. Please try again in a moment!",
             intent: 'error'
         };
     }
@@ -1758,6 +1969,7 @@ End with: "Enjoy exploring the beauty of [City]! Ask me about restaurants or hot
 Now create the itinerary with beautiful formatting and emojis!`;
                 
                 const aiResponse = await callAIWithTyping(itineraryPrompt);
+                suggestQuickReplies(aiResponse.response);
                 addChatMessage(aiResponse.response, false);
                 speak("I've created an itinerary for you. Check the chat for details!");
                 
@@ -1812,6 +2024,7 @@ If you'd like specific restaurant recommendations, just ask!
 Now answer about the local food culture and famous dishes!`;
                 
                 const aiResponse = await callAIWithTyping(specialtyPrompt);
+                suggestQuickReplies(aiResponse.response);
                 addChatMessage(aiResponse.response, false);
                 speak("Let me tell you about the local food specialties!");
                 
