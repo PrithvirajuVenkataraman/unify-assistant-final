@@ -1039,15 +1039,13 @@ let conversationContext = [];
 
 // Wrapper for AI calls with loading indicator
 async function callAIWithTyping(message, loadingMessage = 'Thinking...', hideIndicator = true) {
-    showTypingIndicator();
+    // Only show loading overlay, no typing bubble
     showLoading(loadingMessage);
     try {
         const response = await askGeminiAI(message);
-        if (hideIndicator) hideTypingIndicator();
         hideLoading();
         return response;
     } catch (error) {
-        hideTypingIndicator();
         hideLoading();
         showError('AI request failed. Please try again.');
         throw error;
@@ -1969,7 +1967,6 @@ End with: "Enjoy exploring the beauty of [City]! Ask me about restaurants or hot
 Now create the itinerary with beautiful formatting and emojis!`;
                 
                 const aiResponse = await callAIWithTyping(itineraryPrompt);
-                suggestQuickReplies(aiResponse.response);
                 addChatMessage(aiResponse.response, false);
                 speak("I've created an itinerary for you. Check the chat for details!");
                 
@@ -2024,7 +2021,6 @@ If you'd like specific restaurant recommendations, just ask!
 Now answer about the local food culture and famous dishes!`;
                 
                 const aiResponse = await callAIWithTyping(specialtyPrompt);
-                suggestQuickReplies(aiResponse.response);
                 addChatMessage(aiResponse.response, false);
                 speak("Let me tell you about the local food specialties!");
                 
@@ -2466,6 +2462,7 @@ Now answer the question completely!`;
         }
 
         async function fetchWeather(lat, lon, resolvedLocation, originalQuery = null) {
+            showLoading('Checking weather...');
             try {
                 const weatherResponse = await fetch(
                     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,precipitation&timezone=auto`
@@ -2491,11 +2488,13 @@ Now answer the question completely!`;
                 document.getElementById('temperature').textContent = `${fahrenheit}°F / ${celsius}°C`;
                 document.getElementById('weather-advice').textContent = advice;
                 
+                hideLoading();
                 const weatherMsg = `The temperature in ${displayLocation} is ${fahrenheit}°F (${celsius}°C). ${advice}`;
                 addChatMessage(weatherMsg, false);
                 speak(weatherMsg);
                 
             } catch (error) {
+                hideLoading();
                 console.error('Weather error:', error);
                 const errorMsg = "Sorry, I couldn't fetch the weather data right now. Please try again later.";
                 addChatMessage(errorMsg, false);
