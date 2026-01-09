@@ -652,64 +652,6 @@
             display: none;
         }
         
-        /* Settings Panel */
-        .settings-panel {
-            position: fixed;
-            top: 80px;
-            right: 20px;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-            padding: 24px;
-            width: 320px;
-            z-index: 1000;
-        }
-        
-        .settings-panel.dark-mode {
-            background: #1F2937;
-            color: #F3F4F6;
-        }
-        
-        /* Toast Notification */
-        .toast {
-            position: fixed;
-            bottom: 100px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            z-index: 10000;
-            animation: slideUp 0.3s ease;
-        }
-        
-        .toast.success {
-            background: #10B981;
-            color: white;
-        }
-        
-        .toast.error {
-            background: #EF4444;
-            color: white;
-        }
-        
-        .toast.warning {
-            background: #F59E0B;
-            color: white;
-        }
-        
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateX(-50%) translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(-50%) translateY(0);
-            }
-        }
-        
         /* Simple Loading Spinner (no overlay) */
         .simple-loading {
             position: fixed;
@@ -734,42 +676,6 @@
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
-    <!-- Settings Panel -->
-    <div id="settings-panel" class="settings-panel hidden">
-        <h3 class="text-lg font-bold mb-4">⚙️ Settings</h3>
-        
-        <!-- Voice Mode -->
-        <div class="mb-4">
-            <label class="block text-sm font-semibold mb-2">🎤 Voice Mode</label>
-            <div class="space-y-2">
-                <label class="flex items-center cursor-pointer">
-                    <input type="radio" name="voiceMode" value="tap" checked class="mr-2">
-                    <span class="text-sm">Tap to Toggle (Click to start/stop)</span>
-                </label>
-                <label class="flex items-center cursor-pointer">
-                    <input type="radio" name="voiceMode" value="hold" class="mr-2">
-                    <span class="text-sm">Hold to Talk (Like walkie-talkie)</span>
-                </label>
-            </div>
-        </div>
-        
-        <button onclick="saveSettings()" class="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition">
-            Save Settings
-        </button>
-        
-        <button onclick="toggleSettings()" class="w-full mt-2 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition">
-            Close
-        </button>
-    </div>
-    
-    <!-- Settings Button -->
-    <button onclick="toggleSettings()" class="fixed top-4 right-4 p-3 bg-white rounded-full shadow-lg hover:shadow-xl transition z-50" title="Settings">
-        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="10" cy="10" r="3"></circle>
-            <path d="M10 1v3m0 6v3M1 10h3m6 0h3M2.93 2.93l2.12 2.12m5.9 5.9l2.12 2.12M17.07 2.93l-2.12 2.12m-5.9 5.9l-2.12 2.12"></path>
-        </svg>
-    </button>
-    
     <!-- Weather Effects Container -->
     <div id="weather-effects" class="weather-effect"></div>
     
@@ -1008,7 +914,7 @@ function debugLog(message, data = null) {
     }
 }
 
-debugLog('🚀 Unify Voice Assistant - Bug Fix Version Started');
+debugLog('🚀 Unify Voice Assistant - Bug Fix V3 Started');
 
 // ========== LOADING STATES ==========
 function showLoading(message = 'Processing...') {
@@ -1024,53 +930,6 @@ function hideLoading() {
     const overlay = document.getElementById('loading-overlay');
     if (overlay) {
         overlay.classList.add('hidden');
-        debugLog('✅ Loading complete');
-    }
-}
-
-// ========== TOAST NOTIFICATIONS ==========
-function showToast(message, type = 'success') {
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    
-    debugLog(`📢 Toast (${type}):`, message);
-    
-    setTimeout(() => {
-        toast.remove();
-    }, 3000);
-}
-
-// ========== SETTINGS ==========
-let voiceMode = 'tap'; // 'tap' or 'hold'
-
-function toggleSettings() {
-    const panel = document.getElementById('settings-panel');
-    panel.classList.toggle('hidden');
-    debugLog('⚙️ Settings panel toggled');
-}
-
-function saveSettings() {
-    const selectedMode = document.querySelector('input[name="voiceMode"]:checked').value;
-    voiceMode = selectedMode;
-    localStorage.setItem('voiceMode', selectedMode);
-    
-    debugLog('⚙️ Settings saved:', { voiceMode: selectedMode });
-    showToast(`✅ Voice mode: ${selectedMode === 'tap' ? 'Tap to Toggle' : 'Hold to Talk'}`, 'success');
-    toggleSettings();
-    
-    // Reinitialize voice button with new mode
-    initializeVoiceButton();
-}
-
-function loadSettings() {
-    const savedMode = localStorage.getItem('voiceMode');
-    if (savedMode) {
-        voiceMode = savedMode;
-        const radio = document.querySelector(`input[name="voiceMode"][value="${savedMode}"]`);
-        if (radio) radio.checked = true;
-        debugLog('⚙️ Settings loaded:', { voiceMode: savedMode });
     }
 }
 
@@ -1170,12 +1029,12 @@ let conversationContext = [];
 // Wrapper for AI calls with loading indicator
 async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
     // Only show loading overlay, no typing bubble
-    console.log('🤖 AI Request:', message);
+    debugLog('🤖 AI Request:', message);
     showLoading(loadingMessage);
     try {
         const response = await askGeminiAI(message);
         hideLoading();
-        console.log('✅ AI Response received');
+        debugLog('✅ AI Response received');
         return response;
     } catch (error) {
         hideLoading();
@@ -1243,24 +1102,10 @@ Respond conversationally and naturally.`;
     } catch (error) {
         console.error('💥 AI error:', error);
         console.error('Error details:', error.message, error.stack);
-        
-        // Provide context-specific error messages
-        let errorMsg = '';
-        if (!navigator.onLine) {
-            errorMsg = "⚠️ No internet connection. Please check your network and try again.";
-        } else if (error.message && error.message.includes('quota')) {
-            errorMsg = "⚠️ API limit reached. Please try again in a few moments.";
-        } else if (error.message && error.message.includes('timeout')) {
-            errorMsg = "⚠️ Request timeout. Please try again.";
-        } else {
-            errorMsg = "I'm having trouble connecting right now. Please try again in a moment!";
-        }
-        
-        debugLog('❌ AI Error handled:', errorMsg);
-        showError(errorMsg);
-        
+        // Better error handling - try to be helpful
+        showError(`AI request failed: ${error.message}`);
         return {
-            response: errorMsg,
+            response: "I'm having trouble connecting to my AI. Please try again in a moment!",
             intent: 'error'
         };
     }
@@ -1322,17 +1167,9 @@ async function handleNameCorrection(text) {
 
         // ========== INITIALIZATION ==========
         window.onload = async () => {
-            // Load settings first
-            loadSettings();
-            
             await requestMicrophonePermission();
             loadUserData();
             checkReminders();
-            
-            // Initialize voice button with saved mode
-            setTimeout(() => {
-                initializeVoiceButton();
-            }, 500);
             
             // Check if user has a name stored
             if (!userName) {
@@ -1351,8 +1188,6 @@ async function handleNameCorrection(text) {
                     addChatMessage(hintMsg, false);
                 }, 2000); // Show after 2 seconds
             }
-            
-            debugLog('🎉 App fully initialized!');
         };
 
         async function requestMicrophonePermission() {
@@ -1703,73 +1538,6 @@ async function handleNameCorrection(text) {
 
         // Remove old recognition code - we only need one now
         recognition = continuousRecognition;
-
-        // ========== VOICE BUTTON INITIALIZATION ==========
-        function initializeVoiceButton() {
-            const voiceBtn = document.getElementById('voice-btn');
-            if (!voiceBtn) {
-                debugLog('⚠️ Voice button not found');
-                return;
-            }
-            
-            // Remove all existing listeners by replacing the element
-            const newButton = voiceBtn.cloneNode(true);
-            voiceBtn.parentNode.replaceChild(newButton, voiceBtn);
-            
-            debugLog('🎤 Initializing voice button:', { mode: voiceMode });
-            
-            if (voiceMode === 'tap') {
-                // Tap mode: Toggle on click
-                newButton.addEventListener('click', toggleListening);
-            } else {
-                // Hold mode: Hold to talk
-                let holdTimeout;
-                let isHolding = false;
-                
-                newButton.addEventListener('mousedown', () => {
-                    holdTimeout = setTimeout(() => {
-                        isHolding = true;
-                        startListening();
-                    }, 150);
-                });
-                
-                newButton.addEventListener('mouseup', () => {
-                    clearTimeout(holdTimeout);
-                    if (isHolding) {
-                        stopListening();
-                        isHolding = false;
-                    }
-                });
-                
-                newButton.addEventListener('mouseleave', () => {
-                    clearTimeout(holdTimeout);
-                    if (isHolding) {
-                        stopListening();
-                        isHolding = false;
-                    }
-                });
-                
-                // Touch events for mobile
-                newButton.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    holdTimeout = setTimeout(() => {
-                        isHolding = true;
-                        startListening();
-                    }, 150);
-                });
-                
-                newButton.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    clearTimeout(holdTimeout);
-                    if (isHolding) {
-                        stopListening();
-                        isHolding = false;
-                    }
-                });
-            }
-            
-            debugLog('✅ Voice button initialized');
-        }
 
         // ========== COMMAND PROCESSING ==========
         function processSuggestion(text) {
