@@ -652,45 +652,80 @@
             display: none;
         }
         
-        /* Loading State Overlay */
-        .loading-overlay {
+        /* Settings Panel */
+        .settings-panel {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            backdrop-filter: blur(4px);
-        }
-        
-        .loading-card {
+            top: 80px;
+            right: 20px;
             background: white;
-            padding: 24px 32px;
             border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 24px;
+            width: 320px;
+            z-index: 1000;
         }
         
-        .loading-spinner {
-            width: 48px;
-            height: 48px;
-            border: 4px solid #E5E7EB;
+        .settings-panel.dark-mode {
+            background: #1F2937;
+            color: #F3F4F6;
+        }
+        
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 10000;
+            animation: slideUp 0.3s ease;
+        }
+        
+        .toast.success {
+            background: #10B981;
+            color: white;
+        }
+        
+        .toast.error {
+            background: #EF4444;
+            color: white;
+        }
+        
+        .toast.warning {
+            background: #F59E0B;
+            color: white;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+        
+        /* Simple Loading Spinner (no overlay) */
+        .simple-loading {
+            position: fixed;
+            top: 50%;
+            right: 24px;
+            transform: translateY(-50%);
+            z-index: 9999;
+        }
+        
+        .simple-spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #E5E7EB;
             border-top-color: #8B5CF6;
             border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        .loading-text {
-            font-size: 16px;
-            color: #374151;
-            font-weight: 500;
+            animation: spin 0.8s linear infinite;
         }
         
         @keyframes spin {
@@ -699,6 +734,42 @@
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
+    <!-- Settings Panel -->
+    <div id="settings-panel" class="settings-panel hidden">
+        <h3 class="text-lg font-bold mb-4">⚙️ Settings</h3>
+        
+        <!-- Voice Mode -->
+        <div class="mb-4">
+            <label class="block text-sm font-semibold mb-2">🎤 Voice Mode</label>
+            <div class="space-y-2">
+                <label class="flex items-center cursor-pointer">
+                    <input type="radio" name="voiceMode" value="tap" checked class="mr-2">
+                    <span class="text-sm">Tap to Toggle (Click to start/stop)</span>
+                </label>
+                <label class="flex items-center cursor-pointer">
+                    <input type="radio" name="voiceMode" value="hold" class="mr-2">
+                    <span class="text-sm">Hold to Talk (Like walkie-talkie)</span>
+                </label>
+            </div>
+        </div>
+        
+        <button onclick="saveSettings()" class="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition">
+            Save Settings
+        </button>
+        
+        <button onclick="toggleSettings()" class="w-full mt-2 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition">
+            Close
+        </button>
+    </div>
+    
+    <!-- Settings Button -->
+    <button onclick="toggleSettings()" class="fixed top-4 right-4 p-3 bg-white rounded-full shadow-lg hover:shadow-xl transition z-50" title="Settings">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="10" cy="10" r="3"></circle>
+            <path d="M10 1v3m0 6v3M1 10h3m6 0h3M2.93 2.93l2.12 2.12m5.9 5.9l2.12 2.12M17.07 2.93l-2.12 2.12m-5.9 5.9l-2.12 2.12"></path>
+        </svg>
+    </button>
+    
     <!-- Weather Effects Container -->
     <div id="weather-effects" class="weather-effect"></div>
     
@@ -927,6 +998,18 @@
     </button>
 
 <script>
+// ========== DEBUG MODE ==========
+const DEBUG = true; // Set to false for production
+
+function debugLog(message, data = null) {
+    if (DEBUG) {
+        const timestamp = new Date().toLocaleTimeString();
+        console.log(`[${timestamp}] 🐛 ${message}`, data || '');
+    }
+}
+
+debugLog('🚀 Unify Voice Assistant - Bug Fix Version Started');
+
 // ========== LOADING STATES ==========
 function showLoading(message = 'Processing...') {
     const overlay = document.getElementById('loading-overlay');
@@ -941,6 +1024,53 @@ function hideLoading() {
     const overlay = document.getElementById('loading-overlay');
     if (overlay) {
         overlay.classList.add('hidden');
+        debugLog('✅ Loading complete');
+    }
+}
+
+// ========== TOAST NOTIFICATIONS ==========
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    debugLog(`📢 Toast (${type}):`, message);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
+// ========== SETTINGS ==========
+let voiceMode = 'tap'; // 'tap' or 'hold'
+
+function toggleSettings() {
+    const panel = document.getElementById('settings-panel');
+    panel.classList.toggle('hidden');
+    debugLog('⚙️ Settings panel toggled');
+}
+
+function saveSettings() {
+    const selectedMode = document.querySelector('input[name="voiceMode"]:checked').value;
+    voiceMode = selectedMode;
+    localStorage.setItem('voiceMode', selectedMode);
+    
+    debugLog('⚙️ Settings saved:', { voiceMode: selectedMode });
+    showToast(`✅ Voice mode: ${selectedMode === 'tap' ? 'Tap to Toggle' : 'Hold to Talk'}`, 'success');
+    toggleSettings();
+    
+    // Reinitialize voice button with new mode
+    initializeVoiceButton();
+}
+
+function loadSettings() {
+    const savedMode = localStorage.getItem('voiceMode');
+    if (savedMode) {
+        voiceMode = savedMode;
+        const radio = document.querySelector(`input[name="voiceMode"][value="${savedMode}"]`);
+        if (radio) radio.checked = true;
+        debugLog('⚙️ Settings loaded:', { voiceMode: savedMode });
     }
 }
 
@@ -1038,15 +1168,18 @@ function suggestQuickReplies(context) {
 let conversationContext = [];
 
 // Wrapper for AI calls with loading indicator
-async function callAIWithTyping(message, loadingMessage = 'Thinking...', hideIndicator = true) {
+async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
     // Only show loading overlay, no typing bubble
+    console.log('🤖 AI Request:', message);
     showLoading(loadingMessage);
     try {
         const response = await askGeminiAI(message);
         hideLoading();
+        console.log('✅ AI Response received');
         return response;
     } catch (error) {
         hideLoading();
+        console.error('❌ AI Error:', error);
         showError('AI request failed. Please try again.');
         throw error;
     }
@@ -1110,10 +1243,24 @@ Respond conversationally and naturally.`;
     } catch (error) {
         console.error('💥 AI error:', error);
         console.error('Error details:', error.message, error.stack);
-        // Better error handling - try to be helpful
-        showError(`AI request failed: ${error.message}`);
+        
+        // Provide context-specific error messages
+        let errorMsg = '';
+        if (!navigator.onLine) {
+            errorMsg = "⚠️ No internet connection. Please check your network and try again.";
+        } else if (error.message && error.message.includes('quota')) {
+            errorMsg = "⚠️ API limit reached. Please try again in a few moments.";
+        } else if (error.message && error.message.includes('timeout')) {
+            errorMsg = "⚠️ Request timeout. Please try again.";
+        } else {
+            errorMsg = "I'm having trouble connecting right now. Please try again in a moment!";
+        }
+        
+        debugLog('❌ AI Error handled:', errorMsg);
+        showError(errorMsg);
+        
         return {
-            response: "I'm having trouble connecting to my AI. Please try again in a moment!",
+            response: errorMsg,
             intent: 'error'
         };
     }
@@ -1175,9 +1322,17 @@ async function handleNameCorrection(text) {
 
         // ========== INITIALIZATION ==========
         window.onload = async () => {
+            // Load settings first
+            loadSettings();
+            
             await requestMicrophonePermission();
             loadUserData();
             checkReminders();
+            
+            // Initialize voice button with saved mode
+            setTimeout(() => {
+                initializeVoiceButton();
+            }, 500);
             
             // Check if user has a name stored
             if (!userName) {
@@ -1196,6 +1351,8 @@ async function handleNameCorrection(text) {
                     addChatMessage(hintMsg, false);
                 }, 2000); // Show after 2 seconds
             }
+            
+            debugLog('🎉 App fully initialized!');
         };
 
         async function requestMicrophonePermission() {
@@ -1414,27 +1571,32 @@ async function handleNameCorrection(text) {
                 
                 if (!text) return;
                 
+                // Only process final results
+                if (!result.isFinal) {
+                    debugLog('⏸️ Interim result (skipped):', text);
+                    return;
+                }
+                
+                debugLog('🎤 Final transcript:', text);
+                
                 // Clear any existing timeout
                 if (speechTimeout) {
                     clearTimeout(speechTimeout);
                 }
                 
-                // If it's a final result, process after short delay
-                if (result.isFinal) {
-                    console.log('✅ Final result:', text);
-                    
-                    // Stop listening immediately
-                    stopListening();
-                    
-                    // Prevent duplicate processing
-                    if (isProcessing) {
-                        console.log('⏸️ Already processing, ignoring:', text);
-                        return;
-                    }
-                    
-                    isProcessing = true;
-                    
-                    addChatMessage(text, true);
+                // Stop listening immediately
+                stopListening();
+                
+                // Prevent duplicate processing - CRITICAL CHECK
+                if (isProcessing) {
+                    debugLog('⚠️ Already processing, blocking duplicate:', text);
+                    return;
+                }
+                
+                isProcessing = true;
+                debugLog('✅ Processing flag set, starting command processing');
+                
+                addChatMessage(text, true);
                 
                 try {
                     if (waitingForLocation) {
@@ -1542,6 +1704,73 @@ async function handleNameCorrection(text) {
         // Remove old recognition code - we only need one now
         recognition = continuousRecognition;
 
+        // ========== VOICE BUTTON INITIALIZATION ==========
+        function initializeVoiceButton() {
+            const voiceBtn = document.getElementById('voice-btn');
+            if (!voiceBtn) {
+                debugLog('⚠️ Voice button not found');
+                return;
+            }
+            
+            // Remove all existing listeners by replacing the element
+            const newButton = voiceBtn.cloneNode(true);
+            voiceBtn.parentNode.replaceChild(newButton, voiceBtn);
+            
+            debugLog('🎤 Initializing voice button:', { mode: voiceMode });
+            
+            if (voiceMode === 'tap') {
+                // Tap mode: Toggle on click
+                newButton.addEventListener('click', toggleListening);
+            } else {
+                // Hold mode: Hold to talk
+                let holdTimeout;
+                let isHolding = false;
+                
+                newButton.addEventListener('mousedown', () => {
+                    holdTimeout = setTimeout(() => {
+                        isHolding = true;
+                        startListening();
+                    }, 150);
+                });
+                
+                newButton.addEventListener('mouseup', () => {
+                    clearTimeout(holdTimeout);
+                    if (isHolding) {
+                        stopListening();
+                        isHolding = false;
+                    }
+                });
+                
+                newButton.addEventListener('mouseleave', () => {
+                    clearTimeout(holdTimeout);
+                    if (isHolding) {
+                        stopListening();
+                        isHolding = false;
+                    }
+                });
+                
+                // Touch events for mobile
+                newButton.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    holdTimeout = setTimeout(() => {
+                        isHolding = true;
+                        startListening();
+                    }, 150);
+                });
+                
+                newButton.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    clearTimeout(holdTimeout);
+                    if (isHolding) {
+                        stopListening();
+                        isHolding = false;
+                    }
+                });
+            }
+            
+            debugLog('✅ Voice button initialized');
+        }
+
         // ========== COMMAND PROCESSING ==========
         function processSuggestion(text) {
             document.getElementById('text-input').value = text;
@@ -1549,6 +1778,8 @@ async function handleNameCorrection(text) {
         }
 
         async function processCommand(text) {
+            debugLog('🔄 Processing command:', text);
+            
             const lower = text.toLowerCase();
             
             // Auto-close cards when topic changes
@@ -1860,14 +2091,26 @@ async function handleNameCorrection(text) {
             else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('reminder')) {
                 clearAllReminders();
             }
-            // Memory Recall - More specific pattern to avoid matching weather
-            else if (cleanText.toLowerCase().match(/where\s+(is|are|did\s+i\s+put|did\s+i\s+leave)\s+(my|the)/i) || 
-                     cleanText.toLowerCase().match(/\b(find|locate)\s+(my|the)\s+\w+/i)) {
+            // Memory Recall - VERY specific patterns only
+            else if (
+                // "Where is/are my [thing]" - must start with "where"
+                cleanText.toLowerCase().match(/^where\s+(is|are)\s+(my|the)\s+[\w\s]+\??$/i) ||
+                // "Where did I put/leave my [thing]"
+                cleanText.toLowerCase().match(/^where\s+did\s+i\s+(put|leave)\s+(my|the)\s+[\w\s]+\??$/i) ||
+                // "Find my [thing]" - must start with find
+                cleanText.toLowerCase().match(/^find\s+(my|the)\s+[\w\s]+\??$/i)
+            ) {
+                debugLog('🔍 Memory recall triggered');
                 handleMemoryRecall(cleanText);
             }
-            // Memory Storage (where things are)
-            else if ((cleanText.toLowerCase().includes('my ') || cleanText.toLowerCase().includes('i put') || cleanText.toLowerCase().includes('i left')) && 
-                     (cleanText.toLowerCase().includes(' is ') || cleanText.toLowerCase().includes(' are ') || cleanText.toLowerCase().includes(' in ') || cleanText.toLowerCase().includes(' on ') || cleanText.toLowerCase().includes(' at '))) {
+            // Memory Storage - VERY specific patterns only
+            else if (
+                // "My [thing] is/are [location]"
+                cleanText.toLowerCase().match(/^my\s+[\w\s]+\s+(is|are)\s+(in|on|at|under|behind|inside)\s+/i) ||
+                // "I put/left my [thing] [location]"
+                cleanText.toLowerCase().match(/^i\s+(put|left|placed)\s+(my|the)\s+[\w\s]+\s+(in|on|at|under)/i)
+            ) {
+                debugLog('💾 Memory storage triggered');
                 handleMemoryStorage(cleanText);
             }
             // Creator Info
@@ -3137,7 +3380,13 @@ Now answer the question completely!`;
             return matrix[str2.length][str1.length];
         }
 
-        // ========== LOCAL STORAGE ==========
+        // ========== LOCAL STORAGE (USER-SPECIFIC) ==========
+        function getUserStorageKey() {
+            // Use username as part of storage key to separate user data
+            const safeUserName = (userName || 'default_user').replace(/[^a-zA-Z0-9]/g, '_');
+            return `unify_user_data_${safeUserName}`;
+        }
+        
         function saveUserData() {
             try {
                 const data = {
@@ -3146,7 +3395,9 @@ Now answer the question completely!`;
                     memoryStore: memoryStore,
                     reminders: reminders
                 };
-                localStorage.setItem('unify_user_data', JSON.stringify(data));
+                const storageKey = getUserStorageKey();
+                localStorage.setItem(storageKey, JSON.stringify(data));
+                console.log(`💾 Saved data for user: ${userName} (key: ${storageKey})`);
             } catch (e) {
                 console.error('Failed to save user data:', e);
             }
@@ -3154,7 +3405,9 @@ Now answer the question completely!`;
 
         function loadUserData() {
             try {
-                const stored = localStorage.getItem('unify_user_data');
+                const storageKey = getUserStorageKey();
+                const stored = localStorage.getItem(storageKey);
+                console.log(`📂 Loading data for user: ${userName} (key: ${storageKey})`);
                 if (stored) {
                     const data = JSON.parse(stored);
                     userName = data.userName || null;
@@ -3258,8 +3511,13 @@ function deleteMessage(button) {
     }
 }
 
-// 3. CONVERSATION HISTORY & SEARCH
+// 3. CONVERSATION HISTORY & SEARCH (USER-SPECIFIC)
 let conversationHistory = [];
+
+function getHistoryStorageKey() {
+    const safeUserName = (userName || 'default_user').replace(/[^a-zA-Z0-9]/g, '_');
+    return `unify_history_${safeUserName}`;
+}
 
 function saveToHistory(userMessage, aiResponse) {
     conversationHistory.push({
@@ -3269,12 +3527,16 @@ function saveToHistory(userMessage, aiResponse) {
         date: new Date().toLocaleDateString()
     });
     
-    // Save to localStorage
-    localStorage.setItem('unify_history', JSON.stringify(conversationHistory));
+    // Save to localStorage with user-specific key
+    const historyKey = getHistoryStorageKey();
+    localStorage.setItem(historyKey, JSON.stringify(conversationHistory));
+    console.log(`💾 Saved history for user: ${userName}`);
 }
 
 function loadHistory() {
-    const saved = localStorage.getItem('unify_history');
+    const historyKey = getHistoryStorageKey();
+    const saved = localStorage.getItem(historyKey);
+    console.log(`📂 Loading history for user: ${userName} (key: ${historyKey})`);
     if (saved) {
         conversationHistory = JSON.parse(saved);
     }
