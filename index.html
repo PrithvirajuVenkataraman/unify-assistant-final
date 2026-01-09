@@ -1689,7 +1689,7 @@ async function handleNameCorrection(text) {
             }
 
             // Weather queries - Check BEFORE memory recall to avoid conflicts
-            if (cleanText.toLowerCase().includes('weather') || cleanText.toLowerCase().includes('temperature') || cleanText.toLowerCase().includes('rain') || cleanText.toLowerCase().includes('snow')) {
+            else if (cleanText.toLowerCase().includes('weather') || cleanText.toLowerCase().includes('temperature') || cleanText.toLowerCase().includes('rain') || cleanText.toLowerCase().includes('snow')) {
                 const location = extractLocationFromSentence(cleanText);
                 
                 if (location) {
@@ -1850,14 +1850,34 @@ async function handleNameCorrection(text) {
             else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('reminder')) {
                 clearAllReminders();
             }
-            // Memory Recall - More specific pattern to avoid matching weather
-            else if (cleanText.toLowerCase().match(/where\s+(is|are|did\s+i\s+put|did\s+i\s+leave)\s+(my|the)/i) || 
-                     cleanText.toLowerCase().match(/\b(find|locate)\s+(my|the)\s+\w+/i)) {
+            // Memory Recall - VERY specific patterns only (don't match weather/location queries!)
+            else if (
+                // "Where is/are my [thing]" - but NOT "my location"
+                (cleanText.toLowerCase().match(/^where\s+(is|are)\s+my\s+\w+/i) && 
+                 !cleanText.toLowerCase().includes('location')) ||
+                // "Where did I put/leave my [thing]"
+                cleanText.toLowerCase().match(/^where\s+did\s+i\s+(put|leave)\s+(my|the)\s+/i) ||
+                // "Find my [thing]" - but NOT "my location"  
+                (cleanText.toLowerCase().match(/^find\s+my\s+\w+/i) && 
+                 !cleanText.toLowerCase().includes('location'))
+            ) {
                 handleMemoryRecall(cleanText);
             }
-            // Memory Storage (where things are)
-            else if ((cleanText.toLowerCase().includes('my ') || cleanText.toLowerCase().includes('i put') || cleanText.toLowerCase().includes('i left')) && 
-                     (cleanText.toLowerCase().includes(' is ') || cleanText.toLowerCase().includes(' are ') || cleanText.toLowerCase().includes(' in ') || cleanText.toLowerCase().includes(' on ') || cleanText.toLowerCase().includes(' at '))) {
+            // Memory Storage (where things are) - but NOT weather/location queries
+            else if (
+                (cleanText.toLowerCase().includes('my ') || 
+                 cleanText.toLowerCase().includes('i put') || 
+                 cleanText.toLowerCase().includes('i left')) && 
+                (cleanText.toLowerCase().includes(' is ') || 
+                 cleanText.toLowerCase().includes(' are ') || 
+                 cleanText.toLowerCase().includes(' in ') || 
+                 cleanText.toLowerCase().includes(' on ') || 
+                 cleanText.toLowerCase().includes(' at ')) &&
+                // Exclude weather/location queries
+                !cleanText.toLowerCase().includes('weather') &&
+                !cleanText.toLowerCase().includes('location') &&
+                !cleanText.toLowerCase().includes('temperature')
+            ) {
                 handleMemoryStorage(cleanText);
             }
             // Creator Info
