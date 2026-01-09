@@ -1226,7 +1226,12 @@ async function askGeminiAI(userMessage) {
             `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`
         ).join('\n');
         
-        const systemPrompt = `You are Unify, a helpful voice assistant. The user's name is ${userName || 'User'}.
+        const systemPrompt = `You are Unify, a helpful voice assistant.${userName ? ` The user's name is ${userName}. Use their name naturally and occasionally in conversation.` : ' Be friendly and conversational.'}
+
+CRITICAL RULES:
+- ${userName ? `The user's name is ${userName} - use it!` : 'You do NOT know the user\'s name. NEVER say "User" or "Certainly, User!" - just say "Certainly!" or be friendly without using a name.'}
+- Be natural and conversational
+- When listing hotels/restaurants, ALWAYS use numbered format (1. 2. 3.) NOT bullet points (-)
 
 Your capabilities:
 - Weather (say "check weather")
@@ -1350,11 +1355,7 @@ async function handleNameCorrection(text) {
             addChatMessage(welcomeMsg, false);
             speak(welcomeMsg);
             
-            // Add helpful hint after welcome
-            setTimeout(() => {
-                const hintMsg = `💡 Try saying things like:\n• "What's the weather?"\n• "Add 2 pounds of chicken to my shopping list"\n• "Remind me to call mom at 5pm"\n• "Plan a trip to Paris"\n\nOr say "What can you do?" to see all features!`;
-                addChatMessage(hintMsg, false);
-            }, 2000);
+            // No hint needed - user has Help & Tips button!
         };
 
         async function requestMicrophonePermission() {
