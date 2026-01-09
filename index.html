@@ -1323,9 +1323,177 @@ function dismissSuggestions() {
     localStorage.setItem('suggestions_dismissed', 'true');
 }
 
-function processSuggestion(query) {
-    document.getElementById('text-input').value = query;
-    sendTextInput();
+async function processSuggestion(query) {
+    const input = document.getElementById('text-input');
+    input.value = query;
+    
+    // Add to chat
+    addChatMessage(query, true);
+    
+    // Process the command
+    await processCommand(query);
+    
+    // Clear input
+    input.value = '';
+}
+
+// ========== REGIONAL FOOD SPECIALTIES ==========
+const regionalFood = {
+    // India - Tamil Nadu
+    'tamil nadu': [
+        { name: 'Biryani', emoji: '🍛' },
+        { name: 'Chettinad Curry', emoji: '🍲' },
+        { name: 'Dosa', emoji: '🥘' },
+        { name: 'Filter Coffee', emoji: '☕' },
+        { name: 'Fish Curry', emoji: '🐟' },
+        { name: 'Parotta', emoji: '🥞' }
+    ],
+    'chidambaram': [
+        { name: 'Biryani', emoji: '🍛' },
+        { name: 'Chettinad Curry', emoji: '🍲' },
+        { name: 'Dosa', emoji: '🥘' },
+        { name: 'Filter Coffee', emoji: '☕' },
+        { name: 'Fish Curry', emoji: '🐟' },
+        { name: 'Kothu Parotta', emoji: '🥞' }
+    ],
+    'india': [
+        { name: 'Biryani', emoji: '🍛' },
+        { name: 'Curry', emoji: '🍲' },
+        { name: 'Dosa', emoji: '🥘' },
+        { name: 'Chai', emoji: '☕' },
+        { name: 'Samosa', emoji: '🥟' },
+        { name: 'Tandoori', emoji: '🍗' }
+    ],
+    'kerala': [
+        { name: 'Appam', emoji: '🥞' },
+        { name: 'Fish Curry', emoji: '🐟' },
+        { name: 'Puttu', emoji: '🍚' },
+        { name: 'Biryani', emoji: '🍛' },
+        { name: 'Sadya', emoji: '🍱' }
+    ],
+    
+    // Italy
+    'italy': [
+        { name: 'Pasta', emoji: '🍝' },
+        { name: 'Pizza', emoji: '🍕' },
+        { name: 'Espresso', emoji: '☕' },
+        { name: 'Gelato', emoji: '🍨' },
+        { name: 'Risotto', emoji: '🍚' }
+    ],
+    'rome': [
+        { name: 'Pasta Carbonara', emoji: '🍝' },
+        { name: 'Pizza', emoji: '🍕' },
+        { name: 'Espresso', emoji: '☕' },
+        { name: 'Gelato', emoji: '🍨' }
+    ],
+    
+    // Japan
+    'japan': [
+        { name: 'Ramen', emoji: '🍜' },
+        { name: 'Sushi', emoji: '🍱' },
+        { name: 'Tempura', emoji: '🍤' },
+        { name: 'Matcha', emoji: '🍵' },
+        { name: 'Udon', emoji: '🍜' }
+    ],
+    'tokyo': [
+        { name: 'Ramen', emoji: '🍜' },
+        { name: 'Sushi', emoji: '🍱' },
+        { name: 'Tempura', emoji: '🍤' },
+        { name: 'Matcha', emoji: '🍵' }
+    ],
+    
+    // USA
+    'usa': [
+        { name: 'Burger', emoji: '🍔' },
+        { name: 'BBQ', emoji: '🍖' },
+        { name: 'Hot Dog', emoji: '🌭' },
+        { name: 'Pizza', emoji: '🍕' },
+        { name: 'Steak', emoji: '🥩' }
+    ],
+    'texas': [
+        { name: 'BBQ Brisket', emoji: '🍖' },
+        { name: 'Tex-Mex', emoji: '🌮' },
+        { name: 'Tacos', emoji: '🌮' },
+        { name: 'Chili', emoji: '🌶️' }
+    ],
+    'new york': [
+        { name: 'Pizza', emoji: '🍕' },
+        { name: 'Hot Dog', emoji: '🌭' },
+        { name: 'Bagel', emoji: '🥯' },
+        { name: 'Deli Sandwich', emoji: '🥪' }
+    ],
+    
+    // France
+    'france': [
+        { name: 'Croissant', emoji: '🥐' },
+        { name: 'Crepes', emoji: '🥞' },
+        { name: 'Baguette', emoji: '🥖' },
+        { name: 'Macaron', emoji: '🍰' },
+        { name: 'Espresso', emoji: '☕' }
+    ],
+    'paris': [
+        { name: 'Croissant', emoji: '🥐' },
+        { name: 'Crepes', emoji: '🥞' },
+        { name: 'Macaron', emoji: '🍰' },
+        { name: 'Espresso', emoji: '☕' }
+    ],
+    
+    // China
+    'china': [
+        { name: 'Dim Sum', emoji: '🥟' },
+        { name: 'Noodles', emoji: '🍜' },
+        { name: 'Peking Duck', emoji: '🦆' },
+        { name: 'Fried Rice', emoji: '🍚' }
+    ],
+    
+    // Mexico
+    'mexico': [
+        { name: 'Tacos', emoji: '🌮' },
+        { name: 'Burritos', emoji: '🌯' },
+        { name: 'Quesadilla', emoji: '🫓' },
+        { name: 'Tamales', emoji: '🫔' }
+    ],
+    
+    // Default fallback
+    'default': [
+        { name: 'Fast Food', emoji: '🍔' },
+        { name: 'Pizza', emoji: '🍕' },
+        { name: 'Coffee', emoji: '☕' },
+        { name: 'Cafe', emoji: '🥐' },
+        { name: 'Burgers', emoji: '🍔' },
+        { name: 'Sandwiches', emoji: '🥪' }
+    ]
+};
+
+function getRegionalFood(city) {
+    const cityLower = city.toLowerCase();
+    
+    // Try exact city match first
+    if (regionalFood[cityLower]) {
+        return regionalFood[cityLower];
+    }
+    
+    // Try state/region match (for India)
+    if (cityLower.includes('tamil nadu') || cityLower.includes('chennai') || cityLower.includes('chidambaram')) {
+        return regionalFood['tamil nadu'];
+    }
+    if (cityLower.includes('kerala') || cityLower.includes('kochi')) {
+        return regionalFood['kerala'];
+    }
+    
+    // Try country match
+    if (cityLower.includes('india')) return regionalFood['india'];
+    if (cityLower.includes('italy')) return regionalFood['italy'];
+    if (cityLower.includes('japan')) return regionalFood['japan'];
+    if (cityLower.includes('france')) return regionalFood['france'];
+    if (cityLower.includes('china')) return regionalFood['china'];
+    if (cityLower.includes('mexico')) return regionalFood['mexico'];
+    if (cityLower.includes('ohio') || cityLower.includes('texas') || cityLower.includes('california')) {
+        return regionalFood['usa'];
+    }
+    
+    // Default
+    return regionalFood['default'];
 }
 
 // Check if suggestions were dismissed before
@@ -1699,19 +1867,17 @@ async function handleNameCorrection(text) {
                 }
             );
             
-            // Add REAL search buttons for fast food (no AI hallucinations!)
-            // Only add if this is a hotel/restaurant response
+            // Add REGIONAL FOOD SPECIALTIES (culturally aware!)
+            const regionalSpecialties = getRegionalFood(city);
+            
             let fastFoodHTML = '\n\n<div class="fast-food-section">';
-            fastFoodHTML += `<h3>🍔 Looking for Fast Food or Quick Bites?</h3>`;
+            fastFoodHTML += `<h3>🍽️ Looking for Local Specialties?</h3>`;
             fastFoodHTML += '<div class="fast-food-buttons">';
             
-            // Each button searches Google Maps for REAL places
-            fastFoodHTML += `<button class="fast-food-btn" onclick="searchCategory('fast food', '${city}')">🍔 Fast Food</button>`;
-            fastFoodHTML += `<button class="fast-food-btn" onclick="searchCategory('pizza', '${city}')">🍕 Pizza</button>`;
-            fastFoodHTML += `<button class="fast-food-btn" onclick="searchCategory('coffee shop', '${city}')">☕ Coffee</button>`;
-            fastFoodHTML += `<button class="fast-food-btn" onclick="searchCategory('cafe', '${city}')">🥐 Cafes</button>`;
-            fastFoodHTML += `<button class="fast-food-btn" onclick="searchCategory('burger', '${city}')">🍔 Burgers</button>`;
-            fastFoodHTML += `<button class="fast-food-btn" onclick="searchCategory('sandwich shop', '${city}')">🥪 Sandwiches</button>`;
+            // Show regional specialties!
+            regionalSpecialties.forEach(specialty => {
+                fastFoodHTML += `<button class="fast-food-btn" onclick="searchCategory('${specialty.name}', '${city}')">${specialty.emoji} ${specialty.name}</button>`;
+            });
             
             fastFoodHTML += '</div></div>';
             
