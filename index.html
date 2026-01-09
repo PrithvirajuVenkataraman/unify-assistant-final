@@ -968,6 +968,58 @@ function handleQuickReply(text) {
     sendTextInput();
 }
 
+// ========== REGIONAL FOOD SPECIALTIES ==========
+function getRegionalFood(context) {
+    const lower = context.toLowerCase();
+    
+    // Tamil Nadu / Chidambaram
+    if (lower.includes('tamil nadu') || lower.includes('chidambaram') || lower.includes('chennai')) {
+        return [
+            { icon: '🍛', text: 'Biryani near me' },
+            { icon: '🥘', text: 'Dosa places' },
+            { icon: '☕', text: 'Filter Coffee' }
+        ];
+    }
+    // India (general)
+    if (lower.includes('india')) {
+        return [
+            { icon: '🍛', text: 'Biryani near me' },
+            { icon: '🍲', text: 'Curry places' },
+            { icon: '☕', text: 'Chai shops' }
+        ];
+    }
+    // Italy
+    if (lower.includes('italy') || lower.includes('rome') || lower.includes('milan')) {
+        return [
+            { icon: '🍝', text: 'Pasta restaurants' },
+            { icon: '🍕', text: 'Pizza places' },
+            { icon: '🍨', text: 'Gelato shops' }
+        ];
+    }
+    // Japan
+    if (lower.includes('japan') || lower.includes('tokyo')) {
+        return [
+            { icon: '🍜', text: 'Ramen shops' },
+            { icon: '🍱', text: 'Sushi restaurants' },
+            { icon: '🍵', text: 'Matcha cafes' }
+        ];
+    }
+    // USA
+    if (lower.includes('ohio') || lower.includes('texas') || lower.includes('california') || lower.includes('mason')) {
+        return [
+            { icon: '🍔', text: 'Burger places' },
+            { icon: '🍖', text: 'BBQ restaurants' },
+            { icon: '🍕', text: 'Pizza shops' }
+        ];
+    }
+    // Default (generic)
+    return [
+        { icon: '🍔', text: 'Fast food near me' },
+        { icon: '🍕', text: 'Pizza places' },
+        { icon: '☕', text: 'Coffee shops' }
+    ];
+}
+
 // Suggest context-aware quick replies based on last response
 function suggestQuickReplies(context) {
     const suggestions = [];
@@ -989,20 +1041,26 @@ function suggestQuickReplies(context) {
         );
     }
     // After hotel recommendations
-    else if (context.includes('hotel') || context.includes('stay')) {
+    else if (context.includes('hotel') || context.includes('stay') || context.includes('Price:')) {
         suggestions.push(
             { icon: '🍽️', text: 'Restaurants' },
             { icon: '🗺️', text: 'Things to do' },
             { icon: '🌤️', text: 'Weather' }
         );
+        // Add regional food specialties
+        const regionalFood = getRegionalFood(context);
+        suggestions.push(...regionalFood);
     }
     // After restaurant recommendations
-    else if (context.includes('restaurant') || context.includes('[Pure Veg]') || context.includes('[Non-Veg]')) {
+    else if (context.includes('restaurant') || context.includes('Must Try:')) {
         suggestions.push(
             { icon: '🏨', text: 'Hotels' },
             { icon: '🗺️', text: 'Plan an itinerary' },
             { icon: '🚗', text: 'Transport options' }
         );
+        // Add regional food specialties
+        const regionalFood = getRegionalFood(context);
+        suggestions.push(...regionalFood);
     }
     // After shopping list
     else if (context.includes('shopping') || context.includes('Added')) {
@@ -1169,15 +1227,23 @@ async function handleNameCorrection(text) {
             loadUserData();
             checkReminders();
             
-            // Don't force name input - just show friendly welcome
-            const welcomeMsg = userName 
-                ? `Hi ${userName}! How can I help you today?` 
-                : "Hi! I'm Unify, your voice assistant. How can I help you today?";
-            
-            addChatMessage(welcomeMsg, false);
-            speak(welcomeMsg);
-            
-            // No hint message - user has Help & Tips button!
+            // Check if user has a name stored
+            if (!userName) {
+                waitingForName = true;
+                const welcomeMsg = "Hi! I'm Unify. What's your name?";
+                addChatMessage(welcomeMsg, false);
+                speak(welcomeMsg);
+            } else {
+                const welcomeMsg = `Hi ${userName}! How can I help you today?`;
+                addChatMessage(welcomeMsg, false);
+                speak(welcomeMsg);
+                
+                // Add helpful hint after welcome
+                setTimeout(() => {
+                    const hintMsg = `💡 Try saying things like:\n• "What's the weather?"\n• "Add 2 pounds of chicken to my shopping list"\n• "Remind me to call mom at 5pm"\n• "My keys are on the counter"\n\nOr just ask "What can you do?"`;
+                    addChatMessage(hintMsg, false);
+                }, 2000); // Show after 2 seconds
+            }
         };
 
         async function requestMicrophonePermission() {
@@ -2238,6 +2304,9 @@ Now answer the question completely!`;
                 
                 // Save to history
                 saveToHistory(text, aiResponse.response);
+                
+                // Show context-aware suggestions
+                suggestQuickReplies(aiResponse.response);
             }
             // Use AI for unclear queries and casual chat
             else {
@@ -2254,6 +2323,9 @@ Now answer the question completely!`;
                 
                 // Save to history
                 saveToHistory(text, aiResponse.response);
+                
+                // Show context-aware suggestions
+                suggestQuickReplies(aiResponse.response);
             }
         }
 
