@@ -1008,28 +1008,16 @@
                     <div id="reminders-list" class="space-y-3"></div>
                 </div>
 
-                <!-- Suggestion Buttons -->
-                <div class="bg-purple-50 p-6 rounded-2xl">
-                    <h3 class="font-bold text-gray-900 mb-3">Try asking me:</h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <button onclick="processSuggestion('What\'s the weather like today?')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            ☀️ What's the weather?
+                <!-- Dynamic Suggestion Buttons -->
+                <div id="suggestion-box" class="bg-purple-50 p-6 rounded-2xl hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-bold text-gray-900">Try asking me:</h3>
+                        <button onclick="dismissSuggestions()" class="text-gray-500 hover:text-gray-700 transition-all text-xl leading-none" title="Hide suggestions">
+                            ×
                         </button>
-                        <button onclick="processSuggestion('Add 2 pounds of chicken to my shopping list')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            🛒 Add 2 lbs chicken to list
-                        </button>
-                        <button onclick="processSuggestion('Remind me to call mom at 5pm')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            ⏰ Remind me to call mom
-                        </button>
-                        <button onclick="processSuggestion('My car keys are on the counter')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            🔑 My keys are on counter
-                        </button>
-                        <button onclick="processSuggestion('What can you do?')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            ❓ What can you do?
-                        </button>
-                        <button onclick="processSuggestion('Plan a weekend trip to Paris')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            ✈️ Plan a trip to Paris
-                        </button>
+                    </div>
+                    <div id="suggestion-buttons" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <!-- Dynamic buttons will be inserted here -->
                     </div>
                 </div>
             </div>
@@ -1222,6 +1210,127 @@ function hideQuickReplies() {
     if (container) {
         container.classList.add('hidden');
     }
+}
+
+// ========== MAIN SUGGESTION BOX (Context-Aware) ==========
+let suggestionsDismissed = false;
+let firstInteractionDone = false;
+
+function showMainSuggestions(context = '') {
+    // Don't show if user dismissed it
+    if (suggestionsDismissed) return;
+    
+    const box = document.getElementById('suggestion-box');
+    const buttonsContainer = document.getElementById('suggestion-buttons');
+    if (!box || !buttonsContainer) return;
+    
+    // Get contextual suggestions
+    const suggestions = getContextualSuggestions(context);
+    
+    // Build buttons HTML
+    const buttonsHTML = suggestions.map(s => `
+        <button onclick="processSuggestion('${s.query.replace(/'/g, "\\'")}')}" 
+                class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
+            ${s.icon} ${s.text}
+        </button>
+    `).join('');
+    
+    buttonsContainer.innerHTML = buttonsHTML;
+    box.classList.remove('hidden');
+}
+
+function getContextualSuggestions(context = '') {
+    const lower = context.toLowerCase();
+    
+    // After hotel search
+    if (lower.includes('hotel') || lower.includes('price:')) {
+        return [
+            { icon: '🍽️', text: 'Best restaurants', query: 'Best restaurants nearby' },
+            { icon: '✈️', text: 'Plan itinerary', query: 'Plan a day itinerary' },
+            { icon: '🌤️', text: 'Weather forecast', query: 'What\'s the weather?' },
+            { icon: '🚗', text: 'Transport options', query: 'How to get around?' }
+        ];
+    }
+    
+    // After restaurant search
+    if (lower.includes('restaurant') || lower.includes('must try:')) {
+        return [
+            { icon: '🏨', text: 'Find hotels', query: 'Hotels nearby' },
+            { icon: '🗺️', text: 'Things to do', query: 'What to do here?' },
+            { icon: '☕', text: 'Coffee shops', query: 'Best coffee shops' },
+            { icon: '🍲', text: 'Local specialties', query: 'Famous local dishes' }
+        ];
+    }
+    
+    // After weather
+    if (lower.includes('weather') || lower.includes('temperature') || lower.includes('rain')) {
+        return [
+            { icon: '✈️', text: 'Plan a trip', query: 'Plan a weekend trip' },
+            { icon: '🏨', text: 'Hotels', query: 'Hotels nearby' },
+            { icon: '🛒', text: 'Shopping list', query: 'Show shopping list' },
+            { icon: '⏰', text: 'Set reminder', query: 'Remind me to call mom' }
+        ];
+    }
+    
+    // After shopping list
+    if (lower.includes('shopping') || lower.includes('added to') || lower.includes('shopping list')) {
+        return [
+            { icon: '🛒', text: 'Add more items', query: 'Add milk to list' },
+            { icon: '📝', text: 'Show list', query: 'Show shopping list' },
+            { icon: '🗑️', text: 'Clear list', query: 'Clear shopping list' },
+            { icon: '🌤️', text: 'Weather', query: 'What\'s the weather?' }
+        ];
+    }
+    
+    // After reminder
+    if (lower.includes('reminder') || lower.includes('remind')) {
+        return [
+            { icon: '⏰', text: 'More reminders', query: 'Show my reminders' },
+            { icon: '🛒', text: 'Shopping list', query: 'Add to shopping list' },
+            { icon: '🔑', text: 'Remember location', query: 'My keys are on the desk' },
+            { icon: '✈️', text: 'Plan trip', query: 'Plan a trip' }
+        ];
+    }
+    
+    // After itinerary/travel
+    if (lower.includes('itinerary') || lower.includes('day 1') || lower.includes('trip')) {
+        return [
+            { icon: '🏨', text: 'Hotels', query: 'Hotels in this area' },
+            { icon: '🍽️', text: 'Restaurants', query: 'Best restaurants' },
+            { icon: '🌤️', text: 'Weather', query: 'What\'s the weather?' },
+            { icon: '🚗', text: 'Transport', query: 'How to get around?' }
+        ];
+    }
+    
+    // Default suggestions (first time)
+    return [
+        { icon: '🌤️', text: 'Weather', query: 'What\'s the weather?' },
+        { icon: '🛒', text: 'Add to list', query: 'Add milk to shopping list' },
+        { icon: '⏰', text: 'Set reminder', query: 'Remind me to call mom at 5pm' },
+        { icon: '🔑', text: 'Remember item', query: 'My keys are on counter' },
+        { icon: '❓', text: 'What can you do?', query: 'What can you do?' },
+        { icon: '✈️', text: 'Plan trip', query: 'Plan a trip to Paris' }
+    ];
+}
+
+function dismissSuggestions() {
+    suggestionsDismissed = true;
+    const box = document.getElementById('suggestion-box');
+    if (box) {
+        box.classList.add('hidden');
+    }
+    // Save to localStorage
+    localStorage.setItem('suggestions_dismissed', 'true');
+}
+
+function processSuggestion(query) {
+    document.getElementById('text-input').value = query;
+    sendTextInput();
+}
+
+// Check if suggestions were dismissed before
+if (localStorage.getItem('suggestions_dismissed') === 'true') {
+    suggestionsDismissed = true;
 }
 
 function handleQuickReply(text) {
@@ -1898,10 +2007,6 @@ async function handleNameCorrection(text) {
         recognition = continuousRecognition;
 
         // ========== COMMAND PROCESSING ==========
-        function processSuggestion(text) {
-            document.getElementById('text-input').value = text;
-            sendTextInput();
-        }
 
         async function processCommand(text) {
             const lower = text.toLowerCase();
@@ -2100,6 +2205,10 @@ async function handleNameCorrection(text) {
                         const weatherMsg = `The temperature is ${fahrenheit}°F (${celsius}°C). ${advice}`;
                         addChatMessage(weatherMsg, false);
                         speak(weatherMsg);
+                        
+                        // Show contextual suggestions
+                        if (!firstInteractionDone) firstInteractionDone = true;
+                        showMainSuggestions(weatherMsg);
                     }
                 } else {
                     // No location and no cached weather - try to get user's location automatically
@@ -2614,6 +2723,10 @@ Now answer the question completely!`;
                 
                 // Save to history
                 saveToHistory(text, aiResponse.response);
+                
+                // Show contextual suggestions
+                if (!firstInteractionDone) firstInteractionDone = true;
+                showMainSuggestions(aiResponse.response);
             }
             // Use AI for unclear queries and casual chat
             else {
@@ -2630,6 +2743,10 @@ Now answer the question completely!`;
                 
                 // Save to history
                 saveToHistory(text, aiResponse.response);
+                
+                // Show contextual suggestions
+                if (!firstInteractionDone) firstInteractionDone = true;
+                showMainSuggestions(aiResponse.response);
             }
         }
 
