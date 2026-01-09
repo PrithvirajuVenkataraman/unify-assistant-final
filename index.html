@@ -652,6 +652,44 @@
             display: none;
         }
         
+        /* Thinking Indicator Animation */
+        .thinking-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 12px 20px;
+            background: #F3F4F6;
+            border-radius: 20px;
+            margin: 8px 0;
+        }
+        
+        .thinking-dot {
+            width: 8px;
+            height: 8px;
+            background: #9CA3AF;
+            border-radius: 50%;
+            animation: thinking-bounce 1.4s infinite ease-in-out both;
+        }
+        
+        .thinking-dot:nth-child(1) {
+            animation-delay: -0.32s;
+        }
+        
+        .thinking-dot:nth-child(2) {
+            animation-delay: -0.16s;
+        }
+        
+        @keyframes thinking-bounce {
+            0%, 80%, 100% {
+                transform: scale(0.8);
+                opacity: 0.5;
+            }
+            40% {
+                transform: scale(1.2);
+                opacity: 1;
+            }
+        }
+        
         /* Simple Loading Spinner (no overlay) */
         .simple-loading {
             position: fixed;
@@ -676,6 +714,101 @@
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
+    <!-- Help & Tips Overlay -->
+    <div id="help-overlay" class="hidden fixed inset-0 bg-black bg-opacity-60 z-[9999] flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div class="p-8">
+                <h2 class="text-3xl font-bold mb-6 text-gray-900">ℹ️ Help & Tips</h2>
+                
+                <div class="space-y-6">
+                    <!-- How to Use -->
+                    <div>
+                        <h3 class="text-xl font-semibold mb-3 text-purple-600">🎤 How to Use Unify</h3>
+                        <ul class="space-y-2 text-gray-700">
+                            <li>• Click the microphone button and speak naturally</li>
+                            <li>• Or type your question in the text box</li>
+                            <li>• Speak clearly and wait for my response</li>
+                            <li>• You can interrupt me anytime!</li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Capabilities -->
+                    <div>
+                        <h3 class="text-xl font-semibold mb-3 text-purple-600">✨ What I Can Do</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-purple-50 p-4 rounded-lg">
+                                <p class="font-semibold text-gray-900">🌤️ Weather</p>
+                                <p class="text-sm text-gray-600">"What's the weather?"</p>
+                                <p class="text-sm text-gray-600">"Will it rain today?"</p>
+                            </div>
+                            
+                            <div class="bg-purple-50 p-4 rounded-lg">
+                                <p class="font-semibold text-gray-900">✈️ Travel Planning</p>
+                                <p class="text-sm text-gray-600">"Plan a trip to Paris"</p>
+                                <p class="text-sm text-gray-600">"3-day itinerary for Tokyo"</p>
+                            </div>
+                            
+                            <div class="bg-purple-50 p-4 rounded-lg">
+                                <p class="font-semibold text-gray-900">🏨 Hotels</p>
+                                <p class="text-sm text-gray-600">"Hotels in Chennai"</p>
+                                <p class="text-sm text-gray-600">"Best places to stay"</p>
+                            </div>
+                            
+                            <div class="bg-purple-50 p-4 rounded-lg">
+                                <p class="font-semibold text-gray-900">🍽️ Restaurants</p>
+                                <p class="text-sm text-gray-600">"Best restaurants nearby"</p>
+                                <p class="text-sm text-gray-600">"Pure veg options"</p>
+                            </div>
+                            
+                            <div class="bg-purple-50 p-4 rounded-lg">
+                                <p class="font-semibold text-gray-900">🛒 Shopping Lists</p>
+                                <p class="text-sm text-gray-600">"Add milk to my list"</p>
+                                <p class="text-sm text-gray-600">"Show shopping list"</p>
+                            </div>
+                            
+                            <div class="bg-purple-50 p-4 rounded-lg">
+                                <p class="font-semibold text-gray-900">⏰ Reminders</p>
+                                <p class="text-sm text-gray-600">"Remind me at 5pm"</p>
+                                <p class="text-sm text-gray-600">"Set a reminder"</p>
+                            </div>
+                            
+                            <div class="bg-purple-50 p-4 rounded-lg">
+                                <p class="font-semibold text-gray-900">💭 Memory</p>
+                                <p class="text-sm text-gray-600">"My keys are on the desk"</p>
+                                <p class="text-sm text-gray-600">"Where are my keys?"</p>
+                            </div>
+                            
+                            <div class="bg-purple-50 p-4 rounded-lg">
+                                <p class="font-semibold text-gray-900">💬 Casual Chat</p>
+                                <p class="text-sm text-gray-600">Ask me anything!</p>
+                                <p class="text-sm text-gray-600">I'm here to help</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tips -->
+                    <div>
+                        <h3 class="text-xl font-semibold mb-3 text-purple-600">💡 Pro Tips</h3>
+                        <ul class="space-y-2 text-gray-700">
+                            <li>• <strong>Be specific:</strong> "Weather in Mason, Ohio" works better than just "weather"</li>
+                            <li>• <strong>Natural language:</strong> Talk to me like you would to a friend</li>
+                            <li>• <strong>Follow-ups:</strong> I remember context, so you can ask follow-up questions</li>
+                            <li>• <strong>Speaker button:</strong> Click the speaker icon on any message to hear it again</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- Close Button -->
+                <button onclick="hideHelpOverlay()" class="mt-8 w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                    Back to Chat
+                </button>
+            </div>
+        </div>
+    </div>
+    
     <!-- Weather Effects Container -->
     <div id="weather-effects" class="weather-effect"></div>
     
@@ -830,7 +963,7 @@
     <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
         <div class="max-w-4xl mx-auto p-4">
             <div class="flex items-center gap-3 bg-gray-50 rounded-full border-2 border-gray-200 px-4 py-3 hover:border-purple-300 transition-all">
-                <button onclick="toggleListening()" class="flex-shrink-0 relative group" title="Help & Tips">
+                <button onclick="showHelpOverlay()" class="flex-shrink-0 relative group" title="Help & Tips">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-600 hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
                         <line x1="12" y1="8" x2="12" y2="12"></line>
@@ -934,6 +1067,41 @@ function hideLoading() {
     }
 }
 
+// ========== THINKING INDICATOR ==========
+let thinkingIndicatorElement = null;
+
+function showThinkingIndicator() {
+    // Create thinking indicator if it doesn't exist
+    if (!thinkingIndicatorElement) {
+        const chatContainer = document.getElementById('chat-container');
+        const indicatorDiv = document.createElement('div');
+        indicatorDiv.className = 'flex justify-start';
+        indicatorDiv.id = 'thinking-indicator-wrapper';
+        
+        const indicator = document.createElement('div');
+        indicator.className = 'thinking-indicator';
+        indicator.innerHTML = `
+            <div class="thinking-dot"></div>
+            <div class="thinking-dot"></div>
+            <div class="thinking-dot"></div>
+        `;
+        
+        indicatorDiv.appendChild(indicator);
+        chatContainer.appendChild(indicatorDiv);
+        thinkingIndicatorElement = indicatorDiv;
+        
+        // Scroll to bottom
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+}
+
+function hideThinkingIndicator() {
+    if (thinkingIndicatorElement) {
+        thinkingIndicatorElement.remove();
+        thinkingIndicatorElement = null;
+    }
+}
+
 // ========== QUICK REPLY SUGGESTIONS ==========
 function showQuickReplies(suggestions) {
     const container = document.getElementById('quick-replies');
@@ -1028,14 +1196,17 @@ function suggestQuickReplies(context) {
 let conversationContext = [];
 
 // Wrapper for AI calls with loading indicator
-async function callAIWithTyping(message, loadingMessage = 'Thinking...', hideIndicator = true) {
-    // Only show loading overlay, no typing bubble
+async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
+    // Show thinking indicator in chat
+    showThinkingIndicator();
     showLoading(loadingMessage);
     try {
         const response = await askGeminiAI(message);
+        hideThinkingIndicator();
         hideLoading();
         return response;
     } catch (error) {
+        hideThinkingIndicator();
         hideLoading();
         showError('AI request failed. Please try again.');
         throw error;
@@ -1150,6 +1321,8 @@ async function handleNameCorrection(text) {
         let continuousRecognition = null;
         let isListening = false;
         let synth = window.speechSynthesis;
+        let isSpeaking = false;
+        let currentSpeechText = '';
         let reminders = [];
         let weather = null;
         let waitingForLocation = false;
@@ -1169,23 +1342,19 @@ async function handleNameCorrection(text) {
             loadUserData();
             checkReminders();
             
-            // Check if user has a name stored
-            if (!userName) {
-                waitingForName = true;
-                const welcomeMsg = "Hi! I'm Unify. What's your name?";
-                addChatMessage(welcomeMsg, false);
-                speak(welcomeMsg);
-            } else {
-                const welcomeMsg = `Hi ${userName}! How can I help you today?`;
-                addChatMessage(welcomeMsg, false);
-                speak(welcomeMsg);
-                
-                // Add helpful hint after welcome
-                setTimeout(() => {
-                    const hintMsg = `💡 Try saying things like:\n• "What's the weather?"\n• "Add 2 pounds of chicken to my shopping list"\n• "Remind me to call mom at 5pm"\n• "My keys are on the counter"\n\nOr just ask "What can you do?"`;
-                    addChatMessage(hintMsg, false);
-                }, 2000); // Show after 2 seconds
-            }
+            // Don't force name input - just show friendly welcome
+            const welcomeMsg = userName 
+                ? `Hi ${userName}! How can I help you today?` 
+                : "Hi! I'm Unify, your voice assistant. How can I help you today?";
+            
+            addChatMessage(welcomeMsg, false);
+            speak(welcomeMsg);
+            
+            // Add helpful hint after welcome
+            setTimeout(() => {
+                const hintMsg = `💡 Try saying things like:\n• "What's the weather?"\n• "Add 2 pounds of chicken to my shopping list"\n• "Remind me to call mom at 5pm"\n• "Plan a trip to Paris"\n\nOr say "What can you do?" to see all features!`;
+                addChatMessage(hintMsg, false);
+            }, 2000);
         };
 
         async function requestMicrophonePermission() {
@@ -1280,8 +1449,11 @@ async function handleNameCorrection(text) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-2 fade-in`;
             
+            // Clean markdown bold syntax (**text** → text)
+            let cleanedText = text.replace(/\*\*(.*?)\*\*/g, '$1');
+            
             // Convert newlines to <br> tags for proper display
-            const formattedText = escapeHtml(text).replace(/\n/g, '<br>');
+            const formattedText = escapeHtml(cleanedText).replace(/\n/g, '<br>');
             
             if (isUser) {
                 messageDiv.innerHTML = `
@@ -2013,6 +2185,9 @@ Now create the itinerary with beautiful formatting and emojis!`;
                 
                 // Save to history
                 saveToHistory(text, aiResponse.response);
+                
+                // CRITICAL: Stop here to prevent falling through to AI fallback
+                return;
             }
             // Local Food Specialties / Culture Questions - BROAD DETECTION
             // Catches: "Food in X?", "What to eat in X?", "X cuisine?", "Famous dishes in X?"
@@ -3241,10 +3416,22 @@ Now answer the question completely!`;
         // ========== TEXT-TO-SPEECH ==========
         function speak(text) {
             const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+            currentSpeechText = cleanText;
             
             if (typeof responsiveVoice !== 'undefined') {
                 responsiveVoice.cancel();
-                responsiveVoice.speak(cleanText, "UK English Female", { pitch: 1.1, rate: 1.0, volume: 1 });
+                isSpeaking = true;
+                responsiveVoice.speak(cleanText, "UK English Female", { 
+                    pitch: 1.1, 
+                    rate: 1.0, 
+                    volume: 1,
+                    onstart: () => {
+                        isSpeaking = true;
+                    },
+                    onend: () => {
+                        isSpeaking = false;
+                    }
+                });
                 return;
             }
             
@@ -3263,9 +3450,44 @@ Now answer the question completely!`;
                 utterance.rate = 1.0;
                 utterance.pitch = 1.2;
                 utterance.volume = 1.0;
+                
+                utterance.onstart = () => {
+                    isSpeaking = true;
+                };
+                
+                utterance.onend = () => {
+                    isSpeaking = false;
+                };
+                
+                isSpeaking = true;
                 synth.speak(utterance);
             }, 100);
         }
+        
+        function stopSpeech() {
+            if (typeof responsiveVoice !== 'undefined') {
+                responsiveVoice.cancel();
+            } else {
+                synth.cancel();
+            }
+            isSpeaking = false;
+        }
+        
+        function replaySpeech() {
+            if (currentSpeechText) {
+                speak(currentSpeechText);
+            }
+        }
+        
+        // ========== HELP OVERLAY ==========
+        function showHelpOverlay() {
+            document.getElementById('help-overlay').classList.remove('hidden');
+        }
+        
+        function hideHelpOverlay() {
+            document.getElementById('help-overlay').classList.add('hidden');
+        }
+        
 // ========== UX IMPROVEMENTS ==========
 
 // 1. TYPING INDICATOR
