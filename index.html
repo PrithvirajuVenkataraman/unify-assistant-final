@@ -1758,21 +1758,42 @@ async function handleNameCorrection(text) {
                                     );
                                     const reverseData = await reverseResponse.json();
                                     
-                                    const addr = reverseData.address;
-                                    // Prioritize most specific location name
-                                    let cityName = addr.city || addr.town || addr.village || addr.hamlet || addr.suburb || addr.neighbourhood || "your location";
+                                    // Log FULL response for debugging
+                                    console.log('🗺️ Full OpenStreetMap response:', reverseData);
                                     
-                                    // Add state for US addresses (format: "Mason, Ohio")
-                                    // Don't add country if it's US
-                                    if (addr.state && addr.country_code === 'us') {
-                                        cityName += `, ${addr.state}`;
-                                    } else if (addr.state && addr.country) {
-                                        cityName += `, ${addr.state}, ${addr.country}`;
-                                    } else if (addr.country && addr.country_code !== 'us') {
-                                        cityName += `, ${addr.country}`;
+                                    const addr = reverseData.address;
+                                    
+                                    // Log what we got from OpenStreetMap (for debugging)
+                                    console.log('🗺️ OpenStreetMap address data:', addr);
+                                    
+                                    // Try ALL possible location fields in order of specificity
+                                    let cityName = addr.city || 
+                                                   addr.town || 
+                                                   addr.village || 
+                                                   addr.hamlet || 
+                                                   addr.suburb || 
+                                                   addr.neighbourhood || 
+                                                   addr.county || 
+                                                   addr.municipality ||
+                                                   addr.state_district ||
+                                                   null;
+                                    
+                                    // If we got a city name, format it nicely
+                                    if (cityName) {
+                                        // Add state for US addresses (format: "Mason, Ohio")
+                                        if (addr.state && addr.country_code === 'us') {
+                                            cityName = `${cityName}, ${addr.state}`;
+                                        } else if (addr.state && addr.country) {
+                                            cityName = `${cityName}, ${addr.state}, ${addr.country}`;
+                                        } else if (addr.country && addr.country_code !== 'us') {
+                                            cityName = `${cityName}, ${addr.country}`;
+                                        }
+                                    } else {
+                                        // Fallback: just use state or country
+                                        cityName = addr.state || addr.country || "your location";
                                     }
                                     
-                                    console.log('📍 Location detected:', cityName);
+                                    console.log('📍 Final location name:', cityName);
                                     fetchWeather(lat, lon, cityName);
                                 } catch (error) {
                                     console.error('Reverse geocoding failed:', error);
