@@ -904,17 +904,18 @@
     </button>
 
 <script>
-// ========== DEBUG MODE ==========
-const DEBUG = true; // Set to false for production
-
-function debugLog(message, data = null) {
-    if (DEBUG) {
-        const timestamp = new Date().toLocaleTimeString();
-        console.log(`[${timestamp}] 🐛 ${message}`, data || '');
+// ========== GLOBAL FUNCTION FOR ONCLICK ==========
+// toggleDarkMode must be at global scope for onclick handler
+function toggleDarkMode() {
+    const body = document.body;
+    if (body.classList.contains('dark')) {
+        body.classList.remove('dark');
+        body.classList.add('light');
+    } else {
+        body.classList.remove('light');
+        body.classList.add('dark');
     }
 }
-
-debugLog('🚀 Unify Voice Assistant - Bug Fix V3 Started');
 
 // ========== LOADING STATES ==========
 function showLoading(message = 'Processing...') {
@@ -1027,18 +1028,15 @@ function suggestQuickReplies(context) {
 let conversationContext = [];
 
 // Wrapper for AI calls with loading indicator
-async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
+async function callAIWithTyping(message, loadingMessage = 'Thinking...', hideIndicator = true) {
     // Only show loading overlay, no typing bubble
-    debugLog('🤖 AI Request:', message);
     showLoading(loadingMessage);
     try {
         const response = await askGeminiAI(message);
         hideLoading();
-        debugLog('✅ AI Response received');
         return response;
     } catch (error) {
         hideLoading();
-        console.error('❌ AI Error:', error);
         showError('AI request failed. Please try again.');
         throw error;
     }
@@ -1406,32 +1404,27 @@ async function handleNameCorrection(text) {
                 
                 if (!text) return;
                 
-                // Only process final results
-                if (!result.isFinal) {
-                    debugLog('⏸️ Interim result (skipped):', text);
-                    return;
-                }
-                
-                debugLog('🎤 Final transcript:', text);
-                
                 // Clear any existing timeout
                 if (speechTimeout) {
                     clearTimeout(speechTimeout);
                 }
                 
-                // Stop listening immediately
-                stopListening();
-                
-                // Prevent duplicate processing - CRITICAL CHECK
-                if (isProcessing) {
-                    debugLog('⚠️ Already processing, blocking duplicate:', text);
-                    return;
-                }
-                
-                isProcessing = true;
-                debugLog('✅ Processing flag set, starting command processing');
-                
-                addChatMessage(text, true);
+                // If it's a final result, process after short delay
+                if (result.isFinal) {
+                    console.log('✅ Final result:', text);
+                    
+                    // Stop listening immediately
+                    stopListening();
+                    
+                    // Prevent duplicate processing
+                    if (isProcessing) {
+                        console.log('⏸️ Already processing, ignoring:', text);
+                        return;
+                    }
+                    
+                    isProcessing = true;
+                    
+                    addChatMessage(text, true);
                 
                 try {
                     if (waitingForLocation) {
@@ -1546,8 +1539,6 @@ async function handleNameCorrection(text) {
         }
 
         async function processCommand(text) {
-            debugLog('🔄 Processing command:', text);
-            
             const lower = text.toLowerCase();
             
             // Auto-close cards when topic changes
@@ -1859,26 +1850,14 @@ async function handleNameCorrection(text) {
             else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('reminder')) {
                 clearAllReminders();
             }
-            // Memory Recall - VERY specific patterns only
-            else if (
-                // "Where is/are my [thing]" - must start with "where"
-                cleanText.toLowerCase().match(/^where\s+(is|are)\s+(my|the)\s+[\w\s]+\??$/i) ||
-                // "Where did I put/leave my [thing]"
-                cleanText.toLowerCase().match(/^where\s+did\s+i\s+(put|leave)\s+(my|the)\s+[\w\s]+\??$/i) ||
-                // "Find my [thing]" - must start with find
-                cleanText.toLowerCase().match(/^find\s+(my|the)\s+[\w\s]+\??$/i)
-            ) {
-                debugLog('🔍 Memory recall triggered');
+            // Memory Recall - More specific pattern to avoid matching weather
+            else if (cleanText.toLowerCase().match(/where\s+(is|are|did\s+i\s+put|did\s+i\s+leave)\s+(my|the)/i) || 
+                     cleanText.toLowerCase().match(/\b(find|locate)\s+(my|the)\s+\w+/i)) {
                 handleMemoryRecall(cleanText);
             }
-            // Memory Storage - VERY specific patterns only
-            else if (
-                // "My [thing] is/are [location]"
-                cleanText.toLowerCase().match(/^my\s+[\w\s]+\s+(is|are)\s+(in|on|at|under|behind|inside)\s+/i) ||
-                // "I put/left my [thing] [location]"
-                cleanText.toLowerCase().match(/^i\s+(put|left|placed)\s+(my|the)\s+[\w\s]+\s+(in|on|at|under)/i)
-            ) {
-                debugLog('💾 Memory storage triggered');
+            // Memory Storage (where things are)
+            else if ((cleanText.toLowerCase().includes('my ') || cleanText.toLowerCase().includes('i put') || cleanText.toLowerCase().includes('i left')) && 
+                     (cleanText.toLowerCase().includes(' is ') || cleanText.toLowerCase().includes(' are ') || cleanText.toLowerCase().includes(' in ') || cleanText.toLowerCase().includes(' on ') || cleanText.toLowerCase().includes(' at '))) {
                 handleMemoryStorage(cleanText);
             }
             // Creator Info
