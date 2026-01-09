@@ -711,6 +711,85 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        
+        /* Direction Buttons & Fast Food Section */
+        .direction-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-top: 8px;
+            box-shadow: 0 2px 4px rgba(139, 92, 246, 0.2);
+        }
+        
+        .direction-btn:hover {
+            background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+        
+        .direction-btn:active {
+            transform: translateY(0);
+        }
+        
+        .fast-food-section {
+            margin-top: 20px;
+            padding: 16px;
+            background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+            border-radius: 12px;
+            border: 2px solid #F59E0B;
+        }
+        
+        .fast-food-section h3 {
+            margin: 0 0 12px 0;
+            color: #92400E;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .fast-food-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .fast-food-btn {
+            padding: 10px 16px;
+            background: white;
+            color: #92400E;
+            border: 2px solid #F59E0B;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
+        }
+        
+        .fast-food-btn:hover {
+            background: #F59E0B;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+        }
+        
+        .restaurant-entry {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #E5E7EB;
+        }
+        
+        .restaurant-entry:last-child {
+            border-bottom: none;
+        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -1231,13 +1310,35 @@ async function askGeminiAI(userMessage) {
 CRITICAL RULES:
 - ${userName ? `The user's name is ${userName} - use it!` : 'You do NOT know the user\'s name. NEVER say "User" or "Certainly, User!" - just say "Certainly!" or be friendly without using a name.'}
 - Be natural and conversational
-- When listing hotels/restaurants, ALWAYS use numbered format (1. 2. 3.) NOT bullet points (-)
+
+HOTEL/RESTAURANT FORMATTING (MUST FOLLOW EXACTLY):
+When listing hotels or restaurants, use this format:
+
+1. [Hotel/Restaurant Name]
+   [Brief description - 1 sentence]
+   Price: [Budget/Mid-range/Luxury] | Type: [Veg/Non-Veg/Both]
+   Must Try: [Signature dish]
+   [Key feature or highlight]
+   [LOCATION: City, State]
+
+2. [Next entry...]
+
+AFTER all hotels/restaurants, add:
+
+---
+🍔 FAST FOOD CHAINS IN [CITY]:
+List ALL fast food chains available in that location (McDonald's, KFC, Wendy's, Taco Bell, Burger King, Subway, Chipotle, Panera Bread, Five Guys, Chick-fil-A, Arby's, Jimmy John's, etc.)
+Format: [FASTFOOD: Chain Name, City]
+
+CRITICAL: Add blank line between each numbered entry!
 
 Your capabilities:
 - Weather (say "check weather")
 - Shopping lists (say "manage shopping")  
 - Reminders (say "set reminder")
 - Memory (remembering where things are)
+- Hotel & restaurant recommendations
+- Travel itineraries
 
 For casual conversation, be friendly and natural.
 For name corrections like "no, my name is X", extract the name.
@@ -1444,6 +1545,88 @@ async function handleNameCorrection(text) {
             window.open(formUrl, '_blank');
         }
 
+        // ========== RESTAURANT/HOTEL RESPONSE ENHANCEMENT ==========
+        function enhanceRestaurantResponse(text) {
+            // Check if this is a hotel/restaurant response
+            if (!text.match(/\d+\.\s+\w+/) || !text.includes('Price:')) {
+                return text; // Not a restaurant/hotel response, return as-is
+            }
+            
+            let enhanced = text;
+            let city = 'Mason, Ohio'; // Default city
+            
+            // Try to extract city from [LOCATION: ...] tags
+            const locationMatch = text.match(/\[LOCATION:\s*([^\]]+)\]/);
+            if (locationMatch) {
+                city = locationMatch[1];
+                // Remove location tags from display
+                enhanced = enhanced.replace(/\[LOCATION:[^\]]+\]/g, '');
+            }
+            
+            // Add direction buttons to each numbered entry
+            // Match pattern: "1. Restaurant Name" followed by details
+            enhanced = enhanced.replace(
+                /(\d+\.\s+([^\n]+))\n([^\n]+)\n([^\n]+)\n([^\n]+)\n([^\n]+)/g,
+                (match, fullEntry, name, desc, priceType, mustTry, feature) => {
+                    const cleanName = name.trim();
+                    return `${fullEntry}\n${desc}\n${priceType}\n${mustTry}\n${feature}\n<button class="direction-btn" onclick="getDirections('${cleanName}', '${city}')">📍 Get Directions</button>\n`;
+                }
+            );
+            
+            // Handle fast food section
+            if (enhanced.includes('🍔 FAST FOOD CHAINS') || enhanced.includes('[FASTFOOD:')) {
+                // Extract fast food chains
+                const fastFoodMatches = enhanced.match(/\[FASTFOOD:\s*([^,\]]+)/g);
+                if (fastFoodMatches) {
+                    const chains = fastFoodMatches.map(m => m.replace('[FASTFOOD:', '').trim());
+                    
+                    // Remove [FASTFOOD: ...] tags
+                    enhanced = enhanced.replace(/\[FASTFOOD:[^\]]+\]/g, '');
+                    
+                    // Build fast food section HTML
+                    let fastFoodHTML = '\n\n<div class="fast-food-section">';
+                    fastFoodHTML += `<h3>🍔 Fast Food Chains in ${city}</h3>`;
+                    fastFoodHTML += '<div class="fast-food-buttons">';
+                    
+                    chains.forEach(chain => {
+                        const icon = getChainIcon(chain);
+                        fastFoodHTML += `<button class="fast-food-btn" onclick="getDirections('${chain}', '${city}')">${icon} ${chain}</button>`;
+                    });
+                    
+                    fastFoodHTML += '</div></div>';
+                    
+                    // Add to end of response
+                    enhanced += fastFoodHTML;
+                }
+            }
+            
+            return enhanced;
+        }
+        
+        function getChainIcon(chainName) {
+            const icons = {
+                'McDonald': '🍔',
+                'KFC': '🍗',
+                'Taco Bell': '🌮',
+                'Wendy': '🍔',
+                'Burger King': '👑',
+                'Subway': '🥪',
+                'Chipotle': '🌯',
+                'Panera': '🥖',
+                'Five Guys': '🍟',
+                'Chick-fil-A': '🐔',
+                'Arby': '🥩',
+                'Jimmy John': '🥪',
+                'Domino': '🍕',
+                'Pizza Hut': '🍕'
+            };
+            
+            for (const [key, icon] of Object.entries(icons)) {
+                if (chainName.includes(key)) return icon;
+            }
+            return '🍔'; // Default
+        }
+
         // ========== CHAT MESSAGE HANDLING ==========
         function addChatMessage(text, isUser = true) {
             const chatContainer = document.getElementById('chat-container');
@@ -1453,8 +1636,25 @@ async function handleNameCorrection(text) {
             // Clean markdown bold syntax (**text** → text)
             let cleanedText = text.replace(/\*\*(.*?)\*\*/g, '$1');
             
-            // Convert newlines to <br> tags for proper display
-            const formattedText = escapeHtml(cleanedText).replace(/\n/g, '<br>');
+            // Enhance restaurant/hotel responses with direction buttons (AI messages only)
+            let hasButtons = false;
+            if (!isUser) {
+                const enhanced = enhanceRestaurantResponse(cleanedText);
+                if (enhanced !== cleanedText) {
+                    hasButtons = true;
+                    cleanedText = enhanced;
+                }
+            }
+            
+            // Convert newlines to <br> tags, but handle HTML buttons specially
+            let formattedText;
+            if (hasButtons) {
+                // Don't escape HTML if we have buttons
+                formattedText = cleanedText.replace(/\n/g, '<br>');
+            } else {
+                // Normal escaping for regular text
+                formattedText = escapeHtml(cleanedText).replace(/\n/g, '<br>');
+            }
             
             if (isUser) {
                 messageDiv.innerHTML = `
@@ -3487,6 +3687,42 @@ Now answer the question completely!`;
         
         function hideHelpOverlay() {
             document.getElementById('help-overlay').classList.add('hidden');
+        }
+        
+        // ========== GOOGLE MAPS DIRECTIONS ==========
+        function getDirections(placeName, city) {
+            // Try to get user's exact GPS location
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        // Success - use exact coordinates
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        const destination = encodeURIComponent(`${placeName}, ${city}`);
+                        const mapsUrl = `https://www.google.com/maps/dir/${lat},${lon}/${destination}`;
+                        window.open(mapsUrl, '_blank');
+                    },
+                    (error) => {
+                        // GPS denied or failed - use city as origin
+                        console.log('GPS not available, using city as origin');
+                        const origin = encodeURIComponent(city);
+                        const destination = encodeURIComponent(`${placeName}, ${city}`);
+                        const mapsUrl = `https://www.google.com/maps/dir/${origin}/${destination}`;
+                        window.open(mapsUrl, '_blank');
+                    },
+                    {
+                        enableHighAccuracy: false,
+                        timeout: 5000,
+                        maximumAge: 300000 // Cache for 5 minutes
+                    }
+                );
+            } else {
+                // Geolocation not supported - use city
+                const origin = encodeURIComponent(city);
+                const destination = encodeURIComponent(`${placeName}, ${city}`);
+                const mapsUrl = `https://www.google.com/maps/dir/${origin}/${destination}`;
+                window.open(mapsUrl, '_blank');
+            }
         }
         
 // ========== UX IMPROVEMENTS ==========
