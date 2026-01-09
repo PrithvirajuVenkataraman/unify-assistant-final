@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Unify Voice Assistant</title>
+    <title>Unify Personal Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js?key=jQZ2zpcE"></script>
     <style>
@@ -1227,23 +1227,15 @@ async function handleNameCorrection(text) {
             loadUserData();
             checkReminders();
             
-            // Check if user has a name stored
-            if (!userName) {
-                waitingForName = true;
-                const welcomeMsg = "Hi! I'm Unify. What's your name?";
-                addChatMessage(welcomeMsg, false);
-                speak(welcomeMsg);
-            } else {
-                const welcomeMsg = `Hi ${userName}! How can I help you today?`;
-                addChatMessage(welcomeMsg, false);
-                speak(welcomeMsg);
-                
-                // Add helpful hint after welcome
-                setTimeout(() => {
-                    const hintMsg = `💡 Try saying things like:\n• "What's the weather?"\n• "Add 2 pounds of chicken to my shopping list"\n• "Remind me to call mom at 5pm"\n• "My keys are on the counter"\n\nOr just ask "What can you do?"`;
-                    addChatMessage(hintMsg, false);
-                }, 2000); // Show after 2 seconds
-            }
+            // Don't force name input - just show friendly welcome
+            const welcomeMsg = userName 
+                ? `Hi ${userName}! How can I help you today?` 
+                : "Hi! I'm Unify, your voice assistant. How can I help you today?";
+            
+            addChatMessage(welcomeMsg, false);
+            speak(welcomeMsg);
+            
+            // No hint message - suggestions will appear after first query
         };
 
         async function requestMicrophonePermission() {
