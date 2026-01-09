@@ -652,44 +652,6 @@
             display: none;
         }
         
-        /* Thinking Indicator Animation */
-        .thinking-indicator {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 12px 20px;
-            background: #F3F4F6;
-            border-radius: 20px;
-            margin: 8px 0;
-        }
-        
-        .thinking-dot {
-            width: 8px;
-            height: 8px;
-            background: #9CA3AF;
-            border-radius: 50%;
-            animation: thinking-bounce 1.4s infinite ease-in-out both;
-        }
-        
-        .thinking-dot:nth-child(1) {
-            animation-delay: -0.32s;
-        }
-        
-        .thinking-dot:nth-child(2) {
-            animation-delay: -0.16s;
-        }
-        
-        @keyframes thinking-bounce {
-            0%, 80%, 100% {
-                transform: scale(0.8);
-                opacity: 0.5;
-            }
-            40% {
-                transform: scale(1.2);
-                opacity: 1;
-            }
-        }
-        
         /* Simple Loading Spinner (no overlay) */
         .simple-loading {
             position: fixed;
@@ -711,198 +673,9 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        
-        /* Direction Buttons & Fast Food Section */
-        .direction-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 16px;
-            background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            margin-top: 8px;
-            box-shadow: 0 2px 4px rgba(139, 92, 246, 0.2);
-        }
-        
-        .direction-btn:hover {
-            background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
-        }
-        
-        .direction-btn:active {
-            transform: translateY(0);
-        }
-        
-        .fast-food-section {
-            margin-top: 20px;
-            padding: 16px;
-            background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
-            border-radius: 12px;
-            border: 2px solid #F59E0B;
-        }
-        
-        .fast-food-section h3 {
-            margin: 0 0 12px 0;
-            color: #92400E;
-            font-size: 18px;
-            font-weight: bold;
-        }
-        
-        .fast-food-buttons {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-        
-        .fast-food-btn {
-            padding: 10px 16px;
-            background: white;
-            color: #92400E;
-            border: 2px solid #F59E0B;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
-        }
-        
-        .fast-food-btn:hover {
-            background: #F59E0B;
-            color: white;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
-        }
-        
-        .restaurant-entry {
-            margin-bottom: 20px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #E5E7EB;
-        }
-        
-        .restaurant-entry:last-child {
-            border-bottom: none;
-        }
-        
-        /* Hotel/Restaurant Name Links */
-        .hotel-link {
-            color: #7C3AED;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 16px;
-            transition: all 0.2s ease;
-            border-bottom: 2px solid transparent;
-        }
-        
-        .hotel-link:hover {
-            color: #6D28D9;
-            border-bottom: 2px solid #7C3AED;
-        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
-    <!-- Help & Tips Overlay -->
-    <div id="help-overlay" class="hidden fixed inset-0 bg-black bg-opacity-60 z-[9999] flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div class="p-8">
-                <h2 class="text-3xl font-bold mb-6 text-gray-900">ℹ️ Help & Tips</h2>
-                
-                <div class="space-y-6">
-                    <!-- How to Use -->
-                    <div>
-                        <h3 class="text-xl font-semibold mb-3 text-purple-600">🎤 How to Use Unify</h3>
-                        <ul class="space-y-2 text-gray-700">
-                            <li>• Click the microphone button and speak naturally</li>
-                            <li>• Or type your question in the text box</li>
-                            <li>• Speak clearly and wait for my response</li>
-                            <li>• You can interrupt me anytime!</li>
-                        </ul>
-                    </div>
-                    
-                    <!-- Capabilities -->
-                    <div>
-                        <h3 class="text-xl font-semibold mb-3 text-purple-600">✨ What I Can Do</h3>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="bg-purple-50 p-4 rounded-lg">
-                                <p class="font-semibold text-gray-900">🌤️ Weather</p>
-                                <p class="text-sm text-gray-600">"What's the weather?"</p>
-                                <p class="text-sm text-gray-600">"Will it rain today?"</p>
-                            </div>
-                            
-                            <div class="bg-purple-50 p-4 rounded-lg">
-                                <p class="font-semibold text-gray-900">✈️ Travel Planning</p>
-                                <p class="text-sm text-gray-600">"Plan a trip to Paris"</p>
-                                <p class="text-sm text-gray-600">"3-day itinerary for Tokyo"</p>
-                            </div>
-                            
-                            <div class="bg-purple-50 p-4 rounded-lg">
-                                <p class="font-semibold text-gray-900">🏨 Hotels</p>
-                                <p class="text-sm text-gray-600">"Hotels in Chennai"</p>
-                                <p class="text-sm text-gray-600">"Best places to stay"</p>
-                            </div>
-                            
-                            <div class="bg-purple-50 p-4 rounded-lg">
-                                <p class="font-semibold text-gray-900">🍽️ Restaurants</p>
-                                <p class="text-sm text-gray-600">"Best restaurants nearby"</p>
-                                <p class="text-sm text-gray-600">"Pure veg options"</p>
-                            </div>
-                            
-                            <div class="bg-purple-50 p-4 rounded-lg">
-                                <p class="font-semibold text-gray-900">🛒 Shopping Lists</p>
-                                <p class="text-sm text-gray-600">"Add milk to my list"</p>
-                                <p class="text-sm text-gray-600">"Show shopping list"</p>
-                            </div>
-                            
-                            <div class="bg-purple-50 p-4 rounded-lg">
-                                <p class="font-semibold text-gray-900">⏰ Reminders</p>
-                                <p class="text-sm text-gray-600">"Remind me at 5pm"</p>
-                                <p class="text-sm text-gray-600">"Set a reminder"</p>
-                            </div>
-                            
-                            <div class="bg-purple-50 p-4 rounded-lg">
-                                <p class="font-semibold text-gray-900">💭 Memory</p>
-                                <p class="text-sm text-gray-600">"My keys are on the desk"</p>
-                                <p class="text-sm text-gray-600">"Where are my keys?"</p>
-                            </div>
-                            
-                            <div class="bg-purple-50 p-4 rounded-lg">
-                                <p class="font-semibold text-gray-900">💬 Casual Chat</p>
-                                <p class="text-sm text-gray-600">Ask me anything!</p>
-                                <p class="text-sm text-gray-600">I'm here to help</p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Tips -->
-                    <div>
-                        <h3 class="text-xl font-semibold mb-3 text-purple-600">💡 Pro Tips</h3>
-                        <ul class="space-y-2 text-gray-700">
-                            <li>• <strong>Be specific:</strong> "Weather in Mason, Ohio" works better than just "weather"</li>
-                            <li>• <strong>Natural language:</strong> Talk to me like you would to a friend</li>
-                            <li>• <strong>Follow-ups:</strong> I remember context, so you can ask follow-up questions</li>
-                            <li>• <strong>Speaker button:</strong> Click the speaker icon on any message to hear it again</li>
-                        </ul>
-                    </div>
-                </div>
-                
-                <!-- Close Button -->
-                <button onclick="hideHelpOverlay()" class="mt-8 w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-all flex items-center justify-center gap-2">
-                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path d="M19 12H5M12 19l-7-7 7-7"/>
-                    </svg>
-                    Back to Chat
-                </button>
-            </div>
-        </div>
-    </div>
-    
     <!-- Weather Effects Container -->
     <div id="weather-effects" class="weather-effect"></div>
     
@@ -1008,16 +781,28 @@
                     <div id="reminders-list" class="space-y-3"></div>
                 </div>
 
-                <!-- Dynamic Suggestion Buttons -->
-                <div id="suggestion-box" class="bg-purple-50 p-6 rounded-2xl hidden">
-                    <div class="flex items-center justify-between mb-3">
-                        <h3 class="font-bold text-gray-900">Try asking me:</h3>
-                        <button onclick="dismissSuggestions()" class="text-gray-500 hover:text-gray-700 transition-all text-xl leading-none" title="Hide suggestions">
-                            ×
+                <!-- Suggestion Buttons -->
+                <div class="bg-purple-50 p-6 rounded-2xl">
+                    <h3 class="font-bold text-gray-900 mb-3">Try asking me:</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button onclick="processSuggestion('What\'s the weather like today?')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
+                            ☀️ What's the weather?
                         </button>
-                    </div>
-                    <div id="suggestion-buttons" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <!-- Dynamic buttons will be inserted here -->
+                        <button onclick="processSuggestion('Add 2 pounds of chicken to my shopping list')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
+                            🛒 Add 2 lbs chicken to list
+                        </button>
+                        <button onclick="processSuggestion('Remind me to call mom at 5pm')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
+                            ⏰ Remind me to call mom
+                        </button>
+                        <button onclick="processSuggestion('My car keys are on the counter')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
+                            🔑 My keys are on counter
+                        </button>
+                        <button onclick="processSuggestion('What can you do?')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
+                            ❓ What can you do?
+                        </button>
+                        <button onclick="processSuggestion('Plan a weekend trip to Paris')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
+                            ✈️ Plan a trip to Paris
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1045,7 +830,7 @@
     <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
         <div class="max-w-4xl mx-auto p-4">
             <div class="flex items-center gap-3 bg-gray-50 rounded-full border-2 border-gray-200 px-4 py-3 hover:border-purple-300 transition-all">
-                <button onclick="showHelpOverlay()" class="flex-shrink-0 relative group" title="Help & Tips">
+                <button onclick="toggleListening()" class="flex-shrink-0 relative group" title="Help & Tips">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-600 hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
                         <line x1="12" y1="8" x2="12" y2="12"></line>
@@ -1149,41 +934,6 @@ function hideLoading() {
     }
 }
 
-// ========== THINKING INDICATOR ==========
-let thinkingIndicatorElement = null;
-
-function showThinkingIndicator() {
-    // Create thinking indicator if it doesn't exist
-    if (!thinkingIndicatorElement) {
-        const chatContainer = document.getElementById('chat-container');
-        const indicatorDiv = document.createElement('div');
-        indicatorDiv.className = 'flex justify-start';
-        indicatorDiv.id = 'thinking-indicator-wrapper';
-        
-        const indicator = document.createElement('div');
-        indicator.className = 'thinking-indicator';
-        indicator.innerHTML = `
-            <div class="thinking-dot"></div>
-            <div class="thinking-dot"></div>
-            <div class="thinking-dot"></div>
-        `;
-        
-        indicatorDiv.appendChild(indicator);
-        chatContainer.appendChild(indicatorDiv);
-        thinkingIndicatorElement = indicatorDiv;
-        
-        // Scroll to bottom
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    }
-}
-
-function hideThinkingIndicator() {
-    if (thinkingIndicatorElement) {
-        thinkingIndicatorElement.remove();
-        thinkingIndicatorElement = null;
-    }
-}
-
 // ========== QUICK REPLY SUGGESTIONS ==========
 function showQuickReplies(suggestions) {
     const container = document.getElementById('quick-replies');
@@ -1210,302 +960,6 @@ function hideQuickReplies() {
     if (container) {
         container.classList.add('hidden');
     }
-}
-
-// ========== MAIN SUGGESTION BOX (Context-Aware) ==========
-let suggestionsDismissed = false;
-let firstInteractionDone = false;
-
-function showMainSuggestions(context = '') {
-    // Don't show if user dismissed it
-    if (suggestionsDismissed) return;
-    
-    const box = document.getElementById('suggestion-box');
-    const buttonsContainer = document.getElementById('suggestion-buttons');
-    if (!box || !buttonsContainer) return;
-    
-    // Get contextual suggestions
-    const suggestions = getContextualSuggestions(context);
-    
-    // Build buttons HTML
-    const buttonsHTML = suggestions.map(s => `
-        <button onclick="processSuggestion('${s.query.replace(/'/g, "\\'")}')}" 
-                class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-            ${s.icon} ${s.text}
-        </button>
-    `).join('');
-    
-    buttonsContainer.innerHTML = buttonsHTML;
-    box.classList.remove('hidden');
-}
-
-function getContextualSuggestions(context = '') {
-    const lower = context.toLowerCase();
-    
-    // After hotel search
-    if (lower.includes('hotel') || lower.includes('price:')) {
-        return [
-            { icon: '🍽️', text: 'Best restaurants', query: 'Best restaurants nearby' },
-            { icon: '✈️', text: 'Plan itinerary', query: 'Plan a day itinerary' },
-            { icon: '🌤️', text: 'Weather forecast', query: 'What\'s the weather?' },
-            { icon: '🚗', text: 'Transport options', query: 'How to get around?' }
-        ];
-    }
-    
-    // After restaurant search
-    if (lower.includes('restaurant') || lower.includes('must try:')) {
-        return [
-            { icon: '🏨', text: 'Find hotels', query: 'Hotels nearby' },
-            { icon: '🗺️', text: 'Things to do', query: 'What to do here?' },
-            { icon: '☕', text: 'Coffee shops', query: 'Best coffee shops' },
-            { icon: '🍲', text: 'Local specialties', query: 'Famous local dishes' }
-        ];
-    }
-    
-    // After weather
-    if (lower.includes('weather') || lower.includes('temperature') || lower.includes('rain')) {
-        return [
-            { icon: '✈️', text: 'Plan a trip', query: 'Plan a weekend trip' },
-            { icon: '🏨', text: 'Hotels', query: 'Hotels nearby' },
-            { icon: '🛒', text: 'Shopping list', query: 'Show shopping list' },
-            { icon: '⏰', text: 'Set reminder', query: 'Remind me to call mom' }
-        ];
-    }
-    
-    // After shopping list
-    if (lower.includes('shopping') || lower.includes('added to') || lower.includes('shopping list')) {
-        return [
-            { icon: '🛒', text: 'Add more items', query: 'Add milk to list' },
-            { icon: '📝', text: 'Show list', query: 'Show shopping list' },
-            { icon: '🗑️', text: 'Clear list', query: 'Clear shopping list' },
-            { icon: '🌤️', text: 'Weather', query: 'What\'s the weather?' }
-        ];
-    }
-    
-    // After reminder
-    if (lower.includes('reminder') || lower.includes('remind')) {
-        return [
-            { icon: '⏰', text: 'More reminders', query: 'Show my reminders' },
-            { icon: '🛒', text: 'Shopping list', query: 'Add to shopping list' },
-            { icon: '🔑', text: 'Remember location', query: 'My keys are on the desk' },
-            { icon: '✈️', text: 'Plan trip', query: 'Plan a trip' }
-        ];
-    }
-    
-    // After itinerary/travel
-    if (lower.includes('itinerary') || lower.includes('day 1') || lower.includes('trip')) {
-        return [
-            { icon: '🏨', text: 'Hotels', query: 'Hotels in this area' },
-            { icon: '🍽️', text: 'Restaurants', query: 'Best restaurants' },
-            { icon: '🌤️', text: 'Weather', query: 'What\'s the weather?' },
-            { icon: '🚗', text: 'Transport', query: 'How to get around?' }
-        ];
-    }
-    
-    // Default suggestions (first time)
-    return [
-        { icon: '🌤️', text: 'Weather', query: 'What\'s the weather?' },
-        { icon: '🛒', text: 'Add to list', query: 'Add milk to shopping list' },
-        { icon: '⏰', text: 'Set reminder', query: 'Remind me to call mom at 5pm' },
-        { icon: '🔑', text: 'Remember item', query: 'My keys are on counter' },
-        { icon: '❓', text: 'What can you do?', query: 'What can you do?' },
-        { icon: '✈️', text: 'Plan trip', query: 'Plan a trip to Paris' }
-    ];
-}
-
-function dismissSuggestions() {
-    suggestionsDismissed = true;
-    const box = document.getElementById('suggestion-box');
-    if (box) {
-        box.classList.add('hidden');
-    }
-    // Save to localStorage
-    localStorage.setItem('suggestions_dismissed', 'true');
-}
-
-async function processSuggestion(query) {
-    const input = document.getElementById('text-input');
-    input.value = query;
-    
-    // Trigger the send button click (simpler approach)
-    const sendBtn = document.getElementById('send-btn');
-    if (sendBtn) {
-        sendBtn.click();
-    } else {
-        // Fallback: trigger Enter key press
-        const event = new KeyboardEvent('keypress', {
-            key: 'Enter',
-            code: 'Enter',
-            keyCode: 13,
-            which: 13,
-            bubbles: true
-        });
-        input.dispatchEvent(event);
-    }
-}
-
-// ========== REGIONAL FOOD SPECIALTIES ==========
-const regionalFood = {
-    // India - Tamil Nadu
-    'tamil nadu': [
-        { name: 'Biryani', emoji: '🍛' },
-        { name: 'Chettinad Curry', emoji: '🍲' },
-        { name: 'Dosa', emoji: '🥘' },
-        { name: 'Filter Coffee', emoji: '☕' },
-        { name: 'Fish Curry', emoji: '🐟' },
-        { name: 'Parotta', emoji: '🥞' }
-    ],
-    'chidambaram': [
-        { name: 'Biryani', emoji: '🍛' },
-        { name: 'Chettinad Curry', emoji: '🍲' },
-        { name: 'Dosa', emoji: '🥘' },
-        { name: 'Filter Coffee', emoji: '☕' },
-        { name: 'Fish Curry', emoji: '🐟' },
-        { name: 'Kothu Parotta', emoji: '🥞' }
-    ],
-    'india': [
-        { name: 'Biryani', emoji: '🍛' },
-        { name: 'Curry', emoji: '🍲' },
-        { name: 'Dosa', emoji: '🥘' },
-        { name: 'Chai', emoji: '☕' },
-        { name: 'Samosa', emoji: '🥟' },
-        { name: 'Tandoori', emoji: '🍗' }
-    ],
-    'kerala': [
-        { name: 'Appam', emoji: '🥞' },
-        { name: 'Fish Curry', emoji: '🐟' },
-        { name: 'Puttu', emoji: '🍚' },
-        { name: 'Biryani', emoji: '🍛' },
-        { name: 'Sadya', emoji: '🍱' }
-    ],
-    
-    // Italy
-    'italy': [
-        { name: 'Pasta', emoji: '🍝' },
-        { name: 'Pizza', emoji: '🍕' },
-        { name: 'Espresso', emoji: '☕' },
-        { name: 'Gelato', emoji: '🍨' },
-        { name: 'Risotto', emoji: '🍚' }
-    ],
-    'rome': [
-        { name: 'Pasta Carbonara', emoji: '🍝' },
-        { name: 'Pizza', emoji: '🍕' },
-        { name: 'Espresso', emoji: '☕' },
-        { name: 'Gelato', emoji: '🍨' }
-    ],
-    
-    // Japan
-    'japan': [
-        { name: 'Ramen', emoji: '🍜' },
-        { name: 'Sushi', emoji: '🍱' },
-        { name: 'Tempura', emoji: '🍤' },
-        { name: 'Matcha', emoji: '🍵' },
-        { name: 'Udon', emoji: '🍜' }
-    ],
-    'tokyo': [
-        { name: 'Ramen', emoji: '🍜' },
-        { name: 'Sushi', emoji: '🍱' },
-        { name: 'Tempura', emoji: '🍤' },
-        { name: 'Matcha', emoji: '🍵' }
-    ],
-    
-    // USA
-    'usa': [
-        { name: 'Burger', emoji: '🍔' },
-        { name: 'BBQ', emoji: '🍖' },
-        { name: 'Hot Dog', emoji: '🌭' },
-        { name: 'Pizza', emoji: '🍕' },
-        { name: 'Steak', emoji: '🥩' }
-    ],
-    'texas': [
-        { name: 'BBQ Brisket', emoji: '🍖' },
-        { name: 'Tex-Mex', emoji: '🌮' },
-        { name: 'Tacos', emoji: '🌮' },
-        { name: 'Chili', emoji: '🌶️' }
-    ],
-    'new york': [
-        { name: 'Pizza', emoji: '🍕' },
-        { name: 'Hot Dog', emoji: '🌭' },
-        { name: 'Bagel', emoji: '🥯' },
-        { name: 'Deli Sandwich', emoji: '🥪' }
-    ],
-    
-    // France
-    'france': [
-        { name: 'Croissant', emoji: '🥐' },
-        { name: 'Crepes', emoji: '🥞' },
-        { name: 'Baguette', emoji: '🥖' },
-        { name: 'Macaron', emoji: '🍰' },
-        { name: 'Espresso', emoji: '☕' }
-    ],
-    'paris': [
-        { name: 'Croissant', emoji: '🥐' },
-        { name: 'Crepes', emoji: '🥞' },
-        { name: 'Macaron', emoji: '🍰' },
-        { name: 'Espresso', emoji: '☕' }
-    ],
-    
-    // China
-    'china': [
-        { name: 'Dim Sum', emoji: '🥟' },
-        { name: 'Noodles', emoji: '🍜' },
-        { name: 'Peking Duck', emoji: '🦆' },
-        { name: 'Fried Rice', emoji: '🍚' }
-    ],
-    
-    // Mexico
-    'mexico': [
-        { name: 'Tacos', emoji: '🌮' },
-        { name: 'Burritos', emoji: '🌯' },
-        { name: 'Quesadilla', emoji: '🫓' },
-        { name: 'Tamales', emoji: '🫔' }
-    ],
-    
-    // Default fallback
-    'default': [
-        { name: 'Fast Food', emoji: '🍔' },
-        { name: 'Pizza', emoji: '🍕' },
-        { name: 'Coffee', emoji: '☕' },
-        { name: 'Cafe', emoji: '🥐' },
-        { name: 'Burgers', emoji: '🍔' },
-        { name: 'Sandwiches', emoji: '🥪' }
-    ]
-};
-
-function getRegionalFood(city) {
-    const cityLower = city.toLowerCase();
-    
-    // Try exact city match first
-    if (regionalFood[cityLower]) {
-        return regionalFood[cityLower];
-    }
-    
-    // Try state/region match (for India)
-    if (cityLower.includes('tamil nadu') || cityLower.includes('chennai') || cityLower.includes('chidambaram')) {
-        return regionalFood['tamil nadu'];
-    }
-    if (cityLower.includes('kerala') || cityLower.includes('kochi')) {
-        return regionalFood['kerala'];
-    }
-    
-    // Try country match
-    if (cityLower.includes('india')) return regionalFood['india'];
-    if (cityLower.includes('italy')) return regionalFood['italy'];
-    if (cityLower.includes('japan')) return regionalFood['japan'];
-    if (cityLower.includes('france')) return regionalFood['france'];
-    if (cityLower.includes('china')) return regionalFood['china'];
-    if (cityLower.includes('mexico')) return regionalFood['mexico'];
-    if (cityLower.includes('ohio') || cityLower.includes('texas') || cityLower.includes('california')) {
-        return regionalFood['usa'];
-    }
-    
-    // Default
-    return regionalFood['default'];
-}
-
-// Check if suggestions were dismissed before
-if (localStorage.getItem('suggestions_dismissed') === 'true') {
-    suggestionsDismissed = true;
 }
 
 function handleQuickReply(text) {
@@ -1574,17 +1028,14 @@ function suggestQuickReplies(context) {
 let conversationContext = [];
 
 // Wrapper for AI calls with loading indicator
-async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
-    // Show thinking indicator in chat
-    showThinkingIndicator();
+async function callAIWithTyping(message, loadingMessage = 'Thinking...', hideIndicator = true) {
+    // Only show loading overlay, no typing bubble
     showLoading(loadingMessage);
     try {
         const response = await askGeminiAI(message);
-        hideThinkingIndicator();
         hideLoading();
         return response;
     } catch (error) {
-        hideThinkingIndicator();
         hideLoading();
         showError('AI request failed. Please try again.');
         throw error;
@@ -1604,39 +1055,13 @@ async function askGeminiAI(userMessage) {
             `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`
         ).join('\n');
         
-        const systemPrompt = `You are Unify, a helpful voice assistant.${userName ? ` The user's name is ${userName}. Use their name naturally and occasionally in conversation.` : ' Be friendly and conversational.'}
-
-CRITICAL RULES:
-- ${userName ? `The user's name is ${userName} - use it!` : 'You do NOT know the user\'s name. NEVER say "User" or "Certainly, User!" - just say "Certainly!" or be friendly without using a name.'}
-- Be natural and conversational
-
-HOTEL/RESTAURANT FORMATTING (MUST FOLLOW EXACTLY):
-When listing hotels or restaurants, use this CLEAN format:
-
-1. [Hotel/Restaurant Name]
-   Price: [Budget/Mid-range/Luxury] | Type: [Veg/Non-Veg/Both] | Must Try: [Signature dish]
-   [LOCATION: City, State]
-
-2. [Next entry...]
-   Price: [Range] | Type: [Type] | Must Try: [Dish]
-   [LOCATION: City, State]
-
-CRITICAL RULES:
-- NO descriptions, NO features, NO extra text
-- ONLY: Name, Price, Type, Must Try
-- Keep it ONE LINE after the name
-- Add [LOCATION: City, State] for each entry
-- Add blank line between entries
-
-DO NOT list fast food chains - we handle that separately with search buttons.
+        const systemPrompt = `You are Unify, a helpful voice assistant. The user's name is ${userName || 'User'}.
 
 Your capabilities:
 - Weather (say "check weather")
 - Shopping lists (say "manage shopping")  
 - Reminders (say "set reminder")
 - Memory (remembering where things are)
-- Hotel & restaurant recommendations
-- Travel itineraries
 
 For casual conversation, be friendly and natural.
 For name corrections like "no, my name is X", extract the name.
@@ -1725,8 +1150,6 @@ async function handleNameCorrection(text) {
         let continuousRecognition = null;
         let isListening = false;
         let synth = window.speechSynthesis;
-        let isSpeaking = false;
-        let currentSpeechText = '';
         let reminders = [];
         let weather = null;
         let waitingForLocation = false;
@@ -1746,15 +1169,23 @@ async function handleNameCorrection(text) {
             loadUserData();
             checkReminders();
             
-            // Don't force name input - just show friendly welcome
-            const welcomeMsg = userName 
-                ? `Hi ${userName}! How can I help you today?` 
-                : "Hi! I'm Unify, your voice assistant. How can I help you today?";
-            
-            addChatMessage(welcomeMsg, false);
-            speak(welcomeMsg);
-            
-            // No hint needed - user has Help & Tips button!
+            // Check if user has a name stored
+            if (!userName) {
+                waitingForName = true;
+                const welcomeMsg = "Hi! I'm Unify. What's your name?";
+                addChatMessage(welcomeMsg, false);
+                speak(welcomeMsg);
+            } else {
+                const welcomeMsg = `Hi ${userName}! How can I help you today?`;
+                addChatMessage(welcomeMsg, false);
+                speak(welcomeMsg);
+                
+                // Add helpful hint after welcome
+                setTimeout(() => {
+                    const hintMsg = `💡 Try saying things like:\n• "What's the weather?"\n• "Add 2 pounds of chicken to my shopping list"\n• "Remind me to call mom at 5pm"\n• "My keys are on the counter"\n\nOr just ask "What can you do?"`;
+                    addChatMessage(hintMsg, false);
+                }, 2000); // Show after 2 seconds
+            }
         };
 
         async function requestMicrophonePermission() {
@@ -1843,92 +1274,14 @@ async function handleNameCorrection(text) {
             window.open(formUrl, '_blank');
         }
 
-        // ========== RESTAURANT/HOTEL RESPONSE ENHANCEMENT ==========
-        function enhanceRestaurantResponse(text) {
-            // Check if this is a hotel/restaurant response
-            if (!text.match(/\d+\.\s+\w+/) || !text.includes('Price:')) {
-                return text; // Not a restaurant/hotel response, return as-is
-            }
-            
-            let enhanced = text;
-            let city = 'Mason, Ohio'; // Default city
-            
-            // Try to extract city from [LOCATION: ...] tags
-            const locationMatch = text.match(/\[LOCATION:\s*([^\]]+)\]/);
-            if (locationMatch) {
-                city = locationMatch[1];
-            }
-            
-            // Remove all location tags from display
-            enhanced = enhanced.replace(/\[LOCATION:[^\]]+\]/g, '');
-            
-            // NEW FORMAT: Match "1. Hotel Name" followed by ONE line with Price/Type/Must Try
-            // Pattern: "1. Name\n   Price: ... | Type: ... | Must Try: ..."
-            enhanced = enhanced.replace(
-                /(\d+)\.\s+([^\n]+)\n\s*(Price:[^\n]+)/g,
-                (match, number, name, details) => {
-                    const cleanName = name.trim();
-                    const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(cleanName + ' ' + city)}`;
-                    
-                    return `${number}. <a href="${googleSearchUrl}" target="_blank" class="hotel-link">${cleanName}</a>\n   ${details}\n   <button class="direction-btn" onclick="getDirections('${cleanName.replace(/'/g, "\\'")}', '${city}')">📍 Get Directions</button>\n`;
-                }
-            );
-            
-            // Add REGIONAL FOOD SPECIALTIES (culturally aware!)
-            const regionalSpecialties = getRegionalFood(city);
-            
-            let fastFoodHTML = '\n\n<div class="fast-food-section">';
-            fastFoodHTML += `<h3>🍽️ Looking for Local Specialties?</h3>`;
-            fastFoodHTML += '<div class="fast-food-buttons">';
-            
-            // Show regional specialties!
-            regionalSpecialties.forEach(specialty => {
-                fastFoodHTML += `<button class="fast-food-btn" onclick="searchCategory('${specialty.name}', '${city}')">${specialty.emoji} ${specialty.name}</button>`;
-            });
-            
-            fastFoodHTML += '</div></div>';
-            
-            // Add to end of response
-            enhanced += fastFoodHTML;
-            
-            return enhanced;
-        }
-        
-        function searchCategory(category, city) {
-            // Open Google Maps search for this category
-            const searchQuery = `${category} near ${city}`;
-            const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
-            window.open(mapsUrl, '_blank');
-        }
-
         // ========== CHAT MESSAGE HANDLING ==========
         function addChatMessage(text, isUser = true) {
             const chatContainer = document.getElementById('chat-container');
             const messageDiv = document.createElement('div');
             messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-2 fade-in`;
             
-            // Clean markdown bold syntax (**text** → text)
-            let cleanedText = text.replace(/\*\*(.*?)\*\*/g, '$1');
-            
-            // Enhance restaurant/hotel responses with direction buttons (AI messages only)
-            let hasButtons = false;
-            if (!isUser) {
-                const enhanced = enhanceRestaurantResponse(cleanedText);
-                if (enhanced !== cleanedText) {
-                    hasButtons = true;
-                    cleanedText = enhanced;
-                }
-            }
-            
-            // Convert newlines to <br> tags, but handle HTML buttons specially
-            let formattedText;
-            if (hasButtons) {
-                // Don't escape HTML if we have buttons
-                formattedText = cleanedText.replace(/\n/g, '<br>');
-            } else {
-                // Normal escaping for regular text
-                formattedText = escapeHtml(cleanedText).replace(/\n/g, '<br>');
-            }
+            // Convert newlines to <br> tags for proper display
+            const formattedText = escapeHtml(text).replace(/\n/g, '<br>');
             
             if (isUser) {
                 messageDiv.innerHTML = `
@@ -2180,6 +1533,10 @@ async function handleNameCorrection(text) {
         recognition = continuousRecognition;
 
         // ========== COMMAND PROCESSING ==========
+        function processSuggestion(text) {
+            document.getElementById('text-input').value = text;
+            sendTextInput();
+        }
 
         async function processCommand(text) {
             const lower = text.toLowerCase();
@@ -2378,10 +1735,6 @@ async function handleNameCorrection(text) {
                         const weatherMsg = `The temperature is ${fahrenheit}°F (${celsius}°C). ${advice}`;
                         addChatMessage(weatherMsg, false);
                         speak(weatherMsg);
-                        
-                        // Show contextual suggestions
-                        if (!firstInteractionDone) firstInteractionDone = true;
-                        showMainSuggestions(weatherMsg);
                     }
                 } else {
                     // No location and no cached weather - try to get user's location automatically
@@ -2660,9 +2013,6 @@ Now create the itinerary with beautiful formatting and emojis!`;
                 
                 // Save to history
                 saveToHistory(text, aiResponse.response);
-                
-                // CRITICAL: Stop here to prevent falling through to AI fallback
-                return;
             }
             // Local Food Specialties / Culture Questions - BROAD DETECTION
             // Catches: "Food in X?", "What to eat in X?", "X cuisine?", "Famous dishes in X?"
@@ -2896,10 +2246,6 @@ Now answer the question completely!`;
                 
                 // Save to history
                 saveToHistory(text, aiResponse.response);
-                
-                // Show contextual suggestions
-                if (!firstInteractionDone) firstInteractionDone = true;
-                showMainSuggestions(aiResponse.response);
             }
             // Use AI for unclear queries and casual chat
             else {
@@ -2916,10 +2262,6 @@ Now answer the question completely!`;
                 
                 // Save to history
                 saveToHistory(text, aiResponse.response);
-                
-                // Show contextual suggestions
-                if (!firstInteractionDone) firstInteractionDone = true;
-                showMainSuggestions(aiResponse.response);
             }
         }
 
@@ -3899,22 +3241,10 @@ Now answer the question completely!`;
         // ========== TEXT-TO-SPEECH ==========
         function speak(text) {
             const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-            currentSpeechText = cleanText;
             
             if (typeof responsiveVoice !== 'undefined') {
                 responsiveVoice.cancel();
-                isSpeaking = true;
-                responsiveVoice.speak(cleanText, "UK English Female", { 
-                    pitch: 1.1, 
-                    rate: 1.0, 
-                    volume: 1,
-                    onstart: () => {
-                        isSpeaking = true;
-                    },
-                    onend: () => {
-                        isSpeaking = false;
-                    }
-                });
+                responsiveVoice.speak(cleanText, "UK English Female", { pitch: 1.1, rate: 1.0, volume: 1 });
                 return;
             }
             
@@ -3933,80 +3263,9 @@ Now answer the question completely!`;
                 utterance.rate = 1.0;
                 utterance.pitch = 1.2;
                 utterance.volume = 1.0;
-                
-                utterance.onstart = () => {
-                    isSpeaking = true;
-                };
-                
-                utterance.onend = () => {
-                    isSpeaking = false;
-                };
-                
-                isSpeaking = true;
                 synth.speak(utterance);
             }, 100);
         }
-        
-        function stopSpeech() {
-            if (typeof responsiveVoice !== 'undefined') {
-                responsiveVoice.cancel();
-            } else {
-                synth.cancel();
-            }
-            isSpeaking = false;
-        }
-        
-        function replaySpeech() {
-            if (currentSpeechText) {
-                speak(currentSpeechText);
-            }
-        }
-        
-        // ========== HELP OVERLAY ==========
-        function showHelpOverlay() {
-            document.getElementById('help-overlay').classList.remove('hidden');
-        }
-        
-        function hideHelpOverlay() {
-            document.getElementById('help-overlay').classList.add('hidden');
-        }
-        
-        // ========== GOOGLE MAPS DIRECTIONS ==========
-        function getDirections(placeName, city) {
-            // Try to get user's exact GPS location
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        // Success - use exact coordinates
-                        const lat = position.coords.latitude;
-                        const lon = position.coords.longitude;
-                        const destination = encodeURIComponent(`${placeName}, ${city}`);
-                        const mapsUrl = `https://www.google.com/maps/dir/${lat},${lon}/${destination}`;
-                        window.open(mapsUrl, '_blank');
-                    },
-                    (error) => {
-                        // GPS denied or failed - use city as origin
-                        console.log('GPS not available, using city as origin');
-                        const origin = encodeURIComponent(city);
-                        const destination = encodeURIComponent(`${placeName}, ${city}`);
-                        const mapsUrl = `https://www.google.com/maps/dir/${origin}/${destination}`;
-                        window.open(mapsUrl, '_blank');
-                    },
-                    {
-                        enableHighAccuracy: false,
-                        timeout: 5000,
-                        maximumAge: 300000 // Cache for 5 minutes
-                    }
-                );
-            } else {
-                // Geolocation not supported - use city
-                const origin = encodeURIComponent(city);
-                const destination = encodeURIComponent(`${placeName}, ${city}`);
-                const mapsUrl = `https://www.google.com/maps/dir/${origin}/${destination}`;
-                window.open(mapsUrl, '_blank');
-            }
-        }
-        
 // ========== UX IMPROVEMENTS ==========
 
 // 1. TYPING INDICATOR
