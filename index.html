@@ -790,6 +790,21 @@
         .restaurant-entry:last-child {
             border-bottom: none;
         }
+        
+        /* Hotel/Restaurant Name Links */
+        .hotel-link {
+            color: #7C3AED;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.2s ease;
+            border-bottom: 2px solid transparent;
+        }
+        
+        .hotel-link:hover {
+            color: #6D28D9;
+            border-bottom: 2px solid #7C3AED;
+        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -1312,25 +1327,29 @@ CRITICAL RULES:
 - Be natural and conversational
 
 HOTEL/RESTAURANT FORMATTING (MUST FOLLOW EXACTLY):
-When listing hotels or restaurants, use this format:
+When listing hotels or restaurants, use this CLEAN format:
 
 1. [Hotel/Restaurant Name]
-   [Brief description - 1 sentence]
-   Price: [Budget/Mid-range/Luxury] | Type: [Veg/Non-Veg/Both]
-   Must Try: [Signature dish]
-   [Key feature or highlight]
+   Price: [Budget/Mid-range/Luxury] | Type: [Veg/Non-Veg/Both] | Must Try: [Signature dish]
    [LOCATION: City, State]
 
 2. [Next entry...]
+   Price: [Range] | Type: [Type] | Must Try: [Dish]
+   [LOCATION: City, State]
+
+CRITICAL RULES:
+- NO descriptions, NO features, NO extra text
+- ONLY: Name, Price, Type, Must Try
+- Keep it ONE LINE after the name
+- Add [LOCATION: City, State] for each entry
+- Add blank line between entries
 
 AFTER all hotels/restaurants, add:
 
 ---
 🍔 FAST FOOD CHAINS IN [CITY]:
-List ALL fast food chains available in that location (McDonald's, KFC, Wendy's, Taco Bell, Burger King, Subway, Chipotle, Panera Bread, Five Guys, Chick-fil-A, Arby's, Jimmy John's, etc.)
+List ALL fast food chains available in that location (McDonald's, KFC, Wendy's, Taco Bell, Burger King, Subway, Chipotle, Panera Bread, Five Guys, Chick-fil-A, Arby's, Jimmy John's, Domino's, Pizza Hut, etc.)
 Format: [FASTFOOD: Chain Name, City]
-
-CRITICAL: Add blank line between each numbered entry!
 
 Your capabilities:
 - Weather (say "check weather")
@@ -1559,17 +1578,20 @@ async function handleNameCorrection(text) {
             const locationMatch = text.match(/\[LOCATION:\s*([^\]]+)\]/);
             if (locationMatch) {
                 city = locationMatch[1];
-                // Remove location tags from display
-                enhanced = enhanced.replace(/\[LOCATION:[^\]]+\]/g, '');
             }
             
-            // Add direction buttons to each numbered entry
-            // Match pattern: "1. Restaurant Name" followed by details
+            // Remove all location tags from display
+            enhanced = enhanced.replace(/\[LOCATION:[^\]]+\]/g, '');
+            
+            // NEW FORMAT: Match "1. Hotel Name" followed by ONE line with Price/Type/Must Try
+            // Pattern: "1. Name\n   Price: ... | Type: ... | Must Try: ..."
             enhanced = enhanced.replace(
-                /(\d+\.\s+([^\n]+))\n([^\n]+)\n([^\n]+)\n([^\n]+)\n([^\n]+)/g,
-                (match, fullEntry, name, desc, priceType, mustTry, feature) => {
+                /(\d+)\.\s+([^\n]+)\n\s*(Price:[^\n]+)/g,
+                (match, number, name, details) => {
                     const cleanName = name.trim();
-                    return `${fullEntry}\n${desc}\n${priceType}\n${mustTry}\n${feature}\n<button class="direction-btn" onclick="getDirections('${cleanName}', '${city}')">📍 Get Directions</button>\n`;
+                    const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(cleanName + ' ' + city)}`;
+                    
+                    return `${number}. <a href="${googleSearchUrl}" target="_blank" class="hotel-link">${cleanName}</a>\n   ${details}\n   <button class="direction-btn" onclick="getDirections('${cleanName.replace(/'/g, "\\'")}', '${city}')">📍 Get Directions</button>\n`;
                 }
             );
             
