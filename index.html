@@ -1327,14 +1327,21 @@ async function processSuggestion(query) {
     const input = document.getElementById('text-input');
     input.value = query;
     
-    // Add to chat
-    addChatMessage(query, true);
-    
-    // Process the command
-    await processCommand(query);
-    
-    // Clear input
-    input.value = '';
+    // Trigger the send button click (simpler approach)
+    const sendBtn = document.getElementById('send-btn');
+    if (sendBtn) {
+        sendBtn.click();
+    } else {
+        // Fallback: trigger Enter key press
+        const event = new KeyboardEvent('keypress', {
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true
+        });
+        input.dispatchEvent(event);
+    }
 }
 
 // ========== REGIONAL FOOD SPECIALTIES ==========
