@@ -18,10 +18,32 @@
             animation: waveform 0.8s ease-in-out infinite;
         }
         body.dark {
-            background: #000;
+            background: #000 !important;
         }
         body.light {
-            background: linear-gradient(to bottom right, #fce7f3, #e9d5ff, #c7d2fe);
+            background: linear-gradient(to bottom right, #fce7f3, #e9d5ff, #c7d2fe) !important;
+        }
+        
+        /* Weather Effects - Contained in Weather Card Only */
+        #weather-card {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .weather-effect-local {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 1;
+            border-radius: 1rem;
+        }
+        
+        #weather-card > * {
+            position: relative;
+            z-index: 2;
         }
         
         /* Light Switch Styles */
@@ -2370,12 +2392,24 @@ Now answer the question completely!`;
 
         // ========== WEATHER FUNCTIONS ==========
         function createWeatherEffect(weatherCode, temperature) {
-            const container = document.getElementById('weather-effects');
-            container.innerHTML = ''; // Clear existing effects
+            // ✅ FIXED: Get weather card instead of global container
+            const container = document.getElementById('weather-card');
+            
+            // Create local effects container if it doesn't exist
+            let effectsDiv = container.querySelector('.weather-effect-local');
+            if (!effectsDiv) {
+                effectsDiv = document.createElement('div');
+                effectsDiv.className = 'weather-effect-local';
+                container.insertBefore(effectsDiv, container.firstChild);
+            }
+            
+            effectsDiv.innerHTML = ''; // Clear existing effects
+            
+            // ✅ FIXED: Change card background, NOT body background
             
             // Snow (codes 71-77)
             if (weatherCode >= 71 && weatherCode <= 77) {
-                for (let i = 0; i < 50; i++) {
+                for (let i = 0; i < 20; i++) { // Reduced from 50
                     const snowflake = document.createElement('div');
                     snowflake.className = 'snowflake';
                     snowflake.textContent = '❄';
@@ -2383,103 +2417,60 @@ Now answer the question completely!`;
                     snowflake.style.animationDuration = (Math.random() * 3 + 2) + 's';
                     snowflake.style.animationDelay = Math.random() * 5 + 's';
                     snowflake.style.fontSize = (Math.random() * 10 + 10) + 'px';
-                    container.appendChild(snowflake);
+                    effectsDiv.appendChild(snowflake);
                 }
-                document.body.style.background = 'linear-gradient(to bottom, #B8C6DB, #F5F7FA)';
+                container.style.background = 'linear-gradient(to bottom, #B8C6DB, #F5F7FA)';
             }
             // Rain (codes 51-67, 80-82)
             else if ((weatherCode >= 51 && weatherCode <= 67) || (weatherCode >= 80 && weatherCode <= 82)) {
-                for (let i = 0; i < 100; i++) {
+                for (let i = 0; i < 30; i++) { // Reduced from 100
                     const raindrop = document.createElement('div');
                     raindrop.className = 'raindrop';
                     raindrop.style.left = Math.random() * 100 + '%';
                     raindrop.style.animationDuration = (Math.random() * 0.5 + 0.5) + 's';
                     raindrop.style.animationDelay = Math.random() * 2 + 's';
-                    container.appendChild(raindrop);
+                    effectsDiv.appendChild(raindrop);
                 }
-                // Add clouds for rain
-                for (let i = 1; i <= 3; i++) {
-                    const cloud = document.createElement('div');
-                    cloud.className = `cloud cloud-${i}`;
-                    container.appendChild(cloud);
-                }
-                document.body.style.background = 'linear-gradient(to bottom, #4A5568, #718096)';
+                container.style.background = 'linear-gradient(to bottom, #4A5568, #718096)';
+                container.style.color = 'white';
             }
             // Thunderstorm (codes 95-99)
             else if (weatherCode >= 95 && weatherCode <= 99) {
-                for (let i = 0; i < 80; i++) {
+                for (let i = 0; i < 25; i++) { // Reduced from 80
                     const raindrop = document.createElement('div');
                     raindrop.className = 'raindrop';
                     raindrop.style.left = Math.random() * 100 + '%';
                     raindrop.style.animationDuration = (Math.random() * 0.3 + 0.3) + 's';
                     raindrop.style.animationDelay = Math.random() * 1 + 's';
-                    container.appendChild(raindrop);
+                    effectsDiv.appendChild(raindrop);
                 }
-                // Random lightning
-                setInterval(() => {
-                    if (Math.random() > 0.95) {
-                        const lightning = document.createElement('div');
-                        lightning.className = 'lightning';
-                        container.appendChild(lightning);
-                        setTimeout(() => lightning.remove(), 200);
-                    }
-                }, 1000);
-                document.body.style.background = 'linear-gradient(to bottom, #2D3748, #4A5568)';
+                container.style.background = 'linear-gradient(to bottom, #2D3748, #4A5568)';
+                container.style.color = 'white';
             }
             // Clear/Sunny (code 0-3)
             else if (weatherCode >= 0 && weatherCode <= 3) {
                 const sun = document.createElement('div');
                 sun.className = 'sun';
-                container.appendChild(sun);
-                
-                // Add some clouds for partly cloudy
-                if (weatherCode > 0) {
-                    for (let i = 1; i <= 2; i++) {
-                        const cloud = document.createElement('div');
-                        cloud.className = `cloud cloud-${i}`;
-                        container.appendChild(cloud);
-                    }
-                }
+                sun.style.position = 'absolute';
+                sun.style.top = '20px';
+                sun.style.right = '30px';
+                sun.style.width = '60px';
+                sun.style.height = '60px';
+                effectsDiv.appendChild(sun);
                 
                 // Hot day effect
                 if (temperature > 30) {
                     const heatWave = document.createElement('div');
                     heatWave.className = 'heat-wave';
-                    container.appendChild(heatWave);
-                    document.body.style.background = 'linear-gradient(to bottom, #FDB750, #FFDAA5)';
+                    effectsDiv.appendChild(heatWave);
+                    container.style.background = 'linear-gradient(to bottom, #FDB750, #FFDAA5)';
                 } else {
-                    document.body.style.background = 'linear-gradient(to bottom right, #87CEEB, #E0F6FF, #FFF8DC)';
+                    container.style.background = 'linear-gradient(to bottom right, #87CEEB, #E0F6FF, #FFF8DC)';
                 }
             }
-            // Overcast/Cloudy (codes 45-48 fog, or other cloudy conditions)
+            // Overcast/Cloudy
             else {
-                for (let i = 1; i <= 3; i++) {
-                    const cloud = document.createElement('div');
-                    cloud.className = `cloud cloud-${i}`;
-                    container.appendChild(cloud);
-                }
-                document.body.style.background = 'linear-gradient(to bottom, #A0AEC0, #CBD5E0)';
-            }
-            
-            // Freezing cold effect (any weather below 5°C)
-            if (temperature < 5) {
-                document.body.style.filter = 'brightness(0.9) contrast(1.1)';
-                // Add extra snowflakes even if not snowing
-                if (weatherCode < 71 || weatherCode > 77) {
-                    for (let i = 0; i < 20; i++) {
-                        const snowflake = document.createElement('div');
-                        snowflake.className = 'snowflake';
-                        snowflake.textContent = '❄';
-                        snowflake.style.left = Math.random() * 100 + '%';
-                        snowflake.style.animationDuration = (Math.random() * 4 + 3) + 's';
-                        snowflake.style.animationDelay = Math.random() * 5 + 's';
-                        snowflake.style.fontSize = (Math.random() * 8 + 8) + 'px';
-                        snowflake.style.opacity = '0.6';
-                        container.appendChild(snowflake);
-                    }
-                }
-            } else {
-                document.body.style.filter = 'none';
+                container.style.background = 'linear-gradient(to bottom, #A0AEC0, #CBD5E0)';
             }
         }
 
