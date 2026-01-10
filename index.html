@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Unify Personal Assistant</title>
+    <title>Unify Voice Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js?key=jQZ2zpcE"></script>
     <style>
@@ -673,6 +673,48 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        
+        /* Loading Overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .loading-overlay.hidden {
+            display: none;
+        }
+        
+        .loading-card {
+            background: white;
+            padding: 2rem 3rem;
+            border-radius: 1rem;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid #E5E7EB;
+            border-top-color: #8B5CF6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        .loading-text {
+            color: #374151;
+            font-size: 1.125rem;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -1113,13 +1155,18 @@ async function askGeminiAI(userMessage) {
             `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`
         ).join('\n');
         
-        const systemPrompt = `You are Unify, a helpful voice assistant. The user's name is ${userName || 'User'}.
+        const systemPrompt = `You are Unify, a helpful voice assistant.${userName ? ` The user's name is ${userName}. Use their name naturally and occasionally.` : ' Be friendly and conversational.'}
+
+CRITICAL RULES:
+- ${userName ? `The user's name is ${userName} - use it!` : 'You do NOT know the user\'s name. NEVER say "User" or "Hi User!" - just say "Hi!" or be friendly without using a name.'}
+- Be natural and conversational
 
 Your capabilities:
 - Weather (say "check weather")
 - Shopping lists (say "manage shopping")  
 - Reminders (say "set reminder")
 - Memory (remembering where things are)
+- Travel itineraries and recommendations
 
 For casual conversation, be friendly and natural.
 For name corrections like "no, my name is X", extract the name.
@@ -2011,7 +2058,7 @@ Just talk to me naturally!`;
                 console.log('Input text:', text);
                 
                 // Use AI to create detailed itinerary - PLACES ONLY
-                const itineraryPrompt = `Create a beautifully formatted day-by-day itinerary for: "${text}". 
+                const itineraryPrompt = `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Create a beautifully formatted day-by-day itinerary for: "${text}". 
 
 FOCUS ONLY ON: Places to visit and activities to do
 DO NOT INCLUDE: Food recommendations, hotels, or restaurants (user can ask separately)
@@ -2083,7 +2130,7 @@ Now create the itinerary with beautiful formatting and emojis!`;
                 console.log('🍲 LOCAL FOOD SPECIALTY MODE');
                 
                 // This is asking about local food culture, not specific restaurants
-                const specialtyPrompt = `Answer this question about local food and specialties: "${text}"
+                const specialtyPrompt = `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Answer this question about local food and specialties: "${text}"
 
 Provide information about the LOCAL FOOD CULTURE and FAMOUS DISHES of the region mentioned.
 
@@ -2149,7 +2196,7 @@ Now answer about the local food culture and famous dishes!`;
                 const queryType = wasHotelQuery ? 'hotel' : 'food';
                 
                 const recommendPrompt = queryType === 'hotel' ? 
-                `Answer this question about hotel recommendations: "${finalQuery}"
+                `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Answer this question about hotel recommendations: "${finalQuery}"
 
 Provide 4-6 specific hotel recommendations with these details for EACH:
 - Hotel name - Brief description
@@ -2172,7 +2219,7 @@ End with: "I hope you have a comfortable stay! Let me know if you need restauran
 
 Now answer completely!` :
 
-                `Answer this question about travel recommendations: "${finalQuery}"
+                `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Answer this question about travel recommendations: "${finalQuery}"
 
 Provide 4-6 specific recommendations with brief details.
 Keep it SHORT and COMPLETE.
