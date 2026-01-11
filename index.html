@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Unify Personal Assistant</title>
+    <title>Unify Voice Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js?key=jQZ2zpcE"></script>
     <style>
@@ -218,6 +218,19 @@
         
         .fade-in {
             animation: fadeIn 0.3s ease-out;
+        }
+        
+        .fade-out {
+            animation: fadeOut 0.3s ease-out forwards;
+        }
+        
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+            to {
+                opacity: 0;
+            }
         }
         
         /* Weather Background Effects */
@@ -1036,12 +1049,25 @@ function handleQuickReply(text) {
 function getRegionalFood(context) {
     const lower = context.toLowerCase();
     
-    // Tamil Nadu / Chidambaram
-    if (lower.includes('tamil nadu') || lower.includes('chidambaram') || lower.includes('chennai')) {
+    // South India (expanded)
+    if (lower.includes('tamil nadu') || lower.includes('chidambaram') || lower.includes('chennai') ||
+        lower.includes('bangalore') || lower.includes('bengaluru') || lower.includes('hyderabad') ||
+        lower.includes('mysore') || lower.includes('coimbatore') || lower.includes('madurai') ||
+        lower.includes('kochi') || lower.includes('kerala') || lower.includes('andhra') || lower.includes('karnataka')) {
         return [
-            { icon: '🍛', text: 'Biryani near me' },
-            { icon: '🥘', text: 'Dosa places' },
-            { icon: '☕', text: 'Filter Coffee' }
+            { icon: '🍛', text: 'Best Biryani spots' },
+            { icon: '☕', text: 'Filter coffee places' },
+            { icon: '🥘', text: 'Dosa & Idli spots' }
+        ];
+    }
+    // North India
+    if (lower.includes('delhi') || lower.includes('mumbai') || lower.includes('jaipur') ||
+        lower.includes('agra') || lower.includes('kolkata') || lower.includes('punjab') ||
+        lower.includes('rajasthan')) {
+        return [
+            { icon: '🍛', text: 'Butter chicken spots' },
+            { icon: '🫓', text: 'Naan & Tandoor' },
+            { icon: '🥘', text: 'Street chaat' }
         ];
     }
     // India (general)
@@ -1053,78 +1079,278 @@ function getRegionalFood(context) {
         ];
     }
     // Italy
-    if (lower.includes('italy') || lower.includes('rome') || lower.includes('milan')) {
+    if (lower.includes('italy') || lower.includes('rome') || lower.includes('milan') ||
+        lower.includes('florence') || lower.includes('venice') || lower.includes('naples')) {
         return [
-            { icon: '🍝', text: 'Pasta restaurants' },
-            { icon: '🍕', text: 'Pizza places' },
-            { icon: '🍨', text: 'Gelato shops' }
+            { icon: '🍝', text: 'Authentic Pasta' },
+            { icon: '🍕', text: 'Best Pizzerias' },
+            { icon: '🍦', text: 'Gelato shops' }
+        ];
+    }
+    // NYC
+    if (lower.includes('new york') || lower.includes('nyc') || lower.includes('manhattan') ||
+        lower.includes('brooklyn')) {
+        return [
+            { icon: '🍕', text: 'Classic NYC Pizza' },
+            { icon: '🥯', text: 'Best Bagels' },
+            { icon: '🌭', text: 'Hot dog stands' }
+        ];
+    }
+    // Mexico
+    if (lower.includes('mexico') || lower.includes('cancun') || lower.includes('cabo') ||
+        lower.includes('guadalajara')) {
+        return [
+            { icon: '🌮', text: 'Best Tacos' },
+            { icon: '🫔', text: 'Street food' },
+            { icon: '🌯', text: 'Burrito spots' }
         ];
     }
     // Japan
-    if (lower.includes('japan') || lower.includes('tokyo')) {
+    if (lower.includes('japan') || lower.includes('tokyo') || lower.includes('kyoto') ||
+        lower.includes('osaka')) {
         return [
+            { icon: '🍣', text: 'Sushi spots' },
             { icon: '🍜', text: 'Ramen shops' },
-            { icon: '🍱', text: 'Sushi restaurants' },
-            { icon: '🍵', text: 'Matcha cafes' }
+            { icon: '🥟', text: 'Izakaya' }
+        ];
+    }
+    // France
+    if (lower.includes('france') || lower.includes('paris') || lower.includes('lyon') ||
+        lower.includes('nice')) {
+        return [
+            { icon: '🥐', text: 'Best Croissants' },
+            { icon: '🧀', text: 'Cheese & Wine' },
+            { icon: '🥖', text: 'Boulangeries' }
         ];
     }
     // USA
-    if (lower.includes('ohio') || lower.includes('texas') || lower.includes('california') || lower.includes('mason')) {
+    if (lower.includes('ohio') || lower.includes('texas') || lower.includes('california') || 
+        lower.includes('mason') || lower.includes('chicago') || lower.includes('boston') ||
+        lower.includes('seattle') || lower.includes('los angeles') || lower.includes('long beach')) {
         return [
-            { icon: '🍔', text: 'Burger places' },
-            { icon: '🍖', text: 'BBQ restaurants' },
-            { icon: '🍕', text: 'Pizza shops' }
+            { icon: '🍔', text: 'Best Burgers' },
+            { icon: '🍖', text: 'BBQ spots' },
+            { icon: '☕', text: 'Coffee shops' }
         ];
     }
     // Default (generic)
     return [
-        { icon: '🍔', text: 'Fast food near me' },
-        { icon: '🍕', text: 'Pizza places' },
-        { icon: '☕', text: 'Coffee shops' }
+        { icon: '🍽️', text: 'Local restaurants' },
+        { icon: '☕', text: 'Coffee shops' },
+        { icon: '🍰', text: 'Dessert places' }
     ];
 }
 
 // Suggest context-aware quick replies based on last response
 function suggestQuickReplies(context) {
     const suggestions = [];
+    let lastResponse = context; // Store for share button
     
+    // After itinerary
+    if (context.includes('itinerary') || context.includes('Day 1') || context.includes('Enjoy exploring')) {
+        const regionalFood = getRegionalFood(context);
+        suggestions.push(
+            { icon: '🏨', text: 'Hotels nearby' },
+            { icon: '🍽️', text: 'Restaurants nearby' },
+            ...regionalFood.slice(0, 1), // Add 1 regional food
+            { icon: '🎫', text: 'Things to do at night' },
+            { icon: '📸', text: 'Best photo spots' }
+        );
+        // Add share button for itinerary
+        addShareButton(context, 'itinerary');
+    }
+    // After hotel recommendations
+    else if (context.includes('hotel') || context.includes('stay') || context.includes('Price:') || context.includes('📍 Location:')) {
+        const regionalFood = getRegionalFood(context);
+        suggestions.push(
+            { icon: '🍽️', text: 'Restaurants nearby' },
+            { icon: '🗺️', text: 'Plan activities' },
+            ...regionalFood.slice(0, 1),
+            { icon: '🛍️', text: 'Shopping areas' },
+            { icon: '☕', text: 'Coffee shops' }
+        );
+        // Add share button for hotels
+        addShareButton(context, 'hotels');
+    }
+    // After restaurant/food recommendations
+    else if (context.includes('restaurant') || context.includes('🍽️') || context.includes('Must Try:')) {
+        const regionalFood = getRegionalFood(context);
+        suggestions.push(
+            { icon: '🏨', text: 'Hotels nearby' },
+            { icon: '🗺️', text: 'Things to do' },
+            ...regionalFood.slice(0, 2),
+            { icon: '🍰', text: 'Dessert places' }
+        );
+        // Add share button for restaurants
+        addShareButton(context, 'restaurants');
+    }
     // After weather
-    if (context.includes('weather') || context.includes('temperature')) {
+    else if (context.includes('weather') || context.includes('temperature') || context.includes('°')) {
         suggestions.push(
             { icon: '🏨', text: 'Hotels nearby' },
             { icon: '🍽️', text: 'Best restaurants' },
             { icon: '🗺️', text: 'Things to do' }
         );
     }
-    // After itinerary
-    else if (context.includes('itinerary') || context.includes('Day 1')) {
+    // After shopping list
+    else if (context.includes('shopping') || context.includes('Added')) {
         suggestions.push(
-            { icon: '🏨', text: 'Hotels' },
-            { icon: '🍽️', text: 'Restaurants' },
-            { icon: '🍲', text: 'Local food specialties' }
+            { icon: '📝', text: 'Show shopping list' },
+            { icon: '🛒', text: 'Add more items' },
+            { icon: '🗑️', text: 'Clear list' }
         );
+    }
+    // Default suggestions
+    else {
+        suggestions.push(
+            { icon: '🌤️', text: 'Weather' },
+            { icon: '🗺️', text: 'Plan a trip' },
+            { icon: '🛒', text: 'Shopping list' }
+        );
+    }
+    
+    showQuickReplies(suggestions);
+}
+
+// Add share button after recommendations
+function addShareButton(content, type) {
+    const chatContainer = document.getElementById('chat-container');
+    const shareBox = document.createElement('div');
+    shareBox.className = 'flex justify-center my-3 fade-in';
+    
+    const bgClass = darkMode ? 'bg-blue-900' : 'bg-blue-50';
+    const textClass = darkMode ? 'text-blue-200' : 'text-blue-900';
+    const buttonClass = darkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600';
+    
+    // Clean content for sharing (remove HTML tags)
+    const cleanContent = content.replace(/<[^>]*>/g, '').replace(/\[📍.*?\]/g, '');
+    
+    shareBox.innerHTML = `
+        <button onclick="shareContent(\`${cleanContent.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`, '${type}')" 
+                class="${bgClass} border-2 ${darkMode ? 'border-blue-600' : 'border-blue-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2">
+            <span class="text-xl">📤</span>
+            <span class="text-sm font-medium ${textClass}">Share this ${type}</span>
+        </button>
+    `;
+    
+    chatContainer.appendChild(shareBox);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+// Share content using Web Share API or Clipboard
+async function shareContent(content, type) {
+    const title = `My ${type} from Unify`;
+    const text = `${title}\n\n${content}\n\n---\nShared via Unify Voice Assistant`;
+    
+    // Try Web Share API first (works on mobile)
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: title,
+                text: text
+            });
+            console.log('✅ Shared successfully via Web Share API');
+            // Show success message
+            showTemporaryMessage('✅ Shared successfully!');
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                console.log('Share cancelled or failed:', error);
+                // Fallback to clipboard
+                copyToClipboard(text);
+            }
+        }
+    } else {
+        // Fallback to clipboard
+        copyToClipboard(text);
+    }
+}
+
+// Copy to clipboard fallback
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        console.log('✅ Copied to clipboard');
+        showTemporaryMessage('📋 Copied to clipboard! Now you can paste it into SMS, WhatsApp, or any app!');
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+        showTemporaryMessage('❌ Failed to copy. Please try again.');
+    });
+}
+
+// Show temporary success message
+function showTemporaryMessage(message) {
+    const chatContainer = document.getElementById('chat-container');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'flex justify-center my-2 fade-in';
+    
+    const bgClass = darkMode ? 'bg-green-900' : 'bg-green-50';
+    const textClass = darkMode ? 'text-green-200' : 'text-green-900';
+    
+    msgDiv.innerHTML = `
+        <div class="${bgClass} border-2 ${darkMode ? 'border-green-600' : 'border-green-300'} rounded-lg px-4 py-2">
+            <span class="text-sm font-medium ${textClass}">${message}</span>
+        </div>
+    `;
+    
+    chatContainer.appendChild(msgDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+        msgDiv.classList.add('fade-out');
+        setTimeout(() => msgDiv.remove(), 300);
+    }, 3000);
+}
+
+// Suggest context-aware quick replies based on last response
+function suggestQuickReplies(context) {
+    const suggestions = [];
+    let lastResponse = context; // Store for share button
+    
+    // After itinerary
+    if (context.includes('itinerary') || context.includes('Day 1') || context.includes('Enjoy exploring')) {
+        const regionalFood = getRegionalFood(context);
+        suggestions.push(
+            { icon: '🏨', text: 'Hotels nearby' },
+            { icon: '🍽️', text: 'Restaurants nearby' },
+            ...regionalFood.slice(0, 1), // Add 1 regional food
+            { icon: '🎫', text: 'Things to do at night' },
+            { icon: '📸', text: 'Best photo spots' }
+        );
+        // Add share button for itinerary
+        addShareButton(context, 'itinerary');
     }
     // After hotel recommendations
-    else if (context.includes('hotel') || context.includes('stay') || context.includes('Price:')) {
-        suggestions.push(
-            { icon: '🍽️', text: 'Restaurants' },
-            { icon: '🗺️', text: 'Things to do' },
-            { icon: '🌤️', text: 'Weather' }
-        );
-        // Add regional food specialties
+    else if (context.includes('hotel') || context.includes('stay') || context.includes('Price:') || context.includes('📍 Location:')) {
         const regionalFood = getRegionalFood(context);
-        suggestions.push(...regionalFood);
+        suggestions.push(
+            { icon: '🍽️', text: 'Restaurants nearby' },
+            { icon: '🗺️', text: 'Plan activities' },
+            ...regionalFood.slice(0, 1),
+            { icon: '🛍️', text: 'Shopping areas' },
+            { icon: '☕', text: 'Coffee shops' }
+        );
+        // Add share button for hotels
+        addShareButton(context, 'hotels');
     }
-    // After restaurant recommendations
-    else if (context.includes('restaurant') || context.includes('Must Try:')) {
-        suggestions.push(
-            { icon: '🏨', text: 'Hotels' },
-            { icon: '🗺️', text: 'Plan an itinerary' },
-            { icon: '🚗', text: 'Transport options' }
-        );
-        // Add regional food specialties
+    // After restaurant/food recommendations
+    else if (context.includes('restaurant') || context.includes('🍽️') || context.includes('Must Try:')) {
         const regionalFood = getRegionalFood(context);
-        suggestions.push(...regionalFood);
+        suggestions.push(
+            { icon: '🏨', text: 'Hotels nearby' },
+            { icon: '🗺️', text: 'Things to do' },
+            ...regionalFood.slice(0, 2),
+            { icon: '🍰', text: 'Dessert places' }
+        );
+        // Add share button for restaurants
+        addShareButton(context, 'restaurants');
+    }
+    // After weather
+    else if (context.includes('weather') || context.includes('temperature') || context.includes('°')) {
+        suggestions.push(
+            { icon: '🏨', text: 'Hotels nearby' },
+            { icon: '🍽️', text: 'Best restaurants' },
+            { icon: '🗺️', text: 'Things to do' }
+        );
     }
     // After shopping list
     else if (context.includes('shopping') || context.includes('Added')) {
