@@ -1399,8 +1399,14 @@ async function handleNameCorrection(text) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-2 fade-in`;
             
-            // Convert newlines to <br> tags for proper display
-            const formattedText = escapeHtml(text).replace(/\n/g, '<br>');
+            // For assistant messages, allow safe HTML (links only)
+            // For user messages, escape everything
+            let formattedText;
+            if (isUser) {
+                formattedText = escapeHtml(text).replace(/\n/g, '<br>');
+            } else {
+                formattedText = sanitizeAssistantHtml(text).replace(/\n/g, '<br>');
+            }
             
             if (isUser) {
                 messageDiv.innerHTML = `
@@ -1418,7 +1424,7 @@ async function handleNameCorrection(text) {
                         <div class="${bgClass} rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex-1">
                             <p class="text-sm ${textClass}">${formattedText}</p>
                         </div>
-                        <button onclick="speak(\`${text.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`)" class="flex-shrink-0 p-2 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-all">
+                        <button onclick="speak(\`${text.replace(/`/g, '\\`').replace(/'/g, "\\'").replace(/<[^>]*>/g, '')}\`)" class="flex-shrink-0 p-2 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-all">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
@@ -1437,6 +1443,21 @@ async function handleNameCorrection(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+        
+        // Sanitize HTML but allow safe links for assistant messages
+        function sanitizeAssistantHtml(text) {
+            // First escape everything
+            let safe = escapeHtml(text);
+            
+            // Then restore ONLY safe <a> tags with specific attributes
+            // Pattern: [📍 <a href="URL" target="_blank" style="...">TEXT</a>]
+            safe = safe.replace(
+                /\[📍 &lt;a href=&quot;([^&quot;]+)&quot; target=&quot;_blank&quot; style=&quot;([^&quot;]+)&quot;&gt;([^&lt;]+)&lt;\/a&gt;\]/g,
+                '[📍 <a href="$1" target="_blank" style="$2">$3</a>]'
+            );
+            
+            return safe;
         }
 
         function toggleSendButton() {
