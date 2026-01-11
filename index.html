@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Unify Voice Assistant</title>
+    <title>Unify Personal Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js?key=jQZ2zpcE"></script>
     <style>
@@ -809,7 +809,7 @@
                     </div>
                     <div>
                         <h1 id="title" class="text-4xl font-black text-gray-900">Unify</h1>
-                        <p id="subtitle" class="text-sm text-gray-600">Your AI Voice Assistant</p>
+                        <p id="subtitle" class="text-sm text-gray-600">Your AI Personal Assistant</p>
                     </div>
                 </div>
                 
@@ -858,28 +858,11 @@
                     <div id="reminders-list" class="space-y-3"></div>
                 </div>
 
-                <!-- Suggestion Buttons -->
-                <div class="bg-purple-50 p-6 rounded-2xl">
+                <!-- Suggestion Buttons - Dynamic based on context -->
+                <div id="initial-suggestions" class="bg-purple-50 p-6 rounded-2xl">
                     <h3 class="font-bold text-gray-900 mb-3">Try asking me:</h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <button onclick="processSuggestion('What\'s the weather like today?')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            ☀️ What's the weather?
-                        </button>
-                        <button onclick="processSuggestion('Add 2 pounds of chicken to my shopping list')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            🛒 Add 2 lbs chicken to list
-                        </button>
-                        <button onclick="processSuggestion('Remind me to call mom at 5pm')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            ⏰ Remind me to call mom
-                        </button>
-                        <button onclick="processSuggestion('My car keys are on the counter')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            🔑 My keys are on counter
-                        </button>
-                        <button onclick="processSuggestion('What can you do?')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            ❓ What can you do?
-                        </button>
-                        <button onclick="processSuggestion('Plan a weekend trip to Paris')" class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-                            ✈️ Plan a trip to Paris
-                        </button>
+                    <div id="suggestion-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <!-- Will be populated dynamically -->
                     </div>
                 </div>
             </div>
@@ -1141,6 +1124,110 @@ function getRegionalFood(context) {
     ];
 }
 
+// ========== SUGGESTION BOX MANAGEMENT ==========
+
+// Show initial suggestions on page load
+function showInitialSuggestions() {
+    const suggestions = [
+        { icon: '☀️', text: "What's the weather?", query: "What's the weather like today?" },
+        { icon: '🛒', text: 'Add 2 lbs chicken to list', query: 'Add 2 pounds of chicken to my shopping list' },
+        { icon: '⏰', text: 'Remind me to call mom', query: 'Remind me to call mom at 5pm' },
+        { icon: '🔑', text: 'My keys are on counter', query: 'My car keys are on the counter' },
+        { icon: '❓', text: 'What can you do?', query: 'What can you do?' },
+        { icon: '✈️', text: 'Plan a trip to Paris', query: 'Plan a weekend trip to Paris' }
+    ];
+    
+    updateSuggestionBox(suggestions);
+}
+
+// Update suggestion box with contextual suggestions
+function updateSuggestionBox(suggestions) {
+    const grid = document.getElementById('suggestion-grid');
+    if (!grid) return;
+    
+    grid.innerHTML = suggestions.map(s => `
+        <button onclick="processSuggestion('${s.query.replace(/'/g, "\\'")} ')" 
+                class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
+            ${s.icon} ${s.text}
+        </button>
+    `).join('');
+}
+
+// Update suggestions based on conversation context
+function updateContextualSuggestions(context) {
+    const lower = context.toLowerCase();
+    let suggestions = [];
+    
+    // After itinerary
+    if (lower.includes('itinerary') || lower.includes('day 1') || lower.includes('enjoy exploring')) {
+        const city = extractCityFromText(context);
+        suggestions = [
+            { icon: '🏨', text: `Hotels in ${city || 'this area'}`, query: `Hotels in ${city || 'the area'}` },
+            { icon: '🍽️', text: 'Best restaurants', query: `Best restaurants in ${city || 'the area'}` },
+            { icon: '🎫', text: 'Things to do at night', query: `Things to do at night in ${city || 'the area'}` },
+            { icon: '📸', text: 'Best photo spots', query: `Best photo spots in ${city || 'the area'}` },
+            { icon: '🚌', text: 'How to get around', query: `Transport in ${city || 'the area'}` },
+            { icon: '🛍️', text: 'Shopping areas', query: `Shopping areas in ${city || 'the area'}` }
+        ];
+    }
+    // After hotel recommendations
+    else if (lower.includes('hotel') && lower.includes('price:')) {
+        const city = extractCityFromText(context);
+        suggestions = [
+            { icon: '🍽️', text: 'Restaurants nearby', query: `Best restaurants in ${city || 'the area'}` },
+            { icon: '🗺️', text: 'Things to do', query: `Things to do in ${city || 'the area'}` },
+            { icon: '🚌', text: 'Transport info', query: `How to get around ${city || 'the area'}` },
+            { icon: '☕', text: 'Coffee shops', query: `Coffee shops in ${city || 'the area'}` },
+            { icon: '🛍️', text: 'Shopping areas', query: `Shopping in ${city || 'the area'}` },
+            { icon: '🎫', text: 'Nightlife', query: `Things to do at night in ${city || 'the area'}` }
+        ];
+    }
+    // After restaurants
+    else if (lower.includes('restaurant') || lower.includes('food:')) {
+        const city = extractCityFromText(context);
+        suggestions = [
+            { icon: '🏨', text: 'Hotels nearby', query: `Hotels in ${city || 'the area'}` },
+            { icon: '🗺️', text: 'Create itinerary', query: `Plan a day in ${city || 'the area'}` },
+            { icon: '☕', text: 'Coffee & desserts', query: `Best coffee and dessert places in ${city || 'the area'}` },
+            { icon: '🚌', text: 'Transport', query: `Transport in ${city || 'the area'}` },
+            { icon: '🍔', text: 'Fast food', query: 'Fast food near me' },
+            { icon: '📸', text: 'Photo spots', query: `Photo spots in ${city || 'the area'}` }
+        ];
+    }
+    // Default - show general suggestions
+    else {
+        suggestions = [
+            { icon: '☀️', text: "What's the weather?", query: "What's the weather?" },
+            { icon: '✈️', text: 'Plan a trip', query: 'Plan a trip to Paris' },
+            { icon: '🛒', text: 'Shopping list', query: 'Add milk to my list' },
+            { icon: '⏰', text: 'Set reminder', query: 'Remind me to call mom' },
+            { icon: '🔑', text: 'Store location', query: 'My keys are on the counter' },
+            { icon: '❓', text: 'What can you do?', query: 'What can you do?' }
+        ];
+    }
+    
+    if (suggestions.length > 0) {
+        updateSuggestionBox(suggestions);
+    }
+}
+
+// Extract city name from text
+function extractCityFromText(text) {
+    // Try to find city name after common prepositions
+    const patterns = [
+        /in ([A-Z][a-z]+(?: [A-Z][a-z]+)*)/,
+        /to ([A-Z][a-z]+(?: [A-Z][a-z]+)*)/,
+        /at ([A-Z][a-z]+(?: [A-Z][a-z]+)*)/
+    ];
+    
+    for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match) return match[1];
+    }
+    
+    return '';
+}
+
 // Suggest context-aware quick replies based on last response
 function suggestQuickReplies(context) {
     const suggestions = [];
@@ -1210,6 +1297,9 @@ function suggestQuickReplies(context) {
     }
     
     showQuickReplies(suggestions);
+    
+    // Also update the main suggestion box with contextual suggestions
+    updateContextualSuggestions(context);
 }
 
 // Add share button after recommendations
@@ -1521,6 +1611,9 @@ async function handleNameCorrection(text) {
             await requestMicrophonePermission();
             loadUserData();
             checkReminders();
+            
+            // Show initial suggestions
+            showInitialSuggestions();
             
             // Don't force name input - just show friendly welcome
             const welcomeMsg = userName 
@@ -2051,13 +2144,18 @@ async function handleNameCorrection(text) {
                 console.log('Could not get GPS location:', error);
             }
             
-            // Find hotel names in the response (look for **Hotel Name**)
-            const hotelMatches = responseText.matchAll(/🏨\s+\*\*([^*]+)\*\*/g);
+            // Find hotel names - match both with and without bold markers
+            // Pattern: 🏨 **Hotel Name** OR 🏨 Hotel Name
+            const hotelMatches = responseText.matchAll(/🏨\s+(?:\*\*)?([^*\n]+?)(?:\*\*)?\s*(?:\[|$)/gm);
             let enhancedResponse = responseText;
             
+            const replacements = [];
             for (const match of hotelMatches) {
                 const hotelName = match[1].trim();
                 const fullMatch = match[0];
+                
+                // Skip if already has a link
+                if (fullMatch.includes('<a href')) continue;
                 
                 // Create Google Maps link
                 let mapsLink;
@@ -2069,9 +2167,15 @@ async function handleNameCorrection(text) {
                     mapsLink = `https://www.google.com/maps/search/${encodeURIComponent(hotelName + ' ' + cityName)}`;
                 }
                 
-                // Add directions button after hotel name
-                const replacement = `${fullMatch} [📍 <a href="${mapsLink}" target="_blank" style="color: #3B82F6; text-decoration: underline;">Get Directions</a>]`;
-                enhancedResponse = enhancedResponse.replace(fullMatch, replacement);
+                // Add directions link after hotel emoji and name
+                const replacement = fullMatch.replace(hotelName, `${hotelName} [📍 <a href="${mapsLink}" target="_blank" style="color: #3B82F6; text-decoration: underline;">Get Directions</a>]`);
+                
+                replacements.push({ old: fullMatch, new: replacement });
+            }
+            
+            // Apply all replacements
+            for (const { old, new: newText } of replacements) {
+                enhancedResponse = enhancedResponse.replace(old, newText);
             }
             
             return enhancedResponse;
@@ -2798,14 +2902,15 @@ Now answer about the local food culture and famous dishes!`;
                 const recommendPrompt = queryType === 'hotel' ? 
                 `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Answer this question about hotel recommendations: "${finalQuery}"
 
-**CRITICAL FORMATTING RULES:**
-- Use CLEAN bullet points with proper spacing
+CRITICAL FORMATTING RULES:
+- NO bold markers (**) anywhere in your response
+- Use CLEAN formatting with proper spacing
 - Each hotel gets its own section with clear line breaks
 - Include all required fields in this EXACT format:
 
 Provide 4-6 hotels in this EXACT format:
 
-🏨 **[Hotel Name]**
+🏨 [Hotel Name]
 📍 Location: [Area/Landmark]
 💰 Price: [Budget/Mid-range/Luxury]
 🍽️ Food: [Pure Veg / Non-Veg / Both]
@@ -2818,14 +2923,14 @@ ${finalQuery.includes('both veg and non-veg') ? 'IMPORTANT: Suggest a mix of hot
 
 Example:
 
-🏨 **Hotel Saradharam**
+🏨 Hotel Saradharam
 📍 Location: Near Bus Stand, City Center
 💰 Price: Mid-range
 🍽️ Food: Both
 ⭐ Specialty: Chettinad Chicken
 ✨ Why: Central location with traditional hospitality
 
-🏨 **Hotel Akshaya**
+🏨 Hotel Akshaya
 📍 Location: Temple Road
 💰 Price: Budget
 🍽️ Food: Both
@@ -2833,6 +2938,8 @@ Example:
 ✨ Why: Family-friendly with great value
 
 End with: "I hope you have a comfortable stay!"
+
+REMEMBER: NO bold markers (**) in your response!
 
 Now provide recommendations in this EXACT format!` :
 
