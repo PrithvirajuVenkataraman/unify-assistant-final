@@ -1450,11 +1450,11 @@ async function handleNameCorrection(text) {
             // First escape everything
             let safe = escapeHtml(text);
             
-            // Then restore ONLY safe <a> tags with specific attributes
-            // Pattern: [📍 <a href="URL" target="_blank" style="...">TEXT</a>]
+            // Then restore ONLY safe <a> tags
+            // The pattern after escaping: &lt;a href=&quot;URL&quot; target=&quot;_blank&quot; style=&quot;...&quot;&gt;TEXT&lt;/a&gt;
             safe = safe.replace(
-                /\[📍 &lt;a href=&quot;([^&quot;]+)&quot; target=&quot;_blank&quot; style=&quot;([^&quot;]+)&quot;&gt;([^&lt;]+)&lt;\/a&gt;\]/g,
-                '[📍 <a href="$1" target="_blank" style="$2">$3</a>]'
+                /&lt;a href=&quot;([^&]+)&quot; target=&quot;_blank&quot; style=&quot;([^&]+)&quot;&gt;([^&]+)&lt;\/a&gt;/g,
+                '<a href="$1" target="_blank" style="$2">$3</a>'
             );
             
             return safe;
