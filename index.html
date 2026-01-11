@@ -2597,7 +2597,20 @@ This gives you more freedom to explore at your own pace!`;
                      cleanText.toLowerCase().match(/what (do|can) you (do|offer|provide)/i)) {
                 const helpMsg = `Hey! I'm here to make your life easier. Here's what I can help with:
 
-🌤️ Weather - Ask about weather anywhere!
+✈️ Travel Planning - Complete trip assistance!
+  → "Plan a 3-day trip to Tokyo"
+  → "Create an itinerary for NYC"
+  → "Hotels in Chennai with non-veg"
+  → "Best restaurants in Paris"
+  → Dynamic suggestions (Biryani in India, Pizza in NYC, etc.)
+  → Share recommendations via SMS/WhatsApp
+
+🚌 Transport Info - Get around easily!
+  → "How to get around Chennai?"
+  → "Transport in Long Beach"
+  → Smart advice for big cities vs small towns
+
+🌤️ Weather - Check weather anywhere!
   → "What's the weather?"
   → "Will it rain in Seattle?"
   → "Temperature in Paris?"
@@ -2605,7 +2618,7 @@ This gives you more freedom to explore at your own pace!`;
 🛒 Shopping Lists - Add items with quantities!
   → "Add 2 pounds of chicken to my list"
   → "Add 1 gallon of milk"
-  → "Also add 3 apples"
+  → "Show my shopping list"
 
 ⏰ Reminders - Never forget again!
   → "Remind me to call mom at 5pm"
@@ -2615,12 +2628,15 @@ This gives you more freedom to explore at your own pace!`;
   → "My car keys are on the counter"
   → "Where are my keys?"
 
-✈️ Travel Planning - Plan your trips!
-  → "Plan a 3-day trip to Tokyo"
+💡 Pro Tips:
+  • Ask for local specialties (Biryani, Pizza, Pasta, etc.)
+  • Use "Share" button to send to your phone
+  • Get nightlife, photo spots, shopping suggestions
+  • I remember your name and preferences!
 
 Just talk to me naturally!`;
                 addChatMessage(helpMsg, false);
-                speak("I can help with weather, shopping lists with quantities, reminders, memory, and travel planning. Just talk to me naturally!");
+                speak("I can help with travel planning, transport, weather, shopping lists, reminders, memory, and much more. I even suggest local food based on where you're going!");
                 return; // STOP HERE - don't call AI
             }
             // Itinerary/Travel Planning - Check BEFORE AI fallback
