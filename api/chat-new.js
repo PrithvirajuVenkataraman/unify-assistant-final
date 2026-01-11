@@ -53,14 +53,13 @@ export default async function handler(req) {
         
         console.log('✅ API Key found');
         
-        // Use ACTUAL Gemini 3 and 2.5 models
+        // Use CORRECT model names from Google AI Studio
         const MODELS_TO_TRY = [
-            { name: 'gemini-3.0-flash', version: 'v1' },
-            { name: 'gemini-3.0-flash-preview', version: 'v1' },
-            { name: 'gemini-2.5-flash', version: 'v1' },
-            { name: 'gemini-2.5-pro', version: 'v1' },
-            { name: 'gemini-2.0-flash-exp', version: 'v1alpha' },
-            { name: 'gemini-exp-1206', version: 'v1alpha' }
+            { name: 'gemini-3-flash-preview', version: 'v1alpha' },
+            { name: 'gemini-3-pro-preview', version: 'v1alpha' },
+            { name: 'gemini-2.5-flash', version: 'v1beta' },
+            { name: 'gemini-2.5-pro', version: 'v1beta' },
+            { name: 'gemini-2.0-flash-exp', version: 'v1alpha' }
         ];
         
         const requestBody = {
