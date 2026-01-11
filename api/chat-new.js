@@ -58,7 +58,8 @@ export default async function handler(req) {
             'gemini-2.0-flash-exp',
             'gemini-exp-1206',
             'gemini-1.5-flash',
-            'gemini-1.5-flash-8b'
+            'gemini-1.5-flash-8b',
+            'gemini-1.5-pro'
         ];
         
         const requestBody = {
@@ -80,33 +81,39 @@ export default async function handler(req) {
         let lastError;
         let workingModel = null;
         
-        // Try each model
-        for (const MODEL of MODELS_TO_TRY) {
-            console.log(`🧪 Trying: ${MODEL}`);
-            
-            try {
-                response = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(requestBody)
-                    }
-                );
+        // Try v1 API first (supports experimental models), then v1beta
+        const API_VERSIONS = ['v1', 'v1beta'];
+        
+        for (const apiVersion of API_VERSIONS) {
+            for (const MODEL of MODELS_TO_TRY) {
+                console.log(`🧪 Trying: ${apiVersion}/models/${MODEL}`);
                 
-                if (response.ok) {
-                    workingModel = MODEL;
-                    console.log(`✅ SUCCESS with ${MODEL}`);
-                    break;
-                } else {
-                    const errorData = await response.json();
-                    lastError = errorData;
-                    console.log(`❌ ${MODEL} failed:`, errorData.error?.message);
+                try {
+                    response = await fetch(
+                        `https://generativelanguage.googleapis.com/${apiVersion}/models/${MODEL}:generateContent?key=${API_KEY}`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(requestBody)
+                        }
+                    );
+                    
+                    if (response.ok) {
+                        workingModel = MODEL;
+                        console.log(`✅ SUCCESS with ${apiVersion}/models/${MODEL}`);
+                        break;
+                    } else {
+                        const errorData = await response.json();
+                        lastError = errorData;
+                        console.log(`❌ ${MODEL} failed:`, errorData.error?.message);
+                    }
+                } catch (err) {
+                    console.log(`❌ ${MODEL} error:`, err.message);
+                    lastError = err;
                 }
-            } catch (err) {
-                console.log(`❌ ${MODEL} error:`, err.message);
-                lastError = err;
             }
+            
+            if (workingModel) break; // Found working model, stop trying
         }
         
         if (!workingModel) {
