@@ -57,56 +57,16 @@ export default async function handler(req) {
         
         console.log('✅ API Key found');
         
-        // Try multiple model names in order of preference
+        // Use known working Gemini models (try in order)
         const MODELS_TO_TRY = [
+            'gemini-1.5-flash-8b',
             'gemini-1.5-flash',
-            'gemini-1.5-flash-002',
-            'gemini-1.5-flash-001',
             'gemini-1.5-pro',
             'gemini-pro'
         ];
         
-        let MODEL = null;
-        let lastError = null;
-        
-        // Try each model until one works
-        for (const modelName of MODELS_TO_TRY) {
-            console.log(`🧪 Trying model: ${modelName}`);
-            
-            const testResponse = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${modelName}?key=${API_KEY}`
-            );
-            
-            if (testResponse.ok) {
-                const modelInfo = await testResponse.json();
-                const methods = modelInfo.supportedGenerationMethods || [];
-                
-                if (methods.includes('generateContent')) {
-                    MODEL = modelName;
-                    console.log(`✅ Found working model: ${MODEL}`);
-                    break;
-                } else {
-                    console.log(`⚠️ ${modelName} doesn't support generateContent`);
-                }
-            } else {
-                lastError = await testResponse.text();
-                console.log(`❌ ${modelName} not available`);
-            }
-        }
-        
-        if (!MODEL) {
-            console.error('❌ No working models found!');
-            return new Response(JSON.stringify({ 
-                response: "No available AI models found. Please check your API key or try again later.",
-                intent: 'error'
-            }), {
-                status: 200,
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
-            });
-        }
+        let MODEL = MODELS_TO_TRY[0]; // Start with first model
+        let modelIndex = 0;
         
         console.log('🤖 Using model:', MODEL);
         
@@ -127,20 +87,50 @@ export default async function handler(req) {
         
         console.log('📤 Calling Gemini API...');
         
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
+        let response;
+        let lastError;
+        
+        // Try each model until one works
+        for (let i = 0; i < MODELS_TO_TRY.length; i++) {
+            MODEL = MODELS_TO_TRY[i];
+            console.log(`🧪 Attempt ${i + 1}: Trying ${MODEL}`);
+            
+            try {
+                response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestBody)
+                    }
+                );
+                
+                if (response.ok) {
+                    console.log(`✅ Success with ${MODEL}`);
+                    break; // Found a working model!
+                } else {
+                    const errorData = await response.json();
+                    lastError = errorData;
+                    console.log(`❌ ${MODEL} failed:`, errorData.error?.message || 'Unknown error');
+                    
+                    // If not found, try next model
+                    if (i < MODELS_TO_TRY.length - 1) {
+                        continue;
+                    }
+                }
+            } catch (err) {
+                console.log(`❌ ${MODEL} error:`, err.message);
+                lastError = err;
+                if (i < MODELS_TO_TRY.length - 1) {
+                    continue;
+                }
             }
-        );
+        }
         
         console.log('📥 Gemini status:', response.status);
         
         if (!response.ok) {
-            const errorData = await response.json();
-            console.error('❌ API error:', JSON.stringify(errorData));
+            console.error('❌ All models failed. Last error:', JSON.stringify(lastError));
             
             if (response.status === 429) {
                 return new Response(JSON.stringify({ 
@@ -156,7 +146,7 @@ export default async function handler(req) {
             }
             
             return new Response(JSON.stringify({ 
-                response: `API Error: ${errorData.error?.message || 'Unknown'}`,
+                response: `API Error: ${lastError?.error?.message || 'All models failed'}`,
                 intent: 'error'
             }), {
                 status: 200,
