@@ -53,13 +53,14 @@ export default async function handler(req) {
         
         console.log('✅ API Key found');
         
-        // NEW MODELS - Will try each until one works
+        // Use ACTUAL Gemini 3 and 2.5 models
         const MODELS_TO_TRY = [
-            'gemini-2.0-flash-exp',
-            'gemini-exp-1206',
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-8b',
-            'gemini-1.5-pro'
+            { name: 'gemini-3.0-flash', version: 'v1' },
+            { name: 'gemini-3.0-flash-preview', version: 'v1' },
+            { name: 'gemini-2.5-flash', version: 'v1' },
+            { name: 'gemini-2.5-pro', version: 'v1' },
+            { name: 'gemini-2.0-flash-exp', version: 'v1alpha' },
+            { name: 'gemini-exp-1206', version: 'v1alpha' }
         ];
         
         const requestBody = {
@@ -80,40 +81,39 @@ export default async function handler(req) {
         let response;
         let lastError;
         let workingModel = null;
+        let workingVersion = null;
         
-        // Try v1 API first (supports experimental models), then v1beta
-        const API_VERSIONS = ['v1', 'v1beta'];
-        
-        for (const apiVersion of API_VERSIONS) {
-            for (const MODEL of MODELS_TO_TRY) {
-                console.log(`🧪 Trying: ${apiVersion}/models/${MODEL}`);
-                
-                try {
-                    response = await fetch(
-                        `https://generativelanguage.googleapis.com/${apiVersion}/models/${MODEL}:generateContent?key=${API_KEY}`,
-                        {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(requestBody)
-                        }
-                    );
-                    
-                    if (response.ok) {
-                        workingModel = MODEL;
-                        console.log(`✅ SUCCESS with ${apiVersion}/models/${MODEL}`);
-                        break;
-                    } else {
-                        const errorData = await response.json();
-                        lastError = errorData;
-                        console.log(`❌ ${MODEL} failed:`, errorData.error?.message);
-                    }
-                } catch (err) {
-                    console.log(`❌ ${MODEL} error:`, err.message);
-                    lastError = err;
-                }
-            }
+        // Try each model with its specific API version
+        for (const modelConfig of MODELS_TO_TRY) {
+            const MODEL = modelConfig.name;
+            const API_VERSION = modelConfig.version;
             
-            if (workingModel) break; // Found working model, stop trying
+            console.log(`🧪 Trying: ${API_VERSION}/models/${MODEL}`);
+            
+            try {
+                response = await fetch(
+                    `https://generativelanguage.googleapis.com/${API_VERSION}/models/${MODEL}:generateContent?key=${API_KEY}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestBody)
+                    }
+                );
+                
+                if (response.ok) {
+                    workingModel = MODEL;
+                    workingVersion = API_VERSION;
+                    console.log(`✅ SUCCESS with ${API_VERSION}/models/${MODEL}`);
+                    break;
+                } else {
+                    const errorData = await response.json();
+                    lastError = errorData;
+                    console.log(`❌ ${MODEL} failed:`, errorData.error?.message?.substring(0, 100));
+                }
+            } catch (err) {
+                console.log(`❌ ${MODEL} error:`, err.message);
+                lastError = err;
+            }
         }
         
         if (!workingModel) {
