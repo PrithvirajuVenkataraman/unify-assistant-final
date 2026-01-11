@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Unify Voice Assistant</title>
+    <title>Unify Personal Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js?key=jQZ2zpcE"></script>
     <style>
@@ -2363,6 +2363,7 @@ This gives you more freedom to explore at your own pace!`;
                 const creatorMsg = `I was created by Prithviraju Venkataraman, a developer passionate about AI and voice interfaces. I was built to help his family mainly with travel planning, weather updates, shopping lists, reminders, and more but later on thought, why not make this as a Vibe Coded Project! Cool isn't it? If you see any bugs or room for improvement, click on Request feature.`;
                 addChatMessage(creatorMsg, false);
                 speak("I was created by Prithviraju Venkataraman. This started as a family project and became a Vibe Coded Project!");
+                return; // STOP HERE - don't call AI
             }
             // Help/Features query
             else if (cleanText.toLowerCase().match(/what (can you do|are your features?|features?|do you have|is your feature)/i) ||
@@ -2394,6 +2395,7 @@ This gives you more freedom to explore at your own pace!`;
 Just talk to me naturally!`;
                 addChatMessage(helpMsg, false);
                 speak("I can help with weather, shopping lists with quantities, reminders, memory, and travel planning. Just talk to me naturally!");
+                return; // STOP HERE - don't call AI
             }
             // Itinerary/Travel Planning - Check BEFORE AI fallback
             else if (cleanText.toLowerCase().includes('trip') || 
