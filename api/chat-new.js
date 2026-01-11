@@ -1,10 +1,10 @@
-// Vercel Edge Function - Optimized for Free Tier with 4850 tokens
+// Vercel Edge Function - v2.0 - NEW MODELS
 export const config = {
   runtime: 'edge',
 };
 
 export default async function handler(req) {
-    console.log('🚀 Edge function called');
+    console.log('🚀 Edge function v2.0 called - NEW MODELS');
     
     // Handle CORS
     if (req.method === 'OPTIONS') {
@@ -19,7 +19,6 @@ export default async function handler(req) {
     }
     
     if (req.method !== 'POST') {
-        console.log('❌ Wrong method:', req.method);
         return new Response(JSON.stringify({ error: 'Method not allowed' }), {
             status: 405,
             headers: { 'Content-Type': 'application/json' }
@@ -27,27 +26,24 @@ export default async function handler(req) {
     }
     
     try {
-        const { message, systemPrompt, userName } = await req.json();
-        console.log('📨 Received message:', message?.substring(0, 100));
+        const { message, systemPrompt } = await req.json();
         
         if (!message) {
-            console.log('❌ No message provided');
             return new Response(JSON.stringify({ error: 'Message is required' }), {
                 status: 400,
                 headers: { 'Content-Type': 'application/json' }
             });
         }
         
-        // Get API key from environment variable
         const API_KEY = process.env.GEMINI_API_KEY;
         
         if (!API_KEY) {
-            console.error('❌ GEMINI_API_KEY not found in environment!');
+            console.error('❌ GEMINI_API_KEY not found!');
             return new Response(JSON.stringify({ 
-                error: 'API key not configured',
-                response: 'Configuration error. Please check Vercel environment variables.'
+                response: 'API key not configured. Check Vercel environment variables.',
+                intent: 'error'
             }), {
-                status: 500,
+                status: 200,
                 headers: { 
                     'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': '*'
@@ -57,19 +53,13 @@ export default async function handler(req) {
         
         console.log('✅ API Key found');
         
-        // Based on Google AI Studio - use experimental/preview models
+        // NEW MODELS - Will try each until one works
         const MODELS_TO_TRY = [
             'gemini-2.0-flash-exp',
             'gemini-exp-1206',
-            'gemini-2.0-flash-thinking-exp-1219',
             'gemini-1.5-flash',
-            'gemini-1.5-flash-8b',
-            'gemini-1.5-pro'
+            'gemini-1.5-flash-8b'
         ];
-        
-        let MODEL = MODELS_TO_TRY[0];
-        
-        console.log('🤖 Starting with model:', MODEL);
         
         const requestBody = {
             contents: [{
@@ -86,15 +76,13 @@ export default async function handler(req) {
             }
         };
         
-        console.log('📤 Calling Gemini API...');
-        
         let response;
         let lastError;
+        let workingModel = null;
         
-        // Try each model until one works
-        for (let i = 0; i < MODELS_TO_TRY.length; i++) {
-            MODEL = MODELS_TO_TRY[i];
-            console.log(`🧪 Attempt ${i + 1}: Trying ${MODEL}`);
+        // Try each model
+        for (const MODEL of MODELS_TO_TRY) {
+            console.log(`🧪 Trying: ${MODEL}`);
             
             try {
                 response = await fetch(
@@ -107,47 +95,24 @@ export default async function handler(req) {
                 );
                 
                 if (response.ok) {
-                    console.log(`✅ Success with ${MODEL}`);
-                    break; // Found a working model!
+                    workingModel = MODEL;
+                    console.log(`✅ SUCCESS with ${MODEL}`);
+                    break;
                 } else {
                     const errorData = await response.json();
                     lastError = errorData;
-                    console.log(`❌ ${MODEL} failed:`, errorData.error?.message || 'Unknown error');
-                    
-                    // If not found, try next model
-                    if (i < MODELS_TO_TRY.length - 1) {
-                        continue;
-                    }
+                    console.log(`❌ ${MODEL} failed:`, errorData.error?.message);
                 }
             } catch (err) {
                 console.log(`❌ ${MODEL} error:`, err.message);
                 lastError = err;
-                if (i < MODELS_TO_TRY.length - 1) {
-                    continue;
-                }
             }
         }
         
-        console.log('📥 Gemini status:', response.status);
-        
-        if (!response.ok) {
-            console.error('❌ All models failed. Last error:', JSON.stringify(lastError));
-            
-            if (response.status === 429) {
-                return new Response(JSON.stringify({ 
-                    response: "Too many requests. Wait a moment!",
-                    intent: 'error'
-                }), {
-                    status: 200,
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
-            }
-            
+        if (!workingModel) {
+            console.error('❌ ALL MODELS FAILED');
             return new Response(JSON.stringify({ 
-                response: `API Error: ${lastError?.error?.message || 'All models failed'}`,
+                response: `All models failed. Last error: ${lastError?.error?.message || 'Unknown'}`,
                 intent: 'error'
             }), {
                 status: 200,
@@ -159,15 +124,12 @@ export default async function handler(req) {
         }
         
         const data = await response.json();
-        console.log('✅ Got Gemini response');
         
         let aiText = '';
         if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
             aiText = data.candidates[0].content.parts[0].text;
-            console.log('✅ Text length:', aiText.length);
         } else {
-            console.error('❌ Invalid structure');
-            throw new Error('Invalid API response');
+            throw new Error('Invalid API response structure');
         }
         
         let parsedResponse;
@@ -192,7 +154,7 @@ export default async function handler(req) {
         console.error('❌ Error:', error);
         
         return new Response(JSON.stringify({ 
-            response: "Something went wrong! " + error.message,
+            response: "Error: " + error.message,
             intent: 'error'
         }), {
             status: 200,
