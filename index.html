@@ -1496,6 +1496,148 @@ async function handleNameCorrection(text) {
             }
         }
 
+        // ========== HOTEL RECOMMENDATIONS WITH MAPS ==========
+        let userLocation = null;
+
+        async function getUserLocation() {
+            if (userLocation) return userLocation;
+            
+            return new Promise((resolve) => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            userLocation = {
+                                lat: position.coords.latitude,
+                                lon: position.coords.longitude
+                            };
+                            resolve(userLocation);
+                        },
+                        () => resolve(null),
+                        { timeout: 5000, maximumAge: 300000 }
+                    );
+                } else {
+                    resolve(null);
+                }
+            });
+        }
+
+        async function displayHotelsWithMaps(aiText, query) {
+            const location = await getUserLocation();
+            
+            // Parse hotel data
+            const hotels = [];
+            const hotelBlocks = aiText.split('---').filter(b => b.trim());
+            
+            for (const block of hotelBlocks) {
+                const lines = block.trim().split('\n');
+                const hotel = {};
+                
+                for (const line of lines) {
+                    if (line.startsWith('HOTEL:')) hotel.name = line.substring(6).trim();
+                    else if (line.startsWith('DESC:')) hotel.desc = line.substring(5).trim();
+                    else if (line.startsWith('PRICE:')) hotel.price = line.substring(6).trim();
+                    else if (line.startsWith('FOOD:')) hotel.food = line.substring(5).trim();
+                    else if (line.startsWith('SPECIALTY:')) hotel.specialty = line.substring(10).trim();
+                    else if (line.startsWith('WHY:')) hotel.why = line.substring(4).trim();
+                }
+                
+                if (hotel.name) hotels.push(hotel);
+            }
+            
+            // Extract city from query
+            const cityMatch = query.match(/in\s+([^,?]+)/i);
+            const city = cityMatch ? cityMatch[1].trim() : '';
+            
+            // Build display message
+            let displayHtml = '<div class="space-y-4">';
+            
+            for (const hotel of hotels) {
+                const mapUrl = location 
+                    ? `https://www.google.com/maps/dir/${location.lat},${location.lon}/${encodeURIComponent(hotel.name + ' ' + city)}`
+                    : `https://www.google.com/maps/search/${encodeURIComponent(hotel.name + ' ' + city)}`;
+                
+                const priceColor = hotel.price === 'Budget' ? 'text-green-600' : 
+                                  hotel.price === 'Luxury' ? 'text-purple-600' : 'text-blue-600';
+                const foodIcon = hotel.food === 'Pure Veg' ? '🥬' : 
+                                hotel.food === 'Non-Veg' ? '🍖' : '🍽️';
+                
+                displayHtml += `
+                    <div class="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4 shadow-md">
+                        <div class="flex items-start justify-between mb-2">
+                            <h3 class="text-lg font-bold text-gray-900">${hotel.name}</h3>
+                            <a href="${mapUrl}" target="_blank" 
+                               class="flex items-center gap-1 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium transition-all">
+                                📍 Directions
+                            </a>
+                        </div>
+                        <p class="text-sm text-gray-700 mb-2">${hotel.desc}</p>
+                        <div class="flex flex-wrap gap-2 mb-2">
+                            <span class="px-2 py-1 ${priceColor} bg-white rounded-full text-xs font-semibold border">💰 ${hotel.price}</span>
+                            <span class="px-2 py-1 text-gray-700 bg-white rounded-full text-xs font-semibold border">${foodIcon} ${hotel.food}</span>
+                        </div>
+                        <p class="text-sm text-purple-700 font-medium mb-1">🍴 Try: ${hotel.specialty}</p>
+                        <p class="text-xs text-gray-600">✨ ${hotel.why}</p>
+                    </div>
+                `;
+            }
+            
+            displayHtml += '</div>';
+            
+            const chatContainer = document.getElementById('chat-container');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex justify-start items-start gap-2 fade-in';
+            messageDiv.innerHTML = `
+                <div class="max-w-2xl">
+                    ${displayHtml}
+                    <p class="text-sm text-gray-600 mt-3 text-center">I hope you have a comfortable stay!</p>
+                </div>
+            `;
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            speak("I've found some great hotels for you. Check out the recommendations!");
+        }
+
+        function showFastFoodBox() {
+            const chatContainer = document.getElementById('chat-container');
+            const boxDiv = document.createElement('div');
+            boxDiv.className = 'flex justify-center my-4 fade-in';
+            boxDiv.innerHTML = `
+                <a href="https://www.google.com/search?q=fast+food+near+me" target="_blank"
+                   class="flex items-center gap-2 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white px-6 py-3 rounded-xl shadow-lg transition-all transform hover:scale-105">
+                    <span class="text-2xl">🍔</span>
+                    <div class="text-left">
+                        <div class="font-bold">Quick Fast Food</div>
+                        <div class="text-xs opacity-90">Find nearby options →</div>
+                    </div>
+                </a>
+            `;
+            chatContainer.appendChild(boxDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function showTransportSuggestion() {
+            const chatContainer = document.getElementById('chat-container');
+            const suggestionDiv = document.createElement('div');
+            suggestionDiv.className = 'flex justify-center my-3 fade-in';
+            suggestionDiv.innerHTML = `
+                <button onclick="askAboutTransport()"
+                   class="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-5 py-2 rounded-full shadow-md transition-all text-sm font-medium">
+                    🚌 Need transport info?
+                </button>
+            `;
+            chatContainer.appendChild(suggestionDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function askAboutTransport() {
+            const msg = "Where do you need transport information for?";
+            addChatMessage(msg, false);
+            speak(msg);
+            window.waitingForTransportLocation = true;
+        }
+
         // ========== SPEECH RECOGNITION ==========
         
         let isProcessing = false; // Prevent duplicate processing
@@ -1651,6 +1793,177 @@ async function handleNameCorrection(text) {
         // Remove old recognition code - we only need one now
         recognition = continuousRecognition;
 
+        // ========== HOTEL/RESTAURANT ENHANCEMENT FUNCTIONS ==========
+        
+        // Add GPS directions to hotel recommendations
+        async function addGPSDirectionsToHotels(responseText, query) {
+            // Extract city/location from query
+            const locationMatch = query.match(/\b(in|at|near)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
+            const cityName = locationMatch ? locationMatch[2] : '';
+            
+            // Get user's current location
+            let userLat = null;
+            let userLon = null;
+            
+            try {
+                const position = await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        enableHighAccuracy: false,
+                        timeout: 5000,
+                        maximumAge: 300000
+                    });
+                });
+                userLat = position.coords.latitude;
+                userLon = position.coords.longitude;
+            } catch (error) {
+                console.log('Could not get GPS location:', error);
+            }
+            
+            // Find hotel names in the response (look for **Hotel Name**)
+            const hotelMatches = responseText.matchAll(/🏨\s+\*\*([^*]+)\*\*/g);
+            let enhancedResponse = responseText;
+            
+            for (const match of hotelMatches) {
+                const hotelName = match[1].trim();
+                const fullMatch = match[0];
+                
+                // Create Google Maps link
+                let mapsLink;
+                if (userLat && userLon) {
+                    // Directions from current location
+                    mapsLink = `https://www.google.com/maps/dir/${userLat},${userLon}/${encodeURIComponent(hotelName + ' ' + cityName)}`;
+                } else {
+                    // Just search for the hotel
+                    mapsLink = `https://www.google.com/maps/search/${encodeURIComponent(hotelName + ' ' + cityName)}`;
+                }
+                
+                // Add directions button after hotel name
+                const replacement = `${fullMatch} [📍 <a href="${mapsLink}" target="_blank" style="color: #3B82F6; text-decoration: underline;">Get Directions</a>]`;
+                enhancedResponse = enhancedResponse.replace(fullMatch, replacement);
+            }
+            
+            return enhancedResponse;
+        }
+        
+        // Add fast food suggestion box
+        function addFastFoodSuggestionBox() {
+            const chatContainer = document.getElementById('chat-container');
+            const fastFoodBox = document.createElement('div');
+            fastFoodBox.className = 'flex justify-center my-4 fade-in';
+            
+            const bgClass = darkMode ? 'bg-gray-800 border-gray-600' : 'bg-orange-50 border-orange-300';
+            const textClass = darkMode ? 'text-gray-200' : 'text-orange-900';
+            const buttonClass = darkMode ? 'bg-orange-600 hover:bg-orange-700' : 'bg-orange-500 hover:bg-orange-600';
+            
+            fastFoodBox.innerHTML = `
+                <div class="${bgClass} border-2 rounded-xl p-4 max-w-md shadow-md">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-2xl">🍔</span>
+                        <h3 class="font-bold ${textClass}">Quick Bite?</h3>
+                    </div>
+                    <p class="text-sm ${textClass} mb-3">Looking for fast food nearby?</p>
+                    <a href="https://www.google.com/search?q=fast+food+near+me" target="_blank" 
+                       class="${buttonClass} text-white px-4 py-2 rounded-lg text-sm font-medium inline-block transition-all hover:scale-105">
+                        🔍 Search Fast Food Near Me
+                    </a>
+                </div>
+            `;
+            
+            chatContainer.appendChild(fastFoodBox);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // Add transport suggestion button
+        function addTransportSuggestionButton(query) {
+            const locationMatch = query.match(/\b(in|at|near|to)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
+            const cityName = locationMatch ? locationMatch[2] : '';
+            
+            if (!cityName) return;
+            
+            const chatContainer = document.getElementById('chat-container');
+            const transportBox = document.createElement('div');
+            transportBox.className = 'flex justify-start my-3 fade-in';
+            
+            const bgClass = darkMode ? 'bg-gray-800' : 'bg-blue-50';
+            const textClass = darkMode ? 'text-gray-200' : 'text-blue-900';
+            const buttonClass = darkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600';
+            
+            transportBox.innerHTML = `
+                <button onclick="getTransportInfo('${cityName}')" 
+                        class="${bgClass} border-2 ${darkMode ? 'border-gray-600' : 'border-blue-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2">
+                    <span class="text-xl">🚌</span>
+                    <span class="text-sm font-medium ${textClass}">How to get around ${cityName}?</span>
+                </button>
+            `;
+            
+            chatContainer.appendChild(transportBox);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // Get transport information
+        async function getTransportInfo(cityName) {
+            // Metropolitan cities (big cities with extensive public transport)
+            const metroCities = [
+                'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad', 'pune', 'ahmedabad',
+                'new york', 'nyc', 'boston', 'los angeles', 'chicago', 'san francisco', 'london', 'paris', 'tokyo', 
+                'singapore', 'dubai', 'hong kong', 'sydney', 'melbourne', 'toronto', 'vancouver'
+            ];
+            
+            const isMetro = metroCities.some(city => cityName.toLowerCase().includes(city));
+            
+            showThinkingIndicator('🚌 Checking transport options...');
+            
+            if (isMetro) {
+                // Big city - ask AI for bus/metro timings
+                const transportPrompt = `Provide public transportation information for ${cityName}. Include:
+                
+🚇 **Metro/Subway:**
+- Main lines and routes
+- Operating hours
+- Average frequency
+                
+🚌 **Bus System:**
+- Main bus operators
+- Coverage areas
+- Typical timings
+                
+🚕 **Other Options:**
+- Taxi/Uber/Ola availability
+- Auto-rickshaw (if applicable)
+                
+Keep it concise and practical. Focus on what tourists need to know.`;
+                
+                const aiResponse = await askGeminiAI(transportPrompt);
+                hideThinkingIndicator();
+                addChatMessage(aiResponse.response, false);
+                speak("Here's the transport information!");
+            } else {
+                // Small town - provide standard advice
+                hideThinkingIndicator();
+                const smallTownMsg = `🚌 **Transport in ${cityName}:**
+
+${cityName} is a smaller town with limited public transportation options.
+
+**Local Transport:**
+- Local buses are available but schedules vary
+- Visit the bus stand for current timings and routes
+- Auto-rickshaws are readily available
+
+**💡 Best Advice:**
+If you're visiting ${cityName} for the first time, I'd recommend:
+- **Using your own car/vehicle** to save time and have flexibility
+- **Hiring a local taxi** for the day
+- **Auto-rickshaws** for short distances within town
+
+This gives you more freedom to explore at your own pace!`;
+                
+                addChatMessage(smallTownMsg, false);
+                speak(`${cityName} is a smaller town. I'd recommend using your own transport or hiring a local taxi for convenience.`);
+            }
+            
+            saveToHistory(`Transport in ${cityName}`, 'Provided transport information');
+        }
+        
         // ========== COMMAND PROCESSING ==========
         function processSuggestion(text) {
             document.getElementById('text-input').value = text;
@@ -2221,26 +2534,43 @@ Now answer about the local food culture and famous dishes!`;
                 const recommendPrompt = queryType === 'hotel' ? 
                 `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Answer this question about hotel recommendations: "${finalQuery}"
 
-Provide 4-6 specific hotel recommendations with these details for EACH:
-- Hotel name - Brief description
-- Price range (Budget/Mid-range/Luxury)
-- Restaurant type: [Pure Veg / Non-Veg / Both]
-- Local specialty dish if available
-- Why it's recommended
+**CRITICAL FORMATTING RULES:**
+- Use CLEAN bullet points with proper spacing
+- Each hotel gets its own section with clear line breaks
+- Include all required fields in this EXACT format:
 
-Keep it SHORT and COMPLETE.
+Provide 4-6 hotels in this EXACT format:
+
+🏨 **[Hotel Name]**
+📍 Location: [Area/Landmark]
+💰 Price: [Budget/Mid-range/Luxury]
+🍽️ Food: [Pure Veg / Non-Veg / Both]
+⭐ Specialty: [Local dish to try]
+✨ Why: [One sentence why it's recommended]
 
 ${finalQuery.includes('pure vegetarian') ? 'IMPORTANT: Only suggest hotels with PURE VEGETARIAN restaurants.' : ''}
 ${finalQuery.includes('non-vegetarian') ? 'IMPORTANT: Only suggest hotels with NON-VEGETARIAN restaurants or both options.' : ''}
 ${finalQuery.includes('both veg and non-veg') ? 'IMPORTANT: Suggest a mix of hotels with different restaurant types.' : ''}
 
-Example format:
-- The Saradharam - Near Nataraja Temple, traditional stay | Mid-range | Pure Veg restaurant | Try: Chettinad meals | Perfect for temple visits
-- Hotel Akshaya - Modern, family-friendly | Budget | Non-Veg restaurant | Try: Local biryani | Central location
+Example:
 
-End with: "I hope you have a comfortable stay! Let me know if you need restaurant suggestions."
+🏨 **Hotel Saradharam**
+📍 Location: Near Bus Stand, City Center
+💰 Price: Mid-range
+🍽️ Food: Both
+⭐ Specialty: Chettinad Chicken
+✨ Why: Central location with traditional hospitality
 
-Now answer completely!` :
+🏨 **Hotel Akshaya**
+📍 Location: Temple Road
+💰 Price: Budget
+🍽️ Food: Both
+⭐ Specialty: Local Mutton Biryani
+✨ Why: Family-friendly with great value
+
+End with: "I hope you have a comfortable stay!"
+
+Now provide recommendations in this EXACT format!` :
 
                 `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Answer this question about travel recommendations: "${finalQuery}"
 
@@ -2264,12 +2594,31 @@ Bon appétit! Let me know if you need more suggestions.
 
 Now answer the question completely!`;
                 
-                const aiResponse = await callAIWithTyping(recommendPrompt);
-                addChatMessage(aiResponse.response, false);
+                const aiResponse = await callAIWithTyping(recommendPrompt, queryType === 'hotel' ? '🏨 Finding hotels...' : '🍽️ Finding restaurants...');
+                
+                // Post-process hotel responses to add GPS directions
+                let finalResponse = aiResponse.response;
+                
+                if (queryType === 'hotel') {
+                    finalResponse = await addGPSDirectionsToHotels(aiResponse.response, text);
+                }
+                
+                addChatMessage(finalResponse, false);
                 speak(queryType === 'hotel' ? "I've got some hotel recommendations for you!" : "I've got some recommendations for you!");
                 
+                // Add fast food suggestion box after recommendations
+                if (queryType === 'hotel' || queryType === 'food') {
+                    addFastFoodSuggestionBox();
+                }
+                
+                // Add transport suggestion button
+                addTransportSuggestionButton(text);
+                
                 // Save to history
-                saveToHistory(finalQuery, aiResponse.response);
+                saveToHistory(finalQuery, finalResponse);
+                
+                // Show context-aware quick replies
+                suggestQuickReplies(finalResponse);
                 return; // EXIT - don't process further
             }
             // Food, Hotels, Transport recommendations - FLEXIBLE DETECTION
@@ -2319,24 +2668,37 @@ Now answer the question completely!`;
                 const recommendPrompt = queryType === 'hotel' ? 
                 `Answer this question about hotel recommendations: "${text}"
 
-Provide 4-6 specific hotel recommendations with these details for EACH:
-- Hotel name - Brief description
-- Price range (Budget/Mid-range/Luxury)
-- Restaurant type: [Pure Veg / Non-Veg / Both]
-- Local specialty dish if available
-- Why it's recommended
+Provide 4-5 specific hotel recommendations in this EXACT format (one per line):
 
-Keep it SHORT and COMPLETE.
+HOTEL: [Hotel Name]
+DESC: [One-line description]
+PRICE: [Budget/Mid-range/Luxury]
+FOOD: [Pure Veg/Non-Veg/Both]
+SPECIALTY: [Local dish to try]
+WHY: [Why recommended]
+---
 
 ${text.includes('vegetarian') || text.includes('pure veg') ? 'IMPORTANT: Only suggest hotels with PURE VEGETARIAN restaurants.' : ''}
 
-Example format:
-- The Saradharam - Near Nataraja Temple, traditional stay | Mid-range | Pure Veg restaurant | Try: Chettinad meals | Perfect for temple visits
-- Hotel Akshaya - Modern, family-friendly | Budget | Both Veg & Non-Veg | Try: Local biryani | Central location
+Example:
+HOTEL: Hotel Saradharam
+DESC: Well-known landmark near the bus stand with traditional hospitality
+PRICE: Mid-range
+FOOD: Both
+SPECIALTY: Chettinad Chicken
+WHY: Central location and consistent service
+---
+HOTEL: Hotel Akshaya
+DESC: Modern, clean, and very family-friendly
+PRICE: Budget
+FOOD: Both
+SPECIALTY: Local Mutton Biryani
+WHY: Comfortable rooms and great value
+---
 
-End with: "I hope you have a comfortable stay! Let me know if you need restaurant suggestions."
+End with: "I hope you have a comfortable stay!"
 
-Now answer completely!` :
+Now provide recommendations in this exact format!` :
 
                 `Answer this question about travel recommendations: "${text}"
 
@@ -2360,14 +2722,27 @@ Bon appétit! Let me know if you need more suggestions.
 
 Now answer the question completely!`;
                 
-                const aiResponse = await callAIWithTyping(recommendPrompt);
-                addChatMessage(aiResponse.response, false);
-                speak(queryType === 'hotel' ? "I've got some hotel recommendations for you!" : "I've got some recommendations for you!");
+                const aiResponse = await callAIWithTyping(recommendPrompt, queryType === 'hotel' ? '🏨 Finding hotels...' : '🍽️ Finding recommendations...');
+                
+                if (queryType === 'hotel') {
+                    // Parse and display hotels with map links
+                    await displayHotelsWithMaps(aiResponse.response, text);
+                } else {
+                    addChatMessage(aiResponse.response, false);
+                    speak("I've got some recommendations for you!");
+                }
                 
                 // Save to history
                 saveToHistory(text, aiResponse.response);
                 
-                // Show context-aware suggestions
+                // Show fast food box after hotel/restaurant recommendations
+                if (queryType === 'hotel' || queryType === 'food') {
+                    showFastFoodBox();
+                }
+                
+                // Show transport suggestion button
+                showTransportSuggestion();
+                return; // EXIT
                 suggestQuickReplies(aiResponse.response);
             }
             // Use AI for unclear queries and casual chat
