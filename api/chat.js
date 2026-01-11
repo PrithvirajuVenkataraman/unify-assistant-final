@@ -57,18 +57,19 @@ export default async function handler(req) {
         
         console.log('✅ API Key found');
         
-        // Use known working Gemini models (try in order)
+        // Based on Google AI Studio - use experimental/preview models
         const MODELS_TO_TRY = [
-            'gemini-1.5-flash-8b',
+            'gemini-2.0-flash-exp',
+            'gemini-exp-1206',
+            'gemini-2.0-flash-thinking-exp-1219',
             'gemini-1.5-flash',
-            'gemini-1.5-pro',
-            'gemini-pro'
+            'gemini-1.5-flash-8b',
+            'gemini-1.5-pro'
         ];
         
-        let MODEL = MODELS_TO_TRY[0]; // Start with first model
-        let modelIndex = 0;
+        let MODEL = MODELS_TO_TRY[0];
         
-        console.log('🤖 Using model:', MODEL);
+        console.log('🤖 Starting with model:', MODEL);
         
         const requestBody = {
             contents: [{
