@@ -1921,23 +1921,32 @@ async function handleNameCorrection(text) {
             
             if (isMetro) {
                 // Big city - ask AI for bus/metro timings
-                const transportPrompt = `Provide public transportation information for ${cityName}. Include:
-                
-🚇 **Metro/Subway:**
+                const transportPrompt = `Provide public transportation information for ${cityName}. 
+
+CRITICAL FORMATTING:
+- NO bold markers (**) anywhere
+- Use simple clean formatting
+- Organize by category with emoji headers
+
+Format:
+
+🚇 Metro/Subway:
 - Main lines and routes
 - Operating hours
 - Average frequency
                 
-🚌 **Bus System:**
+🚌 Bus System:
 - Main bus operators
 - Coverage areas
 - Typical timings
                 
-🚕 **Other Options:**
+🚕 Other Options:
 - Taxi/Uber/Ola availability
 - Auto-rickshaw (if applicable)
                 
-Keep it concise and practical. Focus on what tourists need to know.`;
+Keep it concise and practical. Focus on what tourists need to know.
+
+NO bold markers (**) in your response!`;
                 
                 const aiResponse = await askGeminiAI(transportPrompt);
                 hideThinkingIndicator();
@@ -1946,20 +1955,20 @@ Keep it concise and practical. Focus on what tourists need to know.`;
             } else {
                 // Small town - provide standard advice
                 hideThinkingIndicator();
-                const smallTownMsg = `🚌 **Transport in ${cityName}:**
+                const smallTownMsg = `🚌 Transport in ${cityName}:
 
 ${cityName} is a smaller town with limited public transportation options.
 
-**Local Transport:**
+Local Transport:
 - Local buses are available but schedules vary
 - Visit the bus stand for current timings and routes
 - Auto-rickshaws are readily available
 
-**💡 Best Advice:**
+💡 Best Advice:
 If you're visiting ${cityName} for the first time, I'd recommend:
-- **Using your own car/vehicle** to save time and have flexibility
-- **Hiring a local taxi** for the day
-- **Auto-rickshaws** for short distances within town
+- Using your own car/vehicle to save time and have flexibility
+- Hiring a local taxi for the day
+- Auto-rickshaws for short distances within town
 
 This gives you more freedom to explore at your own pace!`;
                 
@@ -2406,44 +2415,49 @@ DO NOT INCLUDE: Food recommendations, hotels, or restaurants (user can ask separ
 
 Keep it concise (5-7 main attractions per day maximum).
 
-Format with visual appeal:
-**Day [number] in [City]:**
+CRITICAL FORMATTING RULES:
+- NO bold markers (**) anywhere
+- NO clock emojis (🕐 🕑 🕒 etc) 
+- Times should be simple: 9:00am, 2:30pm, etc.
+- Use category emojis ONLY (🏛️ 🌳 🎨 🏖️ ⛰️ 🚶)
 
-🕐 **[Time]:** [Place/Activity]
+Format:
+Day [number] in [City]:
+
+9:00am: 🏛️ [Place/Activity]
    - What to see/do there
    - Duration and any entry info
    - Travel time to next spot
 
-Use emojis strategically:
-- 🕐 🕑 🕒 for times
-- 🏛️ for temples/historic sites
-- 🌳 for parks/nature
-- 🎨 for museums/art
-- 🏖️ for beaches
-- ⛰️ for mountains
-- 🚶 for walking areas
+Use emojis for categories only:
+- 🏛️ temples/historic sites
+- 🌳 parks/nature
+- 🎨 museums/art
+- 🏖️ beaches
+- ⛰️ mountains
+- 🚶 walking areas
 
 Example:
-**Day 1 in Chidambaram:**
+Day 1 in Chidambaram:
 
-🕐 **6:00am:** 🏛️ Thillai Nataraja Temple
+6:00am: 🏛️ Thillai Nataraja Temple
    - Witness morning rituals and explore stunning Dravidian architecture
    - Duration: 3 hours
    - Gold-roofed sanctum is a must-see
 
-🕒 **9:30am:** 🏛️ Thillai Kali Amman Temple  
+9:30am: 🏛️ Thillai Kali Amman Temple  
    - Significant temple dedicated to Goddess Kali
    - Duration: 1 hour
    - 🚗 Travel time: 15 mins
 
-🕙 **11:00am:** 🌳 Pichavaram Mangrove Forest
+11:00am: 🌳 Pichavaram Mangrove Forest
    - Rowboat through world's second-largest mangrove forest
    - Duration: 2.5 hours
    - 🚗 Travel time: 40 mins
 
 End with: "Enjoy exploring the beauty of [City]! Ask me about restaurants or hotels if you need recommendations."
 
-Now create the itinerary with beautiful formatting and emojis!`;
+Now create the itinerary with clean formatting - NO bold markers, NO clock emojis!`;
                 
                 const aiResponse = await callAIWithTyping(itineraryPrompt, '🗺️ Planning your itinerary...');
                 addChatMessage(aiResponse.response, false);
