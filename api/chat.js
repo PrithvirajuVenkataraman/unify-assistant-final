@@ -57,8 +57,57 @@ export default async function handler(req) {
         
         console.log('✅ API Key found');
         
-        // Use gemini-1.5-flash-latest (most stable)
-        const MODEL = 'gemini-1.5-flash-latest';
+        // Try multiple model names in order of preference
+        const MODELS_TO_TRY = [
+            'gemini-1.5-flash',
+            'gemini-1.5-flash-002',
+            'gemini-1.5-flash-001',
+            'gemini-1.5-pro',
+            'gemini-pro'
+        ];
+        
+        let MODEL = null;
+        let lastError = null;
+        
+        // Try each model until one works
+        for (const modelName of MODELS_TO_TRY) {
+            console.log(`🧪 Trying model: ${modelName}`);
+            
+            const testResponse = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${modelName}?key=${API_KEY}`
+            );
+            
+            if (testResponse.ok) {
+                const modelInfo = await testResponse.json();
+                const methods = modelInfo.supportedGenerationMethods || [];
+                
+                if (methods.includes('generateContent')) {
+                    MODEL = modelName;
+                    console.log(`✅ Found working model: ${MODEL}`);
+                    break;
+                } else {
+                    console.log(`⚠️ ${modelName} doesn't support generateContent`);
+                }
+            } else {
+                lastError = await testResponse.text();
+                console.log(`❌ ${modelName} not available`);
+            }
+        }
+        
+        if (!MODEL) {
+            console.error('❌ No working models found!');
+            return new Response(JSON.stringify({ 
+                response: "No available AI models found. Please check your API key or try again later.",
+                intent: 'error'
+            }), {
+                status: 200,
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                }
+            });
+        }
+        
         console.log('🤖 Using model:', MODEL);
         
         const requestBody = {
