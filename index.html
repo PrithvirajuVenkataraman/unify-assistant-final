@@ -1149,16 +1149,16 @@ function suggestQuickReplies(context) {
 // ========== GEMINI AI INTEGRATION ==========
 let conversationContext = [];
 
-// Wrapper for AI calls with loading indicator
-async function callAIWithTyping(message, loadingMessage = 'Thinking...', hideIndicator = true) {
-    // Only show loading overlay, no typing bubble
-    showLoading(loadingMessage);
+// Wrapper for AI calls with thinking indicator
+async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
+    // Show thinking indicator in chat
+    showThinkingIndicator(loadingMessage);
     try {
         const response = await askGeminiAI(message);
-        hideLoading();
+        hideThinkingIndicator();
         return response;
     } catch (error) {
-        hideLoading();
+        hideThinkingIndicator();
         showError('AI request failed. Please try again.');
         throw error;
     }
@@ -2126,12 +2126,13 @@ End with: "Enjoy exploring the beauty of [City]! Ask me about restaurants or hot
 
 Now create the itinerary with beautiful formatting and emojis!`;
                 
-                const aiResponse = await callAIWithTyping(itineraryPrompt);
+                const aiResponse = await callAIWithTyping(itineraryPrompt, '🗺️ Planning your itinerary...');
                 addChatMessage(aiResponse.response, false);
                 speak("I've created an itinerary for you. Check the chat for details!");
                 
                 // Save to history
                 saveToHistory(text, aiResponse.response);
+                return; // STOP HERE - don't fall through to casual chat
             }
             // Local Food Specialties / Culture Questions - BROAD DETECTION
             // Catches: "Food in X?", "What to eat in X?", "X cuisine?", "Famous dishes in X?"
@@ -3523,6 +3524,38 @@ function clearHistory() {
     }
 }
 
+// 3.5. THINKING INDICATOR
+function showThinkingIndicator(message = 'Thinking...') {
+    const chatContainer = document.getElementById('chat-container');
+    const thinkingDiv = document.createElement('div');
+    thinkingDiv.id = 'thinking-indicator';
+    thinkingDiv.className = 'flex justify-start items-start gap-2 fade-in';
+    
+    const bgClass = darkMode ? 'bg-gray-700' : 'bg-gray-100';
+    const textClass = darkMode ? 'text-gray-300' : 'text-gray-600';
+    
+    thinkingDiv.innerHTML = `
+        <div class="${bgClass} rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-2">
+            <div class="flex gap-1">
+                <div class="w-2 h-2 ${bgClass === 'bg-gray-700' ? 'bg-purple-400' : 'bg-purple-600'} rounded-full animate-bounce" style="animation-delay: 0s;"></div>
+                <div class="w-2 h-2 ${bgClass === 'bg-gray-700' ? 'bg-purple-400' : 'bg-purple-600'} rounded-full animate-bounce" style="animation-delay: 0.2s;"></div>
+                <div class="w-2 h-2 ${bgClass === 'bg-gray-700' ? 'bg-purple-400' : 'bg-purple-600'} rounded-full animate-bounce" style="animation-delay: 0.4s;"></div>
+            </div>
+            <p class="text-sm ${textClass}">${message}</p>
+        </div>
+    `;
+    
+    chatContainer.appendChild(thinkingDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function hideThinkingIndicator() {
+    const thinkingDiv = document.getElementById('thinking-indicator');
+    if (thinkingDiv) {
+        thinkingDiv.remove();
+    }
+}
+
 // 4. ERROR VISUAL FEEDBACK
 function showError(message) {
     const chatContainer = document.getElementById('chat-container');
@@ -3588,4 +3621,3 @@ loadHistory();
 </script>
 </body>
 </html>
-
