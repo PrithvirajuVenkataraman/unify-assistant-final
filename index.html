@@ -2420,7 +2420,8 @@ Now answer the question completely!`;
                     snowflake.style.fontSize = (Math.random() * 10 + 10) + 'px';
                     effectsDiv.appendChild(snowflake);
                 }
-                container.style.background = 'linear-gradient(to bottom, #B8C6DB, #F5F7FA)';
+                container.style.background = 'linear-gradient(to bottom, #5A6D82, #8B98A8)';
+                container.style.color = 'white';
             }
             // Rain (codes 51-67, 80-82)
             else if ((weatherCode >= 51 && weatherCode <= 67) || (weatherCode >= 80 && weatherCode <= 82)) {
@@ -2464,14 +2465,17 @@ Now answer the question completely!`;
                     const heatWave = document.createElement('div');
                     heatWave.className = 'heat-wave';
                     effectsDiv.appendChild(heatWave);
-                    container.style.background = 'linear-gradient(to bottom, #FDB750, #FFDAA5)';
+                    container.style.background = 'linear-gradient(to bottom, #F59E0B, #FBBF24)';
+                    container.style.color = 'white';
                 } else {
-                    container.style.background = 'linear-gradient(to bottom right, #87CEEB, #E0F6FF, #FFF8DC)';
+                    container.style.background = 'linear-gradient(to bottom right, #3B82F6, #60A5FA, #93C5FD)';
+                    container.style.color = 'white';
                 }
             }
             // Overcast/Cloudy
             else {
-                container.style.background = 'linear-gradient(to bottom, #A0AEC0, #CBD5E0)';
+                container.style.background = 'linear-gradient(to bottom, #6B7280, #9CA3AF)';
+                container.style.color = 'white';
             }
         }
 
