@@ -1,10 +1,11 @@
-// Vercel Edge Function - No timeout limits on free tier!
+// Vercel Edge Function - Optimized for Free Tier with 4850 tokens
 export const config = {
   runtime: 'edge',
 };
 
-// Gemini AI Handler - Optimized for Free Tier with 4850 tokens
 export default async function handler(req) {
+    console.log('🚀 Edge function called');
+    
     // Handle CORS
     if (req.method === 'OPTIONS') {
         return new Response(null, {
@@ -18,6 +19,7 @@ export default async function handler(req) {
     }
     
     if (req.method !== 'POST') {
+        console.log('❌ Wrong method:', req.method);
         return new Response(JSON.stringify({ error: 'Method not allowed' }), {
             status: 405,
             headers: { 'Content-Type': 'application/json' }
@@ -26,8 +28,10 @@ export default async function handler(req) {
     
     try {
         const { message, systemPrompt, userName } = await req.json();
+        console.log('📨 Received message:', message?.substring(0, 100));
         
         if (!message) {
+            console.log('❌ No message provided');
             return new Response(JSON.stringify({ error: 'Message is required' }), {
                 status: 400,
                 headers: { 'Content-Type': 'application/json' }
@@ -38,48 +42,60 @@ export default async function handler(req) {
         const API_KEY = process.env.GEMINI_API_KEY;
         
         if (!API_KEY) {
-            return new Response(JSON.stringify({ error: 'API key not configured' }), {
+            console.error('❌ GEMINI_API_KEY not found in environment!');
+            return new Response(JSON.stringify({ 
+                error: 'API key not configured',
+                response: 'Configuration error. Please check Vercel environment variables.'
+            }), {
                 status: 500,
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                }
             });
         }
         
-        // Use gemini-1.5-flash-latest (stable and fast)
-        const MODEL = 'gemini-1.5-flash-latest';
+        console.log('✅ API Key found');
         
-        // Call Gemini API
+        // Use gemini-1.5-flash-latest (most stable)
+        const MODEL = 'gemini-1.5-flash-latest';
+        console.log('🤖 Using model:', MODEL);
+        
+        const requestBody = {
+            contents: [{
+                parts: [{
+                    text: systemPrompt + '\n\nUser message: ' + message
+                }]
+            }],
+            generationConfig: {
+                temperature: 0.7,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: 4850,
+                candidateCount: 1
+            }
+        };
+        
+        console.log('📤 Calling Gemini API...');
+        
         const response = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`,
             {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: systemPrompt + '\n\nUser message: ' + message
-                        }]
-                    }],
-                    generationConfig: {
-                        temperature: 0.7,
-                        topK: 40,
-                        topP: 0.95,
-                        maxOutputTokens: 4850, // ✅ Your requested token count for valid responses
-                        candidateCount: 1
-                    }
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
             }
         );
         
+        console.log('📥 Gemini status:', response.status);
+        
         if (!response.ok) {
             const errorData = await response.json();
-            console.error('Gemini API error:', errorData);
+            console.error('❌ API error:', JSON.stringify(errorData));
             
-            // Better error handling for rate limits
             if (response.status === 429) {
                 return new Response(JSON.stringify({ 
-                    response: "I'm getting too many requests right now. Please wait a moment and try again!",
+                    response: "Too many requests. Wait a moment!",
                     intent: 'error'
                 }), {
                     status: 200,
@@ -91,9 +107,8 @@ export default async function handler(req) {
             }
             
             return new Response(JSON.stringify({ 
-                error: 'AI service error',
-                details: errorData,
-                response: "Sorry, I'm having trouble right now. Please try again!"
+                response: `API Error: ${errorData.error?.message || 'Unknown'}`,
+                intent: 'error'
             }), {
                 status: 200,
                 headers: { 
@@ -104,25 +119,24 @@ export default async function handler(req) {
         }
         
         const data = await response.json();
+        console.log('✅ Got Gemini response');
         
-        // Extract text from Gemini response
         let aiText = '';
-        if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+        if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
             aiText = data.candidates[0].content.parts[0].text;
+            console.log('✅ Text length:', aiText.length);
         } else {
-            throw new Error('Invalid response from Gemini API');
+            console.error('❌ Invalid structure');
+            throw new Error('Invalid API response');
         }
         
-        // Try to parse as JSON (for structured responses)
         let parsedResponse;
         try {
             parsedResponse = JSON.parse(aiText);
         } catch (e) {
-            // If not JSON, treat as plain text response
             parsedResponse = {
                 intent: 'casual_chat',
-                response: aiText,
-                action: null
+                response: aiText
             };
         }
         
@@ -135,11 +149,11 @@ export default async function handler(req) {
         });
         
     } catch (error) {
-        console.error('Server error:', error);
+        console.error('❌ Error:', error);
+        
         return new Response(JSON.stringify({ 
-            error: 'Internal server error',
-            message: error.message,
-            response: "Oops! Something went wrong. Please try again!"
+            response: "Something went wrong! " + error.message,
+            intent: 'error'
         }), {
             status: 200,
             headers: { 
