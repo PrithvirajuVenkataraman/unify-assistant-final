@@ -934,9 +934,9 @@
                     </div>
                 </button>
             </div>
-            <!-- Footer with disclaimer and request button -->
-            <div class="flex items-center justify-between mt-2 gap-2">
-                <p class="text-xs text-gray-500 flex-1">Unify can make mistakes. Check important info.</p>
+            <!-- Footer with disclaimer and request button - centered -->
+            <div class="flex items-center justify-center mt-2 gap-2">
+                <p class="text-xs text-gray-500">Unify can make mistakes. Check important info.</p>
                 <button 
                     onclick="openFeatureRequest()" 
                     class="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-xs font-medium flex items-center gap-1 transition-all hover:scale-105"
@@ -1146,9 +1146,17 @@ function updateContextualSuggestions(context) {
     const lower = context.toLowerCase();
     let suggestions = [];
     
-    // After itinerary
-    if (lower.includes('itinerary') || lower.includes('day 1') || lower.includes('enjoy exploring')) {
+    console.log('🔄 Updating suggestions for context:', lower.substring(0, 100));
+    
+    // After itinerary - broader detection
+    if (lower.includes('itinerary') || 
+        lower.includes('day 1') || 
+        lower.includes('day 2') ||
+        lower.includes('enjoy exploring') || 
+        lower.includes('things to do') ||
+        (lower.includes('duration') && lower.includes('hours'))) {
         const city = extractCityFromText(context);
+        console.log('✅ Detected itinerary, city:', city);
         suggestions = [
             { icon: '🏨', text: `Hotels in ${city || 'this area'}`, query: `Hotels in ${city || 'the area'}` },
             { icon: '🍽️', text: 'Best restaurants', query: `Best restaurants in ${city || 'the area'}` },
@@ -1195,7 +1203,10 @@ function updateContextualSuggestions(context) {
     }
     
     if (suggestions.length > 0) {
+        console.log('📝 Updating suggestion box with', suggestions.length, 'suggestions');
         updateSuggestionBox(suggestions);
+    } else {
+        console.log('⚠️ No suggestions matched, keeping defaults');
     }
 }
 
