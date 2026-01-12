@@ -1,205 +1,173 @@
-// ========================================
-// Unify Voice Assistant - Secure API Endpoint
-// File: api/chat.js (Place this in api/ folder)
-// Vercel Serverless Function
-// ========================================
+// Vercel Edge Function - v2.0 - NEW MODELS
+export const config = {
+  runtime: 'edge',
+};
 
-export default async function handler(req, res) {
-    // ========== CORS Configuration ==========
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+export default async function handler(req) {
+    console.log('🚀 Edge function v2.0 called - NEW MODELS');
     
-    // Handle preflight OPTIONS request
+    // Handle CORS
     if (req.method === 'OPTIONS') {
-        return res.status(200).end();
+        return new Response(null, {
+            status: 200,
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+            }
+        });
     }
     
-    // ========== Method Validation ==========
     if (req.method !== 'POST') {
-        return res.status(405).json({ 
-            error: 'Method not allowed',
-            message: 'Only POST requests are accepted'
+        return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+            status: 405,
+            headers: { 'Content-Type': 'application/json' }
         });
     }
     
     try {
-        // ========== Request Validation ==========
-        const { message } = req.body;
+        const { message, systemPrompt } = await req.json();
         
         if (!message) {
-            return res.status(400).json({ 
-                error: 'Bad request',
-                message: 'Message parameter is required'
+            return new Response(JSON.stringify({ error: 'Message is required' }), {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' }
             });
         }
         
-        if (typeof message !== 'string') {
-            return res.status(400).json({ 
-                error: 'Bad request',
-                message: 'Message must be a string'
+        const API_KEY = process.env.GEMINI_API_KEY;
+        
+        if (!API_KEY) {
+            console.error('❌ GEMINI_API_KEY not found!');
+            return new Response(JSON.stringify({ 
+                response: 'API key not configured. Check Vercel environment variables.',
+                intent: 'error'
+            }), {
+                status: 200,
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                }
             });
         }
         
-        if (message.trim().length === 0) {
-            return res.status(400).json({ 
-                error: 'Bad request',
-                message: 'Message cannot be empty'
+        console.log('✅ API Key found');
+        
+        // Use CORRECT model names from Google AI Studio
+        const MODELS_TO_TRY = [
+            { name: 'gemini-3-flash-preview', version: 'v1alpha' },
+            { name: 'gemini-3-pro-preview', version: 'v1alpha' },
+            { name: 'gemini-2.5-flash', version: 'v1beta' },
+            { name: 'gemini-2.5-pro', version: 'v1beta' },
+            { name: 'gemini-2.0-flash-exp', version: 'v1alpha' }
+        ];
+        
+        const requestBody = {
+            contents: [{
+                parts: [{
+                    text: systemPrompt + '\n\nUser message: ' + message
+                }]
+            }],
+            generationConfig: {
+                temperature: 0.7,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: 4850,
+                candidateCount: 1
+            }
+        };
+        
+        let response;
+        let lastError;
+        let workingModel = null;
+        let workingVersion = null;
+        
+        // Try each model with its specific API version
+        for (const modelConfig of MODELS_TO_TRY) {
+            const MODEL = modelConfig.name;
+            const API_VERSION = modelConfig.version;
+            
+            console.log(`🧪 Trying: ${API_VERSION}/models/${MODEL}`);
+            
+            try {
+                response = await fetch(
+                    `https://generativelanguage.googleapis.com/${API_VERSION}/models/${MODEL}:generateContent?key=${API_KEY}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestBody)
+                    }
+                );
+                
+                if (response.ok) {
+                    workingModel = MODEL;
+                    workingVersion = API_VERSION;
+                    console.log(`✅ SUCCESS with ${API_VERSION}/models/${MODEL}`);
+                    break;
+                } else {
+                    const errorData = await response.json();
+                    lastError = errorData;
+                    console.log(`❌ ${MODEL} failed:`, errorData.error?.message?.substring(0, 100));
+                }
+            } catch (err) {
+                console.log(`❌ ${MODEL} error:`, err.message);
+                lastError = err;
+            }
+        }
+        
+        if (!workingModel) {
+            console.error('❌ ALL MODELS FAILED');
+            return new Response(JSON.stringify({ 
+                response: `All models failed. Last error: ${lastError?.error?.message || 'Unknown'}`,
+                intent: 'error'
+            }), {
+                status: 200,
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                }
             });
         }
         
-        if (message.length > 10000) {
-            return res.status(400).json({ 
-                error: 'Bad request',
-                message: 'Message too long (max 10000 characters)'
-            });
+        const data = await response.json();
+        
+        let aiText = '';
+        if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+            aiText = data.candidates[0].content.parts[0].text;
+        } else {
+            throw new Error('Invalid API response structure');
         }
         
-        // ========== Environment Variable ==========
-        const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-        
-        if (!GEMINI_API_KEY) {
-            console.error('❌ GEMINI_API_KEY environment variable not set');
-            return res.status(500).json({ 
-                error: 'Configuration error',
-                message: 'API key not configured. Please add GEMINI_API_KEY to Vercel environment variables.'
-            });
+        let parsedResponse;
+        try {
+            parsedResponse = JSON.parse(aiText);
+        } catch (e) {
+            parsedResponse = {
+                intent: 'casual_chat',
+                response: aiText
+            };
         }
         
-        // ========== Call Gemini API ==========
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-        
-        const geminiResponse = await fetch(geminiUrl, {
-            method: 'POST',
+        return new Response(JSON.stringify(parsedResponse), {
+            status: 200,
             headers: {
                 'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{
-                        text: message
-                    }]
-                }],
-                generationConfig: {
-                    temperature: 0.7,
-                    topK: 40,
-                    topP: 0.95,
-                    maxOutputTokens: 2048,
-                    stopSequences: []
-                },
-                safetySettings: [
-                    {
-                        category: "HARM_CATEGORY_HARASSMENT",
-                        threshold: "BLOCK_MEDIUM_AND_ABOVE"
-                    },
-                    {
-                        category: "HARM_CATEGORY_HATE_SPEECH",
-                        threshold: "BLOCK_MEDIUM_AND_ABOVE"
-                    },
-                    {
-                        category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        threshold: "BLOCK_MEDIUM_AND_ABOVE"
-                    },
-                    {
-                        category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-                        threshold: "BLOCK_MEDIUM_AND_ABOVE"
-                    }
-                ]
-            })
-        });
-        
-        // ========== Handle Gemini Errors ==========
-        if (!geminiResponse.ok) {
-            const errorText = await geminiResponse.text();
-            console.error('❌ Gemini API error:', {
-                status: geminiResponse.status,
-                statusText: geminiResponse.statusText,
-                error: errorText
-            });
-            
-            // Check for specific errors
-            if (geminiResponse.status === 429) {
-                return res.status(429).json({
-                    error: 'Rate limit exceeded',
-                    message: 'Too many requests. Please try again in a moment.'
-                });
+                'Access-Control-Allow-Origin': '*'
             }
-            
-            if (geminiResponse.status === 401 || geminiResponse.status === 403) {
-                return res.status(500).json({
-                    error: 'API authentication error',
-                    message: 'Invalid API key. Please check your configuration.'
-                });
-            }
-            
-            return res.status(geminiResponse.status).json({ 
-                error: 'AI service error',
-                message: 'Failed to get response from AI service',
-                details: geminiResponse.statusText
-            });
-        }
-        
-        // ========== Parse Response ==========
-        const data = await geminiResponse.json();
-        
-        // Extract response text
-        let responseText = '';
-        
-        if (data.candidates && data.candidates.length > 0) {
-            const candidate = data.candidates[0];
-            
-            // Check for content filtering
-            if (candidate.finishReason === 'SAFETY') {
-                return res.status(400).json({
-                    error: 'Content filtered',
-                    message: 'Response was filtered due to safety settings. Please try rephrasing your question.'
-                });
-            }
-            
-            if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
-                responseText = candidate.content.parts[0].text;
-            }
-        }
-        
-        // Validate response
-        if (!responseText || responseText.trim().length === 0) {
-            console.error('❌ Empty response from Gemini:', JSON.stringify(data, null, 2));
-            return res.status(500).json({ 
-                error: 'Empty response',
-                message: 'AI returned an empty response. Please try again.'
-            });
-        }
-        
-        // ========== Success Response ==========
-        return res.status(200).json({
-            response: responseText.trim(),
-            model: 'gemini-1.5-flash',
-            timestamp: new Date().toISOString()
         });
         
     } catch (error) {
-        // ========== Error Handling ==========
-        console.error('❌ Server error:', {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-        });
+        console.error('❌ Error:', error);
         
-        // Check for network errors
-        if (error.name === 'FetchError' || error.message.includes('fetch')) {
-            return res.status(503).json({
-                error: 'Service unavailable',
-                message: 'Unable to reach AI service. Please try again later.'
-            });
-        }
-        
-        // Generic error response
-        return res.status(500).json({ 
-            error: 'Internal server error',
-            message: 'An unexpected error occurred. Please try again.',
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        return new Response(JSON.stringify({ 
+            response: "Error: " + error.message,
+            intent: 'error'
+        }), {
+            status: 200,
+            headers: { 
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            }
         });
     }
 }
-
-// ========================================
