@@ -2247,7 +2247,7 @@ async function handleNameCorrection(text) {
                 }
                 
                 // Add directions link after hotel emoji and name
-                const replacement = fullMatch.replace(hotelName, `${hotelName} [📍 <a href="${mapsLink}" target="_blank" style="color: #3B82F6; text-decoration: underline;">Get Directions</a>]`);
+                const replacement = fullMatch.replace(hotelName, `${hotelName} [📍 <a href="${mapsLink}" target="_blank" style="color: #3B82F6; text-decoration: underline;">Get Directions</a> ]`);
                 
                 replacements.push({ old: fullMatch, new: replacement });
             }
@@ -4574,3 +4574,4 @@ loadHistory();
 </script>
 </body>
 </html>
+
