@@ -451,6 +451,17 @@
             overflow-y: auto;
         }
         
+        /* Center on mobile */
+        @media (max-width: 640px) {
+            .shopping-receipt {
+                left: 50%;
+                right: auto;
+                transform: translateX(-50%);
+                width: calc(100% - 40px);
+                max-width: 320px;
+            }
+        }
+        
         .shopping-receipt.dark-mode {
             background: #1F2937;
             color: #F3F4F6;
@@ -1281,14 +1292,6 @@ function suggestQuickReplies(context) {
             { icon: '🗺️', text: 'Things to do' }
         );
     }
-    // After shopping list
-    else if (context.includes('shopping') || context.includes('Added')) {
-        suggestions.push(
-            { icon: '📝', text: 'Show shopping list' },
-            { icon: '🛒', text: 'Add more items' },
-            { icon: '🗑️', text: 'Clear list' }
-        );
-    }
     // Default suggestions
     else {
         suggestions.push(
@@ -1442,14 +1445,6 @@ function suggestQuickReplies(context) {
             { icon: '🏨', text: 'Hotels nearby' },
             { icon: '🍽️', text: 'Best restaurants' },
             { icon: '🗺️', text: 'Things to do' }
-        );
-    }
-    // After shopping list
-    else if (context.includes('shopping') || context.includes('Added')) {
-        suggestions.push(
-            { icon: '📝', text: 'Show shopping list' },
-            { icon: '🛒', text: 'Add more items' },
-            { icon: '🗑️', text: 'Clear list' }
         );
     }
     // Default suggestions
