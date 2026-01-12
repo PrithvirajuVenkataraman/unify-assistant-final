@@ -938,23 +938,11 @@
         </div>
     </div>
 
-    <!-- Fixed Buttons - Right Side Stack -->
-    <!-- History Button (Higher) -->
-    <button 
-        onclick="showHistoryPanel()" 
-        class="fixed bottom-16 right-6 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg transition-all text-sm font-medium flex items-center gap-2 z-50 hover:scale-105"
-        title="View Conversation History">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-        </svg>
-        History
-    </button>
-    
-    <!-- Feature Request Button (Lower) -->
+    <!-- Fixed Buttons - Right Side -->
+    <!-- Feature Request Button - Adjusted for mobile -->
     <button 
         onclick="openFeatureRequest()" 
-        class="fixed bottom-6 right-6 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg transition-all text-sm font-medium flex items-center gap-2 z-50 hover:scale-105"
+        class="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg transition-all text-sm font-medium flex items-center gap-2 z-50 hover:scale-105"
         title="Request a Feature">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 20h9"></path>
@@ -4323,6 +4311,8 @@ function searchHistory(query) {
     return results;
 }
 
+/*
+// HISTORY PANEL - COMMENTED OUT (can be restored if needed)
 function showHistoryPanel() {
     // Create history panel HTML
     const panel = document.createElement('div');
@@ -4403,6 +4393,7 @@ function clearHistory() {
         alert('History cleared!');
     }
 }
+*/
 
 // 3.5. THINKING INDICATOR
 function showThinkingIndicator(message = 'Thinking...') {
