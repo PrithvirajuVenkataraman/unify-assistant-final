@@ -758,6 +758,9 @@
     
     <!-- Shopping List Receipt -->
     <div id="shopping-receipt" class="shopping-receipt hidden">
+        <!-- Close button - absolute positioned -->
+        <button onclick="closeShoppingList()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-3xl leading-none z-10" title="Close" style="background: none; border: none; cursor: pointer;">×</button>
+        
         <div class="receipt-header">
             <div class="receipt-store">🛒 UNIFY MARKET</div>
             <div class="receipt-title">SHOPPING LIST</div>
@@ -1611,8 +1614,18 @@ async function handleNameCorrection(text) {
             loadUserData();
             checkReminders();
             
-            // Show initial suggestions
-            showInitialSuggestions();
+            // Show initial suggestions only on first visit
+            const hasVisited = localStorage.getItem('unify_has_visited');
+            if (!hasVisited) {
+                showInitialSuggestions();
+                // Don't mark as visited yet - wait for first interaction
+            } else {
+                // Hide the suggestions box for returning users
+                const suggestionsBox = document.getElementById('initial-suggestions');
+                if (suggestionsBox) {
+                    suggestionsBox.style.display = 'none';
+                }
+            }
             
             // Don't force name input - just show friendly welcome
             const welcomeMsg = userName 
@@ -2535,6 +2548,15 @@ This gives you more freedom to explore at your own pace!`;
 
         async function processCommand(text) {
             const lower = text.toLowerCase();
+            
+            // Mark as visited after first interaction and hide suggestions box
+            if (!localStorage.getItem('unify_has_visited')) {
+                localStorage.setItem('unify_has_visited', 'true');
+                const suggestionsBox = document.getElementById('initial-suggestions');
+                if (suggestionsBox) {
+                    suggestionsBox.style.display = 'none';
+                }
+            }
             
             // Auto-close cards when topic changes
             const isWeatherQuery = lower.includes('weather') || lower.includes('temperature') || 
@@ -3937,6 +3959,11 @@ Now answer the question completely!`;
             }
         }
 
+        function closeShoppingList() {
+            const receipt = document.getElementById('shopping-receipt');
+            receipt.classList.add('hidden');
+        }
+        
         function clearShoppingList() {
             if (shoppingList.length === 0) {
                 const msg = "Your shopping list is already empty.";
