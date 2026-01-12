@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Unify Voice Assistant</title>
+    <title>JARVIS - Just A Rather Very Intelligent System</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js?key=jQZ2zpcE"></script>
     <style>
@@ -18,10 +18,370 @@
             animation: waveform 0.8s ease-in-out infinite;
         }
         body.dark {
-            background: #000 !important;
+            background: linear-gradient(135deg, #000000 0%, #0a1929 50%, #001f3f 100%) !important;
         }
         body.light {
-            background: linear-gradient(to bottom right, #fce7f3, #e9d5ff, #c7d2fe) !important;
+            background: linear-gradient(to bottom right, #0a1929, #1e3a5f, #0d47a1) !important;
+        }
+        
+        /* ========== JARVIS INTRO ANIMATION ========== */
+        #jarvis-intro {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at center, #0a1929 0%, #001529 50%, #000000 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out;
+        }
+        
+        #jarvis-intro.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        /* Advanced Arc Reactor Animation - Red/Blue Mix */
+        .arc-reactor {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin-bottom: 40px;
+        }
+        
+        /* Central core with red-blue gradient glow */
+        .arc-core {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            background: radial-gradient(circle, 
+                #ffffff 0%, 
+                #00ffff 20%,
+                #0088cc 40%, 
+                #ff0066 60%,
+                #004466 100%);
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 
+                -20px 0 30px rgba(255, 0, 100, 0.6),
+                20px 0 30px rgba(0, 217, 255, 0.6),
+                0 0 50px rgba(0, 217, 255, 0.4),
+                inset 0 0 30px rgba(255, 255, 255, 0.5);
+            animation: biColorPulse 4s ease-in-out infinite;
+        }
+        
+        /* Red glow overlay on left */
+        .arc-core::before {
+            content: '';
+            position: absolute;
+            width: 40px;
+            height: 80px;
+            left: 0;
+            top: 0;
+            background: radial-gradient(circle at left, rgba(255, 0, 100, 0.8) 0%, transparent 70%);
+            border-radius: 50% 0 0 50%;
+            animation: redGlow 4s ease-in-out infinite;
+        }
+        
+        /* Blue glow overlay on right */
+        .arc-core::after {
+            content: '';
+            position: absolute;
+            width: 40px;
+            height: 80px;
+            right: 0;
+            top: 0;
+            background: radial-gradient(circle at right, rgba(0, 217, 255, 0.8) 0%, transparent 70%);
+            border-radius: 0 50% 50% 0;
+            animation: blueGlow 4s ease-in-out infinite;
+        }
+        
+        /* Inner ring - fastest */
+        .arc-ring {
+            position: absolute;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .arc-ring:nth-child(2) {
+            width: 120px;
+            height: 120px;
+            border: 2px solid rgba(0, 217, 255, 0.6);
+            box-shadow: 
+                -5px 0 15px rgba(255, 0, 100, 0.4),
+                5px 0 15px rgba(0, 217, 255, 0.4),
+                inset 0 0 15px rgba(0, 217, 255, 0.2);
+            animation: rotate 4s linear infinite, ringColorShift 4s ease-in-out infinite;
+        }
+        
+        /* Tech circle patterns */
+        .arc-ring:nth-child(2)::before {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #00ffff;
+            border-radius: 50%;
+            top: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 0 10px #00ffff;
+            animation: dotColorShift 4s ease-in-out infinite;
+        }
+        
+        /* Middle ring with segments */
+        .arc-ring:nth-child(3) {
+            width: 180px;
+            height: 180px;
+            border: 2px dashed rgba(0, 217, 255, 0.4);
+            border-radius: 50%;
+            animation: rotate 6s linear infinite reverse, ringColorShift 4s ease-in-out infinite 0.5s;
+            box-shadow: 
+                -8px 0 10px rgba(255, 0, 100, 0.3),
+                8px 0 10px rgba(0, 217, 255, 0.3);
+        }
+        
+        /* Outer ring - slowest with tech pattern */
+        .arc-ring:nth-child(4) {
+            width: 240px;
+            height: 240px;
+            border: 1px solid rgba(0, 217, 255, 0.3);
+            animation: rotate 8s linear infinite, ringColorShift 4s ease-in-out infinite 1s;
+            box-shadow: 
+                -10px 0 20px rgba(255, 0, 100, 0.2),
+                10px 0 20px rgba(0, 217, 255, 0.2);
+        }
+        
+        .arc-ring:nth-child(4)::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 1px dotted rgba(0, 217, 255, 0.2);
+            animation: rotate 10s linear infinite reverse;
+        }
+        
+        /* Outer tech ring with segments */
+        .arc-ring:nth-child(5) {
+            width: 280px;
+            height: 280px;
+            border: 1px solid rgba(0, 136, 204, 0.2);
+            background: repeating-conic-gradient(
+                from 0deg,
+                transparent 0deg 5deg,
+                rgba(0, 217, 255, 0.1) 5deg 6deg
+            );
+            animation: rotate 12s linear infinite, outerRingGlow 4s ease-in-out infinite;
+        }
+        
+        /* Scanning lines with color shift */
+        .arc-line {
+            position: absolute;
+            width: 2px;
+            height: 100px;
+            background: linear-gradient(to bottom, #00ffff, transparent);
+            top: 50%;
+            left: 50%;
+            transform-origin: center -50px;
+            animation: scanLine 3s linear infinite, scanColorShift 4s ease-in-out infinite;
+            box-shadow: 0 0 10px #00ffff;
+        }
+        
+        .arc-line:nth-child(7) {
+            animation: scanLine 3s linear infinite 0.5s, scanColorShift 4s ease-in-out infinite 0.5s;
+            opacity: 0.6;
+        }
+        
+        /* Red-Blue Alternating Glow Animation */
+        @keyframes biColorPulse {
+            0%, 100% { 
+                transform: translate(-50%, -50%) scale(1);
+                box-shadow: 
+                    -20px 0 30px rgba(255, 0, 100, 0.6),
+                    20px 0 30px rgba(0, 217, 255, 0.6),
+                    0 0 50px rgba(0, 217, 255, 0.4),
+                    inset 0 0 30px rgba(255, 255, 255, 0.5);
+            }
+            25% { 
+                transform: translate(-50%, -50%) scale(1.08);
+                box-shadow: 
+                    -30px 0 50px rgba(255, 0, 100, 0.9),
+                    10px 0 20px rgba(0, 217, 255, 0.3),
+                    0 0 60px rgba(255, 0, 100, 0.5),
+                    inset 0 0 40px rgba(255, 100, 150, 0.6);
+            }
+            50% { 
+                transform: translate(-50%, -50%) scale(1.15);
+                box-shadow: 
+                    0 0 80px rgba(255, 0, 100, 0.4),
+                    0 0 80px rgba(0, 217, 255, 0.4),
+                    0 0 100px rgba(255, 255, 255, 0.6),
+                    inset 0 0 50px rgba(255, 255, 255, 0.8);
+            }
+            75% { 
+                transform: translate(-50%, -50%) scale(1.08);
+                box-shadow: 
+                    -10px 0 20px rgba(255, 0, 100, 0.3),
+                    30px 0 50px rgba(0, 217, 255, 0.9),
+                    0 0 60px rgba(0, 217, 255, 0.5),
+                    inset 0 0 40px rgba(100, 200, 255, 0.6);
+            }
+        }
+        
+        /* Red glow intensity */
+        @keyframes redGlow {
+            0%, 100% { opacity: 0.5; }
+            25% { opacity: 1; }
+            50% { opacity: 0.3; }
+            75% { opacity: 0.3; }
+        }
+        
+        /* Blue glow intensity */
+        @keyframes blueGlow {
+            0%, 100% { opacity: 0.5; }
+            25% { opacity: 0.3; }
+            50% { opacity: 0.3; }
+            75% { opacity: 1; }
+        }
+        
+        /* Ring color shift */
+        @keyframes ringColorShift {
+            0%, 100% { 
+                border-color: rgba(0, 217, 255, 0.6);
+            }
+            25% { 
+                border-color: rgba(255, 0, 100, 0.6);
+            }
+            50% { 
+                border-color: rgba(255, 255, 255, 0.8);
+            }
+            75% { 
+                border-color: rgba(0, 217, 255, 0.6);
+            }
+        }
+        
+        /* Dot indicator color shift */
+        @keyframes dotColorShift {
+            0%, 100% { 
+                background: #00ffff;
+                box-shadow: 0 0 10px #00ffff;
+            }
+            25% { 
+                background: #ff0066;
+                box-shadow: 0 0 10px #ff0066;
+            }
+            50% { 
+                background: #ffffff;
+                box-shadow: 0 0 15px #ffffff;
+            }
+            75% { 
+                background: #00ffff;
+                box-shadow: 0 0 10px #00ffff;
+            }
+        }
+        
+        /* Scan line color shift */
+        @keyframes scanColorShift {
+            0%, 100% { 
+                background: linear-gradient(to bottom, #00ffff, transparent);
+                box-shadow: 0 0 10px #00ffff;
+            }
+            25% { 
+                background: linear-gradient(to bottom, #ff0066, transparent);
+                box-shadow: 0 0 10px #ff0066;
+            }
+            50% { 
+                background: linear-gradient(to bottom, #ffffff, transparent);
+                box-shadow: 0 0 15px #ffffff;
+            }
+            75% { 
+                background: linear-gradient(to bottom, #00ffff, transparent);
+                box-shadow: 0 0 10px #00ffff;
+            }
+        }
+        
+        /* Outer ring glow */
+        @keyframes outerRingGlow {
+            0%, 100% { 
+                box-shadow: 
+                    -15px 0 25px rgba(255, 0, 100, 0.2),
+                    15px 0 25px rgba(0, 217, 255, 0.2);
+            }
+            25% { 
+                box-shadow: 
+                    -25px 0 40px rgba(255, 0, 100, 0.4),
+                    5px 0 15px rgba(0, 217, 255, 0.1);
+            }
+            50% { 
+                box-shadow: 
+                    0 0 50px rgba(255, 255, 255, 0.3);
+            }
+            75% { 
+                box-shadow: 
+                    -5px 0 15px rgba(255, 0, 100, 0.1),
+                    25px 0 40px rgba(0, 217, 255, 0.4);
+            }
+        }
+        
+        @keyframes rotate {
+            from { transform: translate(-50%, -50%) rotate(0deg); }
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+        
+        @keyframes scanLine {
+            0% { transform: translate(-50%, 0) rotate(0deg); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translate(-50%, 0) rotate(360deg); opacity: 0; }
+        }
+        
+        .jarvis-text {
+            font-size: 3rem;
+            font-weight: 900;
+            color: #00ffff;
+            text-shadow: 
+                0 0 10px #00ffff,
+                0 0 20px #00d9ff,
+                0 0 30px #0088cc,
+                0 0 40px #0088cc;
+            letter-spacing: 12px;
+            margin-bottom: 20px;
+            animation: fadeIn 1s ease-in;
+            font-family: 'Arial Black', sans-serif;
+        }
+        
+        .jarvis-subtitle {
+            font-size: 0.9rem;
+            color: #80d4ff;
+            text-shadow: 0 0 10px #0088cc;
+            letter-spacing: 3px;
+            opacity: 0;
+            animation: fadeIn 1s ease-in 1s forwards;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .init-status {
+            color: #00d9ff;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            margin-top: 30px;
+            opacity: 0;
+            animation: fadeIn 0.5s ease-in 2s forwards, blink 1s ease-in-out infinite 2.5s;
+        }
+        
+        @keyframes fadeIn {
+            to { opacity: 1; }
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
         }
         
         /* Weather Effects - Contained in Weather Card Only */
@@ -46,16 +406,16 @@
             z-index: 2;
         }
         
-        /* Light Switch Styles */
+        /* Light Switch Styles - Smaller */
         .light-switch-container {
             position: relative;
-            width: 80px;
-            height: 140px;
+            width: 60px;          /* Was 80px */
+            height: 105px;        /* Was 140px */
             background: linear-gradient(145deg, #e6e6e6, #ffffff);
-            border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1),
+            border-radius: 6px;   /* Was 8px */
+            box-shadow: 0 3px 8px rgba(0,0,0,0.1),
                         inset 0 1px 0 rgba(255,255,255,0.8);
-            padding: 15px;
+            padding: 11px;        /* Was 15px */
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -63,43 +423,43 @@
         }
         
         .light-switch {
-            width: 40px;
-            height: 70px;
+            width: 30px;          /* Was 40px */
+            height: 52px;         /* Was 70px */
             background: #fff;
-            border-radius: 4px;
+            border-radius: 3px;   /* Was 4px */
             position: relative;
             cursor: pointer;
-            box-shadow: inset 0 2px 5px rgba(0,0,0,0.2);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
             transition: all 0.3s ease;
         }
         
         .switch-toggle {
-            width: 36px;
-            height: 32px;
+            width: 27px;          /* Was 36px */
+            height: 24px;         /* Was 32px */
             background: linear-gradient(145deg, #f0f0f0, #d9d9d9);
-            border-radius: 3px;
+            border-radius: 2px;   /* Was 3px */
             position: absolute;
-            left: 2px;
-            top: 2px;
+            left: 1.5px;          /* Was 2px */
+            top: 1.5px;           /* Was 2px */
             transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3),
+            box-shadow: 0 2px 3px rgba(0,0,0,0.3),
                         inset 0 1px 0 rgba(255,255,255,0.8);
         }
         
         .switch-toggle::before {
             content: '';
             position: absolute;
-            width: 20px;
-            height: 3px;
+            width: 15px;          /* Was 20px */
+            height: 2px;          /* Was 3px */
             background: #999;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            border-radius: 2px;
+            border-radius: 1px;   /* Was 2px */
         }
         
         .light-switch.on .switch-toggle {
-            top: 36px;
+            top: 27px;          /* Was 36px - adjusted for smaller size */
             background: linear-gradient(145deg, #d9d9d9, #c9c9c9);
         }
         
@@ -647,7 +1007,7 @@
             }
             
             .light-switch.on .switch-toggle {
-                top: 31px;
+                top: 23px;          /* Was 31px - adjusted for smaller size */
             }
         }
         
@@ -764,6 +1124,23 @@
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
+    <!-- JARVIS Intro Animation -->
+    <div id="jarvis-intro">
+        <div class="arc-reactor">
+            <div class="arc-ring"></div>
+            <div class="arc-ring"></div>
+            <div class="arc-ring"></div>
+            <div class="arc-ring"></div>
+            <div class="arc-ring"></div>
+            <div class="arc-core"></div>
+            <div class="arc-line"></div>
+            <div class="arc-line"></div>
+        </div>
+        <div class="jarvis-text">J.A.R.V.I.S</div>
+        <div class="jarvis-subtitle">Just A Rather Very Intelligent System</div>
+        <div class="init-status">◢ Initializing systems...</div>
+    </div>
+    
     <!-- Weather Effects Container -->
     <div id="weather-effects" class="weather-effect"></div>
     
@@ -773,7 +1150,7 @@
         <button onclick="closeShoppingList()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-3xl leading-none z-10" title="Close" style="background: none; border: none; cursor: pointer;">×</button>
         
         <div class="receipt-header">
-            <div class="receipt-store">🛒 UNIFY MARKET</div>
+            <div class="receipt-store">🛒 JARVIS MARKET</div>
             <div class="receipt-title">SHOPPING LIST</div>
             <div class="receipt-subtitle" id="receipt-date">---</div>
             <div class="receipt-divider">- - - - - - - - - - - - - - - -</div>
@@ -815,14 +1192,21 @@
             <!-- Header -->
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-3">
-                    <div class="p-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 shadow-lg">
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
-                            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-                            <path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                    <div class="p-3 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/50 relative">
+                        <!-- Arc Reactor Icon -->
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" class="text-white">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>
+                            <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="1.5"/>
+                            <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                            <line x1="12" y1="2" x2="12" y2="6" stroke="currentColor" stroke-width="1.5"/>
+                            <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" stroke-width="1.5"/>
+                            <line x1="2" y1="12" x2="6" y2="12" stroke="currentColor" stroke-width="1.5"/>
+                            <line x1="18" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="1.5"/>
                         </svg>
+                        <div class="absolute inset-0 rounded-full bg-cyan-400 opacity-30 animate-ping"></div>
                     </div>
                     <div>
-                        <h1 id="title" class="text-4xl font-black text-gray-900">Unify</h1>
+                        <h1 id="title" class="text-4xl font-black text-gray-900">JARVIS</h1>
                         <p id="subtitle" class="text-sm text-gray-600">Your AI Voice Assistant</p>
                     </div>
                 </div>
@@ -950,7 +1334,7 @@
             </div>
             <!-- Footer with disclaimer and request button - centered -->
             <div class="flex items-center justify-center mt-2 gap-2">
-                <p class="text-xs text-gray-500">Unify can make mistakes. Check important info.</p>
+                <p class="text-xs text-gray-500">JARVIS can make mistakes. Check important info.</p>
                 <button 
                     onclick="openFeatureRequest()" 
                     class="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-xs font-medium flex items-center gap-1 transition-all hover:scale-105"
@@ -1330,8 +1714,8 @@ function addShareButton(content, type) {
 
 // Share content using Web Share API or Clipboard
 async function shareContent(content, type) {
-    const title = `My ${type} from Unify`;
-    const text = `${title}\n\n${content}\n\n---\nShared via Unify Voice Assistant`;
+    const title = `My ${type} from JARVIS`;
+    const text = `${title}\n\n${content}\n\n---\nShared via JARVIS Voice Assistant`;
     
     // Try Web Share API first (works on mobile)
     if (navigator.share) {
@@ -1481,7 +1865,7 @@ async function askGeminiAI(userMessage) {
             `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`
         ).join('\n');
         
-        const systemPrompt = `You are Unify, a helpful voice assistant.${userName ? ` The user's name is ${userName}. Use their name naturally and occasionally.` : ' Be friendly and conversational.'}
+        const systemPrompt = `You are JARVIS, a helpful voice assistant.${userName ? ` The user's name is ${userName}. Use their name naturally and occasionally.` : ' Be friendly and conversational.'}
 
 CRITICAL RULES:
 - ${userName ? `The user's name is ${userName} - use it!` : 'You do NOT know the user\'s name. NEVER say "User" or "Hi User!" - just say "Hi!" or be friendly without using a name.'}
@@ -1573,6 +1957,8 @@ async function handleNameCorrection(text) {
         let darkMode = false;
         let recognition = null;
         let continuousRecognition = null;
+        let wakeWordMode = false;  // Are we listening for "Hey Jarvis"?
+        let commandMode = false;    // Are we listening for a command after wake word?
         let isListening = false;
         let synth = window.speechSynthesis;
         let reminders = [];
@@ -1590,6 +1976,42 @@ async function handleNameCorrection(text) {
 
         // ========== INITIALIZATION ==========
         window.onload = async () => {
+            // ========== JARVIS INTRO ANIMATION ==========
+            const introScreen = document.getElementById('jarvis-intro');
+            
+            // Play "Initializing JARVIS..." voice after 2 seconds
+            setTimeout(() => {
+                const initText = "Initializing JARVIS";
+                if (typeof responsiveVoice !== 'undefined') {
+                    responsiveVoice.speak(initText, "UK English Male", { 
+                        pitch: 0.9, 
+                        rate: 0.95, 
+                        volume: 1 
+                    });
+                } else {
+                    const synth = window.speechSynthesis;
+                    const utterance = new SpeechSynthesisUtterance(initText);
+                    const voices = synth.getVoices();
+                    const maleVoice = voices.find(v => 
+                        v.name.includes('Daniel') || 
+                        v.name.includes('Alex') ||
+                        (v.lang.includes('en-GB') && !v.name.toLowerCase().includes('female'))
+                    ) || voices.find(v => v.lang.startsWith('en'));
+                    if (maleVoice) utterance.voice = maleVoice;
+                    utterance.rate = 0.95;
+                    utterance.pitch = 0.9;
+                    synth.speak(utterance);
+                }
+            }, 2000);
+            
+            // Hide intro after 5 seconds
+            setTimeout(() => {
+                introScreen.classList.add('hidden');
+                setTimeout(() => {
+                    introScreen.style.display = 'none';
+                }, 500);
+            }, 5000);
+            
             await requestMicrophonePermission();
             loadUserData();
             checkReminders();
@@ -1610,7 +2032,7 @@ async function handleNameCorrection(text) {
             // Don't force name input - just show friendly welcome
             const welcomeMsg = userName 
                 ? `Hi ${userName}! How can I help you today?` 
-                : "Hi! I'm Unify, your voice assistant. How can I help you today?";
+                : "Hi! I'm JARVIS, your voice assistant. How can I help you today?";
             
             addChatMessage(welcomeMsg, false);
             speak(welcomeMsg);
@@ -2066,15 +2488,41 @@ async function handleNameCorrection(text) {
             continuousRecognition.continuous = true;  // Keep listening
             continuousRecognition.interimResults = true;  // Get interim results
             continuousRecognition.lang = 'en-US';
+            
+            // Stop any ongoing speech when user starts talking (interruption support)
+            continuousRecognition.onstart = () => {
+                stopSpeaking();
+            };
 
             continuousRecognition.onresult = async (event) => {
                 // Get the latest result
                 const last = event.results.length - 1;
                 const result = event.results[last];
-                const text = result[0].transcript.trim();
+                const text = result[0].transcript.trim().toLowerCase();
                 
                 if (!text) return;
                 
+                // ========== WAKE WORD DETECTION ==========
+                if (wakeWordMode && !commandMode) {
+                    // We're listening for "Hey Jarvis"
+                    if (text.includes('hey jarvis') || text.includes('jarvis') || text.includes('hey davis')) {
+                        // Wake word detected!
+                        commandMode = true;
+                        wakeWordMode = false;
+                        
+                        // Respond "Yes, sir?"
+                        const response = "Yes, sir?";
+                        addChatMessage("🎤 Hey JARVIS", true);
+                        addChatMessage(response, false);
+                        speak(response);
+                        
+                        // Keep listening for command
+                        return;
+                    }
+                    return; // Still waiting for wake word
+                }
+                
+                // ========== COMMAND MODE (after "Hey Jarvis") ==========
                 // Clear any existing timeout
                 if (speechTimeout) {
                     clearTimeout(speechTimeout);
@@ -2082,6 +2530,9 @@ async function handleNameCorrection(text) {
                 
                 // If it's a final result, process after short delay
                 if (result.isFinal) {
+                    
+                    // Reset command mode
+                    commandMode = false;
                     
                     // Stop listening immediately
                     stopListening();
@@ -2093,7 +2544,7 @@ async function handleNameCorrection(text) {
                     
                     isProcessing = true;
                     
-                    addChatMessage(text, true);
+                    addChatMessage(result[0].transcript.trim(), true);
                 
                 try {
                     if (waitingForLocation) {
@@ -2150,10 +2601,19 @@ async function handleNameCorrection(text) {
         }
 
         function toggleListening() {
-            if (isListening) {
+            if (isListening && wakeWordMode) {
+                // Stop wake word mode
+                stopListening();
+                wakeWordMode = false;
+                addChatMessage("Wake word mode disabled", false);
+            } else if (isListening) {
                 stopListening();
             } else {
+                // Start wake word mode
+                wakeWordMode = true;
+                commandMode = false;
                 startListening();
+                addChatMessage('🎤 Say "Hey JARVIS" to activate', false);
             }
         }
 
@@ -2247,7 +2707,7 @@ async function handleNameCorrection(text) {
                 }
                 
                 // Add directions link after hotel emoji and name
-                const replacement = fullMatch.replace(hotelName, `${hotelName} [📍 <a href="${mapsLink}" target="_blank" style="color: #3B82F6; text-decoration: underline;">Get Directions</a> ]`);
+                const replacement = fullMatch.replace(hotelName, `${hotelName} [📍 <a href="${mapsLink}" target="_blank" style="color: #3B82F6; text-decoration: underline;">Get Directions</a>]`);
                 
                 replacements.push({ old: fullMatch, new: replacement });
             }
@@ -2737,7 +3197,7 @@ This gives you more freedom to explore at your own pace!`;
                                 try {
                                     const reverseResponse = await fetch(
                                         `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
-                                        { headers: { 'User-Agent': 'UnifyVoiceAssistant/1.0' } }
+                                        { headers: { 'User-Agent': 'JARVISVoiceAssistant/1.0' } }
                                     );
                                     const reverseData = await reverseResponse.json();
                                     
@@ -3477,7 +3937,7 @@ Now answer the question completely!`;
                 // Get up to 5 results to handle ambiguity better
                 const nominatimResponse = await fetch(
                     `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchName)}&format=json&limit=5&addressdetails=1`,
-                    { headers: { 'User-Agent': 'UnifyVoiceAssistant/1.0' } }
+                    { headers: { 'User-Agent': 'JARVISVoiceAssistant/1.0' } }
                 );
                 
                 const nominatimData = await nominatimResponse.json();
@@ -4286,33 +4746,68 @@ Now answer the question completely!`;
         }
 
         // ========== TEXT-TO-SPEECH ==========
+        let currentUtterance = null; // Track current speech
+        
         function speak(text) {
             const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
             
+            // Stop any ongoing speech
             if (typeof responsiveVoice !== 'undefined') {
                 responsiveVoice.cancel();
-                responsiveVoice.speak(cleanText, "UK English Female", { pitch: 1.1, rate: 1.0, volume: 1 });
+                responsiveVoice.speak(cleanText, "UK English Male", { pitch: 0.9, rate: 0.95, volume: 1 });
                 return;
             }
             
             synth.cancel();
             setTimeout(() => {
                 const utterance = new SpeechSynthesisUtterance(cleanText);
-                const voices = synth.getVoices();
-                const goodVoice = voices.find(v => 
-                    (v.name.includes('Google') && v.lang.includes('en')) ||
-                    v.name.includes('Samantha') ||
-                    v.name.includes('Karen') ||
-                    v.lang.includes('en-GB')
-                ) || voices[0];
                 
-                if (goodVoice) utterance.voice = goodVoice;
-                utterance.rate = 1.0;
-                utterance.pitch = 1.2;
+                // Get all available voices
+                const voices = synth.getVoices();
+                
+                // Prioritize male British voices (JARVIS style)
+                const preferredVoice = voices.find(v => 
+                    // Priority 1: Premium male British voices
+                    v.name.includes('Daniel') ||         // UK English Male - Best for JARVIS
+                    v.name.includes('Alex') ||           // macOS male voice
+                    v.name.includes('Oliver') ||         // UK male
+                    (v.name.includes('Google') && v.lang.includes('en-GB') && v.name.includes('Male')) ||
+                    // Priority 2: Any UK/British male voice
+                    (v.lang.includes('en-GB') && !v.name.toLowerCase().includes('female')) ||
+                    // Priority 3: Any US male voice
+                    (v.lang.includes('en-US') && !v.name.toLowerCase().includes('female'))
+                ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
+                
+                if (preferredVoice) {
+                    utterance.voice = preferredVoice;
+                }
+                
+                // JARVIS voice settings - sophisticated and clear
+                utterance.rate = 0.95;      // Measured pace
+                utterance.pitch = 0.9;      // Slightly lower (more authoritative)
                 utterance.volume = 1.0;
+                
+                // Save reference for interruption
+                currentUtterance = utterance;
+                
+                // Clean up when done
+                utterance.onend = () => {
+                    currentUtterance = null;
+                };
+                
                 synth.speak(utterance);
             }, 100);
         }
+        
+        // Stop speech when user starts speaking (interruption support)
+        function stopSpeaking() {
+            if (typeof responsiveVoice !== 'undefined') {
+                responsiveVoice.cancel();
+            }
+            synth.cancel();
+            currentUtterance = null;
+        }
+
 // ========== UX IMPROVEMENTS ==========
 
 // 1. TYPING INDICATOR
@@ -4440,7 +4935,7 @@ function renderHistoryList(filtered = conversationHistory) {
                 <div class="text-gray-700">${escapeHtml(conv.user)}</div>
             </div>
             <div class="text-sm">
-                <div class="font-semibold text-blue-600">Unify:</div>
+                <div class="font-semibold text-blue-600">JARVIS:</div>
                 <div class="text-gray-700">${escapeHtml(conv.ai.substring(0, 150))}${conv.ai.length > 150 ? '...' : ''}</div>
             </div>
         </div>
@@ -4574,4 +5069,3 @@ loadHistory();
 </script>
 </body>
 </html>
-
