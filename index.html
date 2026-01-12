@@ -934,22 +934,22 @@
                     </div>
                 </button>
             </div>
-            <p class="text-xs text-gray-500 text-center mt-2">Unify can make mistakes. Check important info.</p>
+            <!-- Footer with disclaimer and request button -->
+            <div class="flex items-center justify-between mt-2 gap-2">
+                <p class="text-xs text-gray-500 flex-1">Unify can make mistakes. Check important info.</p>
+                <button 
+                    onclick="openFeatureRequest()" 
+                    class="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-xs font-medium flex items-center gap-1 transition-all hover:scale-105"
+                    title="Request a Feature">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                    Request
+                </button>
+            </div>
         </div>
     </div>
-
-    <!-- Fixed Buttons - Right Side -->
-    <!-- Feature Request Button - Adjusted for mobile -->
-    <button 
-        onclick="openFeatureRequest()" 
-        class="fixed bottom-32 right-4 sm:bottom-6 sm:right-6 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg transition-all text-sm font-medium flex items-center gap-2 z-50 hover:scale-105"
-        title="Request a Feature">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 20h9"></path>
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-        </svg>
-        Request
-    </button>
 
 <script>
 // ========== GLOBAL FUNCTION FOR ONCLICK ==========
