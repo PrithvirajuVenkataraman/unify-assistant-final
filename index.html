@@ -2888,6 +2888,7 @@ This gives you more freedom to explore at your own pace!`;
                  !cleanText.toLowerCase().includes('location'))
             ) {
                 handleMemoryRecall(cleanText);
+                return; // STOP HERE - don't call AI
             }
             // Memory Storage (where things are) - but NOT weather/location queries
             else if (
@@ -2905,6 +2906,7 @@ This gives you more freedom to explore at your own pace!`;
                 !cleanText.toLowerCase().includes('temperature')
             ) {
                 handleMemoryStorage(cleanText);
+                return; // STOP HERE - don't call AI
             }
             // Creator Info
             else if (cleanText.toLowerCase().match(/\b(who (created|made|built|developed) (you|this|unify)|who (is|are) (your|the) (creator|developer|maker|author)|tell me about (your|the) creator|who owns (you|this))\b/i)) {
