@@ -3902,7 +3902,7 @@ Now answer the question completely!`;
             });
             
             saveUserData();
-            updateShoppingListUI();
+            updateShoppingListUI(true); // Show when adding items
             
             const msg = itemArray.length === 1 
                 ? `Added ${itemArray[0]} to your shopping list!` 
@@ -3932,7 +3932,7 @@ Now answer the question completely!`;
             if (index !== -1) {
                 const removed = shoppingList.splice(index, 1)[0];
                 saveUserData();
-                updateShoppingListUI();
+                updateShoppingListUI(shoppingList.length > 0); // Show if items remain
                 const msg = `Removed ${removed} from your shopping list!`;
                 addChatMessage(msg, false);
                 speak(msg);
@@ -3974,14 +3974,14 @@ Now answer the question completely!`;
             
             shoppingList = [];
             saveUserData();
-            updateShoppingListUI();
+            updateShoppingListUI(false); // Hide when clearing
             
             const msg = "Shopping list cleared!";
             addChatMessage(msg, false);
             speak(msg);
         }
 
-        function updateShoppingListUI() {
+        function updateShoppingListUI(autoShow = false) {
             const receipt = document.getElementById('shopping-receipt');
             const itemsContainer = document.getElementById('receipt-items');
             const countSpan = document.getElementById('receipt-count');
@@ -4004,7 +4004,10 @@ Now answer the question completely!`;
                 itemsContainer.innerHTML = '<div style="text-align: center; color: #999; font-size: 12px; padding: 20px;">No items yet</div>';
                 receipt.classList.add('hidden');
             } else {
-                receipt.classList.remove('hidden');
+                // Only show if explicitly requested (not on page load)
+                if (autoShow) {
+                    receipt.classList.remove('hidden');
+                }
                 itemsContainer.innerHTML = shoppingList.map((item, index) => `
                     <div class="receipt-item">
                         <div class="receipt-item-text">
@@ -4029,7 +4032,7 @@ Now answer the question completely!`;
         function removeShoppingItem(index) {
             const removed = shoppingList.splice(index, 1)[0];
             saveUserData();
-            updateShoppingListUI();
+            updateShoppingListUI(shoppingList.length > 0); // Keep showing if items remain
             const msg = `Removed ${removed}`;
             speak(msg);
         }
@@ -4320,9 +4323,9 @@ Now answer the question completely!`;
                         }
                     });
                     
-                    // Update UI
+                    // Update UI silently (don't auto-show)
                     if (reminders.length > 0) updateRemindersList();
-                    if (shoppingList.length > 0) updateShoppingListUI();
+                    if (shoppingList.length > 0) updateShoppingListUI(false); // Don't show on load
                 }
             } catch (e) {
                 console.error('Failed to load user data:', e);
