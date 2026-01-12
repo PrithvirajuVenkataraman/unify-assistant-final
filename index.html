@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Unify Personal Assistant</title>
+    <title>Unify Voice Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js?key=jQZ2zpcE"></script>
     <style>
@@ -809,7 +809,7 @@
                     </div>
                     <div>
                         <h1 id="title" class="text-4xl font-black text-gray-900">Unify</h1>
-                        <p id="subtitle" class="text-sm text-gray-600">Your AI Personal Assistant</p>
+                        <p id="subtitle" class="text-sm text-gray-600">Your AI Voice Assistant</p>
                     </div>
                 </div>
                 
@@ -1170,8 +1170,8 @@ function updateContextualSuggestions(context) {
             { icon: '🛍️', text: 'Shopping areas', query: `Shopping areas in ${city || 'the area'}` }
         ];
     }
-    // After hotel recommendations
-    else if (lower.includes('hotel') && lower.includes('price:')) {
+    // After hotel recommendations - detect by emoji and food field
+    else if ((lower.includes('🏨') || lower.includes('hotel')) && lower.includes('food:')) {
         const city = extractCityFromText(context);
         suggestions = [
             { icon: '🍽️', text: 'Restaurants nearby', query: `Best restaurants in ${city || 'the area'}` },
@@ -1247,7 +1247,7 @@ function suggestQuickReplies(context) {
         addShareButton(context, 'itinerary');
     }
     // After hotel recommendations
-    else if (context.includes('hotel') || context.includes('stay') || context.includes('Price:') || context.includes('📍 Location:')) {
+    else if (context.includes('hotel') || context.includes('stay') || context.includes('Food:') || context.includes('🏨')) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
             { icon: '🍽️', text: 'Restaurants nearby' },
@@ -1410,7 +1410,7 @@ function suggestQuickReplies(context) {
         addShareButton(context, 'itinerary');
     }
     // After hotel recommendations
-    else if (context.includes('hotel') || context.includes('stay') || context.includes('Price:') || context.includes('📍 Location:')) {
+    else if (context.includes('hotel') || context.includes('stay') || context.includes('Food:') || context.includes('🏨')) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
             { icon: '🍽️', text: 'Restaurants nearby' },
@@ -2181,6 +2181,128 @@ async function handleNameCorrection(text) {
             return enhancedResponse;
         }
         
+        // Enrich hotel specialties with real data from web search
+        async function enrichHotelSpecialties(responseText, query) {
+            console.log('🔍 Searching for accurate hotel specialties...');
+            
+            // Extract city from query
+            const locationMatch = query.match(/\b(in|at|near)\s+([A-Z][a-z]+(?: [A-Z][a-z]+)*)/i);
+            const cityName = locationMatch ? locationMatch[2] : '';
+            
+            if (!cityName) return responseText;
+            
+            // Find all hotels in the response
+            // Pattern: 🏨 Hotel Name
+            const hotelMatches = [...responseText.matchAll(/🏨\s+([^\n\[]+?)(?:\s*\[|$)/gm)];
+            
+            if (hotelMatches.length === 0) return responseText;
+            
+            let enrichedResponse = responseText;
+            
+            // Search for each hotel (limit to first 5 to avoid too many searches)
+            for (let i = 0; i < Math.min(hotelMatches.length, 5); i++) {
+                const match = hotelMatches[i];
+                const hotelName = match[1].trim();
+                
+                try {
+                    // Search using web_search tool via our API
+                    const searchQuery = `${hotelName} ${cityName} famous for specialty`;
+                    console.log(`🔍 Searching: ${searchQuery}`);
+                    
+                    const response = await fetch('https://api.anthropic.com/v1/messages', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'anthropic-version': '2023-06-01'
+                        },
+                        body: JSON.stringify({
+                            model: 'claude-sonnet-4-20250514',
+                            max_tokens: 300,
+                            tools: [{
+                                type: 'web_search_20250305',
+                                name: 'web_search'
+                            }],
+                            messages: [{
+                                role: 'user',
+                                content: `Search for: ${searchQuery}. What is ${hotelName} famous for? Return ONLY the specialty dish/food in 3-5 words. Format: "Famous for: [dish]"`
+                            }]
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        const content = data.content.find(c => c.type === 'text');
+                        
+                        if (content && content.text) {
+                            const specialty = extractSpecialtyFromResponse(content.text);
+                            
+                            if (specialty) {
+                                console.log(`✅ Found specialty for ${hotelName}: ${specialty}`);
+                                
+                                // Find and replace the specialty line for this hotel
+                                const hotelBlockRegex = new RegExp(
+                                    `(🏨\\s+${hotelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^⭐]*⭐\\s*Specialty:\\s*)([^\\n]+)`,
+                                    'i'
+                                );
+                                
+                                enrichedResponse = enrichedResponse.replace(hotelBlockRegex, `$1${specialty}`);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.log(`Search failed for ${hotelName}:`, error);
+                    // Continue with next hotel
+                }
+                
+                // Small delay between searches
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            
+            return enrichedResponse;
+        }
+        
+        // Extract specialty from search response
+        function extractSpecialtyFromResponse(text) {
+            // Look for "Famous for:" pattern
+            const famousMatch = text.match(/famous for:?\s*([^\n.!?]+)/i);
+            if (famousMatch) {
+                return cleanSpecialty(famousMatch[1]);
+            }
+            
+            // Look for other common patterns
+            const patterns = [
+                /(?:known for|specializes in|best known for)[\s:]+([^\n.!?]+)/i,
+                /(?:try|must try|signature)[\s:]+([^\n.!?]+)/i
+            ];
+            
+            for (const pattern of patterns) {
+                const match = text.match(pattern);
+                if (match) {
+                    return cleanSpecialty(match[1]);
+                }
+            }
+            
+            return null;
+        }
+        
+        // Clean up specialty text
+        function cleanSpecialty(text) {
+            let specialty = text.trim()
+                .replace(/^(their|its|the|a|an)\s+/i, '')
+                .replace(/\.$/, '')
+                .trim();
+            
+            // Capitalize first letter
+            specialty = specialty.charAt(0).toUpperCase() + specialty.slice(1);
+            
+            // Limit length
+            if (specialty.length > 60) {
+                specialty = specialty.substring(0, 60).trim() + '...';
+            }
+            
+            return specialty;
+        }
+        
         // Add fast food suggestion box
         function addFastFoodSuggestionBox() {
             const chatContainer = document.getElementById('chat-container');
@@ -2253,12 +2375,13 @@ async function handleNameCorrection(text) {
                 // Big city - ask AI for bus/metro timings
                 const transportPrompt = `Provide public transportation information for ${cityName}. 
 
-CRITICAL FORMATTING:
-- NO bold markers (**) anywhere
-- Use simple clean formatting
+CRITICAL FORMATTING - READ CAREFULLY:
+- NEVER use asterisks (*) or bold markers (**) 
+- Use bullet points with dash (-)
+- Use simple text only
 - Organize by category with emoji headers
 
-Format:
+Format (NO ASTERISKS):
 
 🚇 Metro/Subway:
 - Main lines and routes
@@ -2276,7 +2399,7 @@ Format:
                 
 Keep it concise and practical. Focus on what tourists need to know.
 
-NO bold markers (**) in your response!`;
+CRITICAL: Do NOT use ** or * anywhere in your response. Use plain text with dashes for bullets.`;
                 
                 const aiResponse = await askGeminiAI(transportPrompt);
                 hideThinkingIndicator();
@@ -2906,42 +3029,47 @@ CRITICAL FORMATTING RULES:
 - NO bold markers (**) anywhere in your response
 - Use CLEAN formatting with proper spacing
 - Each hotel gets its own section with clear line breaks
-- Include all required fields in this EXACT format:
+- Include ONLY these fields: Hotel Name, Food Type, Specialty
 
-Provide 4-6 hotels in this EXACT format:
+Provide 7-10 hotels with VARIETY - include:
+- Mix of well-known hotels AND smaller local favorites
+- Include cafes/eateries that serve great local food
+- Include places within 20-30 min drive if they're popular
+- Don't limit to just hotels - include any dining spots tourists love
 
-🏨 [Hotel Name]
-📍 Location: [Area/Landmark]
-💰 Price: [Budget/Mid-range/Luxury]
+Format (NO Location, NO Price, NO Why - we provide GPS directions):
+
+🏨 [Hotel/Restaurant/Cafe Name]
 🍽️ Food: [Pure Veg / Non-Veg / Both]
-⭐ Specialty: [Local dish to try]
-✨ Why: [One sentence why it's recommended]
+⭐ Specialty: [Must-try local dish]
 
-${finalQuery.includes('pure vegetarian') ? 'IMPORTANT: Only suggest hotels with PURE VEGETARIAN restaurants.' : ''}
-${finalQuery.includes('non-vegetarian') ? 'IMPORTANT: Only suggest hotels with NON-VEGETARIAN restaurants or both options.' : ''}
-${finalQuery.includes('both veg and non-veg') ? 'IMPORTANT: Suggest a mix of hotels with different restaurant types.' : ''}
+${finalQuery.includes('pure vegetarian') ? 'IMPORTANT: Only suggest places with PURE VEGETARIAN food.' : ''}
+${finalQuery.includes('non-vegetarian') ? 'IMPORTANT: Only suggest places with NON-VEGETARIAN food or both options.' : ''}
+${finalQuery.includes('both veg and non-veg') ? 'IMPORTANT: Suggest a mix of places with different food types.' : ''}
 
-Example:
+Example for Chidambaram:
 
 🏨 Hotel Saradharam
-📍 Location: Near Bus Stand, City Center
-💰 Price: Mid-range
 🍽️ Food: Both
-⭐ Specialty: Chettinad Chicken
-✨ Why: Central location with traditional hospitality
+⭐ Specialty: Chettinad Chicken Curry
 
-🏨 Hotel Akshaya
-📍 Location: Temple Road
-💰 Price: Budget
+🏨 Moorthy Cafe
+🍽️ Food: Both  
+⭐ Specialty: Filter Coffee & Vada
+
+🏨 Hotel Jayaram
 🍽️ Food: Both
-⭐ Specialty: Local Mutton Biryani
-✨ Why: Family-friendly with great value
+⭐ Specialty: Mutton Biryani
 
 End with: "I hope you have a comfortable stay!"
 
-REMEMBER: NO bold markers (**) in your response!
+REMEMBER: 
+- NO Location, NO Price, NO Why
+- 7-10 recommendations total
+- Include popular local spots, not just big hotels
+- NO bold markers (**)
 
-Now provide recommendations in this EXACT format!` :
+Now provide recommendations!` :
 
                 `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Answer this question about travel recommendations: "${finalQuery}"
 
@@ -2972,6 +3100,8 @@ Now answer the question completely!`;
                 
                 if (queryType === 'hotel') {
                     finalResponse = await addGPSDirectionsToHotels(aiResponse.response, text);
+                    // Search for accurate specialties for each hotel
+                    finalResponse = await enrichHotelSpecialties(finalResponse, text);
                 }
                 
                 addChatMessage(finalResponse, false);
