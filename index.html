@@ -198,56 +198,116 @@
             opacity: 0.6;
         }
         
-        /* Red-Blue Alternating Glow Animation */
+        /* Red-Blue Alternating Glow Animation - SEQUENTIAL */
         @keyframes biColorPulse {
-            0%, 100% { 
+            /* Start - neutral */
+            0% { 
                 transform: translate(-50%, -50%) scale(1);
                 box-shadow: 
-                    -20px 0 30px rgba(255, 0, 100, 0.6),
-                    20px 0 30px rgba(0, 217, 255, 0.6),
-                    0 0 50px rgba(0, 217, 255, 0.4),
-                    inset 0 0 30px rgba(255, 255, 255, 0.5);
+                    -15px 0 20px rgba(255, 0, 100, 0.3),
+                    15px 0 20px rgba(0, 217, 255, 0.3),
+                    0 0 30px rgba(100, 150, 200, 0.2),
+                    inset 0 0 20px rgba(255, 255, 255, 0.3);
             }
+            /* Red builds up */
+            15% { 
+                transform: translate(-50%, -50%) scale(1.05);
+                box-shadow: 
+                    -35px 0 60px rgba(255, 0, 100, 1),
+                    5px 0 10px rgba(0, 217, 255, 0.1),
+                    -20px 0 70px rgba(255, 0, 100, 0.8),
+                    inset 0 0 40px rgba(255, 50, 100, 0.7);
+            }
+            /* Red peak - HOLD */
             25% { 
                 transform: translate(-50%, -50%) scale(1.08);
                 box-shadow: 
-                    -30px 0 50px rgba(255, 0, 100, 0.9),
-                    10px 0 20px rgba(0, 217, 255, 0.3),
-                    0 0 60px rgba(255, 0, 100, 0.5),
-                    inset 0 0 40px rgba(255, 100, 150, 0.6);
+                    -40px 0 70px rgba(255, 0, 100, 1),
+                    5px 0 10px rgba(0, 217, 255, 0.1),
+                    -25px 0 80px rgba(255, 0, 100, 0.9),
+                    inset 0 0 45px rgba(255, 50, 100, 0.8);
             }
-            50% { 
-                transform: translate(-50%, -50%) scale(1.15);
+            /* Red fades */
+            35% {
+                transform: translate(-50%, -50%) scale(1);
                 box-shadow: 
-                    0 0 80px rgba(255, 0, 100, 0.4),
-                    0 0 80px rgba(0, 217, 255, 0.4),
-                    0 0 100px rgba(255, 255, 255, 0.6),
-                    inset 0 0 50px rgba(255, 255, 255, 0.8);
+                    -15px 0 20px rgba(255, 0, 100, 0.3),
+                    15px 0 20px rgba(0, 217, 255, 0.3),
+                    0 0 30px rgba(100, 150, 200, 0.2),
+                    inset 0 0 20px rgba(255, 255, 255, 0.3);
             }
-            75% { 
+            /* Blue builds up */
+            50% { 
+                transform: translate(-50%, -50%) scale(1.05);
+                box-shadow: 
+                    -5px 0 10px rgba(255, 0, 100, 0.1),
+                    35px 0 60px rgba(0, 217, 255, 1),
+                    20px 0 70px rgba(0, 217, 255, 0.8),
+                    inset 0 0 40px rgba(50, 200, 255, 0.7);
+            }
+            /* Blue peak - HOLD */
+            60% { 
                 transform: translate(-50%, -50%) scale(1.08);
                 box-shadow: 
-                    -10px 0 20px rgba(255, 0, 100, 0.3),
-                    30px 0 50px rgba(0, 217, 255, 0.9),
-                    0 0 60px rgba(0, 217, 255, 0.5),
-                    inset 0 0 40px rgba(100, 200, 255, 0.6);
+                    -5px 0 10px rgba(255, 0, 100, 0.1),
+                    40px 0 70px rgba(0, 217, 255, 1),
+                    25px 0 80px rgba(0, 217, 255, 0.9),
+                    inset 0 0 45px rgba(50, 200, 255, 0.8);
+            }
+            /* Blue fades */
+            70% {
+                transform: translate(-50%, -50%) scale(1);
+                box-shadow: 
+                    -15px 0 20px rgba(255, 0, 100, 0.3),
+                    15px 0 20px rgba(0, 217, 255, 0.3),
+                    0 0 30px rgba(100, 150, 200, 0.2),
+                    inset 0 0 20px rgba(255, 255, 255, 0.3);
+            }
+            /* Full glow builds */
+            85% { 
+                transform: translate(-50%, -50%) scale(1.12);
+                box-shadow: 
+                    0 0 100px rgba(255, 0, 100, 0.6),
+                    0 0 100px rgba(0, 217, 255, 0.6),
+                    0 0 120px rgba(255, 255, 255, 0.8),
+                    inset 0 0 60px rgba(255, 255, 255, 0.9);
+            }
+            /* Full glow peak - HOLD */
+            95% { 
+                transform: translate(-50%, -50%) scale(1.15);
+                box-shadow: 
+                    0 0 120px rgba(255, 0, 100, 0.7),
+                    0 0 120px rgba(0, 217, 255, 0.7),
+                    0 0 150px rgba(255, 255, 255, 1),
+                    inset 0 0 70px rgba(255, 255, 255, 1);
+            }
+            /* Return to start */
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+                box-shadow: 
+                    -15px 0 20px rgba(255, 0, 100, 0.3),
+                    15px 0 20px rgba(0, 217, 255, 0.3),
+                    0 0 30px rgba(100, 150, 200, 0.2),
+                    inset 0 0 20px rgba(255, 255, 255, 0.3);
             }
         }
         
-        /* Red glow intensity */
+        /* Red glow intensity - SEQUENTIAL */
         @keyframes redGlow {
-            0%, 100% { opacity: 0.5; }
-            25% { opacity: 1; }
-            50% { opacity: 0.3; }
-            75% { opacity: 0.3; }
+            0% { opacity: 0.3; }
+            15% { opacity: 0.8; }
+            25% { opacity: 1; }      /* RED PEAK - hold */
+            35% { opacity: 0.3; }
+            50%, 100% { opacity: 0.2; }
         }
         
-        /* Blue glow intensity */
+        /* Blue glow intensity - SEQUENTIAL */
         @keyframes blueGlow {
-            0%, 100% { opacity: 0.5; }
-            25% { opacity: 0.3; }
-            50% { opacity: 0.3; }
-            75% { opacity: 1; }
+            0%, 35% { opacity: 0.2; }
+            50% { opacity: 0.8; }
+            60% { opacity: 1; }      /* BLUE PEAK - hold */
+            70% { opacity: 0.3; }
+            85%, 100% { opacity: 0.2; }
         }
         
         /* Ring color shift */
@@ -382,6 +442,48 @@
         @keyframes blink {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.4; }
+        }
+        
+        /* Header Logo Smooth Glow */
+        .logo-glow {
+            animation: logoGlowPulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes logoGlowPulse {
+            0%, 100% {
+                box-shadow: 
+                    0 0 20px rgba(0, 217, 255, 0.4),
+                    0 0 40px rgba(0, 217, 255, 0.2),
+                    inset 0 0 20px rgba(0, 217, 255, 0.1);
+            }
+            50% {
+                box-shadow: 
+                    0 0 30px rgba(0, 217, 255, 0.8),
+                    0 0 60px rgba(0, 217, 255, 0.5),
+                    0 0 80px rgba(0, 217, 255, 0.3),
+                    inset 0 0 30px rgba(0, 217, 255, 0.2);
+            }
+        }
+        
+        .logo-glow::after {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0, 217, 255, 0.3) 0%, transparent 70%);
+            animation: logoGlowRing 3s ease-in-out infinite;
+            pointer-events: none;
+        }
+        
+        @keyframes logoGlowRing {
+            0%, 100% {
+                opacity: 0.3;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.8;
+                transform: scale(1.1);
+            }
         }
         
         /* Weather Effects - Contained in Weather Card Only */
@@ -1192,7 +1294,7 @@
             <!-- Header -->
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-3">
-                    <div class="p-3 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/50 relative">
+                    <div class="logo-glow p-3 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/50 relative">
                         <!-- Arc Reactor Icon -->
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" class="text-white">
                             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>
@@ -1203,7 +1305,7 @@
                             <line x1="2" y1="12" x2="6" y2="12" stroke="currentColor" stroke-width="1.5"/>
                             <line x1="18" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="1.5"/>
                         </svg>
-                        <div class="absolute inset-0 rounded-full bg-cyan-400 opacity-30 animate-ping"></div>
+                        <div class="absolute inset-0 rounded-full bg-cyan-400 opacity-20 animate-pulse"></div>
                     </div>
                     <div>
                         <h1 id="title" class="text-4xl font-black text-gray-900">JARVIS</h1>
