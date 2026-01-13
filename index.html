@@ -181,25 +181,6 @@
         }
         
         /* Scanning lines with color shift */
-        /* Scanning lines with color shift */
-        .arc-line {
-            position: absolute;
-            width: 2px;
-            height: 140px;
-            background: linear-gradient(to bottom, #00ffff 0%, rgba(0, 255, 255, 0.5) 50%, transparent 100%);
-            top: 50%;
-            left: 50%;
-            transform-origin: center center;  /* Rotate from CENTER */
-            transform: translate(-50%, -50%);
-            animation: scanLine 3s linear infinite, scanColorShift 4s ease-in-out infinite;
-            box-shadow: 0 0 10px #00ffff;
-            pointer-events: none;
-        }
-        
-        .arc-line:nth-child(7) {
-            animation: scanLine 3s linear infinite 1.5s, scanColorShift 4s ease-in-out infinite 0.5s;
-            opacity: 0.7;
-        }
         
         /* Red-Blue Alternating Glow Animation - SEQUENTIAL */
         @keyframes biColorPulse {
@@ -350,24 +331,6 @@
         }
         
         /* Scan line color shift */
-        @keyframes scanColorShift {
-            0%, 100% { 
-                background: linear-gradient(to bottom, #00ffff, transparent);
-                box-shadow: 0 0 10px #00ffff;
-            }
-            25% { 
-                background: linear-gradient(to bottom, #ff0066, transparent);
-                box-shadow: 0 0 10px #ff0066;
-            }
-            50% { 
-                background: linear-gradient(to bottom, #ffffff, transparent);
-                box-shadow: 0 0 15px #ffffff;
-            }
-            75% { 
-                background: linear-gradient(to bottom, #00ffff, transparent);
-                box-shadow: 0 0 10px #00ffff;
-            }
-        }
         
         /* Outer ring glow */
         @keyframes outerRingGlow {
@@ -395,23 +358,6 @@
         @keyframes rotate {
             from { transform: translate(-50%, -50%) rotate(0deg); }
             to { transform: translate(-50%, -50%) rotate(360deg); }
-        }
-        
-        @keyframes scanLine {
-            0% { 
-                transform: translate(-50%, -50%) rotate(0deg); 
-                opacity: 0; 
-            }
-            5% { 
-                opacity: 1; 
-            }
-            95% { 
-                opacity: 1; 
-            }
-            100% { 
-                transform: translate(-50%, -50%) rotate(360deg); 
-                opacity: 0; 
-            }
         }
         
         .jarvis-text {
@@ -1248,8 +1194,6 @@
             <div class="arc-ring"></div>
             <div class="arc-ring"></div>
             <div class="arc-core"></div>
-            <div class="arc-line"></div>
-            <div class="arc-line"></div>
         </div>
         <div class="jarvis-text">J.A.R.V.I.S</div>
         <div class="jarvis-subtitle">Just A Rather Very Intelligent System</div>
