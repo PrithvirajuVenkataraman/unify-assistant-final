@@ -3488,6 +3488,8 @@ Just talk to me naturally!`;
                 // Use AI to create detailed itinerary - PLACES ONLY
                 const itineraryPrompt = `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Create a beautifully formatted day-by-day itinerary for: "${text}". 
 
+IMPORTANT: Extract the city/destination from the user's question and create an itinerary for THAT specific location.
+
 FOCUS ONLY ON: Places to visit and activities to do
 DO NOT INCLUDE: Food recommendations, hotels, or restaurants (user can ask separately)
 
@@ -3500,9 +3502,9 @@ CRITICAL FORMATTING RULES:
 - Use category emojis ONLY (🏛️ 🌳 🎨 🏖️ ⛰️ 🚶)
 
 Format:
-Day [number] in [City]:
+Day [number] in [City Name from Query]:
 
-9:00am: 🏛️ [Place/Activity]
+9:00am: 🏛️ [Place/Activity specific to that city]
    - What to see/do there
    - Duration and any entry info
    - Travel time to next spot
@@ -3515,25 +3517,9 @@ Use emojis for categories only:
 - ⛰️ mountains
 - 🚶 walking areas
 
-Example:
-Day 1 in Chidambaram:
+Make sure ALL places and activities are specific to the city mentioned in the user's question!
 
-6:00am: 🏛️ Thillai Nataraja Temple
-   - Witness morning rituals and explore stunning Dravidian architecture
-   - Duration: 3 hours
-   - Gold-roofed sanctum is a must-see
-
-9:30am: 🏛️ Thillai Kali Amman Temple  
-   - Significant temple dedicated to Goddess Kali
-   - Duration: 1 hour
-   - 🚗 Travel time: 15 mins
-
-11:00am: 🌳 Pichavaram Mangrove Forest
-   - Rowboat through world's second-largest mangrove forest
-   - Duration: 2.5 hours
-   - 🚗 Travel time: 40 mins
-
-End with: "Enjoy exploring the beauty of [City]! Ask me about restaurants or hotels if you need recommendations."
+End with: "Enjoy exploring the beauty of [City from query]! Ask me about restaurants or hotels if you need recommendations."
 
 Now create the itinerary with clean formatting - NO bold markers, NO clock emojis!`;
                 
@@ -3774,33 +3760,21 @@ Now answer the question completely!`;
                 const recommendPrompt = queryType === 'hotel' ? 
                 `Answer this question about hotel recommendations: "${text}"
 
-Provide 4-5 specific hotel recommendations in this EXACT format (one per line):
+IMPORTANT: Extract the city/location from the user's question and recommend hotels in THAT specific city.
+
+Provide 4-5 specific hotel recommendations for the mentioned city in this EXACT format (one per line):
 
 HOTEL: [Hotel Name]
 DESC: [One-line description]
 PRICE: [Budget/Mid-range/Luxury]
 FOOD: [Pure Veg/Non-Veg/Both]
-SPECIALTY: [Local dish to try]
+SPECIALTY: [Local dish to try from THAT city]
 WHY: [Why recommended]
 ---
 
 ${text.includes('vegetarian') || text.includes('pure veg') ? 'IMPORTANT: Only suggest hotels with PURE VEGETARIAN restaurants.' : ''}
 
-Example:
-HOTEL: Hotel Saradharam
-DESC: Well-known landmark near the bus stand with traditional hospitality
-PRICE: Mid-range
-FOOD: Both
-SPECIALTY: Chettinad Chicken
-WHY: Central location and consistent service
----
-HOTEL: Hotel Akshaya
-DESC: Modern, clean, and very family-friendly
-PRICE: Budget
-FOOD: Both
-SPECIALTY: Local Mutton Biryani
-WHY: Comfortable rooms and great value
----
+Make sure all hotels and dishes are specific to the city mentioned in the user's question!
 
 End with: "I hope you have a comfortable stay!"
 
