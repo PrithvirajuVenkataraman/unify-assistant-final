@@ -181,21 +181,24 @@
         }
         
         /* Scanning lines with color shift */
+        /* Scanning lines with color shift */
         .arc-line {
             position: absolute;
             width: 2px;
-            height: 100px;
-            background: linear-gradient(to bottom, #00ffff, transparent);
+            height: 140px;
+            background: linear-gradient(to bottom, #00ffff 0%, rgba(0, 255, 255, 0.5) 50%, transparent 100%);
             top: 50%;
             left: 50%;
-            transform-origin: center -50px;
+            transform-origin: center center;  /* Rotate from CENTER */
+            transform: translate(-50%, -50%);
             animation: scanLine 3s linear infinite, scanColorShift 4s ease-in-out infinite;
             box-shadow: 0 0 10px #00ffff;
+            pointer-events: none;
         }
         
         .arc-line:nth-child(7) {
-            animation: scanLine 3s linear infinite 0.5s, scanColorShift 4s ease-in-out infinite 0.5s;
-            opacity: 0.6;
+            animation: scanLine 3s linear infinite 1.5s, scanColorShift 4s ease-in-out infinite 0.5s;
+            opacity: 0.7;
         }
         
         /* Red-Blue Alternating Glow Animation - SEQUENTIAL */
@@ -395,10 +398,20 @@
         }
         
         @keyframes scanLine {
-            0% { transform: translate(-50%, 0) rotate(0deg); opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { transform: translate(-50%, 0) rotate(360deg); opacity: 0; }
+            0% { 
+                transform: translate(-50%, -50%) rotate(0deg); 
+                opacity: 0; 
+            }
+            5% { 
+                opacity: 1; 
+            }
+            95% { 
+                opacity: 1; 
+            }
+            100% { 
+                transform: translate(-50%, -50%) rotate(360deg); 
+                opacity: 0; 
+            }
         }
         
         .jarvis-text {
@@ -2604,10 +2617,10 @@ async function handleNameCorrection(text) {
                 
                 if (!text) return;
                 
-                // ========== WAKE WORD DETECTION ==========
+                // ========== WAKE WORD DETECTION (OPTIONAL) ==========
                 if (wakeWordMode && !commandMode) {
-                    // We're listening for "Hey Jarvis"
-                    if (text.includes('hey jarvis') || text.includes('jarvis') || text.includes('hey davis')) {
+                    // Check if user said "Hey Jarvis" (optional for Marvel fans)
+                    if (text.includes('hey jarvis') || text.includes('hey davis')) {
                         // Wake word detected!
                         commandMode = true;
                         wakeWordMode = false;
@@ -2621,20 +2634,30 @@ async function handleNameCorrection(text) {
                         // Keep listening for command
                         return;
                     }
-                    return; // Still waiting for wake word
+                    // If user just speaks directly (without "Hey JARVIS"), process it
+                    // This makes wake word OPTIONAL
+                    if (result.isFinal) {
+                        // User spoke directly - disable wake word mode and process
+                        wakeWordMode = false;
+                        commandMode = false;
+                        // Continue to normal processing below
+                    } else {
+                        return; // Wait for final result
+                    }
                 }
                 
-                // ========== COMMAND MODE (after "Hey Jarvis") ==========
+                // ========== COMMAND MODE (after "Hey Jarvis" OR direct speech) ==========
                 // Clear any existing timeout
                 if (speechTimeout) {
                     clearTimeout(speechTimeout);
                 }
                 
-                // If it's a final result, process after short delay
+                // If it's a final result, process
                 if (result.isFinal) {
                     
-                    // Reset command mode
+                    // Reset modes
                     commandMode = false;
+                    wakeWordMode = false;
                     
                     // Stop listening immediately
                     stopListening();
@@ -2711,11 +2734,11 @@ async function handleNameCorrection(text) {
             } else if (isListening) {
                 stopListening();
             } else {
-                // Start wake word mode
+                // Start listening mode
                 wakeWordMode = true;
                 commandMode = false;
                 startListening();
-                addChatMessage('🎤 Say "Hey JARVIS" to activate', false);
+                addChatMessage('🎤 Listening... (Say "Hey JARVIS" or speak directly)', false);
             }
         }
 
