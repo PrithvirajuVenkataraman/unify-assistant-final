@@ -77,14 +77,9 @@ For EVERYTHING ELSE (jokes, facts, weather, calculations, questions):
 - For facts: just state the fact
 - Occasionally add subtle British sophistication`;
         
-        // Use CORRECT model names from Google AI Studio (YOUR WORKING MODELS)
-        const MODELS_TO_TRY = [
-            { name: 'gemini-3-flash-preview', version: 'v1alpha' },
-            { name: 'gemini-3-pro-preview', version: 'v1alpha' },
-            { name: 'gemini-2.5-flash', version: 'v1beta' },
-            { name: 'gemini-2.5-pro', version: 'v1beta' },
-            { name: 'gemini-2.0-flash-exp', version: 'v1alpha' }
-        ];
+        // Use ONLY the first working model (fastest, no fallback delays)
+        const MODEL = 'gemini-3-flash-preview';
+        const API_VERSION = 'v1alpha';
         
         const requestBody = {
             contents: [{
@@ -96,51 +91,64 @@ For EVERYTHING ELSE (jokes, facts, weather, calculations, questions):
                 temperature: 0.7,
                 topK: 40,
                 topP: 0.95,
-                maxOutputTokens: 5000,
+                maxOutputTokens: 4850,
                 candidateCount: 1
             }
         };
         
-        let response;
-        let lastError;
-        let workingModel = null;
+        console.log(`🚀 Using: ${API_VERSION}/models/${MODEL}`);
         
-        // Try each model
-        for (const modelConfig of MODELS_TO_TRY) {
-            const MODEL = modelConfig.name;
-            const API_VERSION = modelConfig.version;
-            
-            console.log(`🧪 Trying: ${API_VERSION}/models/${MODEL}`);
-            
-            try {
-                response = await fetch(
-                    `https://generativelanguage.googleapis.com/${API_VERSION}/models/${MODEL}:generateContent?key=${API_KEY}`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(requestBody)
-                    }
-                );
-                
-                if (response.ok) {
-                    workingModel = MODEL;
-                    console.log(`✅ SUCCESS with ${MODEL}`);
-                    break;
-                } else {
-                    const errorData = await response.json();
-                    lastError = errorData;
-                    console.log(`❌ ${MODEL} failed:`, errorData.error?.message?.substring(0, 100));
+        try {
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/${API_VERSION}/models/${MODEL}:generateContent?key=${API_KEY}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
                 }
-            } catch (err) {
-                console.log(`❌ ${MODEL} error:`, err.message);
-                lastError = err;
+            );
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('❌ API Error:', errorData);
+                return new Response(JSON.stringify({ 
+                    response: `I'm having trouble connecting to my AI. Please try again in a moment!`,
+                    model: 'error'
+                }), {
+                    status: 200,
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    }
+                });
             }
-        }
-        
-        if (!workingModel) {
-            console.error('❌ ALL MODELS FAILED');
+            
+            const data = await response.json();
+            console.log(`✅ SUCCESS with ${MODEL}`);
+            
+            // Extract response text
+            let responseText = '';
+            if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                responseText = data.candidates[0].content.parts[0].text;
+            } else {
+                throw new Error('Invalid API response structure');
+            }
+            
+            return new Response(JSON.stringify({
+                response: responseText.trim(),
+                model: MODEL
+            }), {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                }
+            });
+            
+        } catch (error) {
+            console.error('❌ Error:', error);
             return new Response(JSON.stringify({ 
-                response: `I'm having trouble connecting to my AI. Please try again in a moment!`,
+                response: "I'm having trouble connecting to my AI. Please try again in a moment!",
                 model: 'error'
             }), {
                 status: 200,
@@ -150,30 +158,8 @@ For EVERYTHING ELSE (jokes, facts, weather, calculations, questions):
                 }
             });
         }
-        
-        const data = await response.json();
-        
-        // Extract response text
-        let responseText = '';
-        if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-            responseText = data.candidates[0].content.parts[0].text;
-        } else {
-            throw new Error('Invalid API response structure');
-        }
-        
-        return new Response(JSON.stringify({
-            response: responseText.trim(),
-            model: workingModel
-        }), {
-            status: 200,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            }
-        });
-        
     } catch (error) {
-        console.error('Error:', error);
+        console.error('❌ Error:', error);
         
         return new Response(JSON.stringify({ 
             response: "I'm having trouble connecting to my AI. Please try again in a moment!",
