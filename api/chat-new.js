@@ -77,8 +77,8 @@ For EVERYTHING ELSE (jokes, facts, weather, calculations, questions):
 - For facts: just state the fact
 - Occasionally add subtle British sophistication`;
         
-        // Use ONLY the first working model (fastest, no fallback delays)
-        const MODEL = 'gemini-3-flash-preview';
+        // Use fastest and most reliable model
+        const MODEL = 'gemini-2.0-flash-exp';
         const API_VERSION = 'v1alpha';
         
         const requestBody = {
