@@ -45,16 +45,31 @@ export default async function handler(req, res) {
             messages: [
                 {
                     role: 'system',
-                    content: systemPrompt || 'You are JARVIS, a helpful AI assistant.'
+                    content: (systemPrompt || 'You are JARVIS, a helpful AI assistant.') + `
+
+CRITICAL FORMAT RULES:
+- When asked for hotel recommendations, you MUST respond in this EXACT format:
+HOTEL: [Name]
+DESC: [Description]
+PRICE: [Budget/Mid-range/Luxury]
+FOOD: [Pure Veg/Non-Veg/Both]
+SPECIALTY: [Dish]
+WHY: [Reason]
+---
+
+- Extract the EXACT city mentioned and only recommend hotels in THAT city
+- Do NOT recommend hotels from nearby cities
+- If user asks for "Chidambaram", only give Chidambaram hotels, NOT Puducherry
+- Be precise about the city location`
                 },
                 {
                     role: 'user',
                     content: message
                 }
             ],
-            temperature: 0.7,
+            temperature: 0.5,
             max_tokens: 4096,
-            top_p: 1,
+            top_p: 0.9,
             stream: false
         };
         
