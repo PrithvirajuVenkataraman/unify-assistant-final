@@ -1,7 +1,0 @@
-{
-  "functions": {
-    "api/chat-new.js": {
-      "runtime": "edge"
-    }
-  }
-}
