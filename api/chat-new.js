@@ -33,8 +33,9 @@ export default async function handler(req, res) {
         
         console.log('✅ API Key found');
         
-        // Use stable model
-        const MODEL = 'gemini-1.5-flash-latest';
+        // Use cheapest model (FREE tier: 15 RPM, 1500 RPD, 1.5M tokens/day)
+        // gemini-2.0-flash-lite is cheapest at $0.075 input / $0.30 output
+        const MODEL = 'gemini-2.0-flash-lite';
         const API_VERSION = 'v1beta';
         
         console.log(`🚀 Calling: ${API_VERSION}/models/${MODEL}`);
