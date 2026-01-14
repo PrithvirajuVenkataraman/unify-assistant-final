@@ -2493,18 +2493,99 @@ async function handleNameCorrection(text) {
 
         function showFastFoodBox() {
             const chatContainer = document.getElementById('chat-container');
+            
+            // Detect region from userLocation
+            let region = 'international'; // default
+            
+            if (userLocation) {
+                const country = userLocation.country?.toLowerCase() || '';
+                const state = userLocation.state?.toLowerCase() || '';
+                
+                // South India
+                if (country.includes('india') && (
+                    state.includes('tamil nadu') || state.includes('karnataka') || 
+                    state.includes('kerala') || state.includes('andhra') || 
+                    state.includes('telangana') || state.includes('pondicherry')
+                )) {
+                    region = 'south-india';
+                }
+                // North India
+                else if (country.includes('india')) {
+                    region = 'north-india';
+                }
+                // USA
+                else if (country.includes('united states') || country.includes('usa')) {
+                    region = 'usa';
+                }
+                // UK
+                else if (country.includes('united kingdom') || country.includes('uk') || country.includes('england')) {
+                    region = 'uk';
+                }
+                // Middle East
+                else if (country.includes('uae') || country.includes('saudi') || country.includes('qatar') || country.includes('kuwait')) {
+                    region = 'middle-east';
+                }
+            }
+            
+            // Regional quick access buttons
+            const regionalButtons = {
+                'south-india': [
+                    { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' },
+                    { emoji: '🍛', title: 'Biryani', query: 'biryani near me' },
+                    { emoji: '☕', title: 'Filter Coffee', query: 'filter coffee near me' }
+                ],
+                'north-india': [
+                    { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' },
+                    { emoji: '🍛', title: 'Biryani', query: 'biryani near me' },
+                    { emoji: '🫓', title: 'Dhaba', query: 'dhaba near me' }
+                ],
+                'usa': [
+                    { emoji: '☕', title: 'Coffee Shops', query: 'coffee shops near me' },
+                    { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' },
+                    { emoji: '🍕', title: 'Pizza', query: 'pizza near me' }
+                ],
+                'uk': [
+                    { emoji: '☕', title: 'Coffee', query: 'coffee shops near me' },
+                    { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' },
+                    { emoji: '🍟', title: 'Fish & Chips', query: 'fish and chips near me' }
+                ],
+                'middle-east': [
+                    { emoji: '🥙', title: 'Shawarma', query: 'shawarma near me' },
+                    { emoji: '☕', title: 'Coffee', query: 'coffee shops near me' },
+                    { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' }
+                ],
+                'international': [
+                    { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' },
+                    { emoji: '☕', title: 'Coffee', query: 'coffee shops near me' },
+                    { emoji: '🍕', title: 'Pizza', query: 'pizza near me' }
+                ]
+            };
+            
+            const buttons = regionalButtons[region] || regionalButtons['international'];
+            
             const boxDiv = document.createElement('div');
-            boxDiv.className = 'flex justify-center my-4 fade-in';
+            boxDiv.className = 'flex flex-wrap justify-center gap-3 my-4 fade-in';
+            
+            let buttonsHTML = '';
+            buttons.forEach(btn => {
+                buttonsHTML += `
+                    <a href="https://www.google.com/search?q=${encodeURIComponent(btn.query)}" target="_blank"
+                       class="flex items-center gap-2 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white px-5 py-2.5 rounded-xl shadow-lg transition-all transform hover:scale-105">
+                        <span class="text-xl">${btn.emoji}</span>
+                        <div class="text-left">
+                            <div class="font-bold text-sm">${btn.title}</div>
+                        </div>
+                    </a>
+                `;
+            });
+            
             boxDiv.innerHTML = `
-                <a href="https://www.google.com/search?q=fast+food+near+me" target="_blank"
-                   class="flex items-center gap-2 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white px-6 py-3 rounded-xl shadow-lg transition-all transform hover:scale-105">
-                    <span class="text-2xl">🍔</span>
-                    <div class="text-left">
-                        <div class="font-bold">Quick Fast Food</div>
-                        <div class="text-xs opacity-90">Find nearby options →</div>
-                    </div>
-                </a>
+                <div class="w-full text-center mb-2">
+                    <span class="text-xs text-gray-500">Quick access:</span>
+                </div>
+                ${buttonsHTML}
             `;
+            
             chatContainer.appendChild(boxDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
@@ -3585,6 +3666,20 @@ Now answer about the local food culture and famous dishes!`;
                 saveToHistory(text, aiResponse.response);
             }
             // Handle veg preference response - CHECK FIRST, BEFORE PATTERN MATCHING
+            if (window.waitingForHotelCity) {
+                window.waitingForHotelCity = false;
+                
+                // Now ask for veg preference with the city included
+                window.pendingFoodQuery = `Hotels in ${text}`;
+                window.waitingForVegPreference = true;
+                window.isHotelQuery = true;
+                
+                const prefMsg = "For hotel restaurants, would you prefer:\n1. Pure Veg\n2. Non-Veg\n3. Anything is fine\n\nYou can say the number or the preference!";
+                addChatMessage(prefMsg, false);
+                speak("For hotel restaurants, would you prefer pure veg, non veg, or anything is fine?");
+                return;
+            }
+            
             if (window.waitingForVegPreference) {
                 window.waitingForVegPreference = false;
                 const originalQuery = window.pendingFoodQuery;
@@ -3617,43 +3712,33 @@ Now answer about the local food culture and famous dishes!`;
                 const recommendPrompt = queryType === 'hotel' ? 
                 `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Answer this question about hotel recommendations: "${finalQuery}"
 
+IMPORTANT: Extract the city/location from the query above and recommend hotels in THAT specific city only!
+
 CRITICAL FORMATTING RULES:
 - NO bold markers (**) anywhere in your response
 - Use CLEAN formatting with proper spacing
 - Each hotel gets its own section with clear line breaks
 - Include ONLY these fields: Hotel Name, Food Type, Specialty
 
-Provide 7-10 hotels with VARIETY - include:
+Provide 7-10 hotels with VARIETY in the mentioned city - include:
 - Mix of well-known hotels AND smaller local favorites
 - Include cafes/eateries that serve great local food
 - Include places within 20-30 min drive if they're popular
 - Don't limit to just hotels - include any dining spots tourists love
+- Make sure ALL recommendations are specific to the city mentioned!
 
 Format (NO Location, NO Price, NO Why - we provide GPS directions):
 
 🏨 [Hotel/Restaurant/Cafe Name]
 🍽️ Food: [Pure Veg / Non-Veg / Both]
-⭐ Specialty: [Must-try local dish]
+⭐ Specialty: [Must-try local dish from that city]
 
 ${finalQuery.includes('pure vegetarian') ? 'IMPORTANT: Only suggest places with PURE VEGETARIAN food.' : ''}
 ${finalQuery.includes('non-vegetarian') ? 'IMPORTANT: Only suggest places with NON-VEGETARIAN food or both options.' : ''}
 ${finalQuery.includes('both veg and non-veg') ? 'IMPORTANT: Suggest a mix of places with different food types.' : ''}
 
-Example for Chidambaram:
-
-🏨 Hotel Saradharam
-🍽️ Food: Both
-⭐ Specialty: Chettinad Chicken Curry
-
-🏨 Moorthy Cafe
-🍽️ Food: Both  
-⭐ Specialty: Filter Coffee & Vada
-
-🏨 Hotel Jayaram
-🍽️ Food: Both
-⭐ Specialty: Mutton Biryani
-
 End with: "I hope you have a comfortable stay!"
+
 
 REMEMBER: 
 - NO Location, NO Price, NO Why
@@ -3742,6 +3827,19 @@ Now answer the question completely!`;
                 
                 // If it's a hotel query, ask for food preference
                 if (isHotelQuery && !hasVegPref && !hasNonVegPref && !window.waitingForVegPreference) {
+                    // Check if city is mentioned in query
+                    const cityPattern = /\b(in|at|near|around)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/;
+                    const hasCity = cityPattern.test(text) || /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/.test(text.replace(/^(hotels?|recommend|suggest|find|show|good|best|nice)\s*/i, ''));
+                    
+                    if (!hasCity) {
+                        // Ask for city first
+                        window.waitingForHotelCity = true;
+                        const msg = "Sure! Which city or location would you like hotel recommendations for?";
+                        addChatMessage(msg, false);
+                        speak(msg);
+                        return;
+                    }
+                    
                     window.pendingFoodQuery = text;
                     window.waitingForVegPreference = true;
                     window.isHotelQuery = true;
