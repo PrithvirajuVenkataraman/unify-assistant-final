@@ -1,6 +1,3 @@
-// JARVIS with Groq AI (COMPLETELY FREE - No quota limits like Gemini!)
-// Get free API key: https://console.groq.com/keys
-
 export default async function handler(req, res) {
     console.log('🚀 JARVIS API called (Groq)');
     
@@ -70,7 +67,7 @@ WHY: [Reason]
             temperature: 0.5,
             max_tokens: 4096,
             top_p: 0.9,
-            stream: false
+            stream: false  // Serverless functions don't support streaming well
         };
         
         const response = await fetch(
