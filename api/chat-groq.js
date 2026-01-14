@@ -1,6 +1,8 @@
-// Regular Vercel Serverless Function (Node.js)
+// JARVIS with Groq AI (COMPLETELY FREE - No quota limits like Gemini!)
+// Get free API key: https://console.groq.com/keys
+
 export default async function handler(req, res) {
-    console.log('🚀 JARVIS API called');
+    console.log('🚀 JARVIS API called (Groq)');
     
     // Handle CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -22,59 +24,64 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Message is required' });
         }
         
-        const API_KEY = process.env.GEMINI_API_KEY;
+        const API_KEY = process.env.GROQ_API_KEY;
         
         if (!API_KEY) {
-            console.error('❌ GEMINI_API_KEY not found!');
+            console.error('❌ GROQ_API_KEY not found!');
             return res.status(200).json({ 
-                response: 'API key not configured. Please check Vercel environment variables.'
+                response: 'Groq API key not configured. Get free key at: https://console.groq.com/keys'
             });
         }
         
-        console.log('✅ API Key found');
+        console.log('✅ Groq API Key found');
         
-        // Use cheapest model (FREE tier: 15 RPM, 1500 RPD, 1.5M tokens/day)
-        // gemini-2.0-flash-lite is cheapest at $0.075 input / $0.30 output
-        const MODEL = 'gemini-2.0-flash-lite';
-        const API_VERSION = 'v1beta';
+        // Use Llama 3.3 70B (free, fast, smart!)
+        const MODEL = 'llama-3.3-70b-versatile';
         
-        console.log(`🚀 Calling: ${API_VERSION}/models/${MODEL}`);
+        console.log(`🚀 Calling Groq with ${MODEL}`);
         
         const requestBody = {
-            contents: [{
-                parts: [{
-                    text: (systemPrompt || '') + '\n\nUser: ' + message
-                }]
-            }],
-            generationConfig: {
-                temperature: 0.7,
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 4850
-            }
+            model: MODEL,
+            messages: [
+                {
+                    role: 'system',
+                    content: systemPrompt || 'You are JARVIS, a helpful AI assistant.'
+                },
+                {
+                    role: 'user',
+                    content: message
+                }
+            ],
+            temperature: 0.7,
+            max_tokens: 4096,
+            top_p: 1,
+            stream: false
         };
         
         const response = await fetch(
-            `https://generativelanguage.googleapis.com/${API_VERSION}/models/${MODEL}:generateContent?key=${API_KEY}`,
+            'https://api.groq.com/openai/v1/chat/completions',
             {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${API_KEY}`
+                },
                 body: JSON.stringify(requestBody)
             }
         );
         
         if (!response.ok) {
             const errorData = await response.json();
-            console.error('❌ Gemini API Error:', errorData.error?.message);
+            console.error('❌ Groq API Error:', errorData.error?.message);
             return res.status(200).json({ 
-                response: `Gemini API Error: ${errorData.error?.message || 'Unknown error'}`
+                response: `Groq API Error: ${errorData.error?.message || 'Unknown error'}`
             });
         }
         
         const data = await response.json();
-        console.log('✅ SUCCESS - Got response from Gemini');
+        console.log('✅ SUCCESS - Got response from Groq');
         
-        const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const aiText = data.choices?.[0]?.message?.content;
         
         if (!aiText) {
             console.error('❌ No text in response');
@@ -84,7 +91,8 @@ export default async function handler(req, res) {
         }
         
         return res.status(200).json({
-            response: aiText.trim()
+            response: aiText.trim(),
+            model: MODEL
         });
         
     } catch (error) {
