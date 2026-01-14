@@ -1946,7 +1946,7 @@ ${contextMessages}
 Respond conversationally and naturally.`;
 
         
-        const response = await fetch('/api/chat-groq', {
+        const response = await fetch('/api/chat-new', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1959,10 +1959,13 @@ Respond conversationally and naturally.`;
         
         if (!response.ok) {
             const errorText = await response.text();
+            console.error('❌ API Response not OK:', response.status, errorText);
             throw new Error(`AI request failed: ${response.status}`);
         }
         
         const data = await response.json();
+        console.log('✅ API Response data:', data);
+        console.log('Response text:', data.response || data.text);
         
         conversationContext.push({ role: 'assistant', text: data.response || data.text });
         
@@ -3858,21 +3861,32 @@ Now answer the question completely!`;
                 const recommendPrompt = queryType === 'hotel' ? 
                 `Answer this question about hotel recommendations: "${text}"
 
-IMPORTANT: Extract the city/location from the user's question and recommend hotels in THAT specific city.
+CONTEXT AWARENESS:
+Recent conversation context:
+${conversationContext.slice(-3).map(msg => `${msg.role}: ${msg.text}`).join('\n')}
 
-Provide 4-5 specific hotel recommendations for the mentioned city in this EXACT format (one per line):
+CRITICAL INSTRUCTIONS:
+1. Extract the city name from the user's question OR from recent conversation context
+2. If user just says "hotels" or "accommodation", look at the recent conversation to find which city they're talking about
+3. Recommend hotels ONLY in that EXACT city - NOT nearby cities
+4. Example: If user asks for "Chidambaram", give Chidambaram hotels ONLY, NOT Puducherry or Pondicherry
+5. Example: If conversation was about "Paris itinerary" and user now asks "hotels", recommend Paris hotels
 
-HOTEL: [Hotel Name]
+Provide 4-5 specific hotel recommendations for the EXACT city in this format:
+
+HOTEL: [Hotel Name in the EXACT city]
 DESC: [One-line description]
 PRICE: [Budget/Mid-range/Luxury]
 FOOD: [Pure Veg/Non-Veg/Both]
-SPECIALTY: [Local dish to try from THAT city]
+SPECIALTY: [Local dish from THAT city]
 WHY: [Why recommended]
 ---
 
 ${text.includes('vegetarian') || text.includes('pure veg') ? 'IMPORTANT: Only suggest hotels with PURE VEGETARIAN restaurants.' : ''}
 
-Make sure all hotels and dishes are specific to the city mentioned in the user's question!
+VERIFICATION: Before responding, verify:
+1. You identified the correct city from question OR context
+2. All hotels are actually in that city
 
 End with: "I hope you have a comfortable stay!"
 
@@ -5210,5 +5224,3 @@ loadHistory();
 </script>
 </body>
 </html>
-
-
