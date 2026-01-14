@@ -1,10 +1,7 @@
 {
   "functions": {
     "api/chat-new.js": {
-      "runtime": "@vercel/edge"
-    },
-    "api/test.js": {
-      "runtime": "@vercel/edge"
+      "runtime": "edge"
     }
   }
 }
