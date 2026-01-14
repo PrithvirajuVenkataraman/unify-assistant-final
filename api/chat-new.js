@@ -30,7 +30,7 @@ export default async function handler(req) {
     }
     
     try {
-        const { message } = await req.json();
+        const { message, systemPrompt: customSystemPrompt, userName } = await req.json();
         
         if (!message) {
             return new Response(JSON.stringify({ error: 'Message is required' }), {
@@ -57,8 +57,8 @@ export default async function handler(req) {
         
         console.log('✅ API Key found');
         
-        // JARVIS System Prompt
-        const systemPrompt = `You are JARVIS (Just A Rather Very Intelligent System), an AI assistant inspired by Iron Man's AI. Be sophisticated, helpful, and professional with a touch of British wit.
+        // Use custom system prompt if provided, otherwise use JARVIS default
+        const systemPrompt = customSystemPrompt || `You are JARVIS (Just A Rather Very Intelligent System), an AI assistant inspired by Iron Man's AI. Be sophisticated, helpful, and professional with a touch of British wit.
 
 RESPONSE STYLE RULES:
 
@@ -159,11 +159,14 @@ For EVERYTHING ELSE (jokes, facts, weather, calculations, questions):
             });
         }
     } catch (error) {
-        console.error('❌ Error:', error);
+        console.error('❌ CRITICAL Error:', error);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
         
         return new Response(JSON.stringify({ 
-            response: "I'm having trouble connecting to my AI. Please try again in a moment!",
-            model: 'error'
+            response: `I'm having trouble connecting to my AI. Error: ${error.message}`,
+            model: 'error',
+            debug: error.stack
         }), {
             status: 200,
             headers: { 
