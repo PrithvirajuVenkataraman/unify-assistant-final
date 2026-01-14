@@ -1946,7 +1946,7 @@ ${contextMessages}
 Respond conversationally and naturally.`;
 
         
-        const response = await fetch('/api/chat-new', {
+        const response = await fetch('/api/chat-simple', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
