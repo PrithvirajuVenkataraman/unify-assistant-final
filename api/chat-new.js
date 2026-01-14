@@ -1,57 +1,37 @@
 // ========================================
-// JARVIS - Edge Function with Multiple Models
+// JARVIS - Serverless Function (Node.js)
 // File: api/chat-new.js
 // ========================================
 
-export const config = {
-  runtime: 'edge',
-};
-
-export default async function handler(req) {
-    console.log('🚀 JARVIS Edge function called');
+export default async function handler(req, res) {
+    console.log('🚀 JARVIS API called');
     
     // Handle CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
     if (req.method === 'OPTIONS') {
-        return new Response(null, {
-            status: 200,
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
-            }
-        });
+        return res.status(200).end();
     }
     
     if (req.method !== 'POST') {
-        return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-            status: 405,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return res.status(405).json({ error: 'Method not allowed' });
     }
     
     try {
-        const { message, systemPrompt: customSystemPrompt, userName } = await req.json();
+        const { message, systemPrompt: customSystemPrompt, userName } = req.body;
         
         if (!message) {
-            return new Response(JSON.stringify({ error: 'Message is required' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' }
-            });
+            return res.status(400).json({ error: 'Message is required' });
         }
         
         const API_KEY = process.env.GEMINI_API_KEY;
         
         if (!API_KEY) {
             console.error('❌ GEMINI_API_KEY not found!');
-            return new Response(JSON.stringify({ 
-                response: 'API key not configured. Check Vercel environment variables.',
-                intent: 'error'
-            }), {
-                status: 200,
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
+            return res.status(200).json({ 
+                response: 'API key not configured. Check Vercel environment variables.'
             });
         }
         
@@ -111,15 +91,9 @@ For EVERYTHING ELSE (jokes, facts, weather, calculations, questions):
             if (!response.ok) {
                 const errorData = await response.json();
                 console.error('❌ API Error:', errorData);
-                return new Response(JSON.stringify({ 
+                return res.status(200).json({ 
                     response: `I'm having trouble connecting to my AI. Please try again in a moment!`,
                     model: 'error'
-                }), {
-                    status: 200,
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
                 });
             }
             
@@ -134,45 +108,27 @@ For EVERYTHING ELSE (jokes, facts, weather, calculations, questions):
                 throw new Error('Invalid API response structure');
             }
             
-            return new Response(JSON.stringify({
+            return res.status(200).json({
                 response: responseText.trim(),
                 model: MODEL
-            }), {
-                status: 200,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
             });
             
         } catch (error) {
-            console.error('❌ Error:', error);
-            return new Response(JSON.stringify({ 
+            console.error('Error:', error);
+            return res.status(200).json({ 
                 response: "I'm having trouble connecting to my AI. Please try again in a moment!",
                 model: 'error'
-            }), {
-                status: 200,
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
             });
         }
     } catch (error) {
-        console.error('❌ CRITICAL Error:', error);
+        console.error('CRITICAL Error:', error);
         console.error('Error message:', error.message);
         console.error('Error stack:', error.stack);
         
-        return new Response(JSON.stringify({ 
+        return res.status(200).json({ 
             response: `I'm having trouble connecting to my AI. Error: ${error.message}`,
             model: 'error',
             debug: error.stack
-        }), {
-            status: 200,
-            headers: { 
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            }
         });
     }
 }
