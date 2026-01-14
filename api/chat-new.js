@@ -1,60 +1,43 @@
-// Vercel Edge Function - WORKING VERSION
-export const config = {
-  runtime: 'edge',
-};
-
-export default async function handler(req) {
+// Regular Vercel Serverless Function (Node.js)
+export default async function handler(req, res) {
     console.log('🚀 JARVIS API called');
     
     // Handle CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
     if (req.method === 'OPTIONS') {
-        return new Response(null, {
-            status: 200,
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
-            }
-        });
+        return res.status(200).end();
     }
     
     if (req.method !== 'POST') {
-        return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-            status: 405,
-            headers: { 'Content-Type': 'application/json' }
-        });
+        return res.status(405).json({ error: 'Method not allowed' });
     }
     
     try {
-        const { message, systemPrompt } = await req.json();
+        const { message, systemPrompt } = req.body;
         
         if (!message) {
-            return new Response(JSON.stringify({ error: 'Message is required' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' }
-            });
+            return res.status(400).json({ error: 'Message is required' });
         }
         
         const API_KEY = process.env.GEMINI_API_KEY;
         
         if (!API_KEY) {
             console.error('❌ GEMINI_API_KEY not found!');
-            return new Response(JSON.stringify({ 
-                response: 'API key not configured.'
-            }), {
-                status: 200,
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
+            return res.status(200).json({ 
+                response: 'API key not configured. Please check Vercel environment variables.'
             });
         }
         
-        // Use stable proven models
+        console.log('✅ API Key found');
+        
+        // Use stable model
         const MODEL = 'gemini-1.5-flash-latest';
         const API_VERSION = 'v1beta';
         
-        console.log(`🚀 Using: ${API_VERSION}/models/${MODEL}`);
+        console.log(`🚀 Calling: ${API_VERSION}/models/${MODEL}`);
         
         const requestBody = {
             contents: [{
@@ -81,43 +64,32 @@ export default async function handler(req) {
         
         if (!response.ok) {
             const errorData = await response.json();
-            console.error('❌ API Error:', errorData);
-            return new Response(JSON.stringify({ 
-                response: "I'm having trouble connecting to my AI. Please try again!"
-            }), {
-                status: 200,
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
+            console.error('❌ Gemini API Error:', errorData.error?.message);
+            return res.status(200).json({ 
+                response: `Gemini API Error: ${errorData.error?.message || 'Unknown error'}`
             });
         }
         
         const data = await response.json();
-        console.log('✅ SUCCESS');
+        console.log('✅ SUCCESS - Got response from Gemini');
         
-        const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response';
+        const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
         
-        return new Response(JSON.stringify({
+        if (!aiText) {
+            console.error('❌ No text in response');
+            return res.status(200).json({ 
+                response: 'No response from AI. Please try again.'
+            });
+        }
+        
+        return res.status(200).json({
             response: aiText.trim()
-        }), {
-            status: 200,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            }
         });
         
     } catch (error) {
-        console.error('❌ Error:', error.message);
-        return new Response(JSON.stringify({ 
-            response: "Error: " + error.message
-        }), {
-            status: 200,
-            headers: { 
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            }
+        console.error('❌ Critical Error:', error.message);
+        return res.status(200).json({ 
+            response: `Error: ${error.message}`
         });
     }
 }
