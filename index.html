@@ -1946,7 +1946,7 @@ ${contextMessages}
 Respond conversationally and naturally.`;
 
         
-        const response = await fetch('/api/chat-new', {
+        const response = await fetch('/api/chat-groq', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2283,7 +2283,11 @@ async function handleNameCorrection(text) {
         }
 
         // ========== CHAT MESSAGE HANDLING ==========
-        function addChatMessage(text, isUser = true) {
+        function addAIMessage(text) {
+            addChatMessage(text, false, true); // Always use typewriter for AI
+        }
+        
+        function addChatMessage(text, isUser = true, typewriter = false) {
             const chatContainer = document.getElementById('chat-container');
             const messageDiv = document.createElement('div');
             messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-2 fade-in`;
@@ -2311,7 +2315,7 @@ async function handleNameCorrection(text) {
                 messageDiv.innerHTML = `
                     <div class="flex items-start gap-2 max-w-md">
                         <div class="${bgClass} rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex-1">
-                            <p class="text-sm ${textClass}">${formattedText}</p>
+                            <p class="text-sm ${textClass} typewriter-text"></p>
                         </div>
                         <button onclick="speak(\`${textForSpeech.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`)" class="flex-shrink-0 p-2 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-all">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2321,6 +2325,33 @@ async function handleNameCorrection(text) {
                         </button>
                     </div>
                 `;
+                
+                chatContainer.appendChild(messageDiv);
+                
+                // Typewriter effect for AI responses
+                if (typewriter) {
+                    const textElement = messageDiv.querySelector('.typewriter-text');
+                    let charIndex = 0;
+                    const speed = 15; // ms per character (faster = lower number)
+                    
+                    function typeCharacter() {
+                        if (charIndex < formattedText.length) {
+                            textElement.innerHTML = formattedText.substring(0, charIndex + 1);
+                            charIndex++;
+                            chatContainer.scrollTop = chatContainer.scrollHeight;
+                            setTimeout(typeCharacter, speed);
+                        }
+                    }
+                    
+                    typeCharacter();
+                } else {
+                    const textElement = messageDiv.querySelector('.typewriter-text');
+                    textElement.innerHTML = formattedText;
+                }
+                
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                chatHistory.push({ text, isUser });
+                return;
             }
             
             chatContainer.appendChild(messageDiv);
