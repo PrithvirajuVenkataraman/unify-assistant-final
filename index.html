@@ -1946,7 +1946,7 @@ ${contextMessages}
 Respond conversationally and naturally.`;
 
         
-        const response = await fetch('/api/chat-new', {
+        const response = await fetch('/api/chat-groq', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -5210,4 +5210,5 @@ loadHistory();
 </script>
 </body>
 </html>
+
 
