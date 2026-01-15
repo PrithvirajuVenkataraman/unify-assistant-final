@@ -1947,8 +1947,16 @@ Respond conversationally and naturally.`;
 
         
         const response = await fetch('/api/chat-groq', {
-            method: 'POST',
-            headers: (() => { const h = { 'Content-Type': 'application/json' }; const k = (window.APP_API_KEY || localStorage.getItem('APP_API_KEY') || ''); if (k) h['X-App-Key'] = k; return h; })(),
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-App-Key': localStorage.getItem('APP_API_KEY') || ''
+                    },
+                    body: JSON.stringify({
+                        message: prompt,
+                        systemPrompt: SYSTEM_PROMPT
+                    })
+                })(),
             body: JSON.stringify({
                 message: userMessage,
                 systemPrompt: systemPrompt,
