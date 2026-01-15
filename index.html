@@ -1948,7 +1948,7 @@ Respond conversationally and naturally.`;
         
         const response = await fetch('/api/chat-groq', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: (() => { const h = { 'Content-Type': 'application/json' }; const k = (window.APP_API_KEY || localStorage.getItem('APP_API_KEY') || ''); if (k) h['X-App-Key'] = k; return h; })(),
             body: JSON.stringify({
                 message: userMessage,
                 systemPrompt: systemPrompt,
@@ -2916,78 +2916,103 @@ async function handleNameCorrection(text) {
         
         // Enrich hotel specialties with real data from web search
         async function enrichHotelSpecialties(responseText, query) {
-            
-            // Extract city from query
-            const locationMatch = query.match(/\b(in|at|near)\s+([A-Z][a-z]+(?: [A-Z][a-z]+)*)/i);
-            const cityName = locationMatch ? locationMatch[2] : '';
-            
-            if (!cityName) return responseText;
-            
-            // Find all hotels in the response
-            // Pattern: 🏨 Hotel Name
-            const hotelMatches = [...responseText.matchAll(/🏨\s+([^\n\[]+?)(?:\s*\[|$)/gm)];
-            
-            if (hotelMatches.length === 0) return responseText;
-            
-            let enrichedResponse = responseText;
-            
-            // Search for each hotel (limit to first 5 to avoid too many searches)
-            for (let i = 0; i < Math.min(hotelMatches.length, 5); i++) {
-                const match = hotelMatches[i];
-                const hotelName = match[1].trim();
-                
-                try {
-                    // Search using web_search tool via our API
-                    const searchQuery = `${hotelName} ${cityName} famous for specialty`;
-                    
-                    const response = await fetch('https://api.anthropic.com/v1/messages', {
+            try {
+                // Parse city name from query
+                const cityMatch = query.match(/in\s+([^,\n]+)/i);
+                const cityName = cityMatch ? cityMatch[1].trim() : '';
+
+                // Find hotel blocks that look like: "1. Name|Location|Budget|Specialty|Rating"
+                // We will only attempt to enrich if Specialty is empty, Unknown, or looks like a placeholder.
+                const hotelLineRegex = /^\s*\d+\.\s*([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^|\n]+)\|([^\n]+)$/gm;
+
+                let enrichedResponse = responseText;
+                const hotelLines = [...responseText.matchAll(hotelLineRegex)];
+
+                if (hotelLines.length === 0) return responseText;
+
+                // Helper to call our Brave Search API route
+                async function braveSearch(q) {
+                    const res = await fetch('/api/search', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'anthropic-version': '2023-06-01'
-                        },
-                        body: JSON.stringify({
-                            model: 'claude-sonnet-4-20250514',
-                            max_tokens: 300,
-                            tools: [{
-                                type: 'web_search_20250305',
-                                name: 'web_search'
-                            }],
-                            messages: [{
-                                role: 'user',
-                                content: `Search for: ${searchQuery}. What is ${hotelName} famous for? Return ONLY the specialty dish/food in 3-5 words. Format: "Famous for: [dish]"`
-                            }]
-                        })
+                        headers: (() => { const h = { 'Content-Type': 'application/json' }; const k = (window.APP_API_KEY || localStorage.getItem('APP_API_KEY') || ''); if (k) h['X-App-Key'] = k; return h; })(),
+                        body: JSON.stringify({ query: q })
                     });
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        const content = data.content.find(c => c.type === 'text');
-                        
-                        if (content && content.text) {
-                            const specialty = extractSpecialtyFromResponse(content.text);
-                            
-                            if (specialty) {
-                                
-                                // Find and replace the specialty line for this hotel
-                                const hotelBlockRegex = new RegExp(
-                                    `(🏨\\s+${hotelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^⭐]*⭐\\s*Specialty:\\s*)([^\\n]+)`,
-                                    'i'
-                                );
-                                
-                                enrichedResponse = enrichedResponse.replace(hotelBlockRegex, `$1${specialty}`);
-                            }
-                        }
+
+                    if (!res.ok) {
+                        // If search fails, do not break the chat. Just skip enrichment.
+                        return null;
                     }
-                } catch (error) {
-                    // Continue with next hotel
+                    return res.json(); // { results: [...] }
                 }
-                
-                // Small delay between searches
-                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // Build a text blob from search results so we can reuse extractSpecialtyFromResponse + cleanSpecialty
+                function buildResultsText(results) {
+                    if (!Array.isArray(results) || results.length === 0) return '';
+                    return results
+                        .slice(0, 5)
+                        .map(r => `${r.title || ''}. ${r.description || ''}`)
+                        .join(' ');
+                }
+
+                function specialtyLooksUnknown(s) {
+                    if (!s) return true;
+                    const v = s.trim().toLowerCase();
+                    return (
+                        v === 'unknown' ||
+                        v === 'n/a' ||
+                        v === 'na' ||
+                        v === 'tbd' ||
+                        v.includes('not specified') ||
+                        v.includes('not sure')
+                    );
+                }
+
+                for (const match of hotelLines) {
+                    const fullLine = match[0];
+                    const hotelName = match[1].trim();
+                    const hotelLocation = match[2].trim();
+                    const budget = match[3].trim();
+                    const specialtyCurrent = match[4].trim();
+                    const rating = match[5].trim();
+
+                    if (!specialtyLooksUnknown(specialtyCurrent)) continue;
+
+                    // Query Brave Search for "known for" style info
+                    const searchQuery = `${hotelName} ${hotelLocation || cityName} known for famous for specialty`;
+                    const data = await braveSearch(searchQuery);
+                    if (!data || !data.results) continue;
+
+                    const blob = buildResultsText(data.results);
+                    if (!blob) continue;
+
+                    // Try to extract a clean specialty phrase
+                    // We prefix with "Famous for:" to encourage pattern matching in extractSpecialtyFromResponse.
+                    const extracted = extractSpecialtyFromResponse(`Famous for: ${blob}`) || extractSpecialtyFromResponse(blob);
+
+                    if (extracted) {
+                        const replacement = fullLine.replace(
+                            hotelLineRegex,
+                            (line) => {
+                                // Re-parse line to avoid accidental global replacement issues
+                                const parts = line.split('|').map(p => p.trim());
+                                if (parts.length < 5) return line;
+                                // parts[0] includes "1. Name"
+                                parts[3] = extracted; // Specialty
+                                return `${parts[0]}|${parts[1]}|${parts[2]}|${parts[3]}|${parts[4]}`;
+                            }
+                        );
+                        enrichedResponse = enrichedResponse.replace(fullLine, replacement);
+                    }
+
+                    // Small delay to avoid hammering the free tier
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+
+                return enrichedResponse;
+            } catch (e) {
+                // Fail open. If anything goes wrong, return original response.
+                return responseText;
             }
-            
-            return enrichedResponse;
         }
         
         // Extract specialty from search response
@@ -3915,7 +3940,7 @@ Now answer the question completely!`;
                         
                         const searchResponse = await fetch('/api/search', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: (() => { const h = { 'Content-Type': 'application/json' }; const k = (window.APP_API_KEY || localStorage.getItem('APP_API_KEY') || ''); if (k) h['X-App-Key'] = k; return h; })(),
                             body: JSON.stringify({ query: searchQuery })
                         });
                         
