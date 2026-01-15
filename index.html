@@ -2598,26 +2598,32 @@ async function handleNameCorrection(text) {
             const buttons = regionalButtons[region] || regionalButtons['international'];
             
             const boxDiv = document.createElement('div');
-            boxDiv.className = 'flex flex-wrap justify-center gap-3 my-4 fade-in';
+            boxDiv.className = 'flex flex-wrap justify-center gap-4 my-6 px-4 fade-in';
             
             let buttonsHTML = '';
             buttons.forEach(btn => {
                 buttonsHTML += `
                     <a href="https://www.google.com/search?q=${encodeURIComponent(btn.query)}" target="_blank"
-                       class="flex items-center gap-2 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white px-5 py-2.5 rounded-xl shadow-lg transition-all transform hover:scale-105">
-                        <span class="text-xl">${btn.emoji}</span>
+                       class="flex items-center gap-3 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white px-6 py-3 rounded-xl shadow-lg transition-all transform hover:scale-105 min-w-[160px]">
+                        <span class="text-2xl">${btn.emoji}</span>
                         <div class="text-left">
                             <div class="font-bold text-sm">${btn.title}</div>
+                            <div class="text-xs opacity-80">Search nearby</div>
                         </div>
                     </a>
                 `;
             });
             
             boxDiv.innerHTML = `
-                <div class="w-full text-center mb-2">
-                    <span class="text-xs text-gray-500">Quick access:</span>
+                <div class="w-full text-center mb-3 mt-4">
+                    <span class="text-sm font-medium text-gray-600 dark:text-gray-400">🎯 Quick Access</span>
                 </div>
-                ${buttonsHTML}
+                <div class="flex flex-wrap justify-center gap-4">
+                    ${buttonsHTML}
+                </div>
+                <div class="w-full text-center mt-2">
+                    <span class="text-xs text-gray-400">Click to search on Google Maps</span>
+                </div>
             `;
             
             chatContainer.appendChild(boxDiv);
@@ -3366,8 +3372,7 @@ This gives you more freedom to explore at your own pace!`;
                     }
                 } else {
                     // No location and no cached weather - try to get user's location automatically
-                    addChatMessage("🌍 Detecting your location...", false);
-                    speak("Detecting your location");
+                    showThinkingIndicator('🌍 Getting location...');
                     
                     if (navigator.geolocation) {
                         // Request location with better options
@@ -3426,6 +3431,7 @@ This gives you more freedom to explore at your own pace!`;
                             },
                             (error) => {
                                 // Geolocation failed, ask for location
+                                hideThinkingIndicator();
                                 let askMsg;
                                 if (error.code === 1) {
                                     // Permission denied
@@ -3861,11 +3867,15 @@ Now answer the question completely!`;
                 
                 // If it's a hotel query, ask for food preference
                 if (isHotelQuery && !hasVegPref && !hasNonVegPref && !window.waitingForVegPreference) {
-                    // Check if city is mentioned in query
+                    // Check if city is mentioned in query OR in recent conversation
                     const cityPattern = /\b(in|at|near|around)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/;
                     const hasCity = cityPattern.test(text) || /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/.test(text.replace(/^(hotels?|recommend|suggest|find|show|good|best|nice)\s*/i, ''));
                     
-                    if (!hasCity) {
+                    // Check conversation context for city
+                    const contextText = conversationContext.slice(-3).map(m => m.text).join(' ');
+                    const contextHasCity = /\b(itinerary|itenary|trip|visit|travel|hotels?|restaurants?)\s+(?:for|in|to|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i.test(contextText);
+                    
+                    if (!hasCity && !contextHasCity) {
                         // Ask for city first
                         window.waitingForHotelCity = true;
                         const msg = "Sure! Which city or location would you like hotel recommendations for?";
@@ -3889,23 +3899,58 @@ Now answer the question completely!`;
                 const queryType = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation)\b/i) ? 'hotel' : 
                                   cleanText.toLowerCase().match(/\b(transport|bus|train|taxi)\b/i) ? 'transport' : 'food';
                 
+                // First, search the web for real hotels
+                let searchResults = '';
+                try {
+                    const cityName = text.match(/in\s+([^,?.!]+)/i)?.[1] || 
+                                    conversationContext.slice(-3).map(m => m.text).join(' ').match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/)?.[1] || '';
+                    
+                    if (cityName) {
+                        const searchQuery = `hotels in ${cityName.trim()}`;
+                        console.log('🔍 Searching for:', searchQuery);
+                        
+                        const searchResponse = await fetch('/api/search', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ query: searchQuery })
+                        });
+                        
+                        const searchData = await searchResponse.json();
+                        
+                        if (searchData.results && searchData.results.length > 0) {
+                            searchResults = '\n\nREAL HOTELS FROM WEB SEARCH:\n' + 
+                                searchData.results.map(r => `- ${r.title}: ${r.description}`).join('\n');
+                            console.log('✅ Found real hotels via search');
+                        }
+                    }
+                } catch (searchError) {
+                    console.log('⚠️ Search failed, using LLM knowledge only:', searchError.message);
+                }
+                
                 const recommendPrompt = queryType === 'hotel' ? 
                 `Answer this question about hotel recommendations: "${text}"
 
 CONTEXT AWARENESS:
 Recent conversation context:
 ${conversationContext.slice(-3).map(msg => `${msg.role}: ${msg.text}`).join('\n')}
+${searchResults}
 
 CRITICAL INSTRUCTIONS:
 1. Extract the city name from the user's question OR from recent conversation context
 2. If user just says "hotels" or "accommodation", look at the recent conversation to find which city they're talking about
-3. Recommend hotels ONLY in that EXACT city - NOT nearby cities
-4. Example: If user asks for "Chidambaram", give Chidambaram hotels ONLY, NOT Puducherry or Pondicherry
-5. Example: If conversation was about "Paris itinerary" and user now asks "hotels", recommend Paris hotels
+3. USE THE REAL HOTELS FROM WEB SEARCH RESULTS ABOVE - these are verified to exist!
+4. ONLY recommend hotels that appear in the search results OR that you are 100% certain exist
+5. DO NOT make up hotel names that aren't in the search results
+6. If no search results available, only suggest hotels you're absolutely certain about
 
-Provide 4-5 specific hotel recommendations for the EXACT city in this format:
+VERIFICATION CHECKLIST:
+✓ City identified correctly from query or context
+✓ Hotels match search results OR are well-known chains
+✓ Hotels are in the EXACT city requested (not 50km+ away)
 
-HOTEL: [Hotel Name in the EXACT city]
+Provide 3-5 hotel recommendations in this format:
+
+HOTEL: [Hotel Name from search results or verified knowledge]
 DESC: [One-line description]
 PRICE: [Budget/Mid-range/Luxury]
 FOOD: [Pure Veg/Non-Veg/Both]
@@ -3914,10 +3959,6 @@ WHY: [Why recommended]
 ---
 
 ${text.includes('vegetarian') || text.includes('pure veg') ? 'IMPORTANT: Only suggest hotels with PURE VEGETARIAN restaurants.' : ''}
-
-VERIFICATION: Before responding, verify:
-1. You identified the correct city from question OR context
-2. All hotels are actually in that city
 
 End with: "I hope you have a comfortable stay!"
 
