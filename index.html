@@ -2017,6 +2017,7 @@ async function handleNameCorrection(text) {
 
         // ========== STATE VARIABLES ==========
         let darkMode = false;
+        let autoSpeak = false; // Auto-speak disabled by default (user can click speaker button)
         let recognition = null;
         let continuousRecognition = null;
         let wakeWordMode = false;  // Are we listening for "Hey Jarvis"?
@@ -2317,10 +2318,13 @@ async function handleNameCorrection(text) {
                         <div class="${bgClass} rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex-1">
                             <p class="text-sm ${textClass} typewriter-text"></p>
                         </div>
-                        <button onclick="speak(\`${textForSpeech.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`)" class="flex-shrink-0 p-2 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-all">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <button onclick="toggleSpeak(\`${textForSpeech.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`, this)" class="flex-shrink-0 p-2 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-all speaker-btn">
+                            <svg class="play-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                            </svg>
+                            <svg class="stop-icon hidden" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
+                                <rect x="6" y="6" width="12" height="12" rx="2"></rect>
                             </svg>
                         </button>
                     </div>
@@ -3372,7 +3376,7 @@ This gives you more freedom to explore at your own pace!`;
                     }
                 } else {
                     // No location and no cached weather - try to get user's location automatically
-                    showThinkingIndicator('🌍 Getting location...');
+                    showThinkingIndicator();
                     
                     if (navigator.geolocation) {
                         // Request location with better options
@@ -4974,8 +4978,32 @@ Now answer the question completely!`;
 
         // ========== TEXT-TO-SPEECH ==========
         let currentUtterance = null; // Track current speech
+        let currentSpeakerButton = null; // Track which button is playing
         
-        function speak(text) {
+        function toggleSpeak(text, button) {
+            // If currently speaking, stop
+            if (synth.speaking || (typeof responsiveVoice !== 'undefined' && responsiveVoice.isPlaying())) {
+                stopSpeaking();
+                // Reset all speaker buttons
+                document.querySelectorAll('.speaker-btn').forEach(btn => {
+                    btn.querySelector('.play-icon')?.classList.remove('hidden');
+                    btn.querySelector('.stop-icon')?.classList.add('hidden');
+                });
+                currentSpeakerButton = null;
+                return;
+            }
+            
+            // Otherwise, speak
+            currentSpeakerButton = button;
+            button.querySelector('.play-icon')?.classList.add('hidden');
+            button.querySelector('.stop-icon')?.classList.remove('hidden');
+            speak(text, true); // Force speak when button clicked
+        }
+        
+        function speak(text, force = false) {
+            // Only speak if autoSpeak is enabled OR forced (like manual button click)
+            if (!autoSpeak && !force) return;
+            
             const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
             
             // Stop any ongoing speech
@@ -5020,6 +5048,11 @@ Now answer the question completely!`;
                 // Clean up when done
                 utterance.onend = () => {
                     currentUtterance = null;
+                    if (currentSpeakerButton) {
+                        currentSpeakerButton.querySelector('.play-icon')?.classList.remove('hidden');
+                        currentSpeakerButton.querySelector('.stop-icon')?.classList.add('hidden');
+                        currentSpeakerButton = null;
+                    }
                 };
                 
                 synth.speak(utterance);
