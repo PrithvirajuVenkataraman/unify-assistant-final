@@ -2046,7 +2046,7 @@ async function handleNameCorrection(text) {
         let memoryStore = {}; // Store user's personal information
 
         // ========== INITIALIZATION ==========
-        window.onload = async () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             // ========== JARVIS INTRO ANIMATION ==========
             const introScreen = document.getElementById('jarvis-intro');
             
@@ -2109,7 +2109,7 @@ async function handleNameCorrection(text) {
             speak(welcomeMsg);
             
             // No hint message - suggestions will appear after first query
-        };
+        });
 
         async function requestMicrophonePermission() {
             try {
