@@ -5354,5 +5354,100 @@ loadHistory();
    - Visual shake animation + auto-dismiss
 */
 </script>
+
+<script>
+/* ================================
+   JARVIS UX + GEO REFINEMENTS
+   ================================ */
+
+/* ---------- INTENT GATING ---------- */
+function detectIntent(q) {
+  return {
+    wantsHotels: /hotel|stay|accommodation/i.test(q),
+    wantsFood: /restaurant|food|lunch|dinner/i.test(q)
+  };
+}
+
+/* ---------- HAVERSINE ---------- */
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat/2) ** 2 +
+    Math.cos(lat1 * Math.PI/180) *
+    Math.cos(lat2 * Math.PI/180) *
+    Math.sin(dLon/2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/* ---------- GEOCODING ---------- */
+const geoCache = {};
+async function geocode(place) {
+  if (geoCache[place]) return geoCache[place];
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}`
+  );
+  const data = await res.json();
+  if (!data || !data[0]) return null;
+  const point = { lat: +data[0].lat, lon: +data[0].lon };
+  geoCache[place] = point;
+  return point;
+}
+
+/* ---------- FILTER BY 10KM ---------- */
+async function filterByRadius(anchor, places) {
+  const anchorGeo = await geocode(anchor);
+  if (!anchorGeo) return [];
+  const out = [];
+  for (const p of places) {
+    const g = await geocode(`${p.name}, ${anchor}`);
+    if (!g) continue;
+    const d = haversineKm(anchorGeo.lat, anchorGeo.lon, g.lat, g.lon);
+    if (d <= 10) out.push({ ...p, distanceKm: d });
+  }
+  return out;
+}
+
+/* ---------- READ ALOUD (MANUAL ONLY) ---------- */
+let activeUtterance = null;
+function toggleReadAloud(text, btn) {
+  if (btn.dataset.speaking === 'true') {
+    speechSynthesis.cancel();
+    btn.textContent = '▶️';
+    btn.dataset.speaking = 'false';
+    return;
+  }
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  activeUtterance = u;
+  btn.textContent = '⏹';
+  btn.dataset.speaking = 'true';
+  u.onend = () => {
+    btn.textContent = '▶️';
+    btn.dataset.speaking = 'false';
+  };
+  speechSynthesis.speak(u);
+}
+
+/* ---------- DISABLE AUTO TTS ---------- */
+if (window.responsiveVoice) {
+  responsiveVoice.speak = function() {};
+}
+
+/* ---------- DICTATE (SPEECH TO TEXT ONLY) ---------- */
+if ('webkitSpeechRecognition' in window) {
+  const recognition = new webkitSpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.onresult = e => {
+    const input = document.querySelector('#userInput');
+    if (input) input.value += e.results[0][0].transcript;
+  };
+  const btn = document.getElementById('dictateBtn');
+  if (btn) btn.onclick = () => recognition.start();
+}
+</script>
+
 </body>
 </html>
