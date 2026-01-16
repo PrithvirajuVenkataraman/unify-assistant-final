@@ -1,13 +1,14 @@
+// Brave Search API wrapper for JARVIS
 const __rateLimitStore = new Map();
+
 function requireAppKey(req, res) {
     const expected = process.env.APP_API_KEY;
-    if (!expected) return true; // optional. If set in Vercel, it will be enforced.
+    if (!expected) return true;
     const provided = req.headers['x-app-key'];
     if (provided && String(provided) === String(expected)) return true;
     res.status(401).json({ error: 'Unauthorized' });
     return false;
 }
-
 
 function getClientIp(req) {
     const xff = req.headers['x-forwarded-for'];
@@ -38,7 +39,6 @@ function checkRateLimit(req, { windowMs, max }) {
 }
 
 function enforceRateLimits(req, res) {
-    // Burst control
     const perSec = checkRateLimit(req, { windowMs: 1000, max: 2 });
     if (!perSec.ok) {
         res.setHeader('Retry-After', String(perSec.retryAfterSec));
@@ -47,7 +47,6 @@ function enforceRateLimits(req, res) {
         return false;
     }
 
-    // Sustained control
     const perMin = checkRateLimit(req, { windowMs: 60_000, max: 60 });
     if (!perMin.ok) {
         res.setHeader('Retry-After', String(perMin.retryAfterSec));
@@ -61,18 +60,16 @@ function enforceRateLimits(req, res) {
 
 export default async function handler(req, res) {
     if (!requireAppKey(req, res)) return;
-    console.log('🔍 Brave Search API called');
     
     // Handle CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-App-Key');
     
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
     
-    // Throttle to protect free tier and prevent accidental loops
     if (!enforceRateLimits(req, res)) return;
 
     if (req.method !== 'POST') {
@@ -89,14 +86,11 @@ export default async function handler(req, res) {
         const API_KEY = process.env.BRAVE_SEARCH_API_KEY;
         
         if (!API_KEY) {
-            console.error('❌ BRAVE_SEARCH_API_KEY not found!');
             return res.status(200).json({ 
                 results: [],
-                error: 'Search API key not configured'
+                error: 'Search API key not configured. Get one at: https://brave.com/search/api/'
             });
         }
-        
-        console.log(`🔍 Searching: ${query}`);
         
         // Call Brave Search API
         const response = await fetch(
@@ -111,22 +105,20 @@ export default async function handler(req, res) {
         );
         
         if (!response.ok) {
-            const errorData = await response.json();
-            console.error('❌ Brave Search Error:', errorData);
+            const errorData = await response.json().catch(() => ({}));
             return res.status(200).json({ 
                 results: [],
-                error: 'Search failed'
+                error: `Search failed: ${errorData.message || response.statusText}`
             });
         }
         
         const data = await response.json();
-        console.log('✅ Search results received');
         
-        // Extract relevant info
+        // Extract relevant info from results
         const results = data.web?.results?.slice(0, 5).map(r => ({
-            title: r.title,
-            description: r.description,
-            url: r.url
+            title: r.title || '',
+            description: r.description || '',
+            url: r.url || ''
         })) || [];
         
         return res.status(200).json({
@@ -135,7 +127,6 @@ export default async function handler(req, res) {
         });
         
     } catch (error) {
-        console.error('❌ Error:', error.message);
         return res.status(200).json({ 
             results: [],
             error: error.message
