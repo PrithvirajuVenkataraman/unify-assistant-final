@@ -1086,30 +1086,6 @@
             }
         }
         
-        /* Quick Reply Suggestions */
-        .quick-reply-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 8px 16px;
-            background: white;
-            border: 2px solid #E5E7EB;
-            border-radius: 20px;
-            font-size: 14px;
-            color: #374151;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: all 0.2s ease;
-            flex-shrink: 0;
-        }
-        
-        .quick-reply-btn:hover {
-            border-color: #8B5CF6;
-            color: #8B5CF6;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
-        }
-        
         .scrollbar-hide {
             -ms-overflow-style: none;
             scrollbar-width: none;
@@ -1325,15 +1301,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Quick Reply Suggestions -->
-    <div id="quick-replies" class="fixed bottom-24 left-0 right-0 z-30 hidden">
-        <div class="max-w-4xl mx-auto px-4">
-            <div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                <!-- Suggestions will be added here dynamically -->
-            </div>
-        </div>
-    </div>
     
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="loading-overlay hidden">
@@ -1499,34 +1466,14 @@ function hideLoading() {
 }
 
 function showQuickReplies(suggestions) {
-    const container = document.getElementById('quick-replies');
-    if (!container || !suggestions || suggestions.length === 0) {
-        hideQuickReplies();
-        return;
-    }
     
-    const buttonsHtml = suggestions.map(suggestion => `
-        <button class="quick-reply-btn" onclick="handleQuickReply('${suggestion.text.replace(/'/g, "\\'")}')">
-            ${suggestion.icon || '💬'} ${suggestion.text}
-        </button>
-    `).join('');
-    
-    container.querySelector('div > div').innerHTML = buttonsHtml;
-    container.classList.remove('hidden');
-    
-    
-    setTimeout(hideQuickReplies, 30000);
 }
 
 function hideQuickReplies() {
-    const container = document.getElementById('quick-replies');
-    if (container) {
-        container.classList.add('hidden');
-    }
+    
 }
 
 function handleQuickReply(text) {
-    hideQuickReplies();
     document.getElementById('text-input').value = text;
     sendTextInput();
 }
