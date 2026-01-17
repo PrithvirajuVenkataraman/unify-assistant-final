@@ -1344,10 +1344,10 @@
     </div>
 
     <!-- ChatGPT-style Input at Bottom -->
-    <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
+    <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
         <div class="max-w-4xl mx-auto p-4">
-            <div class="flex items-center gap-3 bg-gray-50 rounded-full border-2 border-gray-200 px-4 py-3 hover:border-purple-300 transition-all">
-                <button onclick="showHelpModal()" class="flex-shrink-0 relative group" title="Help & Tips">
+            <div id="input-bar-inner" class="flex items-center gap-3 bg-gray-50 rounded-full border-2 border-gray-200 px-4 py-3 hover:border-purple-300 transition-all">
+                <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group" title="Help & Tips">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-600 hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
                         <line x1="12" y1="8" x2="12" y2="12"></line>
@@ -1363,7 +1363,7 @@
                     type="text" 
                     id="text-input"
                     placeholder="Ask anything..."
-                    class="flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-500"
+                    class="flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-500 dark-mode-text"
                     onkeypress="if(event.key === 'Enter') sendTextInput()"
                     oninput="toggleSendButton()"
                 />
@@ -1393,7 +1393,7 @@
             </div>
             <!-- Footer with disclaimer and request button - centered -->
             <div class="flex items-center justify-center mt-2 gap-2">
-                <p class="text-xs text-gray-500">JARVIS can make mistakes. Check important info.</p>
+                <p id="footer-disclaimer" class="text-xs text-gray-500">JARVIS can make mistakes. Check important info.</p>
                 <button 
                     onclick="openFeatureRequest()" 
                     class="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-xs font-medium flex items-center gap-1 transition-all hover:scale-105"
@@ -2204,6 +2204,13 @@ async function handleNameCorrection(text) {
             const weatherEffects = document.getElementById('weather-effects');
             const receipt = document.getElementById('shopping-receipt');
             
+            // Input bar elements
+            const inputBarContainer = document.getElementById('input-bar-container');
+            const inputBarInner = document.getElementById('input-bar-inner');
+            const textInput = document.getElementById('text-input');
+            const helpBtn = document.getElementById('help-btn');
+            const footerDisclaimer = document.getElementById('footer-disclaimer');
+            
             if (darkMode) {
                 // Turn OFF the light (dark mode) - INSTANT
                 lightSwitch.classList.remove('on');
@@ -2222,6 +2229,24 @@ async function handleNameCorrection(text) {
                 subtitle.className = 'text-sm text-gray-300';
                 if (chatContainer) chatContainer.className = 'bg-gray-800 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6';
                 if (receipt) receipt.classList.add('dark-mode');
+                
+                // Dark mode for input bar - blend with background
+                if (inputBarContainer) {
+                    inputBarContainer.className = 'fixed bottom-0 left-0 right-0 bg-gray-900 bg-opacity-95 border-t border-gray-700 shadow-lg z-40 backdrop-blur-xl';
+                }
+                if (inputBarInner) {
+                    inputBarInner.className = 'flex items-center gap-3 bg-gray-800 rounded-full border-2 border-gray-600 px-4 py-3 hover:border-purple-400 transition-all';
+                }
+                if (textInput) {
+                    textInput.className = 'flex-1 bg-transparent outline-none text-white placeholder-gray-400';
+                }
+                if (helpBtn) {
+                    const svg = helpBtn.querySelector('svg');
+                    if (svg) svg.className = 'text-gray-400 hover:text-purple-400 transition-all';
+                }
+                if (footerDisclaimer) {
+                    footerDisclaimer.className = 'text-xs text-gray-400';
+                }
             } else {
                 // Turn ON the light (light mode) - DELAYED with tube light startup
                 lightSwitch.classList.add('on');
@@ -2251,6 +2276,24 @@ async function handleNameCorrection(text) {
                     subtitle.className = 'text-sm text-gray-600';
                     if (chatContainer) chatContainer.className = 'bg-gray-50 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6';
                     if (receipt) receipt.classList.remove('dark-mode');
+                    
+                    // Light mode for input bar
+                    if (inputBarContainer) {
+                        inputBarContainer.className = 'fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40';
+                    }
+                    if (inputBarInner) {
+                        inputBarInner.className = 'flex items-center gap-3 bg-gray-50 rounded-full border-2 border-gray-200 px-4 py-3 hover:border-purple-300 transition-all';
+                    }
+                    if (textInput) {
+                        textInput.className = 'flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-500';
+                    }
+                    if (helpBtn) {
+                        const svg = helpBtn.querySelector('svg');
+                        if (svg) svg.className = 'text-gray-600 hover:text-purple-600 transition-all';
+                    }
+                    if (footerDisclaimer) {
+                        footerDisclaimer.className = 'text-xs text-gray-500';
+                    }
                 }, 800); // Match the tube light startup animation duration
             }
         }
@@ -4257,6 +4300,7 @@ Now answer the question completely!`;
         }
 
         async function getWeatherByCity(cityName) {
+            hideThinkingIndicator(); // Hide any existing thinking indicator
             try {
                 const searchName = expandStateAbbreviation(cityName.trim());
                 
@@ -4333,6 +4377,7 @@ Now answer the question completely!`;
         }
 
         async function fetchWeather(lat, lon, resolvedLocation, originalQuery = null) {
+            hideThinkingIndicator(); // Hide thinking indicator before showing loading
             showLoading('Checking weather...');
             try {
                 const weatherResponse = await fetch(
@@ -4347,12 +4392,9 @@ Now answer the question completely!`;
                 // Create weather effects
                 createWeatherEffect(weather.current.weather_code, celsius);
                 
-                // Determine display location
+                // Determine display location - always use the resolved full location
+                // Don't show duplicate like "chidambaram, india (Chidambaram, Tamil Nadu, India)"
                 let displayLocation = resolvedLocation;
-                if (originalQuery && originalQuery.toLowerCase() !== resolvedLocation.toLowerCase()) {
-                    // Show "Roxbury, MA (Boston, Massachusetts, United States)"
-                    displayLocation = `${originalQuery} (${resolvedLocation})`;
-                }
                 
                 document.getElementById('weather-card').classList.remove('hidden');
                 document.getElementById('location-name').textContent = displayLocation;
