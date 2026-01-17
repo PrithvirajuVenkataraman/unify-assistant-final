@@ -1409,6 +1409,70 @@
     </div>
 
 <script>
+
+const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'};
+function getTrustLabel(trustLevel) {
+  return trustLevel === TRUST_LEVEL.VERIFIED
+    ? '✅ Verified by location data'
+    : 'ℹ Generated (structure only)';
+}
+
+function isVerifiedPlace(obj) {
+  return !!obj &&
+    typeof obj.lat === 'number' &&
+    typeof obj.lon === 'number' &&
+    typeof obj.distanceKm === 'number' &&
+    obj.distanceKm <= 10;
+}
+
+function containsPlaceList(text) {
+  if (typeof text !== 'string') return false;
+  return /🏨|🍽️|hotel|restaurant|stay|biryani|curry/i.test(text);
+}
+
+function getUserIntent(text) {
+  return {
+    wantsHotels: /hotel|stay|accommodation/i.test(text),
+    wantsRestaurants: /restaurant|food|eat|biryani|curry|lunch|dinner/i.test(text),
+    wantsItinerary: /itinerary|plan|schedule|day in/i.test(text)
+  };
+}
+
+function violatesIntent(text) {
+  const ctx = window.__intentContext;
+  if (!ctx || typeof text !== 'string') return false;
+  if (ctx.itineraryOnly && containsPlaceList(text)) return true;
+  if (!ctx.allowHotels && /hotel|stay|accommodation/i.test(text)) return true;
+  if (!ctx.allowRestaurants && /restaurant|food|eat|biryani|curry|lunch|dinner/i.test(text)) return true;
+  return false; 
+}
+
+function getSourceAttribution(trustLevel) {
+  return trustLevel === TRUST_LEVEL.VERIFIED
+    ? '📍 Source: OpenStreetMap / Brave Search'
+    : '🧠 Source: Language model (no live location lookup)';
+}
+
+function retryWithStricterPrompt() {
+  const msg = window.__lastUserMessage;
+  if (!msg) return;
+
+  const strict =
+    'STRICT MODE:\n' +
+    '- Do not list hotels or restaurants unless explicitly asked\n' +
+    '- If itinerary only, give structure only\n' +
+    '- Never invent place names\n\n' +
+    msg;
+
+  sendMessage(strict); }
+  
+window.__telemetry = {
+  hallucinationAttempts: 0,
+  regenerations: 0
+};
+
+
+
 // ========== GLOBAL FUNCTION FOR ONCLICK ==========
 // toggleDarkMode must be at global scope for onclick handler
 function toggleDarkMode() {
@@ -1944,6 +2008,17 @@ Recent conversation:
 ${contextMessages}
 
 Respond conversationally and naturally.`;
+        const intent = getUserIntent(userMessage);
+        window.__intentContext = {
+          allowHotels: intent.wantsHotels,
+          allowRestaurants: intent.wantsRestaurants,
+          itineraryOnly:
+            intent.wantsItinerary &&
+            !intent.wantsHotels &&
+            !intent.wantsRestaurants, 
+          __retried: false };
+
+        window.__lastUserMessage = userMessage;
 
         
         const response = await fetch('/api/chat-groq', {
@@ -2284,9 +2359,29 @@ async function handleNameCorrection(text) {
         }
 
         // ========== CHAT MESSAGE HANDLING ==========
-        function addAIMessage(text) {
-            addChatMessage(text, false, true); // Always use typewriter for AI
+        function addAIMessage(text, trustLevel = TRUST_LEVEL.GENERATED) 
+        {
+          if (violatesIntent(text)) {
+            window.__telemetry.hallucinationAttempts++;
+
+            if (!window.__intentContext.__retried) {
+              window.__intentContext.__retried = true;
+              window.__telemetry.regenerations++;
+              retryWithStricterPrompt();
+              return; 
+            } 
+          }
+
+          if (containsPlaceList(text) && trustLevel !== TRUST_LEVEL.VERIFIED) {
+            text = '⚠️ This response contains generated structure only. ' + 
+            'Specific places are shown separately using verified location data.\n\n' + text;
         }
+
+        text += '\n\n' + getTrustLabel(trustLevel);
+        text += '\n' + getSourceAttribution(trustLevel);
+
+        addChatMessage(text, false, true); 
+      }
         
         function addChatMessage(text, isUser = true, typewriter = false) {
             const chatContainer = document.getElementById('chat-container');
