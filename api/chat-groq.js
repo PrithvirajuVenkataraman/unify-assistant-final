@@ -1,106 +1,125 @@
-import fetch from "node-fetch";
+import fetch from 'node-fetch';
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
-
-// ---- TELEMETRY STORE (in-memory, safe for Vercel) ----
-const telemetry = {
-  hallucinationAttempts: 0,
-  regenerations: 0
+export const config = {
+  runtime: 'edge', // or 'nodejs' if you prefer
 };
 
-// ---- HALLUCINATION DETECTOR ----
-function violatesRules(text) {
-  const forbidden = [
-    "🏨", "🍽️", "⭐",
-    "hotel ", "restaurant ",
-    "specialty", "famous for",
-    "best ", "top ", "must visit",
-    "rated", "open at", "price"
-  ];
+export default async function handler(request) {
+  // Handle CORS
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/json',
+  };
 
-  return forbidden.some(k =>
-    text.toLowerCase().includes(k)
-  );
-}
+  // Handle preflight requests
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 200,
+      headers,
+    });
+  }
 
-// ---- SYSTEM PROMPT (GLOBAL, STRICT) ----
-const SYSTEM_PROMPT = `
-You are an assistant embedded inside a deterministic travel application.
+  // Only allow POST requests
+  if (request.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      {
+        status: 405,
+        headers,
+      }
+    );
+  }
 
-CRITICAL RULES:
-1. You MUST NOT name real hotels, restaurants, cafes, or shops.
-2. You MUST NOT invent food specialties, ratings, hours, or prices.
-3. You MUST NOT present guesses as facts.
-4. Use abstract categories only.
-5. Use conditional language ("may", "if available").
-6. If factual data is requested, defer to external verification.
+  try {
+    // Parse the request body
+    const body = await request.json();
+    const { message, systemPrompt, userName } = body;
 
-If you break these rules, your response is invalid.
-`;
+    if (!message) {
+      return new Response(
+        JSON.stringify({ error: 'Message is required' }),
+        {
+          status: 400,
+          headers,
+        }
+      );
+    }
 
-async function callGroq(messages) {
-  const res = await fetch(
-    "https://api.groq.com/openai/v1/chat/completions",
-    {
-      method: "POST",
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+    if (!GROQ_API_KEY) {
+      return new Response(
+        JSON.stringify({
+          response: "I'm currently being configured. Please check back soon!",
+          error: 'API key not configured',
+        }),
+        {
+          status: 200,
+          headers,
+        }
+      );
+    }
+
+    // Prepare system prompt
+    const finalSystemPrompt = systemPrompt || 
+      `You are JARVIS, a helpful voice assistant. ${userName ? `The user's name is ${userName}.` : ''} 
+       Be conversational, helpful, and concise.`;
+
+    // Call Groq API
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
       headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json"
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: "llama3-70b-8192",
-        messages,
-        temperature: 0.2
-      })
-    }
-  );
-
-  const data = await res.json();
-  return data.choices[0].message.content;
-}
-
-export default async function handler(req, res) {
-  try {
-    const userMessage = req.body.message;
-
-    const baseMessages = [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userMessage }
-    ];
-
-    let output = await callGroq(baseMessages);
-
-    // ---- RULE CHECK ----
-    if (violatesRules(output)) {
-      telemetry.hallucinationAttempts++;
-      telemetry.regenerations++;
-
-      // REGENERATE ONCE WITH STRONGER WARNING
-      output = await callGroq([
-        ...baseMessages,
-        {
-          role: "system",
-          content: "Your previous response violated the rules. Regenerate using ONLY abstract, non-factual language."
-        }
-      ]);
-
-      // FINAL GUARD
-      if (violatesRules(output)) {
-        output =
-          "I can outline the structure and intent, but specific recommendations are selected using verified location data.";
-      }
-    }
-
-    res.status(200).json({
-      text: output,
-      meta: {
-        verified: false,
-        source: "LLM (structure only)",
-        telemetry
-      }
+        model: 'llama3-70b-8192',
+        messages: [
+          { role: 'system', content: finalSystemPrompt },
+          { role: 'user', content: message },
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+      }),
     });
 
-  } catch (err) {
-    res.status(500).json({ error: "LLM failure" });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const aiResponse = data.choices[0]?.message?.content || "I couldn't generate a response.";
+
+    // Return successful response
+    return new Response(
+      JSON.stringify({
+        response: aiResponse,
+        meta: {
+          model: 'llama3-70b-8192',
+          tokens: data.usage?.total_tokens || 0,
+        },
+      }),
+      {
+        status: 200,
+        headers,
+      }
+    );
+
+  } catch (error) {
+    console.error('Error in chat-groq:', error);
+    
+    return new Response(
+      JSON.stringify({
+        response: "Sorry, I'm having trouble processing your request. Please try again.",
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      }),
+      {
+        status: 500,
+        headers,
+      }
+    );
   }
 }
