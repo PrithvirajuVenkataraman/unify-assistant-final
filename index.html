@@ -2957,26 +2957,6 @@ async function handleNameCorrection(text) {
                     
                     const searchQuery = `${hotelName} ${cityName} famous for specialty`;
                     
-                    const response = await fetch('https://api.anthropic.com/v1/messages', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'anthropic-version': '2023-06-01'
-                        },
-                        body: JSON.stringify({
-                            model: 'claude-sonnet-4-20250514',
-                            max_tokens: 300,
-                            tools: [{
-                                type: 'web_search_20250305',
-                                name: 'web_search'
-                            }],
-                            messages: [{
-                                role: 'user',
-                                content: `Search for: ${searchQuery}. What is ${hotelName} famous for? Return ONLY the specialty dish/food in 3-5 words. Format: "Famous for: [dish]"`
-                            }]
-                        })
-                    });
-                    
                     if (response.ok) {
                         const data = await response.json();
                         const content = data.content.find(c => c.type === 'text');
@@ -2985,8 +2965,6 @@ async function handleNameCorrection(text) {
                             const specialty = extractSpecialtyFromResponse(content.text);
                             
                             if (specialty) {
-                                
-                                
                                 const hotelBlockRegex = new RegExp(
                                     `(🏨\\s+${hotelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^⭐]*⭐\\s*Specialty:\\s*)([^\\n]+)`,
                                     'i'
@@ -5259,3 +5237,4 @@ loadHistory();
 </script>
 </body>
 </html>
+
