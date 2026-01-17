@@ -1916,9 +1916,19 @@ async function askGeminiAI(userMessage) {
         
         const systemPrompt = `You are JARVIS, a helpful voice assistant.${userName ? ` The user's name is ${userName}. Use their name naturally and occasionally.` : ' Be friendly and conversational.'}
 
-CRITICAL RULES:
+⛔ CRITICAL ANTI-HALLUCINATION RULES:
+1. NEVER make up or invent names of places, hotels, restaurants, or attractions
+2. If you're not 100% CERTAIN something exists, DO NOT mention it
+3. For location-based queries, only mention places you're ABSOLUTELY SURE are real
+4. If unsure, say "I recommend searching online for specific options" instead of making up names
+5. Better to give less information than false information
+6. DO NOT invent hotel names, restaurant names, or attraction names
+7. For small/unknown towns, admit you don't have specific info rather than guessing
+
+RULES:
 - ${userName ? `The user's name is ${userName} - use it!` : 'You do NOT know the user\'s name. NEVER say "User" or "Hi User!" - just say "Hi!" or be friendly without using a name.'}
 - Be natural and conversational
+- If asked about specific places/hotels/restaurants you're unsure about, recommend checking Google Maps, MakeMyTrip, or TripAdvisor
 
 Your capabilities:
 - Weather (say "check weather")
@@ -1933,7 +1943,7 @@ For name corrections like "no, my name is X", extract the name.
 Recent conversation:
 ${contextMessages}
 
-Respond conversationally and naturally.`;
+Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         const intent = getUserIntent(userMessage);
         window.__intentContext = {
           allowHotels: intent.wantsHotels,
@@ -3670,44 +3680,85 @@ Just talk to me naturally!`;
                      cleanText.toLowerCase().includes('visit') && cleanText.toLowerCase().match(/\b(to|in|for)\b/) ||
                      (cleanText.toLowerCase().includes('plan') && (cleanText.toLowerCase().includes('travel') || cleanText.toLowerCase().includes('visit')))) {
                 
+                // Extract location for web search
+                const locationMatch = text.match(/(?:in|to|for|at)\s+([^,?.!]+)/i);
+                const itineraryLocation = locationMatch ? locationMatch[1].trim() : '';
                 
+                // Do web search first to get real places
+                let placeSearchResults = '';
+                if (itineraryLocation) {
+                    try {
+                        const searchQueries = [
+                            `top tourist places in ${itineraryLocation}`,
+                            `things to do in ${itineraryLocation}`,
+                            `${itineraryLocation} attractions must visit`
+                        ];
+                        
+                        const searchPromises = searchQueries.map(async (query) => {
+                            try {
+                                const response = await fetch('/api/search', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ query })
+                                });
+                                const data = await response.json();
+                                return data.results || [];
+                            } catch (e) {
+                                return [];
+                            }
+                        });
+                        
+                        const allResults = await Promise.all(searchPromises);
+                        const combinedResults = allResults.flat().slice(0, 8);
+                        
+                        if (combinedResults.length > 0) {
+                            placeSearchResults = '\n\nWEB SEARCH RESULTS - USE THESE REAL PLACES:\n' + 
+                                combinedResults.map((r, i) => `${i+1}. ${r.title}: ${r.description}`).join('\n');
+                        }
+                    } catch (e) {}
+                }
                 
-                const itineraryPrompt = `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Create a beautifully formatted day-by-day itinerary for: "${text}". 
+                const itineraryPrompt = `${userName ? `The user's name is ${userName}.` : ''} Create a day-by-day itinerary for: "${text}". 
 
-IMPORTANT: Extract the city/destination from the user's question and create an itinerary for THAT specific location.
+LOCATION: ${itineraryLocation || 'Extract from user query'}
+${placeSearchResults}
 
-FOCUS ONLY ON: Places to visit and activities to do
-DO NOT INCLUDE: Food recommendations, hotels, or restaurants (user can ask separately)
+⛔ STRICT ANTI-HALLUCINATION RULES:
+1. ONLY include places that are REAL and VERIFIED to exist in ${itineraryLocation || 'the location'}
+2. If web search results are provided above, USE THOSE PLACES
+3. DO NOT invent or make up place names
+4. If you're not 100% sure a place exists, DO NOT include it
+5. Better to list fewer REAL places than many fake ones
+6. For temples/monuments: use their REAL official names
+7. For small towns: focus on the MAIN attractions (temple, market, lake etc.)
 
-Keep it concise (5-7 main attractions per day maximum).
+WHAT TO INCLUDE:
+- Real tourist attractions from search results
+- Well-known landmarks you're CERTAIN exist
+- General activities (morning walk, local market visit) are OK
 
-CRITICAL FORMATTING RULES:
-- NO bold markers (**) anywhere
-- NO clock emojis (🕐 🕑 🕒 etc) 
-- Times should be simple: 9:00am, 2:30pm, etc.
-- Use category emojis ONLY (🏛️ 🌳 🎨 🏖️ ⛰️ 🚶)
+WHAT TO AVOID:
+- Made-up restaurant names
+- Made-up hotel names  
+- Invented attraction names
+- Places you're unsure about
 
-Format:
-Day [number] in [City Name from Query]:
+FORMAT (clean, no ** bold markers):
 
-9:00am: 🏛️ [Place/Activity specific to that city]
-   - What to see/do there
-   - Duration and any entry info
-   - Travel time to next spot
+Day 1 in ${itineraryLocation || '[City]'}:
 
-Use emojis for categories only:
-- 🏛️ temples/historic sites
-- 🌳 parks/nature
-- 🎨 museums/art
-- 🏖️ beaches
-- ⛰️ mountains
-- 🚶 walking areas
+9:00am: 🏛️ [REAL Place Name]
+   - What to see/do
+   - Duration
 
-Make sure ALL places and activities are specific to the city mentioned in the user's question!
+12:00pm: [Next REAL place]
+   ...
 
-End with: "Enjoy exploring the beauty of [City from query]! Ask me about restaurants or hotels if you need recommendations."
+Keep it to 4-5 REAL places per day maximum.
 
-Now create the itinerary with clean formatting - NO bold markers, NO clock emojis!`;
+End with: "Enjoy exploring ${itineraryLocation || 'the area'}! Ask me about hotels or restaurants separately."
+
+Now create the itinerary using ONLY real, verified places:`;
                 
                 const aiResponse = await callAIWithTyping(itineraryPrompt, '🗺️ Planning your itinerary...');
                 addChatMessage(aiResponse.response, false);
@@ -3735,33 +3786,37 @@ Now create the itinerary with clean formatting - NO bold markers, NO clock emoji
                 
                 
                 
-                const specialtyPrompt = `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Answer this question about local food and specialties: "${text}"
+                const specialtyPrompt = `${userName ? `The user's name is ${userName}.` : ''} Answer this question about local food and specialties: "${text}"
+
+⛔ ANTI-HALLUCINATION RULES:
+1. ONLY mention dishes that are REAL and ACTUALLY from the region
+2. DO NOT invent dish names
+3. Stick to well-known, verifiable regional dishes
+4. If unsure about a dish, DO NOT include it
 
 Provide information about the LOCAL FOOD CULTURE and FAMOUS DISHES of the region mentioned.
 
 Format:
-🍽️ **Famous Local Dishes:**
+🍽️ Famous Local Dishes:
 - Dish name - Brief description and what makes it special
 - Where it's typically served (occasion/context)
 
-Include 5-7 signature dishes that represent the local cuisine.
+Include 5-7 REAL signature dishes that represent the local cuisine.
 
-Example for "What's the food like in Chidambaram?":
-🍽️ **Famous Chidambaram/Tamil Nadu Dishes:**
+Example for Tamil Nadu region:
+🍽️ Famous Tamil Nadu Dishes:
 - Idli & Sambar - Soft steamed rice cakes with lentil stew, breakfast staple
 - Dosa - Crispy rice crepe, served with chutneys and sambar
 - Chettinad Chicken - Fiery red curry with aromatic spices, regional specialty
 - Pongal - Savory rice and lentil dish, comfort food
 - Filter Coffee - Strong South Indian coffee, cultural icon
 
-🌶️ **What Makes It Special:**
-Tamil Nadu cuisine is known for rice-based dishes, fermented batters, and bold use of spices like curry leaves, mustard seeds, and tamarind.
+🌶️ What Makes It Special:
+[Brief description of the cuisine's characteristics]
 
-💡 **Pro Tip:** Best enjoyed at local eateries and traditional homes. Try eating on a banana leaf for authentic experience!
+💡 Pro Tip: [One helpful tip about trying local food]
 
-If you'd like specific restaurant recommendations, just ask!
-
-Now answer about the local food culture and famous dishes!`;
+DO NOT make up dish names! Only include dishes you're 100% sure exist in that region.`;
                 
                 const aiResponse = await callAIWithTyping(specialtyPrompt);
                 addChatMessage(aiResponse.response, false);
@@ -3772,199 +3827,15 @@ Now answer about the local food culture and famous dishes!`;
                 return; 
             }
             
-            if (window.waitingForHotelCity) {
-                window.waitingForHotelCity = false;
-                
-                
-                window.pendingFoodQuery = `Hotels in ${text}`;
-                window.waitingForVegPreference = true;
-                window.isHotelQuery = true;
-                
-                const prefMsg = "For hotel restaurants, would you prefer:\n1. Pure Veg\n2. Non-Veg\n3. Anything is fine\n\nYou can say the number or the preference!";
-                addChatMessage(prefMsg, false);
-                speak("For hotel restaurants, would you prefer pure veg, non veg, or anything is fine?");
-                return;
-            }
-            
-            if (window.waitingForVegPreference) {
-                window.waitingForVegPreference = false;
-                const originalQuery = window.pendingFoodQuery;
-                const wasHotelQuery = window.isHotelQuery;
-                window.pendingFoodQuery = null;
-                window.isHotelQuery = false;
-                
-                let preference = '';
-                if (cleanText.match(/\b(1|one|veg|vegetarian|pure veg)\b/i)) {
-                    preference = wasHotelQuery ? ' (hotels with pure vegetarian restaurants)' : ' (pure vegetarian options only)';
-                } else if (cleanText.match(/\b(2|two|non-veg|non veg|meat)\b/i)) {
-                    preference = wasHotelQuery ? ' (hotels with non-vegetarian restaurants)' : ' (non-vegetarian options)';
-                } else if (cleanText.match(/\b(3|three|anything|any|both|either)\b/i)) {
-                    preference = wasHotelQuery ? ' (hotels with both veg and non-veg options)' : ' (both veg and non-veg options)';
-                } else {
-                    
-                    const msg = "I didn't catch that. Please say 1 for Pure Veg, 2 for Non-Veg, or 3 for Anything.";
-                    addChatMessage(msg, false);
-                    speak(msg);
-                    window.waitingForVegPreference = true;
-                    window.isHotelQuery = wasHotelQuery;
-                    window.pendingFoodQuery = originalQuery;
-                    return;
-                }
-                
-                
-                const finalQuery = originalQuery + preference;
-                const queryType = wasHotelQuery ? 'hotel' : 'food';
-                
-                const recommendPrompt = queryType === 'hotel' ? 
-                `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Answer this question about hotel recommendations: "${finalQuery}"
-
-IMPORTANT: Extract the city/location from the query above and recommend hotels in THAT specific city only!
-
-CRITICAL FORMATTING RULES:
-- NO bold markers (**) anywhere in your response
-- Use CLEAN formatting with proper spacing
-- Each hotel gets its own section with clear line breaks
-- Include ONLY these fields: Hotel Name, Food Type, Specialty
-
-Provide 7-10 hotels with VARIETY in the mentioned city - include:
-- Mix of well-known hotels AND smaller local favorites
-- Include cafes/eateries that serve great local food
-- Include places within 20-30 min drive if they're popular
-- Don't limit to just hotels - include any dining spots tourists love
-- Make sure ALL recommendations are specific to the city mentioned!
-
-Format (NO Location, NO Price, NO Why - we provide GPS directions):
-
-🏨 [Hotel/Restaurant/Cafe Name]
-🍽️ Food: [Pure Veg / Non-Veg / Both]
-⭐ Specialty: [Must-try local dish from that city]
-
-${finalQuery.includes('pure vegetarian') ? 'IMPORTANT: Only suggest places with PURE VEGETARIAN food.' : ''}
-${finalQuery.includes('non-vegetarian') ? 'IMPORTANT: Only suggest places with NON-VEGETARIAN food or both options.' : ''}
-${finalQuery.includes('both veg and non-veg') ? 'IMPORTANT: Suggest a mix of places with different food types.' : ''}
-
-End with: "I hope you have a comfortable stay!"
-
-REMEMBER: 
-- NO Location, NO Price, NO Why
-- 7-10 recommendations total
-- Include popular local spots, not just big hotels
-- NO bold markers (**)
-
-Now provide recommendations!` :
-
-                `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Answer this question about travel recommendations: "${finalQuery}"
-
-Provide 4-6 specific recommendations with brief details.
-Keep it SHORT and COMPLETE.
-
-${finalQuery.includes('vegetarian') || finalQuery.includes('pure veg') ? 'IMPORTANT: Only suggest VEGETARIAN/VEG restaurants. Mark each as [Pure Veg].' : 'Mark each restaurant as [Pure Veg] or [Non-Veg].'}
-
-${queryType === 'food' ? 'Also mention the local specialty dish for the region!' : ''}
-
-Format:
-- Name - Brief description | [Veg Type] | Try: [Local specialty]
-- Include why it's good
-- End with a friendly note
-
-Example for "Best restaurants in Paris":
-- Le Comptoir du Relais - Classic French bistro | [Non-Veg] | Try: Coq au vin
-- L'As du Fallafel - Famous in Marais | [Veg] | Try: Falafel wrap | Budget-friendly
-
-Bon appétit! Let me know if you need more suggestions.
-
-Now answer the question completely!`;
-                
-                const aiResponse = await callAIWithTyping(recommendPrompt, queryType === 'hotel' ? '🏨 Finding hotels...' : '🍽️ Finding restaurants...');
-                
-                
-                let finalResponse = aiResponse.response;
-                
-                if (queryType === 'hotel') {
-                    finalResponse = await addGPSDirectionsToHotels(aiResponse.response, text);
-                    
-                    finalResponse = await enrichHotelSpecialties(finalResponse, text);
-                }
-                
-                addChatMessage(finalResponse, false);
-                speak(queryType === 'hotel' ? "I've got some hotel recommendations for you!" : "I've got some recommendations for you!");
-                
-                
-                if (queryType === 'hotel' || queryType === 'food') {
-                    addFastFoodSuggestionBox();
-                }
-                
-                
-                addTransportSuggestionButton(text);
-                
-                
-                saveToHistory(finalQuery, finalResponse);
-                
-                
-                suggestQuickReplies(finalResponse);
-                return; 
-            }
-            
-            else if (cleanText.toLowerCase().match(/\b(restaurant|eat|eating|dining|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i) ||
+            // Hotel/Restaurant/Transport queries - uses web search, no AI hallucination
+            if (cleanText.toLowerCase().match(/\b(restaurant|eat|eating|dining|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i) ||
                      cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i) ||
                      cleanText.toLowerCase().match(/\b(transport|transportation|bus|train|taxi|uber|ola|auto|rickshaw|metro|subway|getting around|get around|how to reach|how do i get|travel to)\b/i)) {
-                
-                
-                
-                const isFoodQuery = cleanText.toLowerCase().match(/\b(food|restaurant|eat|eating|dining|cuisine|dish|dishes|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i);
-                const isHotelQuery = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i);
-                
-                
-                const hasVegPref = cleanText.toLowerCase().match(/\b(veg|vegetarian|pure veg|only veg|veg only)\b/i);
-                const hasNonVegPref = cleanText.toLowerCase().match(/\b(non-veg|non veg|nonveg|meat|chicken|seafood|anything)\b/i);
-                
-                
-                if (isFoodQuery && !hasVegPref && !hasNonVegPref && !window.waitingForVegPreference) {
-                    window.pendingFoodQuery = text;
-                    window.waitingForVegPreference = true;
-                    window.isHotelQuery = false;
-                    
-                    const prefMsg = "Would you prefer:\n1. Pure Veg\n2. Non-Veg\n3. Anything is fine\n\nYou can say the number or the preference!";
-                    addChatMessage(prefMsg, false);
-                    speak("Would you prefer pure veg, non veg, or anything is fine?");
-                    return;
-                }
-                
-                
-                if (isHotelQuery && !hasVegPref && !hasNonVegPref && !window.waitingForVegPreference) {
-                    
-                    const cityPattern = /\b(in|at|near|around)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/;
-                    const hasCity = cityPattern.test(text) || /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/.test(text.replace(/^(hotels?|recommend|suggest|find|show|good|best|nice)\s*/i, ''));
-                    
-                    
-                    const contextText = conversationContext.slice(-3).map(m => m.text).join(' ');
-                    const contextHasCity = /\b(itinerary|itenary|trip|visit|travel|hotels?|restaurants?)\s+(?:for|in|to|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i.test(contextText);
-                    
-                    if (!hasCity && !contextHasCity) {
-                        
-                        window.waitingForHotelCity = true;
-                        const msg = "Sure! Which city or location would you like hotel recommendations for?";
-                        addChatMessage(msg, false);
-                        speak(msg);
-                        return;
-                    }
-                    
-                    window.pendingFoodQuery = text;
-                    window.waitingForVegPreference = true;
-                    window.isHotelQuery = true;
-                    
-                    const prefMsg = "For hotel restaurants, would you prefer:\n1. Pure Veg\n2. Non-Veg\n3. Anything is fine\n\nYou can say the number or the preference!";
-                    addChatMessage(prefMsg, false);
-                    speak("For hotel restaurants, would you prefer pure veg, non veg, or anything is fine?");
-                    return;
-                }
-                
-                
                 
                 const queryType = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation)\b/i) ? 'hotel' : 
                                   cleanText.toLowerCase().match(/\b(transport|bus|train|taxi)\b/i) ? 'transport' : 'food';
                 
-                
+                // Extract location
                 let searchResults = '';
                 let cityName = '';
                 let stateName = '';
@@ -4053,104 +3924,94 @@ Now answer the question completely!`;
                 } catch (searchError) {
                 }
                 
-                // Always use AI to synthesize results (like Perplexity)
-                // The AI will analyze search results and provide a helpful answer
-                
+                // Show search results directly - no AI hallucination
                 if (queryType === 'hotel') {
-                    const hotelPrompt = `You are a helpful travel assistant. The user asked: "${text}"
+                    if (searchResults && searchResults.length > 50) {
+                        // We have search results - format them nicely
+                        const hotelMsg = `🔍 **Web Search Results for Hotels in ${cityName}**
 
-📍 LOCATION: ${fullLocation || cityName}, ${stateName || 'India'}
+${searchResults}
 
-I searched the web and found these results:
-${searchResults || 'No search results available.'}
+---
 
-YOUR TASK:
-1. Read through the search results above
-2. Find and extract ANY hotel names mentioned
-3. Provide helpful information about staying in ${cityName}
+📱 **Book directly on:**
+• [MakeMyTrip](https://www.makemytrip.com/hotels/hotel-listing?city=${encodeURIComponent(cityName)})
+• [Booking.com](https://www.booking.com/searchresults.html?ss=${encodeURIComponent(fullLocation || cityName)})
+• [Goibibo](https://www.goibibo.com/hotels/)
+• [OYO Rooms](https://www.oyorooms.com/search?location=${encodeURIComponent(cityName)})
 
-RESPONSE FORMAT:
+💡 **Tip:** For small towns like ${cityName}, searching directly on these booking sites often shows more options than Google.`;
 
-🏨 **Hotels in ${cityName}**
+                        addChatMessage(hotelMsg, false);
+                        speak(`I found some hotel information for ${cityName}. Check out the search results and booking links!`);
+                    } else {
+                        // No search results - give helpful fallback
+                        const noResultsMsg = `🔍 **Hotels in ${cityName}**
 
-Based on my web search, here are hotels I found:
+I couldn't find specific hotel listings in my web search. For a town like ${cityName}, here's what I recommend:
 
-[For each hotel found in search results:]
-🏨 **[Hotel Name]**
-- [Any details from search results - price, rating, location, amenities]
+📱 **Search directly on these sites:**
+• [MakeMyTrip](https://www.makemytrip.com/hotels/hotel-listing?city=${encodeURIComponent(cityName)})
+• [Booking.com](https://www.booking.com/searchresults.html?ss=${encodeURIComponent(fullLocation || cityName)})
+• [Goibibo](https://www.goibibo.com/hotels/)
+• [OYO Rooms](https://www.oyorooms.com/search?location=${encodeURIComponent(cityName)})
 
-[If search results mention booking sites, include:]
-📱 **Book online:** [mention sites found in search]
+💡 **Local tips for ${cityName}:**
+• Look for "Lodge" or "Residency" near the bus stand
+• Temple towns often have dharamshala (pilgrim rest houses)
+• Ask auto drivers - they know trusted places
+• OYO has budget rooms in most small towns now`;
 
-[Add local context:]
-💡 **Tips for staying in ${cityName}:**
-- [Relevant local tips based on what you know about the area]
-
-[If this is a temple town like Chidambaram:]
-🏛️ **Temple town info:** [mention dharamshala/pilgrim accommodations if relevant]
-
-IMPORTANT:
-- If search results found hotel names, list them with details
-- If search results only show booking sites (MakeMyTrip, Booking.com), mention those
-- Add your knowledge about the destination to be helpful
-- Be conversational and helpful, not robotic
-
-Now provide a helpful response about hotels in ${cityName}:`;
-
-                    const aiResponse = await callAIWithTyping(hotelPrompt, '🏨 Searching for hotels...');
-                    addChatMessage(aiResponse.response, false);
-                    speak("Here's what I found about hotels!");
+                        addChatMessage(noResultsMsg, false);
+                        speak(`I recommend checking MakeMyTrip or Booking.com directly for hotels in ${cityName}.`);
+                    }
                     
-                    saveToHistory(text, aiResponse.response);
+                    saveToHistory(text, `Hotel search for ${cityName}`);
                     showFastFoodBox();
                     return;
                 }
                 
                 // Restaurant query
-                const foodPrompt = `You are a helpful food guide. The user asked: "${text}"
+                if (searchResults && searchResults.length > 50) {
+                    const foodMsg = `🔍 **Web Search Results for Restaurants in ${cityName}**
 
-📍 LOCATION: ${fullLocation || cityName}, ${stateName || 'India'}
+${searchResults}
 
-I searched the web and found these results:
-${searchResults || 'No search results available.'}
+---
 
-${text.includes('vegetarian') || text.includes('pure veg') ? '⚠️ USER WANTS VEGETARIAN OPTIONS ONLY!' : ''}
+🍛 **Local food tips for ${cityName}:**
+• "Mess" or "Bhavan" = local meals restaurant
+• "Military Hotel" = non-veg restaurant
+• Look near bus stand for budget options
 
-YOUR TASK:
-1. Read through the search results above
-2. Find and extract ANY restaurant names mentioned
-3. Provide helpful information about eating in ${cityName}
+📱 **Find more on:**
+• [Google Maps](https://www.google.com/maps/search/restaurants+in+${encodeURIComponent(cityName)})
+• [Zomato](https://www.zomato.com/${cityName.toLowerCase().replace(/\s+/g, '-')}/restaurants)`;
 
-RESPONSE FORMAT:
+                    addChatMessage(foodMsg, false);
+                    speak(`I found some restaurant information for ${cityName}!`);
+                } else {
+                    const noResultsMsg = `🔍 **Restaurants in ${cityName}**
 
-🍽️ **Restaurants in ${cityName}**
+I couldn't find specific restaurant listings. Here's what works in small towns:
 
-Based on my web search, here are places to eat:
+🍛 **What to look for:**
+• "Mess" or "Bhavan" - authentic local meals
+• "Military Hotel" - non-veg food
+• "Tiffin Center" - breakfast/snacks
+• Near temples = vegetarian options
 
-[For each restaurant found in search results:]
-🍽️ **[Restaurant Name]**
-- [Any details - cuisine type, specialty, veg/non-veg, price range]
+📱 **Search on:**
+• [Google Maps](https://www.google.com/maps/search/restaurants+in+${encodeURIComponent(cityName)})
+• [Zomato](https://www.zomato.com/)
 
-[Add local food context:]
-🍛 **Local specialties of ${cityName} region:**
-- [Mention famous local dishes]
+💡 **Pro tip:** Ask your hotel or auto driver for the best local spot!`;
 
-💡 **Tips for eating in ${cityName}:**
-- [Local food tips - where locals eat, best times, what to try]
-
-IMPORTANT:
-- If search results found restaurant names, list them
-- Add your knowledge about local cuisine to be helpful
-- For Tamil Nadu: mention mess, bhavan, military hotels, etc.
-- Be conversational and helpful
-
-Now provide a helpful response about restaurants in ${cityName}:`;
-
-                const aiResponse = await callAIWithTyping(foodPrompt, '🍽️ Searching for restaurants...');
-                addChatMessage(aiResponse.response, false);
-                speak("Here's what I found about restaurants!");
+                    addChatMessage(noResultsMsg, false);
+                    speak(`For restaurants in ${cityName}, I recommend asking locals or checking Google Maps.`);
+                }
                 
-                saveToHistory(text, aiResponse.response);
+                saveToHistory(text, `Restaurant search for ${cityName}`);
                 showFastFoodBox();
                 
                 showTransportSuggestion();
