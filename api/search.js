@@ -7,7 +7,6 @@ function checkRateLimit(ip, windowMs = 60000, maxRequests = 60) {
   
   const entry = rateLimitStore.get(key);
   
-  // Clean up old entries occasionally
   if (rateLimitStore.size > 1000) {
     const tenMinutesAgo = now - 600000;
     for (const [k, v] of rateLimitStore.entries()) {
@@ -40,13 +39,10 @@ function checkRateLimit(ip, windowMs = 60000, maxRequests = 60) {
 }
 
 function getClientIp(request) {
-  // For Vercel
   const xff = request.headers.get('x-forwarded-for');
   if (xff) {
     return xff.split(',')[0].trim();
   }
-  
-  // Fallback
   return request.headers.get('cf-connecting-ip') || 
          request.headers.get('x-real-ip') || 
          'unknown';
@@ -57,7 +53,6 @@ export const config = {
 };
 
 export default async function handler(request) {
-  // Set CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -65,57 +60,35 @@ export default async function handler(request) {
     'Content-Type': 'application/json',
   };
 
-  // Handle preflight requests
   if (request.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 200,
-      headers,
-    });
+    return new Response(null, { status: 200, headers });
   }
 
-  // Only allow POST requests
   if (request.method !== 'POST') {
     return new Response(
       JSON.stringify({ error: 'Method not allowed' }),
-      {
-        status: 405,
-        headers,
-      }
+      { status: 405, headers }
     );
   }
 
   try {
-    // Check rate limiting
     const clientIp = getClientIp(request);
-    const rateLimit = checkRateLimit(clientIp, 60000, 60); // 60 requests per minute
+    const rateLimit = checkRateLimit(clientIp, 60000, 60);
     
     if (!rateLimit.allowed) {
       return new Response(
-        JSON.stringify({ 
-          error: rateLimit.error,
-          retryAfter: rateLimit.retryAfter 
-        }),
-        {
-          status: 429,
-          headers: {
-            ...headers,
-            'Retry-After': rateLimit.retryAfter.toString(),
-          },
-        }
+        JSON.stringify({ error: rateLimit.error, retryAfter: rateLimit.retryAfter }),
+        { status: 429, headers: { ...headers, 'Retry-After': rateLimit.retryAfter.toString() } }
       );
     }
 
-    // Parse request body
     const body = await request.json();
     const { query } = body;
 
     if (!query || typeof query !== 'string' || query.trim().length === 0) {
       return new Response(
         JSON.stringify({ error: 'Query is required' }),
-        {
-          status: 400,
-          headers,
-        }
+        { status: 400, headers }
       );
     }
 
@@ -127,16 +100,13 @@ export default async function handler(request) {
           results: [],
           message: 'Search is currently unavailable. Please try again later.',
         }),
-        {
-          status: 200,
-          headers,
-        }
+        { status: 200, headers }
       );
     }
 
-    // Call Brave Search API using native fetch (built into Edge runtime)
+    // Get 5 results - more causes hallucination
     const searchResponse = await fetch(
-      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&safesearch=moderate`,
+      `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&safesearch=moderate&text_decorations=false`,
       {
         headers: {
           'Accept': 'application/json',
@@ -148,28 +118,22 @@ export default async function handler(request) {
 
     if (!searchResponse.ok) {
       console.error('Brave Search API error:', searchResponse.status);
-      
-      // Return empty results instead of failing
       return new Response(
-        JSON.stringify({
-          results: [],
-          query: query,
-        }),
-        {
-          status: 200,
-          headers,
-        }
+        JSON.stringify({ results: [], query: query }),
+        { status: 200, headers }
       );
     }
 
     const searchData = await searchResponse.json();
     
-    // Extract and format results
+    // Extract results - limit to 5
     const results = (searchData.web?.results || []).slice(0, 5).map(result => ({
       title: result.title || '',
       description: result.description || '',
       url: result.url || '',
       metaUrl: result.meta_url?.hostname || '',
+      // Include extra snippets if available
+      extraSnippets: result.extra_snippets || [],
     }));
 
     return new Response(
@@ -177,30 +141,18 @@ export default async function handler(request) {
         results: results,
         query: query,
         count: results.length,
-        rateLimit: {
-          remaining: rateLimit.remaining,
-          resetIn: Math.ceil((rateLimitStore.get(`${clientIp}:60000`)?.resetAt - Date.now()) / 1000),
-        },
       }),
-      {
-        status: 200,
-        headers,
-      }
+      { status: 200, headers }
     );
 
   } catch (error) {
     console.error('Error in search API:', error);
-    
     return new Response(
       JSON.stringify({
         results: [],
         error: 'Search service temporarily unavailable',
-        message: 'Please try again in a moment.',
       }),
-      {
-        status: 200, // Return 200 with empty results instead of error
-        headers,
-      }
+      { status: 200, headers }
     );
   }
 }
