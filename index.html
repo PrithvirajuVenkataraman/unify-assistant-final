@@ -530,7 +530,7 @@
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 100;
+            z-index: 30; /* Lower than chat content (z-40) so it doesn't overlap */
             pointer-events: none;
         }
         
@@ -1471,10 +1471,6 @@ window.__telemetry = {
   regenerations: 0
 };
 
-
-
-// ========== GLOBAL FUNCTION FOR ONCLICK ==========
-// toggleDarkMode must be at global scope for onclick handler
 function toggleDarkMode() {
     const body = document.body;
     if (body.classList.contains('dark')) {
@@ -1486,7 +1482,6 @@ function toggleDarkMode() {
     }
 }
 
-// ========== LOADING STATES ==========
 function showLoading(message = 'Processing...') {
     const overlay = document.getElementById('loading-overlay');
     const text = document.getElementById('loading-text');
@@ -1503,7 +1498,6 @@ function hideLoading() {
     }
 }
 
-// ========== QUICK REPLY SUGGESTIONS ==========
 function showQuickReplies(suggestions) {
     const container = document.getElementById('quick-replies');
     if (!container || !suggestions || suggestions.length === 0) {
@@ -1520,7 +1514,7 @@ function showQuickReplies(suggestions) {
     container.querySelector('div > div').innerHTML = buttonsHtml;
     container.classList.remove('hidden');
     
-    // Auto-hide after 30 seconds
+    
     setTimeout(hideQuickReplies, 30000);
 }
 
@@ -1537,11 +1531,10 @@ function handleQuickReply(text) {
     sendTextInput();
 }
 
-// ========== REGIONAL FOOD SPECIALTIES ==========
 function getRegionalFood(context) {
     const lower = context.toLowerCase();
     
-    // South India (expanded)
+    
     if (lower.includes('tamil nadu') || lower.includes('chidambaram') || lower.includes('chennai') ||
         lower.includes('bangalore') || lower.includes('bengaluru') || lower.includes('hyderabad') ||
         lower.includes('mysore') || lower.includes('coimbatore') || lower.includes('madurai') ||
@@ -1552,7 +1545,7 @@ function getRegionalFood(context) {
             { icon: '🥘', text: 'Dosa & Idli spots' }
         ];
     }
-    // North India
+    
     if (lower.includes('delhi') || lower.includes('mumbai') || lower.includes('jaipur') ||
         lower.includes('agra') || lower.includes('kolkata') || lower.includes('punjab') ||
         lower.includes('rajasthan')) {
@@ -1562,7 +1555,7 @@ function getRegionalFood(context) {
             { icon: '🥘', text: 'Street chaat' }
         ];
     }
-    // India (general)
+    
     if (lower.includes('india')) {
         return [
             { icon: '🍛', text: 'Biryani near me' },
@@ -1570,7 +1563,7 @@ function getRegionalFood(context) {
             { icon: '☕', text: 'Chai shops' }
         ];
     }
-    // Italy
+    
     if (lower.includes('italy') || lower.includes('rome') || lower.includes('milan') ||
         lower.includes('florence') || lower.includes('venice') || lower.includes('naples')) {
         return [
@@ -1579,7 +1572,7 @@ function getRegionalFood(context) {
             { icon: '🍦', text: 'Gelato shops' }
         ];
     }
-    // NYC
+    
     if (lower.includes('new york') || lower.includes('nyc') || lower.includes('manhattan') ||
         lower.includes('brooklyn')) {
         return [
@@ -1588,7 +1581,7 @@ function getRegionalFood(context) {
             { icon: '🌭', text: 'Hot dog stands' }
         ];
     }
-    // Mexico
+    
     if (lower.includes('mexico') || lower.includes('cancun') || lower.includes('cabo') ||
         lower.includes('guadalajara')) {
         return [
@@ -1597,7 +1590,7 @@ function getRegionalFood(context) {
             { icon: '🌯', text: 'Burrito spots' }
         ];
     }
-    // Japan
+    
     if (lower.includes('japan') || lower.includes('tokyo') || lower.includes('kyoto') ||
         lower.includes('osaka')) {
         return [
@@ -1606,7 +1599,7 @@ function getRegionalFood(context) {
             { icon: '🥟', text: 'Izakaya' }
         ];
     }
-    // France
+    
     if (lower.includes('france') || lower.includes('paris') || lower.includes('lyon') ||
         lower.includes('nice')) {
         return [
@@ -1615,7 +1608,7 @@ function getRegionalFood(context) {
             { icon: '🥖', text: 'Boulangeries' }
         ];
     }
-    // USA
+    
     if (lower.includes('ohio') || lower.includes('texas') || lower.includes('california') || 
         lower.includes('mason') || lower.includes('chicago') || lower.includes('boston') ||
         lower.includes('seattle') || lower.includes('los angeles') || lower.includes('long beach')) {
@@ -1625,7 +1618,7 @@ function getRegionalFood(context) {
             { icon: '☕', text: 'Coffee shops' }
         ];
     }
-    // Default (generic)
+    
     return [
         { icon: '🍽️', text: 'Local restaurants' },
         { icon: '☕', text: 'Coffee shops' },
@@ -1633,9 +1626,6 @@ function getRegionalFood(context) {
     ];
 }
 
-// ========== SUGGESTION BOX MANAGEMENT ==========
-
-// Show initial suggestions on page load
 function showInitialSuggestions() {
     const suggestions = [
         { icon: '☀️', text: "What's the weather?", query: "What's the weather like today?" },
@@ -1649,7 +1639,6 @@ function showInitialSuggestions() {
     updateSuggestionBox(suggestions);
 }
 
-// Update suggestion box with contextual suggestions
 function updateSuggestionBox(suggestions) {
     const grid = document.getElementById('suggestion-grid');
     if (!grid) return;
@@ -1662,13 +1651,12 @@ function updateSuggestionBox(suggestions) {
     `).join('');
 }
 
-// Update suggestions based on conversation context
 function updateContextualSuggestions(context) {
     const lower = context.toLowerCase();
     let suggestions = [];
     
     
-    // After itinerary - broader detection
+    
     if (lower.includes('itinerary') || 
         lower.includes('day 1') || 
         lower.includes('day 2') ||
@@ -1685,7 +1673,7 @@ function updateContextualSuggestions(context) {
             { icon: '🛍️', text: 'Shopping areas', query: `Shopping areas in ${city || 'the area'}` }
         ];
     }
-    // After hotel recommendations - detect by emoji and food field
+    
     else if ((lower.includes('🏨') || lower.includes('hotel')) && lower.includes('food:')) {
         const city = extractCityFromText(context);
         suggestions = [
@@ -1697,7 +1685,7 @@ function updateContextualSuggestions(context) {
             { icon: '🎫', text: 'Nightlife', query: `Things to do at night in ${city || 'the area'}` }
         ];
     }
-    // After restaurants
+    
     else if (lower.includes('restaurant') || lower.includes('food:')) {
         const city = extractCityFromText(context);
         suggestions = [
@@ -1709,7 +1697,7 @@ function updateContextualSuggestions(context) {
             { icon: '📸', text: 'Photo spots', query: `Photo spots in ${city || 'the area'}` }
         ];
     }
-    // Default - show general suggestions
+    
     else {
         suggestions = [
             { icon: '☀️', text: "What's the weather?", query: "What's the weather?" },
@@ -1727,9 +1715,8 @@ function updateContextualSuggestions(context) {
     }
 }
 
-// Extract city name from text
 function extractCityFromText(text) {
-    // Try to find city name after common prepositions
+    
     const patterns = [
         /in ([A-Z][a-z]+(?: [A-Z][a-z]+)*)/,
         /to ([A-Z][a-z]+(?: [A-Z][a-z]+)*)/,
@@ -1744,25 +1731,24 @@ function extractCityFromText(text) {
     return '';
 }
 
-// Suggest context-aware quick replies based on last response
 function suggestQuickReplies(context) {
     const suggestions = [];
-    let lastResponse = context; // Store for share button
+    let lastResponse = context; 
     
-    // After itinerary
+    
     if (context.includes('itinerary') || context.includes('Day 1') || context.includes('Enjoy exploring')) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
             { icon: '🏨', text: 'Hotels nearby' },
             { icon: '🍽️', text: 'Restaurants nearby' },
-            ...regionalFood.slice(0, 1), // Add 1 regional food
+            ...regionalFood.slice(0, 1), 
             { icon: '🎫', text: 'Things to do at night' },
             { icon: '📸', text: 'Best photo spots' }
         );
-        // Add share button for itinerary
+        
         addShareButton(context, 'itinerary');
     }
-    // After hotel recommendations
+    
     else if (context.includes('hotel') || context.includes('stay') || context.includes('Food:') || context.includes('🏨')) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
@@ -1772,10 +1758,10 @@ function suggestQuickReplies(context) {
             { icon: '🛍️', text: 'Shopping areas' },
             { icon: '☕', text: 'Coffee shops' }
         );
-        // Add share button for hotels
+        
         addShareButton(context, 'hotels');
     }
-    // After restaurant/food recommendations
+    
     else if (context.includes('restaurant') || context.includes('🍽️') || context.includes('Must Try:')) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
@@ -1784,10 +1770,10 @@ function suggestQuickReplies(context) {
             ...regionalFood.slice(0, 2),
             { icon: '🍰', text: 'Dessert places' }
         );
-        // Add share button for restaurants
+        
         addShareButton(context, 'restaurants');
     }
-    // After weather
+    
     else if (context.includes('weather') || context.includes('temperature') || context.includes('°')) {
         suggestions.push(
             { icon: '🏨', text: 'Hotels nearby' },
@@ -1795,7 +1781,7 @@ function suggestQuickReplies(context) {
             { icon: '🗺️', text: 'Things to do' }
         );
     }
-    // Default suggestions
+    
     else {
         suggestions.push(
             { icon: '🌤️', text: 'Weather' },
@@ -1806,11 +1792,10 @@ function suggestQuickReplies(context) {
     
     showQuickReplies(suggestions);
     
-    // Also update the main suggestion box with contextual suggestions
+    
     updateContextualSuggestions(context);
 }
 
-// Add share button after recommendations
 function addShareButton(content, type) {
     const chatContainer = document.getElementById('chat-container');
     const shareBox = document.createElement('div');
@@ -1820,7 +1805,7 @@ function addShareButton(content, type) {
     const textClass = darkMode ? 'text-blue-200' : 'text-blue-900';
     const buttonClass = darkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600';
     
-    // Clean content for sharing (remove HTML tags)
+    
     const cleanContent = content.replace(/<[^>]*>/g, '').replace(/\[📍.*?\]/g, '');
     
     shareBox.innerHTML = `
@@ -1835,33 +1820,31 @@ function addShareButton(content, type) {
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-// Share content using Web Share API or Clipboard
 async function shareContent(content, type) {
     const title = `My ${type} from JARVIS`;
     const text = `${title}\n\n${content}\n\n---\nShared via JARVIS Voice Assistant`;
     
-    // Try Web Share API first (works on mobile)
+    
     if (navigator.share) {
         try {
             await navigator.share({
                 title: title,
                 text: text
             });
-            // Show success message
+            
             showTemporaryMessage('✅ Shared successfully!');
         } catch (error) {
             if (error.name !== 'AbortError') {
-                // Fallback to clipboard
+                
                 copyToClipboard(text);
             }
         }
     } else {
-        // Fallback to clipboard
+        
         copyToClipboard(text);
     }
 }
 
-// Copy to clipboard fallback
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
         showTemporaryMessage('📋 Copied to clipboard! Now you can paste it into SMS, WhatsApp, or any app!');
@@ -1870,7 +1853,6 @@ function copyToClipboard(text) {
     });
 }
 
-// Show temporary success message
 function showTemporaryMessage(message) {
     const chatContainer = document.getElementById('chat-container');
     const msgDiv = document.createElement('div');
@@ -1888,32 +1870,31 @@ function showTemporaryMessage(message) {
     chatContainer.appendChild(msgDiv);
     chatContainer.scrollTop = chatContainer.scrollHeight;
     
-    // Remove after 3 seconds
+    
     setTimeout(() => {
         msgDiv.classList.add('fade-out');
         setTimeout(() => msgDiv.remove(), 300);
     }, 3000);
 }
 
-// Suggest context-aware quick replies based on last response
 function suggestQuickReplies(context) {
     const suggestions = [];
-    let lastResponse = context; // Store for share button
+    let lastResponse = context; 
     
-    // After itinerary
+    
     if (context.includes('itinerary') || context.includes('Day 1') || context.includes('Enjoy exploring')) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
             { icon: '🏨', text: 'Hotels nearby' },
             { icon: '🍽️', text: 'Restaurants nearby' },
-            ...regionalFood.slice(0, 1), // Add 1 regional food
+            ...regionalFood.slice(0, 1), 
             { icon: '🎫', text: 'Things to do at night' },
             { icon: '📸', text: 'Best photo spots' }
         );
-        // Add share button for itinerary
+        
         addShareButton(context, 'itinerary');
     }
-    // After hotel recommendations
+    
     else if (context.includes('hotel') || context.includes('stay') || context.includes('Food:') || context.includes('🏨')) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
@@ -1923,10 +1904,10 @@ function suggestQuickReplies(context) {
             { icon: '🛍️', text: 'Shopping areas' },
             { icon: '☕', text: 'Coffee shops' }
         );
-        // Add share button for hotels
+        
         addShareButton(context, 'hotels');
     }
-    // After restaurant/food recommendations
+    
     else if (context.includes('restaurant') || context.includes('🍽️') || context.includes('Must Try:')) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
@@ -1935,10 +1916,10 @@ function suggestQuickReplies(context) {
             ...regionalFood.slice(0, 2),
             { icon: '🍰', text: 'Dessert places' }
         );
-        // Add share button for restaurants
+        
         addShareButton(context, 'restaurants');
     }
-    // After weather
+    
     else if (context.includes('weather') || context.includes('temperature') || context.includes('°')) {
         suggestions.push(
             { icon: '🏨', text: 'Hotels nearby' },
@@ -1946,7 +1927,7 @@ function suggestQuickReplies(context) {
             { icon: '🗺️', text: 'Things to do' }
         );
     }
-    // Default suggestions
+    
     else {
         suggestions.push(
             { icon: '🌤️', text: 'Weather' },
@@ -1958,12 +1939,10 @@ function suggestQuickReplies(context) {
     showQuickReplies(suggestions);
 }
 
-// ========== GEMINI AI INTEGRATION ==========
 let conversationContext = [];
 
-// Wrapper for AI calls with thinking indicator
 async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
-    // Show thinking indicator in chat
+    
     showThinkingIndicator(loadingMessage);
     try {
         const response = await askGeminiAI(message);
@@ -2039,14 +2018,11 @@ Respond conversationally and naturally.`;
         }
         
         const data = await response.json();
-        console.log('✅ API Response data:', data);
-        console.log('Response text:', data.response || data.text);
-        
         conversationContext.push({ role: 'assistant', text: data.response || data.text });
         
         return data;
     } catch (error) {
-        // Better error handling - try to be helpful
+        
         showError(`AI request failed: ${error.message}`);
         return {
             response: "I'm having trouble connecting to my AI. Please try again in a moment!",
@@ -2090,13 +2066,13 @@ async function handleNameCorrection(text) {
     speak(response);
 }
 
-        // ========== STATE VARIABLES ==========
+        
         let darkMode = false;
-        let autoSpeak = false; // Auto-speak disabled by default (user can click speaker button)
+        let autoSpeak = false; 
         let recognition = null;
         let continuousRecognition = null;
-        let wakeWordMode = false;  // Are we listening for "Hey Jarvis"?
-        let commandMode = false;    // Are we listening for a command after wake word?
+        let wakeWordMode = false;  
+        let commandMode = false;    
         let isListening = false;
         let synth = window.speechSynthesis;
         let reminders = [];
@@ -2106,18 +2082,18 @@ async function handleNameCorrection(text) {
         let chatHistory = [];
         let micPermissionGranted = false;
         
-        // New state variables
+        
         let userName = null;
         let waitingForName = false;
         let shoppingList = [];
-        let memoryStore = {}; // Store user's personal information
+        let memoryStore = {}; 
 
-        // ========== INITIALIZATION ==========
+        
         window.onload = async () => {
-            // ========== JARVIS INTRO ANIMATION ==========
+            
             const introScreen = document.getElementById('jarvis-intro');
             
-            // Play "Initializing JARVIS..." voice after 2 seconds
+            
             setTimeout(() => {
                 const initText = "Initializing JARVIS";
                 if (typeof responsiveVoice !== 'undefined') {
@@ -2142,7 +2118,7 @@ async function handleNameCorrection(text) {
                 }
             }, 2000);
             
-            // Hide intro after 5 seconds
+            
             setTimeout(() => {
                 introScreen.classList.add('hidden');
                 setTimeout(() => {
@@ -2154,20 +2130,20 @@ async function handleNameCorrection(text) {
             loadUserData();
             checkReminders();
             
-            // Show initial suggestions only on first visit
+            
             const hasVisited = localStorage.getItem('unify_has_visited');
             if (!hasVisited) {
                 showInitialSuggestions();
-                // Don't mark as visited yet - wait for first interaction
+                
             } else {
-                // Hide the suggestions box for returning users
+                
                 const suggestionsBox = document.getElementById('initial-suggestions');
                 if (suggestionsBox) {
                     suggestionsBox.style.display = 'none';
                 }
             }
             
-            // Don't force name input - just show friendly welcome
+            
             const welcomeMsg = userName 
                 ? `Hi ${userName}! How can I help you today?` 
                 : "Hi! I'm JARVIS, your voice assistant. How can I help you today?";
@@ -2175,7 +2151,7 @@ async function handleNameCorrection(text) {
             addChatMessage(welcomeMsg, false);
             speak(welcomeMsg);
             
-            // No hint message - suggestions will appear after first query
+            
         };
 
         async function requestMicrophonePermission() {
@@ -2191,7 +2167,7 @@ async function handleNameCorrection(text) {
             }
         }
 
-        // ========== DARK MODE & LIGHT SWITCH ==========
+        
         function toggleDarkMode() {
             darkMode = !darkMode;
             const body = document.body;
@@ -2204,7 +2180,7 @@ async function handleNameCorrection(text) {
             const weatherEffects = document.getElementById('weather-effects');
             const receipt = document.getElementById('shopping-receipt');
             
-            // Input bar elements
+            
             const inputBarContainer = document.getElementById('input-bar-container');
             const inputBarInner = document.getElementById('input-bar-inner');
             const textInput = document.getElementById('text-input');
@@ -2212,14 +2188,14 @@ async function handleNameCorrection(text) {
             const footerDisclaimer = document.getElementById('footer-disclaimer');
             
             if (darkMode) {
-                // Turn OFF the light (dark mode) - INSTANT
+                
                 lightSwitch.classList.remove('on');
                 tubeLight.classList.remove('on', 'starting');
                 
-                // Clear weather effects in dark mode
+                
                 if (weatherEffects) weatherEffects.innerHTML = '';
                 
-                // Immediate dark mode
+                
                 body.classList.remove('light');
                 body.classList.add('dark');
                 body.style.background = '#000';
@@ -2230,7 +2206,7 @@ async function handleNameCorrection(text) {
                 if (chatContainer) chatContainer.className = 'bg-gray-800 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6';
                 if (receipt) receipt.classList.add('dark-mode');
                 
-                // Dark mode for input bar - blend with background
+                
                 if (inputBarContainer) {
                     inputBarContainer.className = 'fixed bottom-0 left-0 right-0 bg-gray-900 bg-opacity-95 border-t border-gray-700 shadow-lg z-40 backdrop-blur-xl';
                 }
@@ -2248,22 +2224,22 @@ async function handleNameCorrection(text) {
                     footerDisclaimer.className = 'text-xs text-gray-400';
                 }
             } else {
-                // Turn ON the light (light mode) - DELAYED with tube light startup
+                
                 lightSwitch.classList.add('on');
                 
-                // Start tube light flicker animation
+                
                 tubeLight.classList.add('starting');
                 
-                // Wait for tube light to fully glow before switching to light mode
+                
                 setTimeout(() => {
                     tubeLight.classList.remove('starting');
                     tubeLight.classList.add('on');
                     
-                    // Now switch to light mode after tube light is on
+                    
                     body.classList.remove('dark');
                     body.classList.add('light');
                     
-                    // Restore weather effects or default background
+                    
                     if (weather && weather.current) {
                         createWeatherEffect(weather.current.weather_code, Math.round(weather.current.temperature_2m));
                     } else {
@@ -2277,7 +2253,7 @@ async function handleNameCorrection(text) {
                     if (chatContainer) chatContainer.className = 'bg-gray-50 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6';
                     if (receipt) receipt.classList.remove('dark-mode');
                     
-                    // Light mode for input bar
+                    
                     if (inputBarContainer) {
                         inputBarContainer.className = 'fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40';
                     }
@@ -2294,12 +2270,12 @@ async function handleNameCorrection(text) {
                     if (footerDisclaimer) {
                         footerDisclaimer.className = 'text-xs text-gray-500';
                     }
-                }, 800); // Match the tube light startup animation duration
+                }, 800); 
             }
         }
 
-        // ========== FEATURE REQUEST ==========
-        // ========== HELP MODAL ==========
+        
+        
         function showHelpModal() {
             const modal = document.createElement('div');
             modal.id = 'help-modal';
@@ -2394,14 +2370,14 @@ async function handleNameCorrection(text) {
             if (modal) modal.remove();
         }
         
-        // ========== FEATURE REQUEST ==========
+        
         function openFeatureRequest() {
-            // Google Form for feature requests
+            
             const formUrl = 'https://forms.gle/h8Wtb3fbwKBnjoYT8';
             window.open(formUrl, '_blank');
         }
 
-        // ========== CHAT MESSAGE HANDLING ==========
+        
         function addAIMessage(text, trustLevel = TRUST_LEVEL.GENERATED) 
         {
           if (violatesIntent(text)) {
@@ -2432,7 +2408,7 @@ async function handleNameCorrection(text) {
             messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-2 fade-in`;
             
             if (isUser) {
-                // User messages: escape everything
+                
                 const formattedText = escapeHtml(text).replace(/\n/g, '<br>');
                 messageDiv.innerHTML = `
                     <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md shadow-sm relative group">
@@ -2441,14 +2417,14 @@ async function handleNameCorrection(text) {
                     </div>
                 `;
             } else {
-                // Assistant messages: allow safe HTML (links)
+                
                 const bgClass = darkMode ? 'bg-gray-700' : 'bg-white';
                 const textClass = darkMode ? 'text-gray-200' : 'text-gray-800';
                 
-                // Remove HTML tags for speech
+                
                 const textForSpeech = text.replace(/<[^>]*>/g, '');
                 
-                // For display: convert newlines to <br> but keep HTML links
+                
                 const formattedText = text.replace(/\n/g, '<br>');
                 
                 messageDiv.innerHTML = `
@@ -2470,11 +2446,11 @@ async function handleNameCorrection(text) {
                 
                 chatContainer.appendChild(messageDiv);
                 
-                // Typewriter effect for AI responses
+                
                 if (typewriter) {
                     const textElement = messageDiv.querySelector('.typewriter-text');
                     let charIndex = 0;
-                    const speed = 15; // ms per character (faster = lower number)
+                    const speed = 15; 
                     
                     function typeCharacter() {
                         if (charIndex < formattedText.length) {
@@ -2513,11 +2489,11 @@ async function handleNameCorrection(text) {
             const voiceBtn = document.getElementById('voice-btn');
             
             if (input.value.trim().length > 0) {
-                // Show send button, hide voice button
+                
                 sendBtn.classList.remove('hidden');
                 voiceBtn.classList.add('hidden');
             } else {
-                // Show voice button, hide send button
+                
                 sendBtn.classList.add('hidden');
                 voiceBtn.classList.remove('hidden');
             }
@@ -2532,7 +2508,7 @@ async function handleNameCorrection(text) {
                 if (waitingForName) {
                     handleNameInput(text);
                 } else if (waitingForLocation) {
-                    // Validate location input
+                    
                     const cleanLocation = text.trim();
                     if (cleanLocation.length < 2) {
                         const msg = "I didn't catch that. Please tell me a city or location name.";
@@ -2541,7 +2517,7 @@ async function handleNameCorrection(text) {
                         input.value = '';
                         return;
                     }
-                    // Reject common filler words
+                    
                     const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh'];
                     if (fillerWords.includes(cleanLocation.toLowerCase())) {
                         const msg = "I didn't quite catch the location. Could you say it again?";
@@ -2560,11 +2536,11 @@ async function handleNameCorrection(text) {
                 }
                 
                 input.value = '';
-                toggleSendButton(); // Reset to voice button after sending
+                toggleSendButton(); 
             }
         }
 
-        // ========== HOTEL RECOMMENDATIONS WITH MAPS ==========
+        
         let userLocation = null;
 
         async function getUserLocation() {
@@ -2592,7 +2568,7 @@ async function handleNameCorrection(text) {
         async function displayHotelsWithMaps(aiText, query) {
             const location = await getUserLocation();
             
-            // Parse hotel data
+            
             const hotels = [];
             const hotelBlocks = aiText.split('---').filter(b => b.trim());
             
@@ -2612,11 +2588,11 @@ async function handleNameCorrection(text) {
                 if (hotel.name) hotels.push(hotel);
             }
             
-            // Extract city from query
+            
             const cityMatch = query.match(/in\s+([^,?]+)/i);
             const city = cityMatch ? cityMatch[1].trim() : '';
             
-            // Build display message
+            
             let displayHtml = '<div class="space-y-4">';
             
             for (const hotel of hotels) {
@@ -2670,14 +2646,14 @@ async function handleNameCorrection(text) {
         function showFastFoodBox() {
             const chatContainer = document.getElementById('chat-container');
             
-            // Detect region from userLocation
-            let region = 'international'; // default
+            
+            let region = 'international'; 
             
             if (userLocation) {
                 const country = userLocation.country?.toLowerCase() || '';
                 const state = userLocation.state?.toLowerCase() || '';
                 
-                // South India
+                
                 if (country.includes('india') && (
                     state.includes('tamil nadu') || state.includes('karnataka') || 
                     state.includes('kerala') || state.includes('andhra') || 
@@ -2685,25 +2661,25 @@ async function handleNameCorrection(text) {
                 )) {
                     region = 'south-india';
                 }
-                // North India
+                
                 else if (country.includes('india')) {
                     region = 'north-india';
                 }
-                // USA
+                
                 else if (country.includes('united states') || country.includes('usa')) {
                     region = 'usa';
                 }
-                // UK
+                
                 else if (country.includes('united kingdom') || country.includes('uk') || country.includes('england')) {
                     region = 'uk';
                 }
-                // Middle East
+                
                 else if (country.includes('uae') || country.includes('saudi') || country.includes('qatar') || country.includes('kuwait')) {
                     region = 'middle-east';
                 }
             }
             
-            // Regional quick access buttons
+            
             const regionalButtons = {
                 'south-india': [
                     { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' },
@@ -2793,10 +2769,10 @@ async function handleNameCorrection(text) {
             window.waitingForTransportLocation = true;
         }
 
-        // ========== SPEECH RECOGNITION ==========
         
-        let isProcessing = false; // Prevent duplicate processing
-        let speechTimeout = null; // Timeout for collecting complete sentence
+        
+        let isProcessing = false; 
+        let speechTimeout = null; 
         
         function initializeSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2805,71 +2781,71 @@ async function handleNameCorrection(text) {
                 return;
             }
 
-            // Manual recognition - triggered by button only
+            
             continuousRecognition = new SpeechRecognition();
-            continuousRecognition.continuous = true;  // Keep listening
-            continuousRecognition.interimResults = true;  // Get interim results
+            continuousRecognition.continuous = true;  
+            continuousRecognition.interimResults = true;  
             continuousRecognition.lang = 'en-US';
             
-            // Stop any ongoing speech when user starts talking (interruption support)
+            
             continuousRecognition.onstart = () => {
                 stopSpeaking();
             };
 
             continuousRecognition.onresult = async (event) => {
-                // Get the latest result
+                
                 const last = event.results.length - 1;
                 const result = event.results[last];
                 const text = result[0].transcript.trim().toLowerCase();
                 
                 if (!text) return;
                 
-                // ========== WAKE WORD DETECTION (OPTIONAL) ==========
+                
                 if (wakeWordMode && !commandMode) {
-                    // Check if user said "Hey Jarvis" (optional for Marvel fans)
+                    
                     if (text.includes('hey jarvis') || text.includes('hey davis')) {
-                        // Wake word detected!
+                        
                         commandMode = true;
                         wakeWordMode = false;
                         
-                        // Respond "Yes, sir?"
+                        
                         const response = "Yes, sir?";
                         addChatMessage("🎤 Hey JARVIS", true);
                         addChatMessage(response, false);
                         speak(response);
                         
-                        // Keep listening for command
+                        
                         return;
                     }
-                    // If user just speaks directly (without "Hey JARVIS"), process it
-                    // This makes wake word OPTIONAL
+                    
+                    
                     if (result.isFinal) {
-                        // User spoke directly - disable wake word mode and process
+                        
                         wakeWordMode = false;
                         commandMode = false;
-                        // Continue to normal processing below
+                        
                     } else {
-                        return; // Wait for final result
+                        return; 
                     }
                 }
                 
-                // ========== COMMAND MODE (after "Hey Jarvis" OR direct speech) ==========
-                // Clear any existing timeout
+                
+                
                 if (speechTimeout) {
                     clearTimeout(speechTimeout);
                 }
                 
-                // If it's a final result, process
+                
                 if (result.isFinal) {
                     
-                    // Reset modes
+                    
                     commandMode = false;
                     wakeWordMode = false;
                     
-                    // Stop listening immediately
+                    
                     stopListening();
                     
-                    // Prevent duplicate processing
+                    
                     if (isProcessing) {
                         return;
                     }
@@ -2880,7 +2856,7 @@ async function handleNameCorrection(text) {
                 
                 try {
                     if (waitingForLocation) {
-                        // Validate location input
+                        
                         const cleanLocation = text.replace(/[?!]/g, '').trim();
                         
                         if (cleanLocation.length < 2) {
@@ -2914,13 +2890,13 @@ async function handleNameCorrection(text) {
                         return;
                     }
                     
-                    // Process as normal command
+                    
                     await processCommand(text);
                 } finally {
-                    // Always clear processing flag
+                    
                     isProcessing = false;
                 }
-                } // Close isFinal check
+                } 
             };
 
             continuousRecognition.onerror = (event) => {
@@ -2934,14 +2910,14 @@ async function handleNameCorrection(text) {
 
         function toggleListening() {
             if (isListening && wakeWordMode) {
-                // Stop wake word mode
+                
                 stopListening();
                 wakeWordMode = false;
                 addChatMessage("Wake word mode disabled", false);
             } else if (isListening) {
                 stopListening();
             } else {
-                // Start listening mode
+                
                 wakeWordMode = true;
                 commandMode = false;
                 startListening();
@@ -2959,7 +2935,7 @@ async function handleNameCorrection(text) {
                 isListening = true;
                 continuousRecognition.start();
                 
-                // Update UI
+                
                 document.getElementById('mic-icon-bottom').classList.add('hidden');
                 document.getElementById('waveform-bottom').classList.remove('hidden');
                 document.getElementById('voice-btn').classList.add('bg-purple-600', 'ring-4', 'ring-purple-200');
@@ -2980,25 +2956,25 @@ async function handleNameCorrection(text) {
                 }
             }
             
-            // Update UI
+            
             document.getElementById('mic-icon-bottom')?.classList.remove('hidden');
             document.getElementById('waveform-bottom')?.classList.add('hidden');
             document.getElementById('voice-btn')?.classList.remove('bg-purple-600', 'ring-4', 'ring-purple-200');
             document.getElementById('voice-btn')?.classList.add('bg-gray-900');
         }
 
-        // Remove old recognition code - we only need one now
+        
         recognition = continuousRecognition;
 
-        // ========== HOTEL/RESTAURANT ENHANCEMENT FUNCTIONS ==========
         
-        // Add GPS directions to hotel recommendations
+        
+        
         async function addGPSDirectionsToHotels(responseText, query) {
-            // Extract city/location from query
+            
             const locationMatch = query.match(/\b(in|at|near)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
             const cityName = locationMatch ? locationMatch[2] : '';
             
-            // Get user's current location
+            
             let userLat = null;
             let userLon = null;
             
@@ -3015,8 +2991,8 @@ async function handleNameCorrection(text) {
             } catch (error) {
             }
             
-            // Find hotel names - match both with and without bold markers
-            // Pattern: 🏨 **Hotel Name** OR 🏨 Hotel Name
+            
+            
             const hotelMatches = responseText.matchAll(/🏨\s+(?:\*\*)?([^*\n]+?)(?:\*\*)?\s*(?:\[|$)/gm);
             let enhancedResponse = responseText;
             
@@ -3025,26 +3001,26 @@ async function handleNameCorrection(text) {
                 const hotelName = match[1].trim();
                 const fullMatch = match[0];
                 
-                // Skip if already has a link
+                
                 if (fullMatch.includes('<a href')) continue;
                 
-                // Create Google Maps link
+                
                 let mapsLink;
                 if (userLat && userLon) {
-                    // Directions from current location
+                    
                     mapsLink = `https://www.google.com/maps/dir/${userLat},${userLon}/${encodeURIComponent(hotelName + ' ' + cityName)}`;
                 } else {
-                    // Just search for the hotel
+                    
                     mapsLink = `https://www.google.com/maps/search/${encodeURIComponent(hotelName + ' ' + cityName)}`;
                 }
                 
-                // Add directions link after hotel emoji and name
+                
                 const replacement = fullMatch.replace(hotelName, `${hotelName} [📍 <a href="${mapsLink}" target="_blank" style="color: #3B82F6; text-decoration: underline;">Get Directions</a>]`);
                 
                 replacements.push({ old: fullMatch, new: replacement });
             }
             
-            // Apply all replacements
+            
             for (const { old, new: newText } of replacements) {
                 enhancedResponse = enhancedResponse.replace(old, newText);
             }
@@ -3052,30 +3028,30 @@ async function handleNameCorrection(text) {
             return enhancedResponse;
         }
         
-        // Enrich hotel specialties with real data from web search
+        
         async function enrichHotelSpecialties(responseText, query) {
             
-            // Extract city from query
+            
             const locationMatch = query.match(/\b(in|at|near)\s+([A-Z][a-z]+(?: [A-Z][a-z]+)*)/i);
             const cityName = locationMatch ? locationMatch[2] : '';
             
             if (!cityName) return responseText;
             
-            // Find all hotels in the response
-            // Pattern: 🏨 Hotel Name
+            
+            
             const hotelMatches = [...responseText.matchAll(/🏨\s+([^\n\[]+?)(?:\s*\[|$)/gm)];
             
             if (hotelMatches.length === 0) return responseText;
             
             let enrichedResponse = responseText;
             
-            // Search for each hotel (limit to first 5 to avoid too many searches)
+            
             for (let i = 0; i < Math.min(hotelMatches.length, 5); i++) {
                 const match = hotelMatches[i];
                 const hotelName = match[1].trim();
                 
                 try {
-                    // Search using web_search tool via our API
+                    
                     const searchQuery = `${hotelName} ${cityName} famous for specialty`;
                     
                     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -3107,7 +3083,7 @@ async function handleNameCorrection(text) {
                             
                             if (specialty) {
                                 
-                                // Find and replace the specialty line for this hotel
+                                
                                 const hotelBlockRegex = new RegExp(
                                     `(🏨\\s+${hotelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^⭐]*⭐\\s*Specialty:\\s*)([^\\n]+)`,
                                     'i'
@@ -3118,25 +3094,25 @@ async function handleNameCorrection(text) {
                         }
                     }
                 } catch (error) {
-                    // Continue with next hotel
+                    
                 }
                 
-                // Small delay between searches
+                
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
             
             return enrichedResponse;
         }
         
-        // Extract specialty from search response
+        
         function extractSpecialtyFromResponse(text) {
-            // Look for "Famous for:" pattern
+            
             const famousMatch = text.match(/famous for:?\s*([^\n.!?]+)/i);
             if (famousMatch) {
                 return cleanSpecialty(famousMatch[1]);
             }
             
-            // Look for other common patterns
+            
             const patterns = [
                 /(?:known for|specializes in|best known for)[\s:]+([^\n.!?]+)/i,
                 /(?:try|must try|signature)[\s:]+([^\n.!?]+)/i
@@ -3152,17 +3128,17 @@ async function handleNameCorrection(text) {
             return null;
         }
         
-        // Clean up specialty text
+        
         function cleanSpecialty(text) {
             let specialty = text.trim()
                 .replace(/^(their|its|the|a|an)\s+/i, '')
                 .replace(/\.$/, '')
                 .trim();
             
-            // Capitalize first letter
+            
             specialty = specialty.charAt(0).toUpperCase() + specialty.slice(1);
             
-            // Limit length
+            
             if (specialty.length > 60) {
                 specialty = specialty.substring(0, 60).trim() + '...';
             }
@@ -3170,7 +3146,7 @@ async function handleNameCorrection(text) {
             return specialty;
         }
         
-        // Add fast food suggestion box
+        
         function addFastFoodSuggestionBox() {
             const chatContainer = document.getElementById('chat-container');
             const fastFoodBox = document.createElement('div');
@@ -3198,7 +3174,7 @@ async function handleNameCorrection(text) {
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
         
-        // Add transport suggestion button
+        
         function addTransportSuggestionButton(query) {
             const locationMatch = query.match(/\b(in|at|near|to)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
             const cityName = locationMatch ? locationMatch[2] : '';
@@ -3225,21 +3201,36 @@ async function handleNameCorrection(text) {
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
         
-        // Get transport information
+        
         async function getTransportInfo(cityName) {
-            // Metropolitan cities (big cities with extensive public transport)
+            
             const metroCities = [
                 'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad', 'pune', 'ahmedabad',
                 'new york', 'nyc', 'boston', 'los angeles', 'chicago', 'san francisco', 'london', 'paris', 'tokyo', 
-                'singapore', 'dubai', 'hong kong', 'sydney', 'melbourne', 'toronto', 'vancouver'
+                'singapore', 'dubai', 'hong kong', 'sydney', 'melbourne', 'toronto', 'vancouver', 'coimbatore',
+                'madurai', 'trichy', 'tiruchirappalli', 'salem', 'kochi', 'cochin', 'thiruvananthapuram', 'trivandrum',
+                'mysore', 'mysuru', 'mangalore', 'mangaluru', 'vizag', 'visakhapatnam', 'vijayawada', 'jaipur',
+                'lucknow', 'kanpur', 'nagpur', 'indore', 'bhopal', 'patna', 'ranchi', 'bhubaneswar', 'guwahati',
+                'chandigarh', 'ludhiana', 'amritsar', 'surat', 'vadodara', 'rajkot'
+            ];
+            
+            
+            const tier2Cities = [
+                'pondicherry', 'puducherry', 'ooty', 'kodaikanal', 'munnar', 'alleppey', 'alappuzha',
+                'tirupati', 'thanjavur', 'kumbakonam', 'mahabalipuram', 'kanyakumari', 'rameswaram',
+                'vellore', 'erode', 'tirunelveli', 'dindigul', 'hosur', 'nagercoil', 'karur',
+                'udaipur', 'jodhpur', 'pushkar', 'mount abu', 'ajmer', 'shimla', 'manali', 'dharamshala',
+                'rishikesh', 'haridwar', 'varanasi', 'agra', 'mathura', 'vrindavan', 'khajuraho',
+                'goa', 'panaji', 'margao', 'puri', 'konark', 'darjeeling', 'gangtok', 'shillong'
             ];
             
             const isMetro = metroCities.some(city => cityName.toLowerCase().includes(city));
+            const isTier2 = tier2Cities.some(city => cityName.toLowerCase().includes(city));
             
             showThinkingIndicator('🚌 Checking transport options...');
             
             if (isMetro) {
-                // Big city - ask AI for bus/metro timings
+                
                 const transportPrompt = `Provide public transportation information for ${cityName}. 
 
 CRITICAL FORMATTING - READ CAREFULLY:
@@ -3260,9 +3251,10 @@ Format (NO ASTERISKS):
 - Coverage areas
 - Typical timings
                 
-🚕 Other Options:
-- Taxi/Uber/Ola availability
-- Auto-rickshaw (if applicable)
+🚕 Ride-Sharing & Taxis:
+- Uber and Ola availability
+- Auto-rickshaw availability
+- Typical fare ranges
                 
 Keep it concise and practical. Focus on what tourists need to know.
 
@@ -3272,34 +3264,72 @@ CRITICAL: Do NOT use ** or * anywhere in your response. Use plain text with dash
                 hideThinkingIndicator();
                 addChatMessage(aiResponse.response, false);
                 speak("Here's the transport information!");
+            } else if (isTier2) {
+                
+                hideThinkingIndicator();
+                const tier2Msg = `🚌 Transport in ${cityName}:
+
+${cityName} is a tourist-friendly town with decent transport options.
+
+🚕 Ride-Sharing:
+- Uber/Ola may be available but with limited drivers
+- Wait times can be longer (10-20 mins)
+- Better availability during tourist season
+
+🛺 Local Options:
+- Auto-rickshaws are the most reliable option
+- Negotiate fare before starting (or insist on meter)
+- Available throughout the town
+
+🚌 Public Transport:
+- Local and intercity buses available at bus stand
+- Check timings at the local bus depot
+- State transport buses connect to major cities
+
+💡 Best Advice for ${cityName}:
+- For sightseeing: Hire an auto for half-day/full-day (negotiate beforehand)
+- For short trips: Use auto-rickshaws
+- For intercity: Book bus tickets in advance during peak season
+- Download Ola/Uber apps as backup but don't rely solely on them`;
+                
+                addChatMessage(tier2Msg, false);
+                speak(`${cityName} has auto-rickshaws and some ride-sharing options. Auto-rickshaws are your most reliable choice here.`);
             } else {
-                // Small town - provide standard advice
+                
                 hideThinkingIndicator();
                 const smallTownMsg = `🚌 Transport in ${cityName}:
 
-${cityName} is a smaller town with limited public transportation options.
+${cityName} is a smaller town without major ride-sharing services like Uber or Ola.
 
-Local Transport:
-- Local buses are available but schedules vary
-- Visit the bus stand for current timings and routes
-- Auto-rickshaws are readily available
+🛺 What's Available:
+- Auto-rickshaws (most common and reliable)
+- Cycle rickshaws in some areas
+- Local shared autos/vans for specific routes
+- Town buses (limited schedules)
 
-💡 Best Advice:
-If you're visiting ${cityName} for the first time, I'd recommend:
-- Using your own car/vehicle to save time and have flexibility
-- Hiring a local taxi for the day
-- Auto-rickshaws for short distances within town
+🚌 Intercity Travel:
+- State transport buses from the bus stand
+- Private buses to nearby cities
+- Shared taxis/vans to neighboring towns
 
-This gives you more freedom to explore at your own pace!`;
+💡 Pro Tips for ${cityName}:
+- Ask your hotel to arrange a trusted auto driver
+- Negotiate auto fare before starting your trip
+- For temple visits, many autos offer package rates
+- Local drivers often double as guides - utilize their knowledge!
+- Keep cash handy as digital payments may not work everywhere
+
+🚗 Best Option:
+If visiting multiple places, consider hiring a local taxi/auto for the full day. Ask your accommodation for recommendations - they usually know trustworthy drivers.`;
                 
                 addChatMessage(smallTownMsg, false);
-                speak(`${cityName} is a smaller town. I'd recommend using your own transport or hiring a local taxi for convenience.`);
+                speak(`${cityName} is a smaller town. Uber and Ola are not available here. Auto-rickshaws are your best option, and I'd recommend hiring one for the day through your hotel.`);
             }
             
             saveToHistory(`Transport in ${cityName}`, 'Provided transport information');
         }
         
-        // ========== COMMAND PROCESSING ==========
+        
         function processSuggestion(text) {
             document.getElementById('text-input').value = text;
             sendTextInput();
@@ -3308,7 +3338,7 @@ This gives you more freedom to explore at your own pace!`;
         async function processCommand(text) {
             const lower = text.toLowerCase();
             
-            // Mark as visited after first interaction and hide suggestions box
+            
             if (!localStorage.getItem('unify_has_visited')) {
                 localStorage.setItem('unify_has_visited', 'true');
                 const suggestionsBox = document.getElementById('initial-suggestions');
@@ -3317,7 +3347,7 @@ This gives you more freedom to explore at your own pace!`;
                 }
             }
             
-            // Auto-close cards when topic changes
+            
             const isWeatherQuery = lower.includes('weather') || lower.includes('temperature') || 
                                    lower.includes('rain') || lower.includes('snow') || 
                                    lower.includes('forecast') || lower.includes('hot') || lower.includes('cold');
@@ -3327,7 +3357,7 @@ This gives you more freedom to explore at your own pace!`;
             
             const isReminderQuery = lower.includes('remind') || lower.includes('reminder');
             
-            // Close weather card if not asking about weather
+            
             if (!isWeatherQuery && !waitingForLocation) {
                 const weatherCard = document.getElementById('weather-card');
                 if (weatherCard && !weatherCard.classList.contains('hidden')) {
@@ -3335,7 +3365,7 @@ This gives you more freedom to explore at your own pace!`;
                 }
             }
             
-            // Close shopping receipt if not asking about shopping
+            
             if (!isShoppingQuery) {
                 const shoppingReceipt = document.getElementById('shopping-receipt');
                 if (shoppingReceipt && !shoppingReceipt.classList.contains('hidden')) {
@@ -3343,7 +3373,7 @@ This gives you more freedom to explore at your own pace!`;
                 }
             }
             
-            // Close reminders section if not asking about reminders
+            
             if (!isReminderQuery) {
                 const remindersSection = document.getElementById('reminders-section');
                 if (remindersSection && !remindersSection.classList.contains('hidden')) {
@@ -3351,7 +3381,7 @@ This gives you more freedom to explore at your own pace!`;
                 }
             }
             
-            // Remove common conversational prefixes
+            
             let cleanText = text;
             const prefixes = ['hey', 'hi', 'hello', 'ok', 'okay', 'well', 'so', 'um', 'uh'];
             for (const prefix of prefixes) {
@@ -3362,7 +3392,7 @@ This gives you more freedom to explore at your own pace!`;
             if (waitingForLocation) {
                 const cleanLocation = cleanText.replace(/[?!]/g, '').trim();
                 
-                // Validate location
+                
                 if (cleanLocation.length < 2) {
                     const msg = "I didn't catch that. Please tell me a city or location name.";
                     addChatMessage(msg, false);
@@ -3370,7 +3400,7 @@ This gives you more freedom to explore at your own pace!`;
                     return;
                 }
                 
-                // Reject common filler words
+                
                 const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh', 'weather'];
                 if (fillerWords.includes(cleanLocation.toLowerCase())) {
                     const msg = "I didn't quite catch the location. Could you say it again?";
@@ -3390,12 +3420,12 @@ This gives you more freedom to explore at your own pace!`;
                 return;
             }
             
-            // Handle location choice selection
+            
             if (window.waitingForLocationChoice && window.pendingLocationChoices) {
                 window.waitingForLocationChoice = false;
                 const choices = window.pendingLocationChoices;
                 
-                // Check if user said a number (1, 2, 3)
+                
                 const numberMatch = cleanText.match(/\b([1-9])\b/);
                 if (numberMatch) {
                     const choice = parseInt(numberMatch[1]) - 1;
@@ -3415,7 +3445,7 @@ This gives you more freedom to explore at your own pace!`;
                     }
                 }
                 
-                // Check if user said the full location name
+                
                 for (const loc of choices) {
                     const addr = loc.address;
                     const country = addr.country ? addr.country.toLowerCase() : '';
@@ -3435,7 +3465,7 @@ This gives you more freedom to explore at your own pace!`;
                     }
                 }
                 
-                // Didn't understand the choice
+                
                 const msg = "I didn't catch which one you meant. Could you say the number or the country name?";
                 addChatMessage(msg, false);
                 speak(msg);
@@ -3443,7 +3473,7 @@ This gives you more freedom to explore at your own pace!`;
                 return;
             }
             
-            // Check for name change/update commands
+            
             if (lower.includes('change') && (lower.includes('name') || lower.includes('my name'))) {
                 const msg = "What would you like me to call you?";
                 addChatMessage(msg, false);
@@ -3452,28 +3482,28 @@ This gives you more freedom to explore at your own pace!`;
                 return;
             }
             
-            // Check for direct name statements
+            
             if (lower.match(/^(my name is|i'm|i am|call me|it's)\s+/i)) {
                 handleNameInput(cleanText);
                 return;
             }
             
-            // Check for name correction (no, actually, etc.)
+            
             if (userName && /^(no|nah|nope|actually|wrong)/i.test(cleanText)) {
                 handleNameCorrection(cleanText);
                 return;
             }
 
-            // Weather queries - Check BEFORE memory recall to avoid conflicts
+            
             else if (cleanText.toLowerCase().includes('weather') || cleanText.toLowerCase().includes('temperature') || cleanText.toLowerCase().includes('rain') || cleanText.toLowerCase().includes('snow')) {
                 const location = extractLocationFromSentence(cleanText);
                 
                 if (location) {
-                    // User specified a location
+                    
                     getWeatherByCity(location);
                 } else if (weather && weather.current) {
-                    // We have weather data already, answer about it
-                    // Handle specific rain question
+                    
+                    
                     if (cleanText.toLowerCase().includes('rain')) {
                         const willRain = willItRain(weather.current.weather_code);
                         const celsius = Math.round(weather.current.temperature_2m);
@@ -3488,7 +3518,7 @@ This gives you more freedom to explore at your own pace!`;
                         addChatMessage(rainMsg, false);
                         speak(rainMsg);
                     } 
-                    // Handle snow question
+                    
                     else if (cleanText.toLowerCase().includes('snow')) {
                         const willSnow = willItSnow(weather.current.weather_code);
                         const celsius = Math.round(weather.current.temperature_2m);
@@ -3503,7 +3533,7 @@ This gives you more freedom to explore at your own pace!`;
                         addChatMessage(snowMsg, false);
                         speak(snowMsg);
                     }
-                    // General weather info
+                    
                     else {
                         const celsius = Math.round(weather.current.temperature_2m);
                         const fahrenheit = Math.round((celsius * 9/5) + 32);
@@ -3513,18 +3543,18 @@ This gives you more freedom to explore at your own pace!`;
                         speak(weatherMsg);
                     }
                 } else {
-                    // No location and no cached weather - try to get user's location automatically
+                    
                     showThinkingIndicator();
                     
                     if (navigator.geolocation) {
-                        // Request location with better options
+                        
                         navigator.geolocation.getCurrentPosition(
                             async (position) => {
                                 const lat = position.coords.latitude;
                                 const lon = position.coords.longitude;
                                 
                                 
-                                // Do reverse geocoding to get city name
+                                
                                 try {
                                     const reverseResponse = await fetch(
                                         `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
@@ -3532,13 +3562,13 @@ This gives you more freedom to explore at your own pace!`;
                                     );
                                     const reverseData = await reverseResponse.json();
                                     
-                                    // Log FULL response for debugging
+                                    
                                     
                                     const addr = reverseData.address;
                                     
-                                    // Log what we got from OpenStreetMap (for debugging)
                                     
-                                    // Try ALL possible location fields in order of specificity
+                                    
+                                    
                                     let cityName = addr.city || 
                                                    addr.town || 
                                                    addr.village || 
@@ -3550,9 +3580,9 @@ This gives you more freedom to explore at your own pace!`;
                                                    addr.state_district ||
                                                    null;
                                     
-                                    // If we got a city name, format it nicely
+                                    
                                     if (cityName) {
-                                        // Add state for US addresses (format: "Mason, Ohio")
+                                        
                                         if (addr.state && addr.country_code === 'us') {
                                             cityName = `${cityName}, ${addr.state}`;
                                         } else if (addr.state && addr.country) {
@@ -3561,28 +3591,28 @@ This gives you more freedom to explore at your own pace!`;
                                             cityName = `${cityName}, ${addr.country}`;
                                         }
                                     } else {
-                                        // Fallback: just use state or country
+                                        
                                         cityName = addr.state || addr.country || "your location";
                                     }
                                     
                                     fetchWeather(lat, lon, cityName);
                                 } catch (error) {
-                                    // Fallback to generic name
+                                    
                                     fetchWeather(lat, lon, "your location");
                                 }
                             },
                             (error) => {
-                                // Geolocation failed, ask for location
+                                
                                 hideThinkingIndicator();
                                 let askMsg;
                                 if (error.code === 1) {
-                                    // Permission denied
+                                    
                                     askMsg = "📍 Location permission was denied. Please tell me your city, or check your browser settings to enable location access.";
                                 } else if (error.code === 2) {
-                                    // Position unavailable
+                                    
                                     askMsg = "I couldn't determine your location. Where are you? Just say your city!";
                                 } else if (error.code === 3) {
-                                    // Timeout
+                                    
                                     askMsg = "Location detection is taking too long. Where are you located?";
                                 } else {
                                     askMsg = "I couldn't detect your location. Where are you?";
@@ -3592,30 +3622,30 @@ This gives you more freedom to explore at your own pace!`;
                                 waitingForLocation = true;
                             },
                             {
-                                enableHighAccuracy: false, // Faster, less battery
-                                timeout: 15000, // 15 seconds (increased from 7)
-                                maximumAge: 300000 // Cache for 5 minutes
+                                enableHighAccuracy: false, 
+                                timeout: 15000, 
+                                maximumAge: 300000 
                             }
                         );
                     } else {
-                        // Geolocation not supported
+                        
                         const askMsg = "Your browser doesn't support location detection. Just tell me your city or town!";
                         addChatMessage(askMsg, false);
                         speak(askMsg);
                         waitingForLocation = true;
                     }
                 }
-                return; // CRITICAL: Stop here, don't fall through to AI fallback
+                return; 
             }
-            // Shopping List Commands - SEPARATE CHECK (not else if!)
+            
             if (cleanText.toLowerCase().includes('add') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('shopping') || cleanText.toLowerCase().includes('to my list') || cleanText.toLowerCase().includes('to list'))) {
                 handleAddToShoppingList(cleanText);
             }
-            // Handle follow-up additions: "also add", "and add", etc.
+            
             else if (cleanText.toLowerCase().match(/\b(also|and|plus)\s+add\b/i) || cleanText.toLowerCase().match(/\badd\s+(also|too)\b/i)) {
                 handleAddToShoppingList(cleanText);
             }
-            // Simple "add X" when shopping list was recently used
+            
             else if (cleanText.toLowerCase().startsWith('add ') && shoppingList.length > 0) {
                 handleAddToShoppingList(cleanText);
             }
@@ -3628,11 +3658,11 @@ This gives you more freedom to explore at your own pace!`;
             else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('shopping')) {
                 clearShoppingList();
             }
-            // Reminder queries - SEPARATE CHECK
+            
             else if (cleanText.toLowerCase().includes('remind')) {
                 createReminderFromText(cleanText);
             }
-            // Show reminders - Make more specific to avoid matching "shopping list"
+            
             else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('my reminder') || cleanText.toLowerCase().includes('list reminder')) && 
                      !cleanText.toLowerCase().includes('shopping')) {
                 if (reminders.length === 0) {
@@ -3647,25 +3677,25 @@ This gives you more freedom to explore at your own pace!`;
                     document.getElementById('reminders-section').classList.remove('hidden');
                 }
             }
-            // Delete/clear reminders
+            
             else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('reminder')) {
                 clearAllReminders();
             }
-            // Memory Recall - VERY specific patterns only (don't match weather/location queries!)
+            
             else if (
-                // "Where is/are my [thing]" - but NOT "my location"
+                
                 (cleanText.toLowerCase().match(/^where\s+(is|are)\s+my\s+\w+/i) && 
                  !cleanText.toLowerCase().includes('location')) ||
-                // "Where did I put/leave my [thing]"
+                
                 cleanText.toLowerCase().match(/^where\s+did\s+i\s+(put|leave)\s+(my|the)\s+/i) ||
-                // "Find my [thing]" - but NOT "my location"  
+                
                 (cleanText.toLowerCase().match(/^find\s+my\s+\w+/i) && 
                  !cleanText.toLowerCase().includes('location'))
             ) {
                 handleMemoryRecall(cleanText);
-                return; // STOP HERE - don't call AI
+                return; 
             }
-            // Memory Storage (where things are) - but NOT weather/location queries
+            
             else if (
                 (cleanText.toLowerCase().includes('my ') || 
                  cleanText.toLowerCase().includes('i put') || 
@@ -3675,22 +3705,22 @@ This gives you more freedom to explore at your own pace!`;
                  cleanText.toLowerCase().includes(' in ') || 
                  cleanText.toLowerCase().includes(' on ') || 
                  cleanText.toLowerCase().includes(' at ')) &&
-                // Exclude weather/location queries
+                
                 !cleanText.toLowerCase().includes('weather') &&
                 !cleanText.toLowerCase().includes('location') &&
                 !cleanText.toLowerCase().includes('temperature')
             ) {
                 handleMemoryStorage(cleanText);
-                return; // STOP HERE - don't call AI
+                return; 
             }
-            // Creator Info
+            
             else if (cleanText.toLowerCase().match(/\b(who (created|made|built|developed) (you|this|unify)|who (is|are) (your|the) (creator|developer|maker|author)|tell me about (your|the) creator|who owns (you|this))\b/i)) {
                 const creatorMsg = `I was created by Prithviraju Venkataraman, a developer passionate about AI and voice interfaces. I was built to help his family mainly with travel planning, weather updates, shopping lists, reminders, and more but later on thought, why not make this as a Vibe Coded Project! Cool isn't it? If you see any bugs or room for improvement, click on Request feature.`;
                 addChatMessage(creatorMsg, false);
                 speak("I was created by Prithviraju Venkataraman. This started as a family project and became a Vibe Coded Project!");
-                return; // STOP HERE - don't call AI
+                return; 
             }
-            // Help/Features query
+            
             else if (cleanText.toLowerCase().match(/what (can you do|are your features?|features?|do you have|is your feature)/i) ||
                      cleanText.toLowerCase().match(/\b(help|capabilities|what are you)\b/i) ||
                      cleanText.toLowerCase().match(/what (do|can) you (do|offer|provide)/i)) {
@@ -3736,9 +3766,9 @@ This gives you more freedom to explore at your own pace!`;
 Just talk to me naturally!`;
                 addChatMessage(helpMsg, false);
                 speak("I can help with travel planning, transport, weather, shopping lists, reminders, memory, and much more. I even suggest local food based on where you're going!");
-                return; // STOP HERE - don't call AI
+                return; 
             }
-            // Itinerary/Travel Planning - Check BEFORE AI fallback
+            
             else if (cleanText.toLowerCase().includes('trip') || 
                      cleanText.toLowerCase().includes('itinerary') || 
                      cleanText.toLowerCase().includes('itenarary') ||
@@ -3748,7 +3778,7 @@ Just talk to me naturally!`;
                      (cleanText.toLowerCase().includes('plan') && (cleanText.toLowerCase().includes('travel') || cleanText.toLowerCase().includes('visit')))) {
                 
                 
-                // Use AI to create detailed itinerary - PLACES ONLY
+                
                 const itineraryPrompt = `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Create a beautifully formatted day-by-day itinerary for: "${text}". 
 
 IMPORTANT: Extract the city/destination from the user's question and create an itinerary for THAT specific location.
@@ -3790,28 +3820,28 @@ Now create the itinerary with clean formatting - NO bold markers, NO clock emoji
                 addChatMessage(aiResponse.response, false);
                 speak("I've created an itinerary for you. Check the chat for details!");
                 
-                // Save to history
+                
                 saveToHistory(text, aiResponse.response);
-                return; // STOP HERE - don't fall through to casual chat
+                return; 
             }
-            // Local Food Specialties / Culture Questions - BROAD DETECTION
-            // Catches: "Food in X?", "What to eat in X?", "X cuisine?", "Famous dishes in X?"
+            
+            
             else if (
-                // Pattern 1: "[adjective] food/cuisine/dishes in [place]"
+                
                 (cleanText.toLowerCase().match(/\b(food|cuisine|dishes?|specialt(y|ies))\s+(in|of|from)\s+\w+/i)) ||
-                // Pattern 2: "[place] food/cuisine/dishes"
+                
                 (cleanText.toLowerCase().match(/\w+\s+(food|cuisine|dishes?|specialt(y|ies))/i) && cleanText.split(' ').length <= 6) ||
-                // Pattern 3: "what to eat/try in [place]"
+                
                 (cleanText.toLowerCase().match(/what\s+(to|should|can|do)\s+(eat|try|have)/i)) ||
-                // Pattern 4: "famous/special/local/traditional [food terms]"
+                
                 (cleanText.toLowerCase().match(/\b(famous|special|local|traditional|authentic|signature|must.try|typical)\b/i) && 
                  cleanText.toLowerCase().match(/\b(food|dish|dishes|cuisine|eat)\b/i)) ||
-                // Pattern 5: Simple "food in [place]" or "[place] food"
+                
                 (cleanText.toLowerCase().match(/\b(food|cuisine)\b/i) && !cleanText.toLowerCase().match(/\b(restaurant|hotel|where|best)\b/i))
             ) {
                 
                 
-                // This is asking about local food culture, not specific restaurants
+                
                 const specialtyPrompt = `${userName ? `The user's name is ${userName}.` : 'Do NOT say "User" - just be friendly without using a name.'} Answer this question about local food and specialties: "${text}"
 
 Provide information about the LOCAL FOOD CULTURE and FAMOUS DISHES of the region mentioned.
@@ -3844,14 +3874,15 @@ Now answer about the local food culture and famous dishes!`;
                 addChatMessage(aiResponse.response, false);
                 speak("Let me tell you about the local food specialties!");
                 
-                // Save to history
+                
                 saveToHistory(text, aiResponse.response);
+                return; 
             }
-            // Handle veg preference response - CHECK FIRST, BEFORE PATTERN MATCHING
+            
             if (window.waitingForHotelCity) {
                 window.waitingForHotelCity = false;
                 
-                // Now ask for veg preference with the city included
+                
                 window.pendingFoodQuery = `Hotels in ${text}`;
                 window.waitingForVegPreference = true;
                 window.isHotelQuery = true;
@@ -3877,7 +3908,7 @@ Now answer about the local food culture and famous dishes!`;
                 } else if (cleanText.match(/\b(3|three|anything|any|both|either)\b/i)) {
                     preference = wasHotelQuery ? ' (hotels with both veg and non-veg options)' : ' (both veg and non-veg options)';
                 } else {
-                    // Didn't understand, ask again
+                    
                     const msg = "I didn't catch that. Please say 1 for Pure Veg, 2 for Non-Veg, or 3 for Anything.";
                     addChatMessage(msg, false);
                     speak(msg);
@@ -3887,7 +3918,7 @@ Now answer about the local food culture and famous dishes!`;
                     return;
                 }
                 
-                // Continue with original query + preference
+                
                 const finalQuery = originalQuery + preference;
                 const queryType = wasHotelQuery ? 'hotel' : 'food';
                 
@@ -3921,7 +3952,6 @@ ${finalQuery.includes('both veg and non-veg') ? 'IMPORTANT: Suggest a mix of pla
 
 End with: "I hope you have a comfortable stay!"
 
-
 REMEMBER: 
 - NO Location, NO Price, NO Why
 - 7-10 recommendations total
@@ -3954,48 +3984,48 @@ Now answer the question completely!`;
                 
                 const aiResponse = await callAIWithTyping(recommendPrompt, queryType === 'hotel' ? '🏨 Finding hotels...' : '🍽️ Finding restaurants...');
                 
-                // Post-process hotel responses to add GPS directions
+                
                 let finalResponse = aiResponse.response;
                 
                 if (queryType === 'hotel') {
                     finalResponse = await addGPSDirectionsToHotels(aiResponse.response, text);
-                    // Search for accurate specialties for each hotel
+                    
                     finalResponse = await enrichHotelSpecialties(finalResponse, text);
                 }
                 
                 addChatMessage(finalResponse, false);
                 speak(queryType === 'hotel' ? "I've got some hotel recommendations for you!" : "I've got some recommendations for you!");
                 
-                // Add fast food suggestion box after recommendations
+                
                 if (queryType === 'hotel' || queryType === 'food') {
                     addFastFoodSuggestionBox();
                 }
                 
-                // Add transport suggestion button
+                
                 addTransportSuggestionButton(text);
                 
-                // Save to history
+                
                 saveToHistory(finalQuery, finalResponse);
                 
-                // Show context-aware quick replies
+                
                 suggestQuickReplies(finalResponse);
-                return; // EXIT - don't process further
+                return; 
             }
-            // Food, Hotels, Transport recommendations - FLEXIBLE DETECTION
+            
             else if (cleanText.toLowerCase().match(/\b(restaurant|eat|eating|dining|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i) ||
                      cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i) ||
                      cleanText.toLowerCase().match(/\b(transport|transportation|bus|train|taxi|uber|ola|auto|rickshaw|metro|subway|getting around|get around|how to reach|how do i get|travel to)\b/i)) {
                 
                 
-                // Check if it's a restaurant/food query
+                
                 const isFoodQuery = cleanText.toLowerCase().match(/\b(food|restaurant|eat|eating|dining|cuisine|dish|dishes|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i);
                 const isHotelQuery = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i);
                 
-                // Check if user already specified preference
+                
                 const hasVegPref = cleanText.toLowerCase().match(/\b(veg|vegetarian|pure veg|only veg|veg only)\b/i);
                 const hasNonVegPref = cleanText.toLowerCase().match(/\b(non-veg|non veg|nonveg|meat|chicken|seafood|anything)\b/i);
                 
-                // If it's a food query and no preference specified, ask for preference
+                
                 if (isFoodQuery && !hasVegPref && !hasNonVegPref && !window.waitingForVegPreference) {
                     window.pendingFoodQuery = text;
                     window.waitingForVegPreference = true;
@@ -4007,18 +4037,18 @@ Now answer the question completely!`;
                     return;
                 }
                 
-                // If it's a hotel query, ask for food preference
+                
                 if (isHotelQuery && !hasVegPref && !hasNonVegPref && !window.waitingForVegPreference) {
-                    // Check if city is mentioned in query OR in recent conversation
+                    
                     const cityPattern = /\b(in|at|near|around)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/;
                     const hasCity = cityPattern.test(text) || /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/.test(text.replace(/^(hotels?|recommend|suggest|find|show|good|best|nice)\s*/i, ''));
                     
-                    // Check conversation context for city
+                    
                     const contextText = conversationContext.slice(-3).map(m => m.text).join(' ');
                     const contextHasCity = /\b(itinerary|itenary|trip|visit|travel|hotels?|restaurants?)\s+(?:for|in|to|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i.test(contextText);
                     
                     if (!hasCity && !contextHasCity) {
-                        // Ask for city first
+                        
                         window.waitingForHotelCity = true;
                         const msg = "Sure! Which city or location would you like hotel recommendations for?";
                         addChatMessage(msg, false);
@@ -4036,21 +4066,28 @@ Now answer the question completely!`;
                     return;
                 }
                 
-                // If we get here, it's a NEW query (not continuing from veg preference)
-                // Determine query type from the current text
+                
+                
                 const queryType = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation)\b/i) ? 'hotel' : 
                                   cleanText.toLowerCase().match(/\b(transport|bus|train|taxi)\b/i) ? 'transport' : 'food';
                 
-                // First, search the web for real hotels
+                
                 let searchResults = '';
+                let cityName = '';
                 try {
-                    const cityName = text.match(/in\s+([^,?.!]+)/i)?.[1] || 
-                                    conversationContext.slice(-3).map(m => m.text).join(' ').match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/)?.[1] || '';
+                    cityName = text.match(/in\s+([^,?.!]+)/i)?.[1] || 
+                                    text.match(/at\s+([^,?.!]+)/i)?.[1] ||
+                                    text.match(/for\s+([^,?.!]+)/i)?.[1] ||
+                                    conversationContext.slice(-5).map(m => m.text).join(' ').match(/(?:in|at|for|to)\s+([A-Z][a-z]+(?:[\s,]+[A-Z][a-z]+)*)/i)?.[1] || '';
+                    
+                    
+                    cityName = cityName.trim().replace(/[?.!,]$/, '');
                     
                     if (cityName) {
-                        const searchQuery = `hotels in ${cityName.trim()}`;
-                        console.log('🔍 Searching for:', searchQuery);
                         
+                        const searchQuery = queryType === 'hotel' 
+                            ? `best hotels to stay in ${cityName} booking` 
+                            : `best restaurants to eat in ${cityName} food`;
                         const searchResponse = await fetch('/api/search', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -4060,13 +4097,11 @@ Now answer the question completely!`;
                         const searchData = await searchResponse.json();
                         
                         if (searchData.results && searchData.results.length > 0) {
-                            searchResults = '\n\nREAL HOTELS FROM WEB SEARCH:\n' + 
+                            searchResults = '\n\nREAL DATA FROM WEB SEARCH (USE THESE!):\n' + 
                                 searchData.results.map(r => `- ${r.title}: ${r.description}`).join('\n');
-                            console.log('✅ Found real hotels via search');
                         }
                     }
                 } catch (searchError) {
-                    console.log('⚠️ Search failed, using LLM knowledge only:', searchError.message);
                 }
                 
                 const recommendPrompt = queryType === 'hotel' ? 
@@ -4106,23 +4141,34 @@ End with: "I hope you have a comfortable stay!"
 
 Now provide recommendations in this exact format!` :
 
-                `Answer this question about travel recommendations: "${text}"
+                `Answer this question about restaurant recommendations: "${text}"
+
+CONTEXT:
+City: ${cityName || 'from the query'}
+Recent conversation: ${conversationContext.slice(-3).map(msg => `${msg.role}: ${msg.text}`).join('\n')}
+${searchResults}
+
+CRITICAL INSTRUCTIONS:
+1. USE THE REAL RESTAURANTS FROM WEB SEARCH RESULTS ABOVE if available
+2. Only recommend restaurants that appear in search results OR that you're 100% certain exist
+3. If no search results, suggest well-known restaurants you're confident about
 
 Provide 4-6 specific recommendations with brief details.
 Keep it SHORT and COMPLETE.
 
 ${text.includes('vegetarian') || text.includes('pure veg') ? 'IMPORTANT: Only suggest VEGETARIAN/VEG restaurants. Mark each as [Pure Veg].' : 'Mark each restaurant as [Pure Veg] or [Non-Veg].'}
 
-${queryType === 'food' ? 'Also mention the local specialty dish for the region!' : ''}
+Also mention the local specialty dish for the region!
 
 Format:
-- Name - Brief description | [Veg Type] | Try: [Local specialty]
+🍽️ Restaurant Name
+- Brief description | [Veg Type] | Try: [Local specialty]
 - Include why it's good
-- End with a friendly note
 
 Example for "Best restaurants in Paris":
-- Le Comptoir du Relais - Classic French bistro | [Non-Veg] | Try: Coq au vin
-- L'As du Fallafel - Famous in Marais | [Veg] | Try: Falafel wrap | Budget-friendly
+🍽️ Le Comptoir du Relais
+- Classic French bistro | [Non-Veg] | Try: Coq au vin
+- Known for authentic French cuisine
 
 Bon appétit! Let me know if you need more suggestions.
 
@@ -4131,47 +4177,47 @@ Now answer the question completely!`;
                 const aiResponse = await callAIWithTyping(recommendPrompt, queryType === 'hotel' ? '🏨 Finding hotels...' : '🍽️ Finding recommendations...');
                 
                 if (queryType === 'hotel') {
-                    // Parse and display hotels with map links
+                    
                     await displayHotelsWithMaps(aiResponse.response, text);
                 } else {
                     addChatMessage(aiResponse.response, false);
                     speak("I've got some recommendations for you!");
                 }
                 
-                // Save to history
+                
                 saveToHistory(text, aiResponse.response);
                 
-                // Show fast food box after hotel/restaurant recommendations
+                
                 if (queryType === 'hotel' || queryType === 'food') {
                     showFastFoodBox();
                 }
                 
-                // Show transport suggestion button
+                
                 showTransportSuggestion();
-                return; // EXIT
+                return; 
                 suggestQuickReplies(aiResponse.response);
             }
-            // Use AI for unclear queries and casual chat
+            
             else {
                 
                 const aiResponse = await callAIWithTyping(text);
                 addChatMessage(aiResponse.response, false);
                 speak(aiResponse.response);
                 
-                // Save to history
+                
                 saveToHistory(text, aiResponse.response);
                 
-                // Show context-aware suggestions
+                
                 suggestQuickReplies(aiResponse.response);
             }
         }
 
-        // ========== WEATHER FUNCTIONS ==========
+        
         function createWeatherEffect(weatherCode, temperature) {
-            // ✅ FIXED: Get weather card instead of global container
+            
             const container = document.getElementById('weather-card');
             
-            // Create local effects container if it doesn't exist
+            
             let effectsDiv = container.querySelector('.weather-effect-local');
             if (!effectsDiv) {
                 effectsDiv = document.createElement('div');
@@ -4179,13 +4225,13 @@ Now answer the question completely!`;
                 container.insertBefore(effectsDiv, container.firstChild);
             }
             
-            effectsDiv.innerHTML = ''; // Clear existing effects
+            effectsDiv.innerHTML = ''; 
             
-            // ✅ FIXED: Change card background, NOT body background
             
-            // Snow (codes 71-77)
+            
+            
             if (weatherCode >= 71 && weatherCode <= 77) {
-                for (let i = 0; i < 20; i++) { // Reduced from 50
+                for (let i = 0; i < 20; i++) { 
                     const snowflake = document.createElement('div');
                     snowflake.className = 'snowflake';
                     snowflake.textContent = '❄';
@@ -4198,9 +4244,9 @@ Now answer the question completely!`;
                 container.style.background = 'linear-gradient(to bottom, #5A6D82, #8B98A8)';
                 container.style.color = 'white';
             }
-            // Rain (codes 51-67, 80-82)
+            
             else if ((weatherCode >= 51 && weatherCode <= 67) || (weatherCode >= 80 && weatherCode <= 82)) {
-                for (let i = 0; i < 30; i++) { // Reduced from 100
+                for (let i = 0; i < 30; i++) { 
                     const raindrop = document.createElement('div');
                     raindrop.className = 'raindrop';
                     raindrop.style.left = Math.random() * 100 + '%';
@@ -4211,9 +4257,9 @@ Now answer the question completely!`;
                 container.style.background = 'linear-gradient(to bottom, #4A5568, #718096)';
                 container.style.color = 'white';
             }
-            // Thunderstorm (codes 95-99)
+            
             else if (weatherCode >= 95 && weatherCode <= 99) {
-                for (let i = 0; i < 25; i++) { // Reduced from 80
+                for (let i = 0; i < 25; i++) { 
                     const raindrop = document.createElement('div');
                     raindrop.className = 'raindrop';
                     raindrop.style.left = Math.random() * 100 + '%';
@@ -4224,7 +4270,7 @@ Now answer the question completely!`;
                 container.style.background = 'linear-gradient(to bottom, #2D3748, #4A5568)';
                 container.style.color = 'white';
             }
-            // Clear/Sunny (code 0-3)
+            
             else if (weatherCode >= 0 && weatherCode <= 3) {
                 const sun = document.createElement('div');
                 sun.className = 'sun';
@@ -4235,7 +4281,7 @@ Now answer the question completely!`;
                 sun.style.height = '60px';
                 effectsDiv.appendChild(sun);
                 
-                // Hot day effect
+                
                 if (temperature > 30) {
                     const heatWave = document.createElement('div');
                     heatWave.className = 'heat-wave';
@@ -4247,7 +4293,7 @@ Now answer the question completely!`;
                     container.style.color = 'white';
                 }
             }
-            // Overcast/Cloudy
+            
             else {
                 container.style.background = 'linear-gradient(to bottom, #6B7280, #9CA3AF)';
                 container.style.color = 'white';
@@ -4257,15 +4303,15 @@ Now answer the question completely!`;
         function extractLocationFromSentence(text) {
             const lower = text.toLowerCase();
             
-            // Check for "current location" keywords - return null to trigger geolocation
+            
             const currentLocationKeywords = ['my location', 'current location', 'my current location', 'here', 'where i am', 'my area', 'this location'];
             for (const keyword of currentLocationKeywords) {
                 if (lower.includes(keyword)) {
-                    return null; // Will trigger geolocation
+                    return null; 
                 }
             }
             
-            // Remove common time phrases first
+            
             let cleanText = text;
             const timeWords = ['right now', 'now', 'today', 'tomorrow', 'tonight', 'currently', 'at the moment'];
             timeWords.forEach(word => {
@@ -4282,14 +4328,14 @@ Now answer the question completely!`;
                 const match = cleanText.match(pattern);
                 if (match && match[1]) {
                     let location = match[1].trim();
-                    // Clean up the location string
+                    
                     location = location.replace(/[?.!,;]$/g, '').trim();
                     
-                    // Double-check it's not a current location keyword
+                    
                     const locationLower = location.toLowerCase();
                     for (const keyword of currentLocationKeywords) {
                         if (locationLower.includes(keyword)) {
-                            return null; // Trigger geolocation
+                            return null; 
                         }
                     }
                     
@@ -4300,11 +4346,11 @@ Now answer the question completely!`;
         }
 
         async function getWeatherByCity(cityName) {
-            hideThinkingIndicator(); // Hide any existing thinking indicator
+            hideThinkingIndicator(); 
             try {
                 const searchName = expandStateAbbreviation(cityName.trim());
                 
-                // Get up to 5 results to handle ambiguity better
+                
                 const nominatimResponse = await fetch(
                     `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchName)}&format=json&limit=5&addressdetails=1`,
                     { headers: { 'User-Agent': 'JARVISVoiceAssistant/1.0' } }
@@ -4319,7 +4365,7 @@ Now answer the question completely!`;
                     return;
                 }
                 
-                // Check if there are multiple distinct locations (different countries/states)
+                
                 const uniqueLocations = [];
                 const seenCountries = new Set();
                 
@@ -4329,14 +4375,14 @@ Now answer the question completely!`;
                     const state = addr.state || '';
                     const key = `${country}-${state}`;
                     
-                    // Only add if this country/state combo hasn't been seen
+                    
                     if (!seenCountries.has(key) && uniqueLocations.length < 3) {
                         seenCountries.add(key);
                         uniqueLocations.push(loc);
                     }
                 }
                 
-                // If multiple distinct locations found, ask user to disambiguate
+                
                 if (uniqueLocations.length > 1 && !cityName.includes(',')) {
                     const options = uniqueLocations.map((loc, index) => {
                         const addr = loc.address;
@@ -4350,13 +4396,13 @@ Now answer the question completely!`;
                     addChatMessage(disambigMsg, false);
                     speak(`I found multiple places called ${cityName}. Which one did you mean?`);
                     
-                    // Store options for later selection
+                    
                     window.pendingLocationChoices = uniqueLocations;
                     window.waitingForLocationChoice = true;
                     return;
                 }
                 
-                // Use the first (best) result
+                
                 const location = nominatimData[0];
                 const latitude = parseFloat(location.lat);
                 const longitude = parseFloat(location.lon);
@@ -4366,7 +4412,7 @@ Now answer the question completely!`;
                 if (addr.state) locationName += `, ${addr.state}`;
                 if (addr.country) locationName += `, ${addr.country}`;
                 
-                // Pass both original query and resolved location
+                
                 await fetchWeather(latitude, longitude, locationName, cityName.trim());
                 
             } catch (error) {
@@ -4377,7 +4423,7 @@ Now answer the question completely!`;
         }
 
         async function fetchWeather(lat, lon, resolvedLocation, originalQuery = null) {
-            hideThinkingIndicator(); // Hide thinking indicator before showing loading
+            hideThinkingIndicator(); 
             showLoading('Checking weather...');
             try {
                 const weatherResponse = await fetch(
@@ -4389,11 +4435,11 @@ Now answer the question completely!`;
                 const fahrenheit = Math.round((celsius * 9/5) + 32);
                 const advice = getWeatherAdvice(weather);
                 
-                // Create weather effects
+                
                 createWeatherEffect(weather.current.weather_code, celsius);
                 
-                // Determine display location - always use the resolved full location
-                // Don't show duplicate like "chidambaram, india (Chidambaram, Tamil Nadu, India)"
+                
+                
                 let displayLocation = resolvedLocation;
                 
                 document.getElementById('weather-card').classList.remove('hidden');
@@ -4428,14 +4474,14 @@ Now answer the question completely!`;
         }
 
         function willItRain(weatherCode) {
-            // Rain codes: 51-67 (drizzle and rain), 80-82 (rain showers), 95-99 (thunderstorms)
+            
             return (weatherCode >= 51 && weatherCode <= 67) || 
                    (weatherCode >= 80 && weatherCode <= 82) || 
                    (weatherCode >= 95 && weatherCode <= 99);
         }
 
         function willItSnow(weatherCode) {
-            // Snow codes: 71-77, 85-86
+            
             return (weatherCode >= 71 && weatherCode <= 77) || 
                    (weatherCode >= 85 && weatherCode <= 86);
         }
@@ -4460,7 +4506,7 @@ Now answer the question completely!`;
             return location;
         }
 
-        // ========== REMINDER FUNCTIONS ==========
+        
         function createReminderFromText(text) {
             const reminder = {
                 id: Date.now(),
@@ -4623,15 +4669,15 @@ Now answer the question completely!`;
             speak(msg);
         }
 
-        // ========== NAME HANDLING ==========
+        
         function handleNameInput(text) {
             waitingForName = false;
-            // Extract clean name from input
+            
             let name = text.trim();
-            // Remove common phrases
+            
             name = name.replace(/^(my name is|i'm|i am|it's|call me)\s+/i, '');
             name = name.replace(/[?.!,]$/g, '');
-            // Capitalize first letter
+            
             name = name.charAt(0).toUpperCase() + name.slice(1);
             
             userName = name;
@@ -4642,35 +4688,35 @@ Now answer the question completely!`;
             speak(response);
         }
 
-        // ========== SHOPPING LIST FUNCTIONS ==========
+        
         function handleAddToShoppingList(text) {
             const lower = text.toLowerCase();
-            // Extract items after "add" and before "to"
+            
             let items = text;
             
-            // Try to extract items between "add" and "to shopping list"
+            
             const match1 = text.match(/add\s+(.+?)\s+to\s+(?:my\s+)?shopping/i);
             if (match1) {
                 items = match1[1];
             } else {
-                // Try just after "add"
+                
                 const match2 = text.match(/(?:add|also|and|plus)\s+(.+)/i);
                 if (match2) {
                     items = match2[1];
                 }
             }
             
-            // Clean up
+            
             items = items.replace(/to (?:my )?shopping list/gi, '');
             items = items.replace(/please/gi, '');
-            items = items.replace(/\s+also$/gi, ''); // Remove trailing "also"
-            items = items.replace(/\s+too$/gi, ''); // Remove trailing "too"
+            items = items.replace(/\s+also$/gi, ''); 
+            items = items.replace(/\s+too$/gi, ''); 
             
-            // Split by common separators
+            
             const itemArray = items.split(/,| and |\n/).map(item => item.trim()).filter(item => item.length > 0);
             
             itemArray.forEach(item => {
-                // Capitalize first letter for better display
+                
                 const formattedItem = item.charAt(0).toUpperCase() + item.slice(1);
                 
                 if (!shoppingList.some(existing => existing.toLowerCase() === item.toLowerCase())) {
@@ -4679,7 +4725,7 @@ Now answer the question completely!`;
             });
             
             saveUserData();
-            updateShoppingListUI(true); // Show when adding items
+            updateShoppingListUI(true); 
             
             const msg = itemArray.length === 1 
                 ? `Added ${itemArray[0]} to your shopping list!` 
@@ -4692,7 +4738,7 @@ Now answer the question completely!`;
             const lower = text.toLowerCase();
             let item = text;
             
-            // Extract item to remove
+            
             const match1 = text.match(/remove\s+(.+?)\s+from\s+(?:my\s+)?shopping/i);
             if (match1) {
                 item = match1[1];
@@ -4709,7 +4755,7 @@ Now answer the question completely!`;
             if (index !== -1) {
                 const removed = shoppingList.splice(index, 1)[0];
                 saveUserData();
-                updateShoppingListUI(shoppingList.length > 0); // Show if items remain
+                updateShoppingListUI(shoppingList.length > 0); 
                 const msg = `Removed ${removed} from your shopping list!`;
                 addChatMessage(msg, false);
                 speak(msg);
@@ -4731,7 +4777,7 @@ Now answer the question completely!`;
                 addChatMessage(msg, false);
                 speak(msg);
                 
-                // Show the receipt
+                
                 document.getElementById('shopping-receipt').classList.remove('hidden');
             }
         }
@@ -4751,7 +4797,7 @@ Now answer the question completely!`;
             
             shoppingList = [];
             saveUserData();
-            updateShoppingListUI(false); // Hide when clearing
+            updateShoppingListUI(false); 
             
             const msg = "Shopping list cleared!";
             addChatMessage(msg, false);
@@ -4764,7 +4810,7 @@ Now answer the question completely!`;
             const countSpan = document.getElementById('receipt-count');
             const dateSpan = document.getElementById('receipt-date');
             
-            // Update date/time
+            
             const now = new Date();
             const dateStr = now.toLocaleDateString('en-US', { 
                 month: 'short', 
@@ -4781,7 +4827,7 @@ Now answer the question completely!`;
                 itemsContainer.innerHTML = '<div style="text-align: center; color: #999; font-size: 12px; padding: 20px;">No items yet</div>';
                 receipt.classList.add('hidden');
             } else {
-                // Only show if explicitly requested (not on page load)
+                
                 if (autoShow) {
                     receipt.classList.remove('hidden');
                 }
@@ -4798,7 +4844,7 @@ Now answer the question completely!`;
             
             countSpan.textContent = shoppingList.length;
             
-            // Update dark mode styling
+            
             if (darkMode) {
                 receipt.classList.add('dark-mode');
             } else {
@@ -4809,17 +4855,17 @@ Now answer the question completely!`;
         function removeShoppingItem(index) {
             const removed = shoppingList.splice(index, 1)[0];
             saveUserData();
-            updateShoppingListUI(shoppingList.length > 0); // Keep showing if items remain
+            updateShoppingListUI(shoppingList.length > 0); 
             const msg = `Removed ${removed}`;
             speak(msg);
         }
 
-        // ========== MEMORY SYSTEM ==========
+        
         function handleMemoryStorage(text) {
             const lower = text.toLowerCase();
             
-            // Parse what and where
-            // Patterns: "my X is/are in/on/at Y", "I put my X in/on/at Y", "I left my X in/on/at Y"
+            
+            
             let thing = null;
             let location = null;
             let preposition = null;
@@ -4847,14 +4893,14 @@ Now answer the question completely!`;
             }
             
             if (thing && location) {
-                // Clean up
+                
                 thing = thing.replace(/^(the|my|a|an)\s+/i, '');
                 location = location.replace(/[?.!,]$/g, '');
                 
-                // Add preposition to location if we have it
+                
                 const fullLocation = preposition ? `${preposition} ${location}` : location;
                 
-                // Normalize common variations (handle typos and similar items)
+                
                 const normalizedThing = normalizeThing(thing);
                 
                 memoryStore[normalizedThing] = fullLocation;
@@ -4870,11 +4916,11 @@ Now answer the question completely!`;
             }
         }
 
-        // Normalize item names to handle common variations
+        
         function normalizeThing(thing) {
             thing = thing.toLowerCase().trim();
             
-            // Common singular to plural mappings
+            
             const singularToPlural = {
                 'key': 'keys',
                 'glass': 'glasses',
@@ -4883,17 +4929,17 @@ Now answer the question completely!`;
                 'earbud': 'earbuds'
             };
             
-            // Check if it's already plural
+            
             if (thing.endsWith('s')) {
                 return thing;
             }
             
-            // Check for exact singular match
+            
             if (singularToPlural[thing]) {
                 return singularToPlural[thing];
             }
             
-            // Check for compound words (e.g., "car key" -> "car keys")
+            
             const words = thing.split(' ');
             const lastWord = words[words.length - 1];
             
@@ -4902,7 +4948,7 @@ Now answer the question completely!`;
                 return words.join(' ');
             }
             
-            // If last word doesn't end in 's', add it for common objects
+            
             if (!lastWord.endsWith('s') && words.length > 0) {
                 words[words.length - 1] = lastWord + 's';
                 return words.join(' ');
@@ -4914,8 +4960,8 @@ Now answer the question completely!`;
         function handleMemoryRecall(text) {
             const lower = text.toLowerCase();
             
-            // Parse what they're looking for
-            // Patterns: "where is/are my X", "where did I put X", "where's my X", "do you know where X is", "my X?"
+            
+            
             let thing = null;
             
             const patterns = [
@@ -4924,7 +4970,7 @@ Now answer the question completely!`;
                 /(?:do you know )?where'?s\s+(?:my\s+|the\s+)?(.+)/i,
                 /where\s+(?:my\s+|the\s+)?(.+?)\s+(?:is|are)/i,
                 /(?:my\s+|the\s+)?(.+)\s+where/i,
-                /^(?:my\s+|the\s+)?(.+)\?$/i  // Just "my car key?"
+                /^(?:my\s+|the\s+)?(.+)\?$/i  
             ];
             
             for (const pattern of patterns) {
@@ -4939,15 +4985,15 @@ Now answer the question completely!`;
                 thing = thing.replace(/[?.!,]$/g, '');
                 thing = thing.replace(/^(the|my|a|an)\s+/i, '');
                 
-                // Try exact match first
+                
                 let location = memoryStore[thing.toLowerCase()];
                 
-                // If no exact match, try fuzzy matching
+                
                 if (!location) {
                     const match = findBestMemoryMatch(thing);
                     if (match) {
                         location = match.location;
-                        thing = match.thing; // Use the stored version
+                        thing = match.thing; 
                     }
                 }
                 
@@ -4967,36 +5013,36 @@ Now answer the question completely!`;
             }
         }
 
-        // Fuzzy matching helper function
+        
         function findBestMemoryMatch(query) {
             query = query.toLowerCase();
             const keys = Object.keys(memoryStore);
             
-            // Try to find the best match
+            
             for (const key of keys) {
-                // Exact match
+                
                 if (key === query) {
                     return { thing: key, location: memoryStore[key] };
                 }
                 
-                // Singular/plural variations
+                
                 if (key === query + 's' || key + 's' === query) {
                     return { thing: key, location: memoryStore[key] };
                 }
                 
-                // Remove 's' from both and compare
+                
                 const keySingular = key.replace(/s$/, '');
                 const querySingular = query.replace(/s$/, '');
                 if (keySingular === querySingular) {
                     return { thing: key, location: memoryStore[key] };
                 }
                 
-                // Partial match (contains)
+                
                 if (key.includes(query) || query.includes(key)) {
                     return { thing: key, location: memoryStore[key] };
                 }
                 
-                // Word-by-word match
+                
                 const keyWords = key.split(' ');
                 const queryWords = query.split(' ');
                 const matchCount = keyWords.filter(kw => queryWords.some(qw => 
@@ -5008,10 +5054,10 @@ Now answer the question completely!`;
                 }
             }
             
-            // Try Levenshtein distance for typos
+            
             let bestMatch = null;
             let bestDistance = Infinity;
-            const maxDistance = Math.floor(query.length / 3); // Allow up to 1/3 character differences
+            const maxDistance = Math.floor(query.length / 3); 
             
             for (const key of keys) {
                 const distance = levenshteinDistance(query, key);
@@ -5028,7 +5074,7 @@ Now answer the question completely!`;
             return null;
         }
 
-        // Levenshtein distance algorithm for spell checking
+        
         function levenshteinDistance(str1, str2) {
             const matrix = [];
             
@@ -5046,9 +5092,9 @@ Now answer the question completely!`;
                         matrix[i][j] = matrix[i - 1][j - 1];
                     } else {
                         matrix[i][j] = Math.min(
-                            matrix[i - 1][j - 1] + 1, // substitution
-                            matrix[i][j - 1] + 1,     // insertion
-                            matrix[i - 1][j] + 1      // deletion
+                            matrix[i - 1][j - 1] + 1, 
+                            matrix[i][j - 1] + 1,     
+                            matrix[i - 1][j] + 1      
                         );
                     }
                 }
@@ -5057,9 +5103,9 @@ Now answer the question completely!`;
             return matrix[str2.length][str1.length];
         }
 
-        // ========== LOCAL STORAGE (USER-SPECIFIC) ==========
+        
         function getUserStorageKey() {
-            // Use username as part of storage key to separate user data
+            
             const safeUserName = (userName || 'default_user').replace(/[^a-zA-Z0-9]/g, '_');
             return `unify_user_data_${safeUserName}`;
         }
@@ -5089,7 +5135,7 @@ Now answer the question completely!`;
                     memoryStore = data.memoryStore || {};
                     reminders = data.reminders || [];
                     
-                    // Restore alarm times for reminders
+                    
                     reminders.forEach(r => {
                         if (r.alarmTime) {
                             r.alarmTime = new Date(r.alarmTime);
@@ -5097,31 +5143,31 @@ Now answer the question completely!`;
                         }
                     });
                     
-                    // Update UI silently (don't auto-show)
+                    
                     if (reminders.length > 0) updateRemindersList();
-                    if (shoppingList.length > 0) updateShoppingListUI(false); // Don't show on load
+                    if (shoppingList.length > 0) updateShoppingListUI(false); 
                 }
             } catch (e) {
             }
         }
 
         function saveRemindersToStorage() {
-            saveUserData(); // Use unified save function
+            saveUserData(); 
         }
 
         function loadRemindersFromStorage() {
-            // No longer needed - handled by loadUserData
+            
         }
 
-        // ========== TEXT-TO-SPEECH ==========
-        let currentUtterance = null; // Track current speech
-        let currentSpeakerButton = null; // Track which button is playing
+        
+        let currentUtterance = null; 
+        let currentSpeakerButton = null; 
         
         function toggleSpeak(text, button) {
-            // If currently speaking, stop
+            
             if (synth.speaking || (typeof responsiveVoice !== 'undefined' && responsiveVoice.isPlaying())) {
                 stopSpeaking();
-                // Reset all speaker buttons
+                
                 document.querySelectorAll('.speaker-btn').forEach(btn => {
                     btn.querySelector('.play-icon')?.classList.remove('hidden');
                     btn.querySelector('.stop-icon')?.classList.add('hidden');
@@ -5130,20 +5176,20 @@ Now answer the question completely!`;
                 return;
             }
             
-            // Otherwise, speak
+            
             currentSpeakerButton = button;
             button.querySelector('.play-icon')?.classList.add('hidden');
             button.querySelector('.stop-icon')?.classList.remove('hidden');
-            speak(text, true); // Force speak when button clicked
+            speak(text, true); 
         }
         
         function speak(text, force = false) {
-            // Only speak if autoSpeak is enabled OR forced (like manual button click)
+            
             if (!autoSpeak && !force) return;
             
             const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
             
-            // Stop any ongoing speech
+            
             if (typeof responsiveVoice !== 'undefined') {
                 responsiveVoice.cancel();
                 responsiveVoice.speak(cleanText, "UK English Male", { pitch: 0.9, rate: 0.95, volume: 1 });
@@ -5154,19 +5200,19 @@ Now answer the question completely!`;
             setTimeout(() => {
                 const utterance = new SpeechSynthesisUtterance(cleanText);
                 
-                // Get all available voices
+                
                 const voices = synth.getVoices();
                 
-                // Prioritize male British voices (JARVIS style)
+                
                 const preferredVoice = voices.find(v => 
-                    // Priority 1: Premium male British voices
-                    v.name.includes('Daniel') ||         // UK English Male - Best for JARVIS
-                    v.name.includes('Alex') ||           // macOS male voice
-                    v.name.includes('Oliver') ||         // UK male
+                    
+                    v.name.includes('Daniel') ||         
+                    v.name.includes('Alex') ||           
+                    v.name.includes('Oliver') ||         
                     (v.name.includes('Google') && v.lang.includes('en-GB') && v.name.includes('Male')) ||
-                    // Priority 2: Any UK/British male voice
+                    
                     (v.lang.includes('en-GB') && !v.name.toLowerCase().includes('female')) ||
-                    // Priority 3: Any US male voice
+                    
                     (v.lang.includes('en-US') && !v.name.toLowerCase().includes('female'))
                 ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
                 
@@ -5174,15 +5220,15 @@ Now answer the question completely!`;
                     utterance.voice = preferredVoice;
                 }
                 
-                // JARVIS voice settings - sophisticated and clear
-                utterance.rate = 0.95;      // Measured pace
-                utterance.pitch = 0.9;      // Slightly lower (more authoritative)
+                
+                utterance.rate = 0.95;      
+                utterance.pitch = 0.9;      
                 utterance.volume = 1.0;
                 
-                // Save reference for interruption
+                
                 currentUtterance = utterance;
                 
-                // Clean up when done
+                
                 utterance.onend = () => {
                     currentUtterance = null;
                     if (currentSpeakerButton) {
@@ -5196,7 +5242,7 @@ Now answer the question completely!`;
             }, 100);
         }
         
-        // Stop speech when user starts speaking (interruption support)
+        
         function stopSpeaking() {
             if (typeof responsiveVoice !== 'undefined') {
                 responsiveVoice.cancel();
@@ -5205,13 +5251,10 @@ Now answer the question completely!`;
             currentUtterance = null;
         }
 
-// ========== UX IMPROVEMENTS ==========
-
-// 1. TYPING INDICATOR
 function showTypingIndicator() {
     const chatContainer = document.getElementById('chat-container');
     
-    // Remove existing typing indicator if any
+    
     hideTypingIndicator();
     
     const typingDiv = document.createElement('div');
@@ -5237,7 +5280,6 @@ function hideTypingIndicator() {
     }
 }
 
-// 2. DELETE MESSAGE FUNCTION
 function deleteMessage(button) {
     if (confirm('Delete this message?')) {
         const messageDiv = button.closest('.flex');
@@ -5248,7 +5290,6 @@ function deleteMessage(button) {
     }
 }
 
-// 3. CONVERSATION HISTORY & SEARCH (USER-SPECIFIC)
 let conversationHistory = [];
 
 function getHistoryStorageKey() {
@@ -5264,7 +5305,7 @@ function saveToHistory(userMessage, aiResponse) {
         date: new Date().toLocaleDateString()
     });
     
-    // Save to localStorage with user-specific key
+    
     const historyKey = getHistoryStorageKey();
     localStorage.setItem(historyKey, JSON.stringify(conversationHistory));
 }
@@ -5286,9 +5327,9 @@ function searchHistory(query) {
 }
 
 /*
-// HISTORY PANEL - COMMENTED OUT (can be restored if needed)
+
 function showHistoryPanel() {
-    // Create history panel HTML
+    
     const panel = document.createElement('div');
     panel.id = 'history-panel';
     panel.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
@@ -5369,7 +5410,6 @@ function clearHistory() {
 }
 */
 
-// 3.5. THINKING INDICATOR
 function showThinkingIndicator(message = 'Thinking...') {
     const chatContainer = document.getElementById('chat-container');
     const thinkingDiv = document.createElement('div');
@@ -5401,7 +5441,6 @@ function hideThinkingIndicator() {
     }
 }
 
-// 4. ERROR VISUAL FEEDBACK
 function showError(message) {
     const chatContainer = document.getElementById('chat-container');
     const errorDiv = document.createElement('div');
@@ -5419,14 +5458,13 @@ function showError(message) {
     chatContainer.appendChild(errorDiv);
     chatContainer.scrollTop = chatContainer.scrollHeight;
     
-    // Remove after 5 seconds
+    
     setTimeout(() => {
         errorDiv.style.opacity = '0';
         setTimeout(() => errorDiv.remove(), 300);
     }, 5000);
 }
 
-// Add shake animation to CSS
 const style = document.createElement('style');
 style.textContent = `
     @keyframes shake {
@@ -5440,10 +5478,7 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// Load history on page load
 loadHistory();
-
-// ========== USAGE INSTRUCTIONS ==========
 
 /*
 1. TYPING INDICATOR:
