@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 // Simple in-memory rate limiting (resets on server restart)
 const rateLimitStore = new Map();
 
@@ -136,7 +134,7 @@ export default async function handler(request) {
       );
     }
 
-    // Call Brave Search API
+    // Call Brave Search API using native fetch (built into Edge runtime)
     const searchResponse = await fetch(
       `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&safesearch=moderate`,
       {
