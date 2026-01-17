@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>JARVIS - Just A Rather Very Intelligent System</title>
+    <title>JARVI GTS - Just A Rather Very Intelligent Getting There System/title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js?key=jQZ2zpcE"></script>
     <style>
@@ -3836,7 +3836,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                                   cleanText.toLowerCase().match(/\b(transport|bus|train|taxi)\b/i) ? 'transport' : 'food';
                 
                 // Extract location
-                let searchResults = '';
                 let cityName = '';
                 let stateName = '';
                 let fullLocation = '';
@@ -3850,172 +3849,111 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         cityName = parts[0];
                         stateName = parts.slice(1).join(', ');
                     } else {
+                        // Try to extract from current text
                         cityName = text.match(/in\s+([^,?.!]+)/i)?.[1] || 
                                    text.match(/at\s+([^,?.!]+)/i)?.[1] ||
-                                   text.match(/for\s+([^,?.!]+)/i)?.[1] ||
-                                   conversationContext.slice(-5).map(m => m.text).join(' ').match(/(?:in|at|for|to)\s+([A-Z][a-z]+(?:[\s,]+[A-Z][a-z]+)*)/i)?.[1] || '';
+                                   text.match(/for\s+([^,?.!]+)/i)?.[1] || '';
+                        
+                        // If no city in current text, check conversation context
+                        if (!cityName) {
+                            const contextText = conversationContext.slice(-6).map(m => m.text).join(' ');
+                            // Look for city patterns in context
+                            const contextMatch = contextText.match(/(?:hotels?|restaurants?|trip|itinerary|visit)\s+(?:in|to|for|at)\s+([A-Za-z][a-z]+(?:[\s,]+[A-Za-z][a-z]+)*)/i) ||
+                                                 contextText.match(/in\s+([A-Za-z][a-z]+(?:,\s*[A-Za-z][a-z]+)*)/i);
+                            if (contextMatch) {
+                                cityName = contextMatch[1].split(',')[0].trim();
+                            }
+                        }
                         fullLocation = cityName;
                     }
                     
                     cityName = cityName.trim().replace(/[?.!,]$/, '');
                     fullLocation = fullLocation.trim().replace(/[?.!]$/, '');
                     
+                    // Capitalize city name properly
+                    const capitalizeWords = (str) => str.split(' ').map(word => 
+                        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                    ).join(' ');
+                    
                     if (cityName) {
-                        // PERPLEXITY-STYLE MULTI-SEARCH
-                        // Run 3-4 different searches in parallel to gather comprehensive data
-                        
-                        const searchQueries = queryType === 'hotel' ? [
-                            `best hotels in ${fullLocation || cityName}`,
-                            `hotels to stay in ${cityName} ${stateName || 'India'} booking`,
-                            `${cityName} accommodation lodges guesthouses`,
-                            `top rated hotels ${cityName} reviews tripadvisor`
-                        ] : [
-                            `best restaurants in ${fullLocation || cityName}`,
-                            `famous food places in ${cityName} ${stateName || ''}`,
-                            `${cityName} local food restaurants where to eat`,
-                            `top rated restaurants ${cityName} reviews`
-                        ];
-                        
-                        // Execute all searches in parallel
-                        const searchPromises = searchQueries.map(async (query) => {
-                            try {
-                                const response = await fetch('/api/search', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ query })
-                                });
-                                const data = await response.json();
-                                return { query, results: data.results || [] };
-                            } catch (e) {
-                                return { query, results: [] };
-                            }
-                        });
-                        
-                        const allSearchResults = await Promise.all(searchPromises);
-                        
-                        // Combine and deduplicate results
-                        const seenTitles = new Set();
-                        let combinedResults = [];
-                        
-                        allSearchResults.forEach(searchResult => {
-                            searchResult.results.forEach(r => {
-                                // Deduplicate by title similarity
-                                const titleLower = r.title.toLowerCase();
-                                if (!seenTitles.has(titleLower)) {
-                                    seenTitles.add(titleLower);
-                                    combinedResults.push({
-                                        title: r.title,
-                                        description: r.description,
-                                        url: r.url,
-                                        source: searchResult.query
-                                    });
-                                }
-                            });
-                        });
-                        
-                        // Limit to 5 results - more causes AI to hallucinate
-                        combinedResults = combinedResults.slice(0, 5);
-                        
-                        if (combinedResults.length > 0) {
-                            searchResults = `\n\n📊 WEB SEARCH RESULTS (from ${allSearchResults.filter(s => s.results.length > 0).length} searches):\n` + 
-                                combinedResults.map((r, i) => `[${i+1}] ${r.title}\nSource: ${r.url}\n${r.description}${r.extraSnippets ? '\n' + r.extraSnippets.join('\n') : ''}`).join('\n\n');
-                        }
-                    }
-                } catch (searchError) {
-                }
-                
-                // Show search results directly - no AI hallucination
-                if (queryType === 'hotel') {
-                    if (searchResults && searchResults.length > 50) {
-                        // We have search results - format them nicely
-                        const hotelMsg = `🔍 **Web Search Results for Hotels in ${cityName}**
-
-${searchResults}
-
----
-
-📱 **Book directly on:**
-• [MakeMyTrip](https://www.makemytrip.com/hotels/hotel-listing?city=${encodeURIComponent(cityName)})
-• [Booking.com](https://www.booking.com/searchresults.html?ss=${encodeURIComponent(fullLocation || cityName)})
-• [Goibibo](https://www.goibibo.com/hotels/)
-• [OYO Rooms](https://www.oyorooms.com/search?location=${encodeURIComponent(cityName)})
-
-💡 **Tip:** For small towns like ${cityName}, searching directly on these booking sites often shows more options than Google.`;
-
-                        addChatMessage(hotelMsg, false);
-                        speak(`I found some hotel information for ${cityName}. Check out the search results and booking links!`);
-                    } else {
-                        // No search results - give helpful fallback
-                        const noResultsMsg = `🔍 **Hotels in ${cityName}**
-
-I couldn't find specific hotel listings in my web search. For a town like ${cityName}, here's what I recommend:
-
-📱 **Search directly on these sites:**
-• [MakeMyTrip](https://www.makemytrip.com/hotels/hotel-listing?city=${encodeURIComponent(cityName)})
-• [Booking.com](https://www.booking.com/searchresults.html?ss=${encodeURIComponent(fullLocation || cityName)})
-• [Goibibo](https://www.goibibo.com/hotels/)
-• [OYO Rooms](https://www.oyorooms.com/search?location=${encodeURIComponent(cityName)})
-
-💡 **Local tips for ${cityName}:**
-• Look for "Lodge" or "Residency" near the bus stand
-• Temple towns often have dharamshala (pilgrim rest houses)
-• Ask auto drivers - they know trusted places
-• OYO has budget rooms in most small towns now`;
-
-                        addChatMessage(noResultsMsg, false);
-                        speak(`I recommend checking MakeMyTrip or Booking.com directly for hotels in ${cityName}.`);
+                        cityName = capitalizeWords(cityName);
+                        fullLocation = capitalizeWords(fullLocation);
                     }
                     
-                    saveToHistory(text, `Hotel search for ${cityName}`);
-                    showFastFoodBox();
-                    return;
-                }
-                
-                // Restaurant query
-                if (searchResults && searchResults.length > 50) {
-                    const foodMsg = `🔍 **Web Search Results for Restaurants in ${cityName}**
+                    // If still no city, ask for it
+                    if (!cityName) {
+                        const askMsg = queryType === 'hotel' 
+                            ? "Which city would you like hotel recommendations for?"
+                            : queryType === 'food'
+                            ? "Which city would you like restaurant recommendations for?"
+                            : "Which city do you need transport information for?";
+                        addChatMessage(askMsg, false);
+                        speak(askMsg);
+                        return;
+                    }
+                    // Show Google Maps embed - FREE, no API needed!
+                    if (queryType === 'hotel') {
+                        const searchQuery = encodeURIComponent(`hotels in ${fullLocation || cityName}`);
+                        const hotelMsg = `🏨 **Hotels in ${cityName}**
 
-${searchResults}
+<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
+<iframe 
+  src="https://maps.google.com/maps?q=hotels+in+${searchQuery}&output=embed"
+  width="100%" 
+  height="300"
+  style="border:0; display:block;" 
+  allowfullscreen=""
+  loading="lazy"
+  referrerpolicy="no-referrer-when-downgrade">
+</iframe>
+</div>
 
----
+📍 Click on markers to see ratings, reviews & directions!`;
 
-🍛 **Local food tips for ${cityName}:**
-• "Mess" or "Bhavan" = local meals restaurant
-• "Military Hotel" = non-veg restaurant
-• Look near bus stand for budget options
+                        addChatMessage(hotelMsg, false);
+                        speak(`Here are hotels in ${cityName}. You can see them on the map!`);
+                        
+                        saveToHistory(text, `Hotel search for ${cityName}`);
+                        showFastFoodBox();
+                        return;
+                    }
+                    
+                    // Restaurant query - Google Maps embed
+                    const searchQuery = encodeURIComponent(`restaurants in ${fullLocation || cityName}`);
+                    const foodMsg = `🍽️ **Restaurants in ${cityName}**
 
-📱 **Find more on:**
-• [Google Maps](https://www.google.com/maps/search/restaurants+in+${encodeURIComponent(cityName)})
-• [Zomato](https://www.zomato.com/${cityName.toLowerCase().replace(/\s+/g, '-')}/restaurants)`;
+<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
+<iframe 
+  src="https://maps.google.com/maps?q=restaurants+in+${searchQuery}&output=embed"
+  width="100%" 
+  height="300"
+  style="border:0; display:block;" 
+  allowfullscreen=""
+  loading="lazy"
+  referrerpolicy="no-referrer-when-downgrade">
+</iframe>
+</div>
+
+📍 Click on markers to see ratings, reviews & directions!
+
+🍛 **Local tip:** In Tamil Nadu, "Mess" = local meals, "Military Hotel" = non-veg`;
 
                     addChatMessage(foodMsg, false);
-                    speak(`I found some restaurant information for ${cityName}!`);
-                } else {
-                    const noResultsMsg = `🔍 **Restaurants in ${cityName}**
+                    speak(`Here are restaurants in ${cityName}. Check out the map!`);
+                
+                    saveToHistory(text, `Restaurant search for ${cityName}`);
+                    showFastFoodBox();
+                    showTransportSuggestion();
+                    return;
+                } catch (error) {
+                    // If anything fails, show a simple message
+                    const fallbackMsg = `🍽️ **Restaurants in ${cityName || 'your area'}**
 
-I couldn't find specific restaurant listings. Here's what works in small towns:
-
-🍛 **What to look for:**
-• "Mess" or "Bhavan" - authentic local meals
-• "Military Hotel" - non-veg food
-• "Tiffin Center" - breakfast/snacks
-• Near temples = vegetarian options
-
-📱 **Search on:**
-• [Google Maps](https://www.google.com/maps/search/restaurants+in+${encodeURIComponent(cityName)})
-• [Zomato](https://www.zomato.com/)
-
-💡 **Pro tip:** Ask your hotel or auto driver for the best local spot!`;
-
-                    addChatMessage(noResultsMsg, false);
-                    speak(`For restaurants in ${cityName}, I recommend asking locals or checking Google Maps.`);
+Search "restaurants in ${cityName || 'your area'}" on Google Maps to find places with ratings and reviews!`;
+                    addChatMessage(fallbackMsg, false);
+                    speak(`Search for restaurants on Google Maps!`);
+                    return;
                 }
-                
-                saveToHistory(text, `Restaurant search for ${cityName}`);
-                showFastFoodBox();
-                
-                showTransportSuggestion();
-                return;
             }
             
             else {
