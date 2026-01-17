@@ -66,6 +66,7 @@ export default async function handler(request) {
        Be conversational, helpful, and concise.`;
 
     // Call Groq API using native fetch (built into Edge runtime)
+    // Using llama-3.3-70b-versatile (latest available model)
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -73,7 +74,7 @@ export default async function handler(request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama3-70b-8192',
+        model: 'llama-3.3-70b-versatile',
         messages: [
           { role: 'system', content: finalSystemPrompt },
           { role: 'user', content: message },
@@ -85,7 +86,46 @@ export default async function handler(request) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+      console.error('Groq API error:', response.status, errorText);
+      
+      // Try fallback model if primary fails
+      const fallbackResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [
+            { role: 'system', content: finalSystemPrompt },
+            { role: 'user', content: message },
+          ],
+          temperature: 0.7,
+          max_tokens: 5000,
+        }),
+      });
+      
+      if (!fallbackResponse.ok) {
+        throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+      }
+      
+      const fallbackData = await fallbackResponse.json();
+      const fallbackAiResponse = fallbackData.choices[0]?.message?.content || "I couldn't generate a response.";
+      
+      return new Response(
+        JSON.stringify({
+          response: fallbackAiResponse,
+          meta: {
+            model: 'llama-3.1-8b-instant',
+            tokens: fallbackData.usage?.total_tokens || 0,
+          },
+        }),
+        {
+          status: 200,
+          headers,
+        }
+      );
     }
 
     const data = await response.json();
@@ -96,7 +136,7 @@ export default async function handler(request) {
       JSON.stringify({
         response: aiResponse,
         meta: {
-          model: 'llama3-70b-8192',
+          model: 'llama-3.3-70b-versatile',
           tokens: data.usage?.total_tokens || 0,
         },
       }),
