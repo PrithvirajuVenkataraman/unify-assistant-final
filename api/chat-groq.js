@@ -1,7 +1,7 @@
 import fetch from 'node-fetch';
 
 export const config = {
-  runtime: 'edge', // or 'nodejs' if you prefer
+  runtime: 'edge',
 };
 
 export default async function handler(request) {
@@ -81,7 +81,7 @@ export default async function handler(request) {
           { role: 'user', content: message },
         ],
         temperature: 0.7,
-        max_tokens: 1000,
+        max_tokens: 5000,
       }),
     });
 
