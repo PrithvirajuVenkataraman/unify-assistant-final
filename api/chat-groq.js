@@ -65,7 +65,7 @@ export default async function handler(request) {
       `You are JARVIS, a helpful voice assistant. ${userName ? `The user's name is ${userName}.` : ''} 
        Be conversational, helpful, and concise.`;
 
-    // Call Groq API
+    // Call Groq API using native fetch (built into Edge runtime)
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
