@@ -4042,120 +4042,119 @@ Now answer the question completely!`;
                             });
                         });
                         
-                        // Take top 10-15 unique results
-                        combinedResults = combinedResults.slice(0, 15);
+                        // Limit to 5 results - more causes AI to hallucinate
+                        combinedResults = combinedResults.slice(0, 5);
                         
                         if (combinedResults.length > 0) {
                             searchResults = `\n\n📊 WEB SEARCH RESULTS (from ${allSearchResults.filter(s => s.results.length > 0).length} searches):\n` + 
-                                combinedResults.map((r, i) => `${i+1}. ${r.title}\n   ${r.description}`).join('\n\n');
+                                combinedResults.map((r, i) => `[${i+1}] ${r.title}\nSource: ${r.url}\n${r.description}${r.extraSnippets ? '\n' + r.extraSnippets.join('\n') : ''}`).join('\n\n');
                         }
                     }
                 } catch (searchError) {
                 }
                 
-                const recommendPrompt = queryType === 'hotel' ? 
-                `You are a travel assistant. Answer this question: "${text}"
-
-📍 LOCATION: ${fullLocation || cityName}
-- City: ${cityName}
-- State/Region: ${stateName || 'Identify from city name'}
-
-${searchResults}
-
-🔍 INSTRUCTIONS:
-1. ANALYZE the web search results above carefully
-2. EXTRACT actual hotel names mentioned in the search results
-3. ONLY recommend hotels that appear in the search results
-4. If a hotel is mentioned for a DIFFERENT city, DO NOT include it
-5. Verify each hotel is specifically in ${cityName}
-
-⚠️ IMPORTANT: ${cityName} ${stateName ? 'is in ' + stateName : ''} - do NOT confuse with similarly named places in other states.
-
-FORMAT your response as:
-
-🏨 **Hotels in ${cityName}** (Based on web search)
-
-For each hotel found:
-🏨 [Hotel Name]
-📍 Location: ${cityName}
-💰 Price Range: [Budget/Mid-range/Luxury]
-🍽️ Food: [Veg/Non-Veg/Both]
-⭐ Why: [Brief reason from search results]
-
----
-
-If search results don't show specific hotels in ${cityName}, say:
-"I searched for hotels in ${cityName} but couldn't find detailed listings. For a small town like this, I recommend:
-- Checking MakeMyTrip or Booking.com directly
-- Looking for TTDC (Tamil Nadu Tourism) hotels if in Tamil Nadu
-- Asking locals for trusted lodges near the bus stand or temple"
-
-End with a helpful tip for ${cityName}!` :
-
-                `You are a food guide. Answer this question: "${text}"
-
-📍 LOCATION: ${fullLocation || cityName}
-- City: ${cityName}
-- State/Region: ${stateName || 'Identify from city name'}
-
-${searchResults}
-
-🔍 INSTRUCTIONS:
-1. ANALYZE the web search results above carefully
-2. EXTRACT actual restaurant/eatery names mentioned in the search results
-3. ONLY recommend places that appear in the search results
-4. If a restaurant is mentioned for a DIFFERENT city, DO NOT include it
-5. Verify each place is specifically in ${cityName}
-
-⚠️ IMPORTANT: ${cityName} ${stateName ? 'is in ' + stateName : ''} - do NOT confuse with similarly named places.
-
-${text.includes('vegetarian') || text.includes('pure veg') ? '🥬 USER WANTS VEGETARIAN ONLY!' : ''}
-
-FORMAT your response as:
-
-🍽️ **Restaurants in ${cityName}** (Based on web search)
-
-For each restaurant found:
-🍽️ [Restaurant Name]
-📍 Location: ${cityName}
-🥗 Type: [Pure Veg/Non-Veg/Both]
-🍛 Try: [Local specialty dish]
-⭐ Why: [Brief reason]
-
----
-
-Local specialty of ${cityName} region: [Mention the famous local dish]
-
-If search results don't show specific restaurants in ${cityName}, say:
-"I searched for restaurants in ${cityName} but couldn't find detailed listings. For authentic local food:
-- Look for local 'mess' or 'tiffin centers' near the bus stand
-- Try temple prasadam if visiting Nataraja Temple
-- Ask locals for the best idli/dosa shops"
-
-Enjoy your meal in ${cityName}!`;
-                
-                const aiResponse = await callAIWithTyping(recommendPrompt, queryType === 'hotel' ? '🏨 Searching hotels...' : '🍽️ Searching restaurants...');
+                // Always use AI to synthesize results (like Perplexity)
+                // The AI will analyze search results and provide a helpful answer
                 
                 if (queryType === 'hotel') {
-                    
-                    await displayHotelsWithMaps(aiResponse.response, text);
-                } else {
+                    const hotelPrompt = `You are a helpful travel assistant. The user asked: "${text}"
+
+📍 LOCATION: ${fullLocation || cityName}, ${stateName || 'India'}
+
+I searched the web and found these results:
+${searchResults || 'No search results available.'}
+
+YOUR TASK:
+1. Read through the search results above
+2. Find and extract ANY hotel names mentioned
+3. Provide helpful information about staying in ${cityName}
+
+RESPONSE FORMAT:
+
+🏨 **Hotels in ${cityName}**
+
+Based on my web search, here are hotels I found:
+
+[For each hotel found in search results:]
+🏨 **[Hotel Name]**
+- [Any details from search results - price, rating, location, amenities]
+
+[If search results mention booking sites, include:]
+📱 **Book online:** [mention sites found in search]
+
+[Add local context:]
+💡 **Tips for staying in ${cityName}:**
+- [Relevant local tips based on what you know about the area]
+
+[If this is a temple town like Chidambaram:]
+🏛️ **Temple town info:** [mention dharamshala/pilgrim accommodations if relevant]
+
+IMPORTANT:
+- If search results found hotel names, list them with details
+- If search results only show booking sites (MakeMyTrip, Booking.com), mention those
+- Add your knowledge about the destination to be helpful
+- Be conversational and helpful, not robotic
+
+Now provide a helpful response about hotels in ${cityName}:`;
+
+                    const aiResponse = await callAIWithTyping(hotelPrompt, '🏨 Searching for hotels...');
                     addChatMessage(aiResponse.response, false);
-                    speak("I've got some recommendations for you!");
+                    speak("Here's what I found about hotels!");
+                    
+                    saveToHistory(text, aiResponse.response);
+                    showFastFoodBox();
+                    return;
                 }
                 
+                // Restaurant query
+                const foodPrompt = `You are a helpful food guide. The user asked: "${text}"
+
+📍 LOCATION: ${fullLocation || cityName}, ${stateName || 'India'}
+
+I searched the web and found these results:
+${searchResults || 'No search results available.'}
+
+${text.includes('vegetarian') || text.includes('pure veg') ? '⚠️ USER WANTS VEGETARIAN OPTIONS ONLY!' : ''}
+
+YOUR TASK:
+1. Read through the search results above
+2. Find and extract ANY restaurant names mentioned
+3. Provide helpful information about eating in ${cityName}
+
+RESPONSE FORMAT:
+
+🍽️ **Restaurants in ${cityName}**
+
+Based on my web search, here are places to eat:
+
+[For each restaurant found in search results:]
+🍽️ **[Restaurant Name]**
+- [Any details - cuisine type, specialty, veg/non-veg, price range]
+
+[Add local food context:]
+🍛 **Local specialties of ${cityName} region:**
+- [Mention famous local dishes]
+
+💡 **Tips for eating in ${cityName}:**
+- [Local food tips - where locals eat, best times, what to try]
+
+IMPORTANT:
+- If search results found restaurant names, list them
+- Add your knowledge about local cuisine to be helpful
+- For Tamil Nadu: mention mess, bhavan, military hotels, etc.
+- Be conversational and helpful
+
+Now provide a helpful response about restaurants in ${cityName}:`;
+
+                const aiResponse = await callAIWithTyping(foodPrompt, '🍽️ Searching for restaurants...');
+                addChatMessage(aiResponse.response, false);
+                speak("Here's what I found about restaurants!");
                 
                 saveToHistory(text, aiResponse.response);
-                
-                
-                if (queryType === 'hotel' || queryType === 'food') {
-                    showFastFoodBox();
-                }
-                
+                showFastFoodBox();
                 
                 showTransportSuggestion();
-                return; 
-                suggestQuickReplies(aiResponse.response);
+                return;
             }
             
             else {
