@@ -2274,7 +2274,7 @@ async function handleNameCorrection(text) {
                                 
                                 <div>
                                     <p class="font-semibold text-gray-900 dark:text-white">Get GPS Directions:</p>
-                                    <p class="text-gray-600 dark:text-gray-400">Every hotel has a "📍 Get Directions" link for instant navigation!</p>
+                                    <p class="text-gray-600 dark:text-gray-400">Hotel recommendations are based on web search results!</p>
                                 </div>
                                 
                                 <div>
@@ -2917,62 +2917,8 @@ async function handleNameCorrection(text) {
         
         
         async function addGPSDirectionsToHotels(responseText, query) {
-            
-            const locationMatch = query.match(/\b(in|at|near)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i);
-            const cityName = locationMatch ? locationMatch[2] : '';
-            
-            
-            let userLat = null;
-            let userLon = null;
-            
-            try {
-                const position = await new Promise((resolve, reject) => {
-                    navigator.geolocation.getCurrentPosition(resolve, reject, {
-                        enableHighAccuracy: false,
-                        timeout: 5000,
-                        maximumAge: 300000
-                    });
-                });
-                userLat = position.coords.latitude;
-                userLon = position.coords.longitude;
-            } catch (error) {
-            }
-            
-            
-            
-            const hotelMatches = responseText.matchAll(/🏨\s+(?:\*\*)?([^*\n]+?)(?:\*\*)?\s*(?:\[|$)/gm);
-            let enhancedResponse = responseText;
-            
-            const replacements = [];
-            for (const match of hotelMatches) {
-                const hotelName = match[1].trim();
-                const fullMatch = match[0];
-                
-                
-                if (fullMatch.includes('<a href')) continue;
-                
-                
-                let mapsLink;
-                if (userLat && userLon) {
-                    
-                    mapsLink = `https://www.google.com/maps/dir/${userLat},${userLon}/${encodeURIComponent(hotelName + ' ' + cityName)}`;
-                } else {
-                    
-                    mapsLink = `https://www.google.com/maps/search/${encodeURIComponent(hotelName + ' ' + cityName)}`;
-                }
-                
-                
-                const replacement = fullMatch.replace(hotelName, `${hotelName} [📍 <a href="${mapsLink}" target="_blank" style="color: #3B82F6; text-decoration: underline;">Get Directions</a>]`);
-                
-                replacements.push({ old: fullMatch, new: replacement });
-            }
-            
-            
-            for (const { old, new: newText } of replacements) {
-                enhancedResponse = enhancedResponse.replace(old, newText);
-            }
-            
-            return enhancedResponse;
+            // Simply return the response without adding directions
+            return responseText;
         }
         
         
@@ -4021,107 +3967,174 @@ Now answer the question completely!`;
                 
                 let searchResults = '';
                 let cityName = '';
+                let stateName = '';
+                let fullLocation = '';
+                
                 try {
-                    cityName = text.match(/in\s+([^,?.!]+)/i)?.[1] || 
-                                    text.match(/at\s+([^,?.!]+)/i)?.[1] ||
-                                    text.match(/for\s+([^,?.!]+)/i)?.[1] ||
-                                    conversationContext.slice(-5).map(m => m.text).join(' ').match(/(?:in|at|for|to)\s+([A-Z][a-z]+(?:[\s,]+[A-Z][a-z]+)*)/i)?.[1] || '';
-                    
+                    // Extract full location including state/country
+                    const fullLocationMatch = text.match(/in\s+([^?.!]+?)(?:\?|$|\.)/i);
+                    if (fullLocationMatch) {
+                        fullLocation = fullLocationMatch[1].trim();
+                        const parts = fullLocation.split(',').map(p => p.trim());
+                        cityName = parts[0];
+                        stateName = parts.slice(1).join(', ');
+                    } else {
+                        cityName = text.match(/in\s+([^,?.!]+)/i)?.[1] || 
+                                   text.match(/at\s+([^,?.!]+)/i)?.[1] ||
+                                   text.match(/for\s+([^,?.!]+)/i)?.[1] ||
+                                   conversationContext.slice(-5).map(m => m.text).join(' ').match(/(?:in|at|for|to)\s+([A-Z][a-z]+(?:[\s,]+[A-Z][a-z]+)*)/i)?.[1] || '';
+                        fullLocation = cityName;
+                    }
                     
                     cityName = cityName.trim().replace(/[?.!,]$/, '');
+                    fullLocation = fullLocation.trim().replace(/[?.!]$/, '');
                     
                     if (cityName) {
+                        // PERPLEXITY-STYLE MULTI-SEARCH
+                        // Run 3-4 different searches in parallel to gather comprehensive data
                         
-                        const searchQuery = queryType === 'hotel' 
-                            ? `best hotels to stay in ${cityName} booking` 
-                            : `best restaurants to eat in ${cityName} food`;
-                        const searchResponse = await fetch('/api/search', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ query: searchQuery })
+                        const searchQueries = queryType === 'hotel' ? [
+                            `best hotels in ${fullLocation || cityName}`,
+                            `hotels to stay in ${cityName} ${stateName || 'India'} booking`,
+                            `${cityName} accommodation lodges guesthouses`,
+                            `top rated hotels ${cityName} reviews tripadvisor`
+                        ] : [
+                            `best restaurants in ${fullLocation || cityName}`,
+                            `famous food places in ${cityName} ${stateName || ''}`,
+                            `${cityName} local food restaurants where to eat`,
+                            `top rated restaurants ${cityName} reviews`
+                        ];
+                        
+                        // Execute all searches in parallel
+                        const searchPromises = searchQueries.map(async (query) => {
+                            try {
+                                const response = await fetch('/api/search', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ query })
+                                });
+                                const data = await response.json();
+                                return { query, results: data.results || [] };
+                            } catch (e) {
+                                return { query, results: [] };
+                            }
                         });
                         
-                        const searchData = await searchResponse.json();
+                        const allSearchResults = await Promise.all(searchPromises);
                         
-                        if (searchData.results && searchData.results.length > 0) {
-                            searchResults = '\n\nREAL DATA FROM WEB SEARCH (USE THESE!):\n' + 
-                                searchData.results.map(r => `- ${r.title}: ${r.description}`).join('\n');
+                        // Combine and deduplicate results
+                        const seenTitles = new Set();
+                        let combinedResults = [];
+                        
+                        allSearchResults.forEach(searchResult => {
+                            searchResult.results.forEach(r => {
+                                // Deduplicate by title similarity
+                                const titleLower = r.title.toLowerCase();
+                                if (!seenTitles.has(titleLower)) {
+                                    seenTitles.add(titleLower);
+                                    combinedResults.push({
+                                        title: r.title,
+                                        description: r.description,
+                                        url: r.url,
+                                        source: searchResult.query
+                                    });
+                                }
+                            });
+                        });
+                        
+                        // Take top 10-15 unique results
+                        combinedResults = combinedResults.slice(0, 15);
+                        
+                        if (combinedResults.length > 0) {
+                            searchResults = `\n\n📊 WEB SEARCH RESULTS (from ${allSearchResults.filter(s => s.results.length > 0).length} searches):\n` + 
+                                combinedResults.map((r, i) => `${i+1}. ${r.title}\n   ${r.description}`).join('\n\n');
                         }
                     }
                 } catch (searchError) {
                 }
                 
                 const recommendPrompt = queryType === 'hotel' ? 
-                `Answer this question about hotel recommendations: "${text}"
+                `You are a travel assistant. Answer this question: "${text}"
 
-CONTEXT AWARENESS:
-Recent conversation context:
-${conversationContext.slice(-3).map(msg => `${msg.role}: ${msg.text}`).join('\n')}
+📍 LOCATION: ${fullLocation || cityName}
+- City: ${cityName}
+- State/Region: ${stateName || 'Identify from city name'}
+
 ${searchResults}
 
-CRITICAL INSTRUCTIONS:
-1. Extract the city name from the user's question OR from recent conversation context
-2. If user just says "hotels" or "accommodation", look at the recent conversation to find which city they're talking about
-3. USE THE REAL HOTELS FROM WEB SEARCH RESULTS ABOVE - these are verified to exist!
-4. ONLY recommend hotels that appear in the search results OR that you are 100% certain exist
-5. DO NOT make up hotel names that aren't in the search results
-6. If no search results available, only suggest hotels you're absolutely certain about
+🔍 INSTRUCTIONS:
+1. ANALYZE the web search results above carefully
+2. EXTRACT actual hotel names mentioned in the search results
+3. ONLY recommend hotels that appear in the search results
+4. If a hotel is mentioned for a DIFFERENT city, DO NOT include it
+5. Verify each hotel is specifically in ${cityName}
 
-VERIFICATION CHECKLIST:
-✓ City identified correctly from query or context
-✓ Hotels match search results OR are well-known chains
-✓ Hotels are in the EXACT city requested (not 50km+ away)
+⚠️ IMPORTANT: ${cityName} ${stateName ? 'is in ' + stateName : ''} - do NOT confuse with similarly named places in other states.
 
-Provide 3-5 hotel recommendations in this format:
+FORMAT your response as:
 
-HOTEL: [Hotel Name from search results or verified knowledge]
-DESC: [One-line description]
-PRICE: [Budget/Mid-range/Luxury]
-FOOD: [Pure Veg/Non-Veg/Both]
-SPECIALTY: [Local dish from THAT city]
-WHY: [Why recommended]
+🏨 **Hotels in ${cityName}** (Based on web search)
+
+For each hotel found:
+🏨 [Hotel Name]
+📍 Location: ${cityName}
+💰 Price Range: [Budget/Mid-range/Luxury]
+🍽️ Food: [Veg/Non-Veg/Both]
+⭐ Why: [Brief reason from search results]
+
 ---
 
-${text.includes('vegetarian') || text.includes('pure veg') ? 'IMPORTANT: Only suggest hotels with PURE VEGETARIAN restaurants.' : ''}
+If search results don't show specific hotels in ${cityName}, say:
+"I searched for hotels in ${cityName} but couldn't find detailed listings. For a small town like this, I recommend:
+- Checking MakeMyTrip or Booking.com directly
+- Looking for TTDC (Tamil Nadu Tourism) hotels if in Tamil Nadu
+- Asking locals for trusted lodges near the bus stand or temple"
 
-End with: "I hope you have a comfortable stay!"
+End with a helpful tip for ${cityName}!` :
 
-Now provide recommendations in this exact format!` :
+                `You are a food guide. Answer this question: "${text}"
 
-                `Answer this question about restaurant recommendations: "${text}"
+📍 LOCATION: ${fullLocation || cityName}
+- City: ${cityName}
+- State/Region: ${stateName || 'Identify from city name'}
 
-CONTEXT:
-City: ${cityName || 'from the query'}
-Recent conversation: ${conversationContext.slice(-3).map(msg => `${msg.role}: ${msg.text}`).join('\n')}
 ${searchResults}
 
-CRITICAL INSTRUCTIONS:
-1. USE THE REAL RESTAURANTS FROM WEB SEARCH RESULTS ABOVE if available
-2. Only recommend restaurants that appear in search results OR that you're 100% certain exist
-3. If no search results, suggest well-known restaurants you're confident about
+🔍 INSTRUCTIONS:
+1. ANALYZE the web search results above carefully
+2. EXTRACT actual restaurant/eatery names mentioned in the search results
+3. ONLY recommend places that appear in the search results
+4. If a restaurant is mentioned for a DIFFERENT city, DO NOT include it
+5. Verify each place is specifically in ${cityName}
 
-Provide 4-6 specific recommendations with brief details.
-Keep it SHORT and COMPLETE.
+⚠️ IMPORTANT: ${cityName} ${stateName ? 'is in ' + stateName : ''} - do NOT confuse with similarly named places.
 
-${text.includes('vegetarian') || text.includes('pure veg') ? 'IMPORTANT: Only suggest VEGETARIAN/VEG restaurants. Mark each as [Pure Veg].' : 'Mark each restaurant as [Pure Veg] or [Non-Veg].'}
+${text.includes('vegetarian') || text.includes('pure veg') ? '🥬 USER WANTS VEGETARIAN ONLY!' : ''}
 
-Also mention the local specialty dish for the region!
+FORMAT your response as:
 
-Format:
-🍽️ Restaurant Name
-- Brief description | [Veg Type] | Try: [Local specialty]
-- Include why it's good
+🍽️ **Restaurants in ${cityName}** (Based on web search)
 
-Example for "Best restaurants in Paris":
-🍽️ Le Comptoir du Relais
-- Classic French bistro | [Non-Veg] | Try: Coq au vin
-- Known for authentic French cuisine
+For each restaurant found:
+🍽️ [Restaurant Name]
+📍 Location: ${cityName}
+🥗 Type: [Pure Veg/Non-Veg/Both]
+🍛 Try: [Local specialty dish]
+⭐ Why: [Brief reason]
 
-Bon appétit! Let me know if you need more suggestions.
+---
 
-Now answer the question completely!`;
+Local specialty of ${cityName} region: [Mention the famous local dish]
+
+If search results don't show specific restaurants in ${cityName}, say:
+"I searched for restaurants in ${cityName} but couldn't find detailed listings. For authentic local food:
+- Look for local 'mess' or 'tiffin centers' near the bus stand
+- Try temple prasadam if visiting Nataraja Temple
+- Ask locals for the best idli/dosa shops"
+
+Enjoy your meal in ${cityName}!`;
                 
-                const aiResponse = await callAIWithTyping(recommendPrompt, queryType === 'hotel' ? '🏨 Finding hotels...' : '🍽️ Finding recommendations...');
+                const aiResponse = await callAIWithTyping(recommendPrompt, queryType === 'hotel' ? '🏨 Searching hotels...' : '🍽️ Searching restaurants...');
                 
                 if (queryType === 'hotel') {
                     
