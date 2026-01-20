@@ -1,4 +1,7 @@
 // FREE TIER VERSION - No paid services required
+// Deploy this file to: /api/search.js (Vercel Edge Function)
+// No API keys required - uses free public APIs
+
 export const config = {
   runtime: 'edge',
 };
@@ -82,7 +85,7 @@ function shouldUseSearch(query) {
   // Definitely DO search for these
   const yesSearch = [
     // Time-sensitive
-    'today', 'now', 'current', 'latest', '2024', '2025',
+    'today', 'now', 'current', 'latest', '2024', '2025', '2026',
     // News
     'news', 'breaking', 'update',
     // Locations
