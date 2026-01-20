@@ -3952,7 +3952,31 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         return;
                     }
                     
+                    // Transport query handling
+                    if (queryType === 'transport') {
+                        const transportQuery = encodeURIComponent(`${cityName} public transport how to get around`);
+                        const transportPrompt = `How to get around ${fullLocation || cityName}? Brief transport info including buses, trains, taxis, auto-rickshaws if applicable. Keep it under 100 words.`;
+
+                        const aiResponse = await callAIWithTyping(transportPrompt, '🚌 Getting transport info...');
+
+                        const transportMsg = aiResponse.response + `
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔍 **More transport info:**
+
+📍 [Search Google Maps](https://www.google.com/maps/search/transit+near+${encodeURIComponent(cityName)}) - Find transit options
+
+🔎 [Search on Google](https://www.google.com/search?q=${transportQuery}) - Detailed guides`;
+
+                        addChatMessage(transportMsg, false);
+                        speak(`Here's transport information for ${cityName}.`);
+                        saveToHistory(text, `Transport info for ${cityName}`);
+                        return;
+                    }
+
                     // Restaurant query - Use AI + Google Search links
+                    console.log('DEBUG: Starting restaurant query for', cityName); // Debug log
                     const restaurantPrompt = `List restaurants and food places in ${fullLocation || cityName}.
 
 IMPORTANT RULES:
@@ -3997,6 +4021,7 @@ Keep response concise - under 200 words.`;
 
 ⭐ [Check TripAdvisor](https://www.google.com/search?q=${tripadvisorQuery}) - Tourist recommendations`;
 
+                    console.log('DEBUG: Restaurant response with links:', foodMsg.substring(0, 200)); // Debug log
                     addChatMessage(foodMsg, false);
                     speak(`Here are restaurant suggestions for ${cityName}. I've included search links to find more options!`);
 
