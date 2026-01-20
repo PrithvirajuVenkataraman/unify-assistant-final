@@ -2394,24 +2394,40 @@ async function handleNameCorrection(text) {
                     </div>
                 `;
             } else {
-                
+
                 const bgClass = darkMode ? 'bg-gray-700' : 'bg-white';
                 const textClass = darkMode ? 'text-gray-200' : 'text-gray-800';
-                
-                
+
+
                 const textForSpeech = text.replace(/<[^>]*>/g, '');
-                
-                
+
+                // Check if message contains HTML elements (like iframes, divs)
+                const hasHtmlContent = /<(iframe|div|img|table)\s/i.test(text);
+
                 // Convert markdown links [text](url) to HTML anchor tags, then newlines to <br>
-                const formattedText = text
-                    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-blue-500 hover:text-blue-700 underline">$1</a>')
-                    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-                    .replace(/\n/g, '<br>');
-                
+                // But preserve HTML tags like <iframe>, <div>, etc.
+                let formattedText;
+                if (hasHtmlContent) {
+                    // For HTML content, only convert markdown links and bold, preserve other HTML
+                    formattedText = text
+                        .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-blue-500 hover:text-blue-700 underline">$1</a>')
+                        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+                    // Only convert newlines that are NOT inside HTML tags
+                    formattedText = formattedText.replace(/\n(?![^<]*>)/g, '<br>');
+                } else {
+                    formattedText = text
+                        .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-blue-500 hover:text-blue-700 underline">$1</a>')
+                        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\n/g, '<br>');
+                }
+
+                // Use wider container for messages with maps/iframes
+                const containerWidth = hasHtmlContent ? 'max-w-2xl' : 'max-w-md';
+
                 messageDiv.innerHTML = `
-                    <div class="flex items-start gap-2 max-w-md">
-                        <div class="${bgClass} rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex-1">
-                            <p class="text-sm ${textClass} typewriter-text"></p>
+                    <div class="flex items-start gap-2 ${containerWidth}">
+                        <div class="${bgClass} rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex-1 overflow-hidden">
+                            <div class="text-sm ${textClass} typewriter-text"></div>
                         </div>
                         <button onclick="toggleSpeak(\`${textForSpeech.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`, this)" class="flex-shrink-0 p-2 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-all speaker-btn">
                             <svg class="play-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -4021,13 +4037,18 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     
                     // If still no city, ask for it
                     if (!cityName) {
-                        const askMsg = queryType === 'hotel' 
-                            ? "Which city would you like hotel recommendations for?"
-                            : queryType === 'food'
-                            ? "Which city would you like restaurant recommendations for?"
-                            : "Which city do you need transport information for?";
-                        addChatMessage(askMsg, false);
-                        speak(askMsg);
+                        if (queryType === 'transport') {
+                            const askMsg = "Which city do you need transport information for?";
+                            addChatMessage(askMsg, false);
+                            speak(askMsg);
+                            window.waitingForTransportLocation = true;
+                        } else {
+                            const askMsg = queryType === 'hotel'
+                                ? "Which city would you like hotel recommendations for?"
+                                : "Which city would you like restaurant recommendations for?";
+                            addChatMessage(askMsg, false);
+                            speak(askMsg);
+                        }
                         return;
                     }
                     // Show Google Maps embed - FREE, no API needed!
