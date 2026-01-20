@@ -2219,6 +2219,308 @@ function getFeedbackStats() {
 
 // ============ END FEEDBACK SYSTEM ============
 
+// ============ TRANSLATOR MODE ============
+
+// Check if user wants to enable translator mode
+function detectTranslatorRequest(text) {
+    const lower = text.toLowerCase();
+
+    // Patterns to detect translator mode activation
+    const activationPatterns = [
+        // "speak in Tamil", "talk in Hindi", etc.
+        /(?:speak|talk|translate|switch|change)\s+(?:in|to)\s+(tamil|kannada|telugu|hindi)/i,
+        // "Tamil la pesu" (Tamil: speak in Tamil)
+        /tamil\s+(?:la|le|ல)\s+(?:pesu|peslama|pesalam)/i,
+        // "Kannada alli maathaadu" (Kannada: speak in Kannada)
+        /kannada\s+(?:alli|alli|ಅಲ್ಲಿ)\s+(?:maathaadu|matadi)/i,
+        // "Hindi mein bolo" (Hindi: speak in Hindi)
+        /hindi\s+(?:mein|me|में)\s+(?:bolo|baat)/i,
+        // "Telugu lo cheppu" (Telugu: speak in Telugu)
+        /telugu\s+(?:lo|లో)\s+(?:cheppu|matlaadu)/i,
+        // "help me speak to" patterns
+        /help\s+(?:me\s+)?(?:speak|talk|communicate)\s+(?:to|with).*(?:in\s+)?(tamil|kannada|telugu|hindi)/i,
+        // "I need to talk to auto/rickshaw driver in Kannada"
+        /(?:talk|speak|communicate)\s+(?:to|with)\s+(?:auto|rickshaw|taxi|driver|shopkeeper|vendor).*(?:in\s+)?(tamil|kannada|telugu|hindi)/i,
+        // "translate to Tamil"
+        /translate\s+(?:to|into)\s+(tamil|kannada|telugu|hindi)/i,
+        // "can you speak Tamil"
+        /can\s+you\s+(?:speak|talk)\s+(?:in\s+)?(tamil|kannada|telugu|hindi)/i
+    ];
+
+    for (const pattern of activationPatterns) {
+        const match = lower.match(pattern);
+        if (match) {
+            // Extract the language
+            const langMatch = lower.match(/\b(tamil|kannada|telugu|hindi)\b/i);
+            if (langMatch) {
+                return langMatch[1].toLowerCase();
+            }
+        }
+    }
+
+    // Check for deactivation
+    if (lower.match(/(?:stop|exit|end|disable|turn off)\s+(?:translat|interpreter)/i) ||
+        lower.match(/(?:switch|go)\s+(?:back\s+)?to\s+english/i) ||
+        lower === 'stop' || lower === 'exit translator') {
+        return 'exit';
+    }
+
+    return null;
+}
+
+// Activate translator mode
+function activateTranslatorMode(language) {
+    const langInfo = supportedLanguages[language];
+    if (!langInfo) return false;
+
+    translatorMode = true;
+    translatorLanguage = language;
+
+    // Show translator mode UI
+    showTranslatorModeUI(langInfo);
+
+    const activationMsg = `🌐 **Translator Mode Activated - ${langInfo.name} (${langInfo.nativeName})**
+
+I'll now help you communicate in ${langInfo.name}!
+
+**How it works:**
+1. Say or type what you want to say in English
+2. I'll translate it to ${langInfo.name}
+3. I'll also speak it out loud so you can use it directly
+
+**Example phrases I can help with:**
+• "How much does this cost?"
+• "Take me to the railway station"
+• "Where is the nearest ATM?"
+• "I need help"
+
+**To exit translator mode:** Say "stop translator" or "switch to English"
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🎤 **Ready!** What would you like to say in ${langInfo.name}?`;
+
+    addChatMessage(activationMsg, false);
+    speak(`Translator mode activated for ${langInfo.name}. Tell me what you want to say and I'll translate it for you.`);
+
+    return true;
+}
+
+// Deactivate translator mode
+function deactivateTranslatorMode() {
+    const wasActive = translatorMode;
+    const prevLang = translatorLanguage ? supportedLanguages[translatorLanguage]?.name : 'the language';
+
+    translatorMode = false;
+    translatorLanguage = null;
+
+    // Remove translator UI
+    hideTranslatorModeUI();
+
+    if (wasActive) {
+        const exitMsg = `✅ **Translator Mode Ended**
+
+Switched back to English. I'm ready to help you with anything else!`;
+        addChatMessage(exitMsg, false);
+        speak(`Translator mode ended. I'm back to English.`);
+    }
+}
+
+// Show translator mode UI indicator
+function showTranslatorModeUI(langInfo) {
+    // Remove existing if any
+    hideTranslatorModeUI();
+
+    const indicator = document.createElement('div');
+    indicator.id = 'translator-mode-indicator';
+    indicator.className = 'fixed top-20 left-1/2 transform -translate-x-1/2 z-40 fade-in';
+
+    const bgClass = darkMode ? 'bg-gradient-to-r from-purple-900 to-indigo-900' : 'bg-gradient-to-r from-purple-500 to-indigo-500';
+
+    indicator.innerHTML = `
+        <div class="${bgClass} text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-3">
+            <span class="text-lg">🌐</span>
+            <span class="font-medium">Translator: English → ${langInfo.name}</span>
+            <button onclick="deactivateTranslatorMode()" class="ml-2 bg-white/20 hover:bg-white/30 rounded-full px-2 py-0.5 text-sm transition-all">
+                Exit
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(indicator);
+}
+
+// Hide translator mode UI
+function hideTranslatorModeUI() {
+    const indicator = document.getElementById('translator-mode-indicator');
+    if (indicator) {
+        indicator.classList.add('fade-out');
+        setTimeout(() => indicator.remove(), 300);
+    }
+}
+
+// Translate text using AI
+async function translateText(englishText, targetLang) {
+    const langInfo = supportedLanguages[targetLang];
+    if (!langInfo) return null;
+
+    showThinkingIndicator(`Translating to ${langInfo.name}...`);
+
+    try {
+        const translationPrompt = `You are a translator. Translate the following English text to ${langInfo.name} (${langInfo.nativeName}).
+
+IMPORTANT RULES:
+1. Provide ONLY the translation, nothing else
+2. Use natural, conversational ${langInfo.name} that locals would understand
+3. For common phrases, use the most commonly spoken version
+4. Include the script (${langInfo.nativeName} script)
+5. After the translation, on a new line, provide a phonetic pronunciation guide in English letters
+
+English text to translate:
+"${englishText}"
+
+Format your response EXACTLY like this:
+[${langInfo.name} script translation]
+(Pronunciation: [phonetic guide])`;
+
+        const response = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: translationPrompt,
+                systemPrompt: `You are an expert ${langInfo.name} translator. Provide accurate, natural translations.`
+            })
+        });
+
+        const data = await response.json();
+        hideThinkingIndicator();
+
+        if (data.response) {
+            return {
+                translation: data.response,
+                language: langInfo
+            };
+        }
+    } catch (error) {
+        hideThinkingIndicator();
+        console.error('Translation error:', error);
+    }
+
+    return null;
+}
+
+// Process text in translator mode
+async function processTranslatorMode(text) {
+    const langInfo = supportedLanguages[translatorLanguage];
+    if (!langInfo) {
+        deactivateTranslatorMode();
+        return;
+    }
+
+    // Translate the text
+    const result = await translateText(text, translatorLanguage);
+
+    if (result && result.translation) {
+        const translationMsg = `🗣️ **Your phrase in ${langInfo.name}:**
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+**English:** "${text}"
+
+**${langInfo.name}:**
+${result.translation}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔊 *Click the speaker button to hear it!*
+
+💡 **Tip:** Show this to the person you're talking to, or play the audio.`;
+
+        addChatMessage(translationMsg, false);
+
+        // Extract just the translation for speech (first line, without pronunciation guide)
+        const translationOnly = result.translation.split('\n')[0].replace(/^\[|\]$/g, '').trim();
+
+        // Try to speak in the target language
+        speakInLanguage(translationOnly, langInfo.voiceLang);
+    } else {
+        const errorMsg = `❌ Sorry, I couldn't translate that. Please try again with a simpler phrase.`;
+        addChatMessage(errorMsg, false);
+        speak("Sorry, I couldn't translate that. Please try a simpler phrase.");
+    }
+}
+
+// Speak text in a specific language
+function speakInLanguage(text, langCode) {
+    // Try ResponsiveVoice first for better language support
+    if (typeof responsiveVoice !== 'undefined') {
+        const voiceMap = {
+            'ta-IN': 'Tamil Female',
+            'kn-IN': 'Kannada Female',
+            'te-IN': 'Telugu Female',
+            'hi-IN': 'Hindi Female'
+        };
+
+        const voice = voiceMap[langCode] || 'UK English Female';
+
+        responsiveVoice.speak(text, voice, {
+            pitch: 1,
+            rate: 0.9,
+            volume: 1
+        });
+    } else {
+        // Fallback to Web Speech API
+        const synth = window.speechSynthesis;
+        const utterance = new SpeechSynthesisUtterance(text);
+
+        // Try to find a voice for the language
+        const voices = synth.getVoices();
+        const langVoice = voices.find(v => v.lang === langCode || v.lang.startsWith(langCode.split('-')[0]));
+
+        if (langVoice) {
+            utterance.voice = langVoice;
+        }
+        utterance.lang = langCode;
+        utterance.rate = 0.9;
+
+        synth.speak(utterance);
+    }
+}
+
+// Quick translation phrases for common situations
+function getQuickTranslationPhrases(language) {
+    const phrases = {
+        'tamil': [
+            { english: 'How much?', native: 'எவ்வளவு?' },
+            { english: 'Thank you', native: 'நன்றி' },
+            { english: 'Where is...?', native: '...எங்கே?' },
+            { english: 'Please stop here', native: 'தயவுசெய்து இங்கே நிறுத்துங்கள்' }
+        ],
+        'kannada': [
+            { english: 'How much?', native: 'ಎಷ್ಟು?' },
+            { english: 'Thank you', native: 'ಧನ್ಯವಾದ' },
+            { english: 'Where is...?', native: '...ಎಲ್ಲಿದೆ?' },
+            { english: 'Please stop here', native: 'ದಯವಿಟ್ಟು ಇಲ್ಲಿ ನಿಲ್ಲಿಸಿ' }
+        ],
+        'telugu': [
+            { english: 'How much?', native: 'ఎంత?' },
+            { english: 'Thank you', native: 'ధన్యవాదాలు' },
+            { english: 'Where is...?', native: '...ఎక్కడ?' },
+            { english: 'Please stop here', native: 'దయచేసి ఇక్కడ ఆపండి' }
+        ],
+        'hindi': [
+            { english: 'How much?', native: 'कितना?' },
+            { english: 'Thank you', native: 'धन्यवाद' },
+            { english: 'Where is...?', native: '...कहाँ है?' },
+            { english: 'Please stop here', native: 'कृपया यहाँ रुकिए' }
+        ]
+    };
+
+    return phrases[language] || [];
+}
+
+// ============ END TRANSLATOR MODE ============
+
 let conversationContext = [];
 
 async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
@@ -2376,9 +2678,19 @@ async function handleNameCorrection(text) {
         let userName = null;
         let waitingForName = false;
         let shoppingList = [];
-        let memoryStore = {}; 
+        let memoryStore = {};
 
-        
+        // Translator mode variables
+        let translatorMode = false;
+        let translatorLanguage = null;
+        const supportedLanguages = {
+            'tamil': { code: 'ta', name: 'Tamil', nativeName: 'தமிழ்', voiceLang: 'ta-IN' },
+            'kannada': { code: 'kn', name: 'Kannada', nativeName: 'ಕನ್ನಡ', voiceLang: 'kn-IN' },
+            'telugu': { code: 'te', name: 'Telugu', nativeName: 'తెలుగు', voiceLang: 'te-IN' },
+            'hindi': { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', voiceLang: 'hi-IN' }
+        };
+
+
         window.onload = async () => {
             
             const introScreen = document.getElementById('jarvis-intro');
@@ -3645,6 +3957,33 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
                 cleanText = cleanText.replace(regex, '');
             }
 
+            // ========== TRANSLATOR MODE HANDLING ==========
+            // Check if user wants to activate/deactivate translator
+            const translatorRequest = detectTranslatorRequest(cleanText);
+            if (translatorRequest) {
+                if (translatorRequest === 'exit') {
+                    deactivateTranslatorMode();
+                    return;
+                } else {
+                    // Activate translator for the detected language
+                    activateTranslatorMode(translatorRequest);
+                    return;
+                }
+            }
+
+            // If translator mode is active, process text as translation
+            if (translatorMode && translatorLanguage) {
+                // Don't translate common commands
+                const skipTranslation = ['help', 'stop', 'exit', 'weather', 'reminder', 'shopping'];
+                const shouldSkip = skipTranslation.some(cmd => lower.includes(cmd));
+
+                if (!shouldSkip) {
+                    await processTranslatorMode(cleanText);
+                    return;
+                }
+            }
+            // ========== END TRANSLATOR MODE HANDLING ==========
+
             if (waitingForLocation) {
                 const cleanLocation = cleanText.replace(/[?!]/g, '').trim();
                 
@@ -4101,7 +4440,14 @@ ${cityName} is a smaller town. Here's how to get around:
   → "Hotels in Chennai with non-veg"
   → "Best restaurants in Paris"
   → Dynamic suggestions (Biryani in India, Pizza in NYC, etc.)
-  → Share recommendations via SMS/WhatsApp
+  → Share recommendations via SMS/WhatsApp/Email
+
+🌐 Translator Mode - Communicate with locals!
+  → "Speak in Tamil" / "Tamil la peslama"
+  → "Help me talk to auto driver in Kannada"
+  → "Translate to Hindi" / "Telugu lo cheppu"
+  → Supports: Tamil, Kannada, Telugu, Hindi
+  → Say "stop translator" to exit
 
 🚌 Transport Info - Get around easily!
   → "How to get around Chennai?"
@@ -4128,13 +4474,13 @@ ${cityName} is a smaller town. Here's how to get around:
 
 💡 Pro Tips:
   • Ask for local specialties (Biryani, Pizza, Pasta, etc.)
-  • Use "Share" button to send to your phone
-  • Get nightlife, photo spots, shopping suggestions
+  • Use "Share" or "Email" buttons to save recommendations
+  • Use Translator to talk to rickshaw drivers, shopkeepers!
   • I remember your name and preferences!
 
 Just talk to me naturally!`;
                 addChatMessage(helpMsg, false);
-                speak("I can help with travel planning, transport, weather, shopping lists, reminders, memory, and much more. I even suggest local food based on where you're going!");
+                speak("I can help with travel planning, translation, transport, weather, shopping lists, reminders, and much more. I can even translate for you when talking to locals!");
                 return; 
             }
             
