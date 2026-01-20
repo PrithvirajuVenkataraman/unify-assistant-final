@@ -1698,25 +1698,65 @@ function extractCityFromText(text) {
     return '';
 }
 
+// Helper function to detect if response is actually a hotel listing
+function isHotelListing(text) {
+    // Must have multiple indicators that this is a hotel recommendation
+    const hotelIndicators = [
+        /\d+\.\s*[A-Z].*?(Hotel|Inn|Resort|Suites|Lodge|Hostel)/i,  // Numbered list with hotel type
+        /Price:/i,           // Price mention
+        /Rating:/i,          // Rating mention
+        /per night/i,        // Per night pricing
+        /\$\d+/,             // Dollar amount
+        /₹\d+/,              // Rupee amount
+        /stars?:/i,          // Star rating
+        /check-in/i,         // Check-in info
+        /amenities/i,        // Amenities list
+        /rooms? available/i, // Room availability
+    ];
+
+    // Count how many indicators match
+    const matchCount = hotelIndicators.filter(pattern => pattern.test(text)).length;
+
+    // Need at least 2 indicators to confirm it's a hotel listing
+    return matchCount >= 2;
+}
+
+// Helper function to detect if response is actually a restaurant listing
+function isRestaurantListing(text) {
+    const restaurantIndicators = [
+        /\d+\.\s*[A-Z].*?(Restaurant|Cafe|Bistro|Diner|Eatery|Kitchen)/i,  // Numbered list with restaurant type
+        /Must Try:/i,        // Must try dishes
+        /Cuisine:/i,         // Cuisine type
+        /Speciality:/i,      // Speciality dishes
+        /\$\$|\$\$\$/,       // Price range symbols
+        /Rating:/i,          // Rating mention
+        /Hours:/i,           // Opening hours
+        /Signature dish/i,   // Signature dish
+    ];
+
+    const matchCount = restaurantIndicators.filter(pattern => pattern.test(text)).length;
+    return matchCount >= 2;
+}
+
 function suggestQuickReplies(context) {
     const suggestions = [];
-    let lastResponse = context; 
-    
-    
+    let lastResponse = context;
+
+    // Check for itinerary first (most specific)
     if (context.includes('itinerary') || context.includes('Day 1') || context.includes('Enjoy exploring')) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
             { icon: '🏨', text: 'Hotels nearby' },
             { icon: '🍽️', text: 'Restaurants nearby' },
-            ...regionalFood.slice(0, 1), 
+            ...regionalFood.slice(0, 1),
             { icon: '🎫', text: 'Things to do at night' },
             { icon: '📸', text: 'Best photo spots' }
         );
-        
+
         addShareButton(context, 'itinerary');
     }
-    
-    else if (context.includes('hotel') || context.includes('stay') || context.includes('Food:') || context.includes('🏨')) {
+    // Check for actual hotel listings (not just mentions of "hotel")
+    else if (isHotelListing(context)) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
             { icon: '🍽️', text: 'Restaurants nearby' },
@@ -1725,11 +1765,11 @@ function suggestQuickReplies(context) {
             { icon: '🛍️', text: 'Shopping areas' },
             { icon: '☕', text: 'Coffee shops' }
         );
-        
+
         addShareButton(context, 'hotels');
     }
-    
-    else if (context.includes('restaurant') || context.includes('🍽️') || context.includes('Must Try:')) {
+    // Check for actual restaurant listings
+    else if (isRestaurantListing(context)) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
             { icon: '🏨', text: 'Hotels nearby' },
@@ -1737,10 +1777,10 @@ function suggestQuickReplies(context) {
             ...regionalFood.slice(0, 2),
             { icon: '🍰', text: 'Dessert places' }
         );
-        
+
         addShareButton(context, 'restaurants');
     }
-    
+    // Weather responses
     else if (context.includes('weather') || context.includes('temperature') || context.includes('°')) {
         suggestions.push(
             { icon: '🏨', text: 'Hotels nearby' },
@@ -1748,7 +1788,7 @@ function suggestQuickReplies(context) {
             { icon: '🗺️', text: 'Things to do' }
         );
     }
-    
+    // Default suggestions
     else {
         suggestions.push(
             { icon: '🌤️', text: 'Weather' },
@@ -1756,33 +1796,42 @@ function suggestQuickReplies(context) {
             { icon: '🛒', text: 'Shopping list' }
         );
     }
-    
+
     showQuickReplies(suggestions);
-    
-    
+
+
     updateContextualSuggestions(context);
 }
 
 function addShareButton(content, type) {
     const chatContainer = document.getElementById('chat-container');
     const shareBox = document.createElement('div');
-    shareBox.className = 'flex justify-center my-3 fade-in';
-    
+    shareBox.className = 'flex justify-center gap-3 my-3 fade-in flex-wrap';
+
     const bgClass = darkMode ? 'bg-blue-900' : 'bg-blue-50';
     const textClass = darkMode ? 'text-blue-200' : 'text-blue-900';
-    const buttonClass = darkMode ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600';
-    
-    
+    const emailBgClass = darkMode ? 'bg-purple-900' : 'bg-purple-50';
+    const emailTextClass = darkMode ? 'text-purple-200' : 'text-purple-900';
+
+
     const cleanContent = content.replace(/<[^>]*>/g, '').replace(/\[📍.*?\]/g, '');
-    
+
+    // Store content globally for email modal
+    window.pendingEmailContent = { content: cleanContent, type: type };
+
     shareBox.innerHTML = `
-        <button onclick="shareContent(\`${cleanContent.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`, '${type}')" 
+        <button onclick="shareContent(\`${cleanContent.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`, '${type}')"
                 class="${bgClass} border-2 ${darkMode ? 'border-blue-600' : 'border-blue-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2">
             <span class="text-xl">📤</span>
             <span class="text-sm font-medium ${textClass}">Share this ${type}</span>
         </button>
+        <button onclick="openEmailModal('${type}')"
+                class="${emailBgClass} border-2 ${darkMode ? 'border-purple-600' : 'border-purple-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2">
+            <span class="text-xl">📧</span>
+            <span class="text-sm font-medium ${emailTextClass}">Email this ${type}</span>
+        </button>
     `;
-    
+
     chatContainer.appendChild(shareBox);
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
@@ -1820,91 +1869,355 @@ function copyToClipboard(text) {
     });
 }
 
+// ============ EMAIL FUNCTIONALITY ============
+
+// Open email modal to get user's email
+function openEmailModal(type) {
+    // Check if modal already exists
+    let modal = document.getElementById('email-modal');
+    if (modal) {
+        modal.remove();
+    }
+
+    const bgOverlay = darkMode ? 'bg-black/70' : 'bg-black/50';
+    const modalBg = darkMode ? 'bg-gray-800' : 'bg-white';
+    const textColor = darkMode ? 'text-white' : 'text-gray-800';
+    const inputBg = darkMode ? 'bg-gray-700 text-white border-gray-600' : 'bg-white text-gray-800 border-gray-300';
+
+    modal = document.createElement('div');
+    modal.id = 'email-modal';
+    modal.className = `fixed inset-0 ${bgOverlay} flex items-center justify-center z-50 fade-in`;
+
+    // Get saved email for auto-fill
+    const savedEmail = loadSavedEmail();
+
+    modal.innerHTML = `
+        <div class="${modalBg} rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold ${textColor}">📧 Email Your ${type.charAt(0).toUpperCase() + type.slice(1)}</h3>
+                <button onclick="closeEmailModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+
+            <p class="text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'} mb-4">
+                Enter your email address to receive this ${type} in your inbox.
+            </p>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium ${textColor} mb-1">Email Address</label>
+                    <input type="email" id="email-input"
+                           placeholder="your.email@example.com"
+                           value="${savedEmail}"
+                           class="w-full px-4 py-3 rounded-xl border ${inputBg} focus:outline-none focus:ring-2 focus:ring-purple-500"
+                           onkeypress="if(event.key === 'Enter') sendEmail('${type}')">
+                </div>
+
+                <div class="flex gap-3">
+                    <button onclick="closeEmailModal()"
+                            class="flex-1 px-4 py-3 rounded-xl border ${darkMode ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-600 hover:bg-gray-100'} transition-all">
+                        Cancel
+                    </button>
+                    <button onclick="sendEmail('${type}')"
+                            class="flex-1 px-4 py-3 rounded-xl bg-purple-600 text-white hover:bg-purple-700 transition-all font-medium">
+                        Send Email
+                    </button>
+                </div>
+
+                <p class="text-xs ${darkMode ? 'text-gray-500' : 'text-gray-400'} text-center">
+                    This will open your default email app with the content ready to send.
+                </p>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Focus the input (select all if pre-filled)
+    setTimeout(() => {
+        const input = document.getElementById('email-input');
+        if (input) {
+            input.focus();
+            if (savedEmail) {
+                input.select();
+            }
+        }
+    }, 100);
+}
+
+// Close email modal
+function closeEmailModal() {
+    const modal = document.getElementById('email-modal');
+    if (modal) {
+        modal.classList.add('fade-out');
+        setTimeout(() => modal.remove(), 300);
+    }
+}
+
+// Send email using mailto
+function sendEmail(type) {
+    const emailInput = document.getElementById('email-input');
+    const email = emailInput?.value?.trim();
+
+    if (!email) {
+        showTemporaryMessage('❌ Please enter an email address');
+        return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        showTemporaryMessage('❌ Please enter a valid email address');
+        return;
+    }
+
+    // Get the stored content
+    const pending = window.pendingEmailContent;
+    if (!pending || !pending.content) {
+        showTemporaryMessage('❌ No content to send. Please try again.');
+        closeEmailModal();
+        return;
+    }
+
+    // Prepare email content
+    const typeTitle = type.charAt(0).toUpperCase() + type.slice(1);
+    const subject = encodeURIComponent(`Your ${typeTitle} from JARVIS`);
+
+    // Format content for email (limit length for mailto)
+    let emailBody = `Hi!\n\nHere's your ${type} from JARVIS Voice Assistant:\n\n`;
+    emailBody += '═'.repeat(40) + '\n\n';
+    emailBody += pending.content.substring(0, 1500); // Limit content length
+    if (pending.content.length > 1500) {
+        emailBody += '\n\n[Content truncated - full version available in app]';
+    }
+    emailBody += '\n\n' + '═'.repeat(40);
+    emailBody += '\n\nSent via JARVIS Voice Assistant';
+    emailBody += '\n\nHave a great trip! 🌟';
+
+    const body = encodeURIComponent(emailBody);
+
+    // Create mailto link
+    const mailtoLink = `mailto:${email}?subject=${subject}&body=${body}`;
+
+    // Open email client
+    window.location.href = mailtoLink;
+
+    // Save email for future use
+    try {
+        localStorage.setItem('jarvis_user_email', email);
+    } catch (e) {
+        // Non-fatal
+    }
+
+    // Close modal and show success
+    closeEmailModal();
+    showTemporaryMessage('📧 Opening your email app...');
+}
+
+// Load saved email when opening modal (auto-fill)
+function loadSavedEmail() {
+    try {
+        return localStorage.getItem('jarvis_user_email') || '';
+    } catch (e) {
+        return '';
+    }
+}
+
+// ============ END EMAIL FUNCTIONALITY ============
+
 function showTemporaryMessage(message) {
     const chatContainer = document.getElementById('chat-container');
     const msgDiv = document.createElement('div');
     msgDiv.className = 'flex justify-center my-2 fade-in';
-    
+
     const bgClass = darkMode ? 'bg-green-900' : 'bg-green-50';
     const textClass = darkMode ? 'text-green-200' : 'text-green-900';
-    
+
     msgDiv.innerHTML = `
         <div class="${bgClass} border-2 ${darkMode ? 'border-green-600' : 'border-green-300'} rounded-lg px-4 py-2">
             <span class="text-sm font-medium ${textClass}">${message}</span>
         </div>
     `;
-    
+
     chatContainer.appendChild(msgDiv);
     chatContainer.scrollTop = chatContainer.scrollHeight;
-    
-    
+
+
     setTimeout(() => {
         msgDiv.classList.add('fade-out');
         setTimeout(() => msgDiv.remove(), 300);
     }, 3000);
 }
 
-function suggestQuickReplies(context) {
-    const suggestions = [];
-    let lastResponse = context; 
-    
-    
-    if (context.includes('itinerary') || context.includes('Day 1') || context.includes('Enjoy exploring')) {
-        const regionalFood = getRegionalFood(context);
-        suggestions.push(
-            { icon: '🏨', text: 'Hotels nearby' },
-            { icon: '🍽️', text: 'Restaurants nearby' },
-            ...regionalFood.slice(0, 1), 
-            { icon: '🎫', text: 'Things to do at night' },
-            { icon: '📸', text: 'Best photo spots' }
-        );
-        
-        addShareButton(context, 'itinerary');
+// ============ FEEDBACK & LEARNING SYSTEM ============
+
+// Store the last query-response pair for feedback
+let lastQueryResponse = { query: '', response: '' };
+
+// Load learned preferences from localStorage
+function loadLearnedPreferences() {
+    try {
+        const data = localStorage.getItem('jarvis_learned_preferences');
+        return data ? JSON.parse(data) : {
+            positivePatterns: [],      // Successful query patterns
+            preferredTopics: {},       // Topics user likes
+            feedbackCount: { positive: 0, negative: 0 },
+            lastUpdated: null
+        };
+    } catch (e) {
+        return { positivePatterns: [], preferredTopics: {}, feedbackCount: { positive: 0, negative: 0 }, lastUpdated: null };
     }
-    
-    else if (context.includes('hotel') || context.includes('stay') || context.includes('Food:') || context.includes('🏨')) {
-        const regionalFood = getRegionalFood(context);
-        suggestions.push(
-            { icon: '🍽️', text: 'Restaurants nearby' },
-            { icon: '🗺️', text: 'Plan activities' },
-            ...regionalFood.slice(0, 1),
-            { icon: '🛍️', text: 'Shopping areas' },
-            { icon: '☕', text: 'Coffee shops' }
-        );
-        
-        addShareButton(context, 'hotels');
-    }
-    
-    else if (context.includes('restaurant') || context.includes('🍽️') || context.includes('Must Try:')) {
-        const regionalFood = getRegionalFood(context);
-        suggestions.push(
-            { icon: '🏨', text: 'Hotels nearby' },
-            { icon: '🗺️', text: 'Things to do' },
-            ...regionalFood.slice(0, 2),
-            { icon: '🍰', text: 'Dessert places' }
-        );
-        
-        addShareButton(context, 'restaurants');
-    }
-    
-    else if (context.includes('weather') || context.includes('temperature') || context.includes('°')) {
-        suggestions.push(
-            { icon: '🏨', text: 'Hotels nearby' },
-            { icon: '🍽️', text: 'Best restaurants' },
-            { icon: '🗺️', text: 'Things to do' }
-        );
-    }
-    
-    else {
-        suggestions.push(
-            { icon: '🌤️', text: 'Weather' },
-            { icon: '🗺️', text: 'Plan a trip' },
-            { icon: '🛒', text: 'Shopping list' }
-        );
-    }
-    
-    showQuickReplies(suggestions);
 }
+
+// Save learned preferences to localStorage
+function saveLearnedPreferences(prefs) {
+    try {
+        prefs.lastUpdated = new Date().toISOString();
+        localStorage.setItem('jarvis_learned_preferences', JSON.stringify(prefs));
+    } catch (e) {
+        console.log('Could not save preferences:', e);
+    }
+}
+
+// Extract topic keywords from a query
+function extractTopics(text) {
+    const topics = [];
+    const lowerText = text.toLowerCase();
+
+    const topicPatterns = {
+        'travel': /\b(trip|travel|visit|itinerary|vacation|holiday|tour)\b/,
+        'hotels': /\b(hotel|stay|accommodation|resort|hostel|booking)\b/,
+        'restaurants': /\b(restaurant|food|eat|dining|cuisine|cafe)\b/,
+        'weather': /\b(weather|temperature|forecast|rain|sunny|climate)\b/,
+        'activities': /\b(things to do|activities|attractions|sightseeing|places)\b/,
+        'transport': /\b(transport|bus|train|metro|taxi|uber|flight)\b/,
+        'shopping': /\b(shopping|mall|market|buy|store)\b/
+    };
+
+    for (const [topic, pattern] of Object.entries(topicPatterns)) {
+        if (pattern.test(lowerText)) {
+            topics.push(topic);
+        }
+    }
+
+    return topics;
+}
+
+// Handle positive feedback (thumbs up)
+function handlePositiveFeedback(buttonElement) {
+    const prefs = loadLearnedPreferences();
+
+    // Record the successful interaction
+    if (lastQueryResponse.query) {
+        const topics = extractTopics(lastQueryResponse.query);
+
+        // Store successful query pattern (limit to 50 patterns)
+        prefs.positivePatterns.push({
+            query: lastQueryResponse.query.substring(0, 100),
+            topics: topics,
+            timestamp: new Date().toISOString()
+        });
+
+        // Keep only last 50 patterns
+        if (prefs.positivePatterns.length > 50) {
+            prefs.positivePatterns = prefs.positivePatterns.slice(-50);
+        }
+
+        // Increment topic preferences
+        topics.forEach(topic => {
+            prefs.preferredTopics[topic] = (prefs.preferredTopics[topic] || 0) + 1;
+        });
+    }
+
+    prefs.feedbackCount.positive++;
+    saveLearnedPreferences(prefs);
+
+    // Update UI
+    const container = buttonElement.closest('.feedback-container');
+    container.innerHTML = `
+        <div class="flex items-center gap-2 text-green-500">
+            <span>👍</span>
+            <span class="text-xs">Thanks for the feedback!</span>
+        </div>
+    `;
+
+    // Fade out after a moment
+    setTimeout(() => {
+        container.classList.add('fade-out');
+        setTimeout(() => container.remove(), 300);
+    }, 2000);
+}
+
+// Handle negative feedback (thumbs down)
+function handleNegativeFeedback(buttonElement) {
+    const prefs = loadLearnedPreferences();
+    prefs.feedbackCount.negative++;
+    saveLearnedPreferences(prefs);
+
+    // Update UI
+    const container = buttonElement.closest('.feedback-container');
+    container.innerHTML = `
+        <div class="flex items-center gap-2 text-orange-500">
+            <span>👎</span>
+            <span class="text-xs">Sorry about that. I'll try to do better!</span>
+        </div>
+    `;
+
+    // Fade out after a moment
+    setTimeout(() => {
+        container.classList.add('fade-out');
+        setTimeout(() => container.remove(), 300);
+    }, 2000);
+}
+
+// Add feedback buttons after AI response
+function addFeedbackButtons(query, response) {
+    // Store for feedback reference
+    lastQueryResponse = { query, response };
+
+    const chatContainer = document.getElementById('chat-container');
+    const feedbackDiv = document.createElement('div');
+    feedbackDiv.className = 'flex justify-start my-2 fade-in feedback-container';
+
+    const bgClass = darkMode ? 'bg-gray-800' : 'bg-gray-100';
+    const textClass = darkMode ? 'text-gray-400' : 'text-gray-600';
+
+    feedbackDiv.innerHTML = `
+        <div class="flex items-center gap-3 ${bgClass} rounded-full px-3 py-1.5 ml-2">
+            <span class="text-xs ${textClass}">Was this helpful?</span>
+            <button onclick="handlePositiveFeedback(this)"
+                    class="p-1.5 rounded-full hover:bg-green-100 dark:hover:bg-green-900 transition-all"
+                    title="Yes, helpful!">
+                <span class="text-lg">👍</span>
+            </button>
+            <button onclick="handleNegativeFeedback(this)"
+                    class="p-1.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900 transition-all"
+                    title="Not quite right">
+                <span class="text-lg">👎</span>
+            </button>
+        </div>
+    `;
+
+    chatContainer.appendChild(feedbackDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+// Get user's preferred topics for personalization
+function getUserPreferredTopics() {
+    const prefs = loadLearnedPreferences();
+    // Sort topics by preference count
+    return Object.entries(prefs.preferredTopics)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([topic]) => topic);
+}
+
+// Get feedback stats for display
+function getFeedbackStats() {
+    const prefs = loadLearnedPreferences();
+    return prefs.feedbackCount;
+}
+
+// ============ END FEEDBACK SYSTEM ============
 
 let conversationContext = [];
 
@@ -4259,20 +4572,23 @@ I had trouble getting specific recommendations, but you can search directly:
             }
             
             else {
-                
+
                 const aiResponse = await callAIWithTyping(text);
                 addChatMessage(aiResponse.response, false);
                 speak(aiResponse.response);
-                
-                
+
+
                 saveToHistory(text, aiResponse.response);
-                
-                
+
+
                 suggestQuickReplies(aiResponse.response);
+
+                // Add feedback buttons for learning
+                addFeedbackButtons(text, aiResponse.response);
             }
         }
 
-        
+
         function createWeatherEffect(weatherCode, temperature) {
             
             const container = document.getElementById('weather-card');
