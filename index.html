@@ -3356,11 +3356,18 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
                         const selected = choices[choice];
                         const lat = parseFloat(selected.lat);
                         const lon = parseFloat(selected.lon);
-                        
+
                         const addr = selected.address;
-                        let locationName = addr.city || addr.town || addr.village || addr.hamlet || selected.display_name.split(',')[0];
-                        if (addr.state) locationName += `, ${addr.state}`;
-                        if (addr.country) locationName += `, ${addr.country}`;
+                        // Prefer city/town over smaller localities
+                        let locationName = addr.city || addr.town || addr.municipality || addr.county || addr.village || addr.hamlet || selected.display_name.split(',')[0];
+                        if (addr.country_code === 'us' && addr.state) {
+                            locationName += `, ${addr.state}`;
+                        } else if (addr.state && addr.state !== locationName) {
+                            locationName += `, ${addr.state}`;
+                            if (addr.country) locationName += `, ${addr.country}`;
+                        } else if (addr.country) {
+                            locationName += `, ${addr.country}`;
+                        }
                         
                         window.pendingLocationChoices = null;
                         await fetchWeather(lat, lon, locationName);
@@ -3373,14 +3380,21 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
                     const addr = loc.address;
                     const country = addr.country ? addr.country.toLowerCase() : '';
                     const state = addr.state ? addr.state.toLowerCase() : '';
-                    
+
                     if (cleanText.toLowerCase().includes(country) || cleanText.toLowerCase().includes(state)) {
                         const lat = parseFloat(loc.lat);
                         const lon = parseFloat(loc.lon);
-                        
-                        let locationName = addr.city || addr.town || addr.village || addr.hamlet || loc.display_name.split(',')[0];
-                        if (addr.state) locationName += `, ${addr.state}`;
-                        if (addr.country) locationName += `, ${addr.country}`;
+
+                        // Prefer city/town over smaller localities
+                        let locationName = addr.city || addr.town || addr.municipality || addr.county || addr.village || addr.hamlet || loc.display_name.split(',')[0];
+                        if (addr.country_code === 'us' && addr.state) {
+                            locationName += `, ${addr.state}`;
+                        } else if (addr.state && addr.state !== locationName) {
+                            locationName += `, ${addr.state}`;
+                            if (addr.country) locationName += `, ${addr.country}`;
+                        } else if (addr.country) {
+                            locationName += `, ${addr.country}`;
+                        }
                         
                         window.pendingLocationChoices = null;
                         await fetchWeather(lat, lon, locationName);
@@ -3488,33 +3502,33 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
                                     
                                     
                                     const addr = reverseData.address;
-                                    
-                                    
-                                    
-                                    
-                                    let cityName = addr.city || 
-                                                   addr.town || 
-                                                   addr.village || 
-                                                   addr.hamlet || 
-                                                   addr.suburb || 
-                                                   addr.neighbourhood || 
-                                                   addr.county || 
+
+                                    // Prefer city/town over smaller localities (suburb, village, hamlet, neighbourhood)
+                                    // This ensures "Mason, Ohio" instead of "Socialville, Ohio"
+                                    let cityName = addr.city ||
+                                                   addr.town ||
                                                    addr.municipality ||
+                                                   addr.county ||
+                                                   addr.village ||
+                                                   addr.hamlet ||
+                                                   addr.suburb ||
+                                                   addr.neighbourhood ||
                                                    addr.state_district ||
                                                    null;
-                                    
-                                    
+
+                                    // Format location name based on country
                                     if (cityName) {
-                                        
-                                        if (addr.state && addr.country_code === 'us') {
+                                        // For US: City, State format
+                                        if (addr.country_code === 'us' && addr.state) {
                                             cityName = `${cityName}, ${addr.state}`;
-                                        } else if (addr.state && addr.country) {
+                                        } else if (addr.state && addr.state !== cityName) {
+                                            // For international: City, State, Country
                                             cityName = `${cityName}, ${addr.state}, ${addr.country}`;
                                         } else if (addr.country && addr.country_code !== 'us') {
                                             cityName = `${cityName}, ${addr.country}`;
                                         }
                                     } else {
-                                        
+                                        // Fallback
                                         cityName = addr.state || addr.country || "your location";
                                     }
                                     
@@ -4186,11 +4200,22 @@ Search "restaurants in ${cityName || 'your area'}" on Google Maps to find places
                 const longitude = parseFloat(location.lon);
                 
                 const addr = location.address;
-                let locationName = addr.city || addr.town || addr.village || addr.hamlet || location.display_name.split(',')[0];
-                if (addr.state) locationName += `, ${addr.state}`;
-                if (addr.country) locationName += `, ${addr.country}`;
-                
-                
+                // Prefer city/town over smaller localities (suburb, village, hamlet, neighbourhood)
+                // This ensures "Mason, Ohio" instead of "Socialville, Ohio"
+                let locationName = addr.city || addr.town || addr.municipality || addr.county || addr.village || addr.hamlet || location.display_name.split(',')[0];
+
+                // For US locations: City, State format
+                // For international: City, State, Country format (skip state if same as city)
+                if (addr.country_code === 'us' && addr.state) {
+                    locationName += `, ${addr.state}`;
+                } else if (addr.state && addr.state !== locationName) {
+                    locationName += `, ${addr.state}`;
+                    if (addr.country) locationName += `, ${addr.country}`;
+                } else if (addr.country) {
+                    locationName += `, ${addr.country}`;
+                }
+
+
                 await fetchWeather(latitude, longitude, locationName, cityName.trim());
                 
             } catch (error) {
