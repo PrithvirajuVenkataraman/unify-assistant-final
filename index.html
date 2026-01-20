@@ -3876,59 +3876,60 @@ Just talk to me naturally!`;
 LOCATION: ${itineraryLocation || 'Extract from user query'}
 ${placeSearchResults}
 
-⛔ STRICT ANTI-HALLUCINATION RULES:
-1. ONLY include places that are REAL and VERIFIED to exist in ${itineraryLocation || 'the location'}
-2. If web search results are provided above, USE THOSE PLACES
-3. DO NOT invent or make up place names
-4. If you're not 100% sure a place exists, DO NOT include it
-5. Better to list fewer REAL places than many fake ones
-6. For temples/monuments: use their REAL official names
-7. For small towns: focus on the MAIN attractions (temple, market, lake etc.)
+⛔ CRITICAL: EVERY ENTRY MUST BE A SPECIFIC, NAMED PLACE
+Each activity must have a real, proper name - not generic descriptions.
 
-⛔ CRITICAL - NO REPETITION:
-- NEVER repeat the same place on multiple days
-- Each attraction should appear ONLY ONCE in the entire itinerary
-- Track places you've mentioned and ensure variety across all days
-- If a city has limited attractions, include day trips to nearby places
+✅ GOOD (specific names):
+- "Eiffel Tower" NOT "famous tower"
+- "Central Park" NOT "a park in the city"
+- "Taj Mahal" NOT "historic monument"
+- "Marina Beach" NOT "visit the beach"
+- "Meenakshi Temple" NOT "local temple"
+- "Grand Bazaar" NOT "local market"
+- "Louvre Museum" NOT "art museum"
 
-⛔ EXCLUDE NICHE/SPECIAL INTEREST ACTIVITIES:
-- NO sports matches (football, cricket, etc.) - not relevant for general tourists
-- NO concerts or live events (these are date-specific)
-- NO activities requiring specific memberships or expertise
-- Focus ONLY on universally accessible tourist attractions
+❌ FORBIDDEN - NEVER INCLUDE THESE:
+- Generic activities: "take a walk", "explore the area", "get familiar"
+- Transportation as activities: "ride the subway", "take a bus tour"
+- Vague suggestions: "visit local shops", "grab lunch", "try street food"
+- Unnamed places: "a local temple", "nearby park", "famous monument"
+- Filler content: "relax", "reflect on trip", "enjoy the views", "take a break"
+- Rest time: "rest at hotel", "unwind", "free time"
 
-WHAT TO INCLUDE:
-- Real tourist attractions from search results
-- Well-known landmarks you're CERTAIN exist
-- Historical sites, temples, parks, museums, lakes, viewpoints
-- Local markets and shopping areas
-- Day trips to nearby attractions for longer itineraries
-- General activities (morning walk, local market visit) are OK
+⛔ NO REPETITION:
+- Each place appears ONLY ONCE across all days
+- For week-long trips, include day trips to nearby areas
 
-WHAT TO AVOID:
-- Made-up restaurant names
-- Made-up hotel names
-- Invented attraction names
-- Places you're unsure about
-- Sports matches, concerts, or date-specific events
-- Repeating the same place on different days
+⛔ EXCLUDE:
+- Sports matches, concerts, date-specific events
 
-FORMAT (clean, no ** bold markers):
+✅ INCLUDE (always with SPECIFIC NAMES):
+- Landmarks and monuments (actual names)
+- Museums and galleries (specific names)
+- Historic sites (proper names)
+- Named parks and gardens
+- Famous markets (by name)
+- Viewpoints and observation decks (specific names)
+- Religious sites (specific temple/church names)
+- Notable neighborhoods (by name)
+
+FORMAT (no ** markers):
 
 Day 1 in ${itineraryLocation || '[City]'}:
 
-9:00am: 🏛️ [REAL Place Name]
-   - What to see/do
-   - Duration
+9:00am: 🏛️ [SPECIFIC PLACE NAME]
+   - What to see/do there
+   - Duration: X hours
 
-12:00pm: [Next REAL place]
-   ...
+12:00pm: 🗽 [ANOTHER SPECIFIC PLACE]
+   - Key highlights
+   - Duration: X hours
 
-Keep it to 4-5 REAL places per day maximum. ENSURE NO PLACE IS REPEATED ACROSS DAYS.
+3-4 NAMED attractions per day. NO generic filler.
 
 End with: "Enjoy exploring ${itineraryLocation || 'the area'}! Ask me about hotels or restaurants separately."
 
-Now create the itinerary using ONLY real, verified places with NO REPETITION:`;
+BEFORE RESPONDING: Check that EVERY entry has a specific place name, not generic text!`;
                 
                 const aiResponse = await callAIWithTyping(itineraryPrompt, '🗺️ Planning your itinerary...');
                 addChatMessage(aiResponse.response, false);
