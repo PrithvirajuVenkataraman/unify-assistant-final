@@ -3862,10 +3862,14 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             }
             
             // Hotel/Restaurant/Transport queries - uses web search, no AI hallucination
-            if (cleanText.toLowerCase().match(/\b(restaurant|eat|eating|dining|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i) ||
-                     cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i) ||
-                     cleanText.toLowerCase().match(/\b(transport|transportation|bus|train|taxi|uber|ola|auto|rickshaw|metro|subway|getting around|get around|how to reach|how do i get|travel to)\b/i)) {
-                
+            // DEBUG: Check if restaurant condition matches
+            const isRestaurantMatch = cleanText.toLowerCase().match(/\b(restaurant|eat|eating|dining|meal|lunch|dinner|breakfast|cafe|cafes|place to eat|places to eat)\b/i);
+            const isHotelMatch = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i);
+            const isTransportMatch = cleanText.toLowerCase().match(/\b(transport|transportation|bus|train|taxi|uber|ola|auto|rickshaw|metro|subway|getting around|get around|how to reach|how do i get|travel to)\b/i);
+            console.log('DEBUG processCommand:', { cleanText, isRestaurantMatch: !!isRestaurantMatch, isHotelMatch: !!isHotelMatch, isTransportMatch: !!isTransportMatch });
+
+            if (isRestaurantMatch || isHotelMatch || isTransportMatch) {
+
                 const queryType = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation)\b/i) ? 'hotel' : 
                                   cleanText.toLowerCase().match(/\b(transport|bus|train|taxi)\b/i) ? 'transport' : 'food';
                 
