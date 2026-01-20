@@ -2402,7 +2402,11 @@ async function handleNameCorrection(text) {
                 const textForSpeech = text.replace(/<[^>]*>/g, '');
                 
                 
-                const formattedText = text.replace(/\n/g, '<br>');
+                // Convert markdown links [text](url) to HTML anchor tags, then newlines to <br>
+                const formattedText = text
+                    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-blue-500 hover:text-blue-700 underline">$1</a>')
+                    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\n/g, '<br>');
                 
                 messageDiv.innerHTML = `
                     <div class="flex items-start gap-2 max-w-md">
@@ -3861,12 +3865,10 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 return; 
             }
             
-            // Hotel/Restaurant/Transport queries - uses web search, no AI hallucination
-            // DEBUG: Check if restaurant condition matches
+            // Hotel/Restaurant/Transport queries
             const isRestaurantMatch = cleanText.toLowerCase().match(/\b(restaurants?|eat|eating|dining|meals?|lunch|dinner|breakfast|cafes?|place to eat|places to eat)\b/i);
             const isHotelMatch = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i);
             const isTransportMatch = cleanText.toLowerCase().match(/\b(transport|transportation|bus|train|taxi|uber|ola|auto|rickshaw|metro|subway|getting around|get around|how to reach|how do i get|travel to)\b/i);
-            console.log('DEBUG processCommand:', { cleanText, isRestaurantMatch: !!isRestaurantMatch, isHotelMatch: !!isHotelMatch, isTransportMatch: !!isTransportMatch });
 
             if (isRestaurantMatch || isHotelMatch || isTransportMatch) {
 
@@ -3958,29 +3960,94 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     
                     // Transport query handling
                     if (queryType === 'transport') {
-                        const transportQuery = encodeURIComponent(`${cityName} public transport how to get around`);
-                        const transportPrompt = `How to get around ${fullLocation || cityName}? Brief transport info including buses, trains, taxis, auto-rickshaws if applicable. Keep it under 100 words.`;
+                        // Major cities with metro/extensive public transport
+                        const majorCities = [
+                            'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad',
+                            'pune', 'ahmedabad', 'jaipur', 'lucknow', 'kanpur', 'nagpur', 'kochi', 'cochin',
+                            'new york', 'nyc', 'los angeles', 'chicago', 'san francisco', 'boston', 'seattle',
+                            'london', 'paris', 'tokyo', 'singapore', 'dubai', 'hong kong', 'sydney', 'toronto'
+                        ];
 
-                        const aiResponse = await callAIWithTyping(transportPrompt, '🚌 Getting transport info...');
+                        const cityLower = cityName.toLowerCase();
+                        const isMajorCity = majorCities.some(city => cityLower.includes(city));
 
-                        const transportMsg = aiResponse.response + `
+                        let transportMsg;
+
+                        if (isMajorCity) {
+                            // Major city - show Google Maps transit embed
+                            const transitQuery = encodeURIComponent(`transit in ${cityName}`);
+                            transportMsg = `🚌 **Transport in ${cityName}**
+
+${cityName} has excellent public transportation options!
+
+<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
+<iframe
+  src="https://maps.google.com/maps?q=metro+stations+${transitQuery}&output=embed"
+  width="100%"
+  height="300"
+  style="border:0; display:block;"
+  allowfullscreen=""
+  loading="lazy">
+</iframe>
+</div>
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
-🔍 **More transport info:**
+🔍 **Find transit options:**
 
-📍 [Search Google Maps](https://www.google.com/maps/search/transit+near+${encodeURIComponent(cityName)}) - Find transit options
+🚇 [Metro/Subway Stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(cityName)}) - Find nearest stations
 
-🔎 [Search on Google](https://www.google.com/search?q=${transportQuery}) - Detailed guides`;
+🚌 [Bus Stops](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(cityName)}) - Local bus routes
+
+🚕 [Book a Ride](https://www.google.com/search?q=uber+ola+${encodeURIComponent(cityName)}) - Uber/Ola available
+
+📍 [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
+
+                            speak(`${cityName} has good public transport including metro and buses. Check the map for stations!`);
+                        } else {
+                            // Small town - auto-rickshaws and local transport
+                            transportMsg = `🚌 **Transport in ${cityName}**
+
+${cityName} is a smaller town. Here's how to get around:
+
+🛺 **Auto-Rickshaws** (Most Reliable)
+- Available throughout town
+- Negotiate fare before starting OR insist on meter
+- Typical fare: ₹20-50 for short trips
+
+🚌 **Local Buses**
+- Available from the bus stand
+- Ask locals for routes and timings
+- Very affordable option
+
+🚗 **Taxi/Cab Services**
+- Uber/Ola may have limited availability
+- Ask your hotel to arrange a trusted driver
+- Consider hiring for full-day sightseeing
+
+💡 **Pro Tips:**
+- Download Ola/Uber as backup but don't rely on them
+- Ask hotel staff for trusted auto drivers
+- For temple visits, autos often offer package rates
+- Keep cash handy - digital payments may not work everywhere
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔍 **More info:**
+
+🔎 [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
+
+📍 [Find Bus Stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(cityName)}) - Main bus terminal`;
+
+                            speak(`${cityName} is a smaller town. Auto-rickshaws are your best bet. I've listed all your options.`);
+                        }
 
                         addChatMessage(transportMsg, false);
-                        speak(`Here's transport information for ${cityName}.`);
                         saveToHistory(text, `Transport info for ${cityName}`);
                         return;
                     }
 
                     // Restaurant query - Use AI + Google Search links
-                    console.log('DEBUG: Starting restaurant query for', cityName); // Debug log
                     const restaurantPrompt = `List restaurants and food places in ${fullLocation || cityName}.
 
 IMPORTANT RULES:
@@ -4025,7 +4092,6 @@ Keep response concise - under 200 words.`;
 
 ⭐ [Check TripAdvisor](https://www.google.com/search?q=${tripadvisorQuery}) - Tourist recommendations`;
 
-                    console.log('DEBUG: Restaurant response with links:', foodMsg.substring(0, 200)); // Debug log
                     addChatMessage(foodMsg, false);
                     speak(`Here are restaurant suggestions for ${cityName}. I've included search links to find more options!`);
 
