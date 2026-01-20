@@ -1,4 +1,7 @@
 // api/chat-groq.js - OPTIMIZED FOR GROQ FREE TIER
+// Deploy this file to: /api/chat-groq.js (Vercel Edge Function)
+// Required ENV: GROQ_API_KEY
+
 export const config = {
   runtime: 'edge',
 };
@@ -47,7 +50,7 @@ function selectModel(query) {
   // - Yes/no answers
   
   const smallModel = 'llama-3.1-8b-instant'; // Fastest, cheapest
-  const largeModel = 'llama-3.3-70b-versatile'; // Best quality
+  const largeModel = 'llama-3.3-70b-versatile'; // Best quality (or use 'llama-3.1-70b-versatile' as fallback)
   
   // Use large model only for:
   if (
