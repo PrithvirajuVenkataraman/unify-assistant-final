@@ -3952,40 +3952,75 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         return;
                     }
                     
-                    // Restaurant query - Google Maps embed
-                    const searchQuery = encodeURIComponent(`restaurants in ${fullLocation || cityName}`);
-                    const foodMsg = `🍽️ **Restaurants in ${cityName}**
+                    // Restaurant query - Use AI + Google Search links
+                    const restaurantPrompt = `List restaurants and food places in ${fullLocation || cityName}.
 
-<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
-<iframe 
-  src="https://maps.google.com/maps?q=restaurants+in+${searchQuery}&output=embed"
-  width="100%" 
-  height="300"
-  style="border:0; display:block;" 
-  allowfullscreen=""
-  loading="lazy"
-  referrerpolicy="no-referrer-when-downgrade">
-</iframe>
-</div>
+IMPORTANT RULES:
+1. ONLY mention restaurants you are 100% CERTAIN exist - well-known chains or famous local spots
+2. If you're not sure about specific restaurant names in ${cityName}, focus on:
+   - Types of restaurants available (vegetarian, non-veg, multi-cuisine)
+   - Local food specialties to try
+   - What to search for on Google Maps
+3. DO NOT invent restaurant names
 
-📍 Click on markers to see ratings, reviews & directions!
+FORMAT (no ** bold markers, use plain text):
 
-🍛 **Local tip:** In Tamil Nadu, "Mess" = local meals, "Military Hotel" = non-veg`;
+🍽️ Restaurants in ${cityName}
+
+[If you know real restaurant names, list 3-5 with brief descriptions]
+[If unsure, describe the food scene and what to look for]
+
+🍛 Local Specialties to Try:
+- List 3-4 famous dishes of this region
+
+💡 Search Tips:
+- What terms to search on Google Maps (e.g., "Mess" for local meals in Tamil Nadu)
+
+Keep response concise - under 200 words.`;
+
+                    const aiResponse = await callAIWithTyping(restaurantPrompt, '🍽️ Finding restaurants...');
+
+                    // Build response with clickable search links
+                    const mapsQuery = encodeURIComponent(`restaurants in ${fullLocation || cityName}`);
+                    const googleQuery = encodeURIComponent(`best restaurants in ${fullLocation || cityName}`);
+                    const tripadvisorQuery = encodeURIComponent(`${fullLocation || cityName} restaurants tripadvisor`);
+
+                    let foodMsg = aiResponse.response + `
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔍 **Search for restaurants:**
+
+📍 [Open Google Maps](https://www.google.com/maps/search/${mapsQuery}) - See nearby places with ratings
+
+🔎 [Search on Google](https://www.google.com/search?q=${googleQuery}) - Read reviews and articles
+
+⭐ [Check TripAdvisor](https://www.google.com/search?q=${tripadvisorQuery}) - Tourist recommendations`;
 
                     addChatMessage(foodMsg, false);
-                    speak(`Here are restaurants in ${cityName}. Check out the map!`);
-                
+                    speak(`Here are restaurant suggestions for ${cityName}. I've included search links to find more options!`);
+
                     saveToHistory(text, `Restaurant search for ${cityName}`);
                     showFastFoodBox();
                     showTransportSuggestion();
                     return;
                 } catch (error) {
-                    // If anything fails, show a simple message
+                    hideThinkingIndicator();
+                    // If anything fails, show search links
+                    const mapsQuery = encodeURIComponent(`restaurants in ${cityName || 'your area'}`);
+                    const googleQuery = encodeURIComponent(`best restaurants in ${cityName || 'your area'}`);
+
                     const fallbackMsg = `🍽️ **Restaurants in ${cityName || 'your area'}**
 
-Search "restaurants in ${cityName || 'your area'}" on Google Maps to find places with ratings and reviews!`;
+I had trouble getting specific recommendations, but you can search directly:
+
+📍 [Open Google Maps](https://www.google.com/maps/search/${mapsQuery}) - See nearby restaurants with ratings
+
+🔎 [Search on Google](https://www.google.com/search?q=${googleQuery}) - Find reviews and articles
+
+💡 **Tip:** Look for places with 4+ stars and recent reviews!`;
                     addChatMessage(fallbackMsg, false);
-                    speak(`Search for restaurants on Google Maps!`);
+                    speak(`Check the search links to find restaurants in ${cityName}!`);
                     return;
                 }
             }
