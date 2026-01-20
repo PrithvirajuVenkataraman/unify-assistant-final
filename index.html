@@ -3871,7 +3871,7 @@ Just talk to me naturally!`;
                     } catch (e) {}
                 }
                 
-                const itineraryPrompt = `${userName ? `The user's name is ${userName}.` : ''} Create a day-by-day itinerary for: "${text}". 
+                const itineraryPrompt = `${userName ? `The user's name is ${userName}.` : ''} Create a day-by-day itinerary for: "${text}".
 
 LOCATION: ${itineraryLocation || 'Extract from user query'}
 ${placeSearchResults}
@@ -3885,16 +3885,33 @@ ${placeSearchResults}
 6. For temples/monuments: use their REAL official names
 7. For small towns: focus on the MAIN attractions (temple, market, lake etc.)
 
+⛔ CRITICAL - NO REPETITION:
+- NEVER repeat the same place on multiple days
+- Each attraction should appear ONLY ONCE in the entire itinerary
+- Track places you've mentioned and ensure variety across all days
+- If a city has limited attractions, include day trips to nearby places
+
+⛔ EXCLUDE NICHE/SPECIAL INTEREST ACTIVITIES:
+- NO sports matches (football, cricket, etc.) - not relevant for general tourists
+- NO concerts or live events (these are date-specific)
+- NO activities requiring specific memberships or expertise
+- Focus ONLY on universally accessible tourist attractions
+
 WHAT TO INCLUDE:
 - Real tourist attractions from search results
 - Well-known landmarks you're CERTAIN exist
+- Historical sites, temples, parks, museums, lakes, viewpoints
+- Local markets and shopping areas
+- Day trips to nearby attractions for longer itineraries
 - General activities (morning walk, local market visit) are OK
 
 WHAT TO AVOID:
 - Made-up restaurant names
-- Made-up hotel names  
+- Made-up hotel names
 - Invented attraction names
 - Places you're unsure about
+- Sports matches, concerts, or date-specific events
+- Repeating the same place on different days
 
 FORMAT (clean, no ** bold markers):
 
@@ -3907,11 +3924,11 @@ Day 1 in ${itineraryLocation || '[City]'}:
 12:00pm: [Next REAL place]
    ...
 
-Keep it to 4-5 REAL places per day maximum.
+Keep it to 4-5 REAL places per day maximum. ENSURE NO PLACE IS REPEATED ACROSS DAYS.
 
 End with: "Enjoy exploring ${itineraryLocation || 'the area'}! Ask me about hotels or restaurants separately."
 
-Now create the itinerary using ONLY real, verified places:`;
+Now create the itinerary using ONLY real, verified places with NO REPETITION:`;
                 
                 const aiResponse = await callAIWithTyping(itineraryPrompt, '🗺️ Planning your itinerary...');
                 addChatMessage(aiResponse.response, false);
