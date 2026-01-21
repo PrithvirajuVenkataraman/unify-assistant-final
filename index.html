@@ -1178,6 +1178,460 @@
             font-size: 1.125rem;
             font-weight: 500;
         }
+
+        /* Full-width map container styles */
+        .map-message {
+            width: 100% !important;
+            max-width: none !important;
+        }
+
+        .map-message .map-container {
+            width: 100% !important;
+            min-width: 350px;
+        }
+
+        .map-message .map-container iframe {
+            width: 100% !important;
+            height: 350px !important;
+            min-height: 300px;
+        }
+
+        @media (min-width: 768px) {
+            .map-message .map-container iframe {
+                height: 400px !important;
+            }
+        }
+
+        /* ========== PROFESSIONAL UI/UX ENHANCEMENTS ========== */
+
+        /* Import Google Fonts for better typography */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+        /* Base typography improvements */
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Enhanced header title */
+        .jarvis-title {
+            font-family: 'Space Grotesk', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.5px;
+        }
+
+        body.dark .jarvis-title {
+            background: linear-gradient(135deg, #00d9ff 0%, #00ffcc 50%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+        }
+
+        /* Glassmorphism card effect */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.08),
+                0 2px 8px rgba(0, 0, 0, 0.04),
+                inset 0 1px 0 rgba(255, 255, 255, 0.6);
+        }
+
+        body.dark .glass-card {
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                0 2px 8px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        /* Enhanced floating input bar */
+        .floating-input-bar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(200, 200, 200, 0.3);
+            box-shadow:
+                0 -4px 30px rgba(0, 0, 0, 0.08),
+                0 -1px 4px rgba(0, 0, 0, 0.04);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body.dark .floating-input-bar {
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow:
+                0 -4px 30px rgba(0, 0, 0, 0.3),
+                0 -1px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Modern input field styling */
+        .modern-input {
+            background: rgba(243, 244, 246, 0.8);
+            border: 2px solid transparent;
+            border-radius: 16px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .modern-input:hover {
+            background: rgba(243, 244, 246, 1);
+            border-color: rgba(139, 92, 246, 0.3);
+        }
+
+        .modern-input:focus-within {
+            background: white;
+            border-color: rgba(139, 92, 246, 0.6);
+            box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.15);
+        }
+
+        body.dark .modern-input {
+            background: rgba(30, 41, 59, 0.8);
+        }
+
+        body.dark .modern-input:hover {
+            background: rgba(30, 41, 59, 1);
+            border-color: rgba(0, 217, 255, 0.3);
+        }
+
+        body.dark .modern-input:focus-within {
+            background: rgba(15, 23, 42, 1);
+            border-color: rgba(0, 217, 255, 0.6);
+            box-shadow: 0 0 0 4px rgba(0, 217, 255, 0.15);
+        }
+
+        /* Animated gradient button */
+        .gradient-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-size: 200% 200%;
+            animation: gradientShift 3s ease infinite;
+            transition: all 0.3s ease;
+        }
+
+        .gradient-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .gradient-btn:active {
+            transform: scale(0.98);
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* Enhanced suggestion chips */
+        .suggestion-chip {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%);
+            border: 1px solid rgba(139, 92, 246, 0.15);
+            border-radius: 12px;
+            padding: 12px 16px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .suggestion-chip::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .suggestion-chip:hover {
+            transform: translateY(-2px);
+            border-color: rgba(139, 92, 246, 0.4);
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.15);
+        }
+
+        .suggestion-chip:hover::before {
+            opacity: 1;
+        }
+
+        body.dark .suggestion-chip {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.9) 100%);
+            border-color: rgba(0, 217, 255, 0.15);
+        }
+
+        body.dark .suggestion-chip:hover {
+            border-color: rgba(0, 217, 255, 0.4);
+            box-shadow: 0 8px 25px rgba(0, 217, 255, 0.15);
+        }
+
+        body.dark .suggestion-chip::before {
+            background: linear-gradient(135deg, rgba(0, 217, 255, 0.1) 0%, rgba(0, 255, 136, 0.1) 100%);
+        }
+
+        /* Chat message bubbles enhancement */
+        .chat-bubble-user {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px 20px 4px 20px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .chat-bubble-jarvis {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            border-radius: 20px 20px 20px 4px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            animation: slideInLeft 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body.dark .chat-bubble-jarvis {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
+            border-color: rgba(255, 255, 255, 0.05);
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes slideInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        /* Pulse animation for voice button */
+        .voice-pulse {
+            animation: voicePulse 2s ease-in-out infinite;
+        }
+
+        @keyframes voicePulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.4);
+            }
+            50% {
+                box-shadow: 0 0 0 12px rgba(139, 92, 246, 0);
+            }
+        }
+
+        /* Voice button listening state */
+        .voice-listening {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+            animation: voiceListening 1s ease-in-out infinite;
+        }
+
+        @keyframes voiceListening {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+        }
+
+        /* Enhanced weather card */
+        .weather-card-enhanced {
+            background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 50%, #14b8a6 100%);
+            border-radius: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .weather-card-enhanced::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, transparent 60%);
+            animation: weatherGlow 5s ease-in-out infinite;
+        }
+
+        @keyframes weatherGlow {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-10%, 10%) scale(1.2); }
+        }
+
+        /* Scrollbar styling */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(139, 92, 246, 0.3);
+            border-radius: 3px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(139, 92, 246, 0.5);
+        }
+
+        body.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(0, 217, 255, 0.3);
+        }
+
+        body.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 217, 255, 0.5);
+        }
+
+        /* Status indicator */
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #6b7280;
+            padding: 4px 10px;
+            background: rgba(243, 244, 246, 0.8);
+            border-radius: 20px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: statusPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        body.dark .status-indicator {
+            background: rgba(30, 41, 59, 0.8);
+            color: #9ca3af;
+        }
+
+        /* Enhanced header with better spacing */
+        .header-enhanced {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 0;
+        }
+
+        /* Logo container with glow */
+        .logo-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.35);
+            transition: all 0.3s ease;
+        }
+
+        .logo-container:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(102, 126, 234, 0.45);
+        }
+
+        body.dark .logo-container {
+            background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            box-shadow: 0 8px 25px rgba(14, 165, 233, 0.35);
+        }
+
+        /* Suggestions container */
+        .suggestions-container {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(236, 72, 153, 0.05) 100%);
+            border-radius: 20px;
+            padding: 20px;
+            border: 1px solid rgba(139, 92, 246, 0.1);
+        }
+
+        body.dark .suggestions-container {
+            background: linear-gradient(135deg, rgba(0, 217, 255, 0.05) 0%, rgba(0, 255, 136, 0.05) 100%);
+            border-color: rgba(0, 217, 255, 0.1);
+        }
+
+        /* Help modal enhancement */
+        .help-modal-enhanced {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.15);
+        }
+
+        body.dark .help-modal-enhanced {
+            background: rgba(15, 23, 42, 0.98);
+        }
+
+        /* Typing indicator */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 12px 16px;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: typingBounce 1.4s ease-in-out infinite;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: 0s; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typingBounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-8px); }
+        }
+
+        body.dark .typing-dot {
+            background: #00d9ff;
+        }
+
+        /* Smooth theme transition */
+        * {
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+        }
+
+        /* Card hover effect */
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        body.dark .card-hover:hover {
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -1244,12 +1698,12 @@
         </div>
 
         <div class="max-w-4xl mx-auto relative z-10 p-6">
-            <!-- Header -->
-            <div class="flex justify-between items-center mb-8">
-                <div class="flex items-center gap-3">
-                    <div class="logo-glow p-3 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/50 relative">
+            <!-- Header - Enhanced -->
+            <div class="header-enhanced mb-8">
+                <div class="flex items-center gap-4">
+                    <div class="logo-container">
                         <!-- Arc Reactor Icon -->
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" class="text-white">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" class="text-white">
                             <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>
                             <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="1.5"/>
                             <circle cx="12" cy="12" r="3" fill="currentColor"/>
@@ -1258,14 +1712,19 @@
                             <line x1="2" y1="12" x2="6" y2="12" stroke="currentColor" stroke-width="1.5"/>
                             <line x1="18" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="1.5"/>
                         </svg>
-                        <div class="absolute inset-0 rounded-full bg-cyan-400 opacity-20 animate-pulse"></div>
                     </div>
                     <div>
-                        <h1 id="title" class="text-4xl font-black text-gray-900">JARVIS</h1>
-                        <p id="subtitle" class="text-sm text-gray-600">Your AI Voice Assistant</p>
+                        <h1 id="title" class="text-4xl font-black jarvis-title">JARVIS</h1>
+                        <div class="flex items-center gap-3 mt-1">
+                            <p id="subtitle" class="text-sm text-gray-500 font-medium">AI Voice Assistant</p>
+                            <div class="status-indicator">
+                                <div class="status-dot"></div>
+                                <span>Online</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                
+
                 <!-- Light Switch -->
                 <div class="light-switch-container" onclick="toggleDarkMode()">
                     <div id="light-switch" class="light-switch on">
@@ -1275,46 +1734,55 @@
             </div>
 
             <!-- Main Content Area -->
-            <div id="main-card" class="bg-white bg-opacity-80 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white border-opacity-50 mb-6">
-                
+            <div id="main-card" class="glass-card rounded-3xl p-8 mb-6 card-hover">
+
                 <!-- Chat History -->
-                <div id="chat-container" class="bg-gray-50 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6">
+                <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6 custom-scrollbar">
                     <!-- Welcome message -->
                 </div>
 
                 <!-- Weather Card -->
-                <div id="weather-card" class="hidden bg-gradient-to-r from-blue-400 to-cyan-500 text-white p-6 rounded-2xl shadow-lg mb-6">
-                    <div class="flex items-center justify-between mb-3">
-                        <div class="flex items-center gap-2">
-                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
-                            </svg>
+                <div id="weather-card" class="hidden weather-card-enhanced text-white p-6 shadow-lg mb-6">
+                    <div class="flex items-center justify-between mb-3 relative z-10">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 bg-white/20 rounded-xl backdrop-blur-sm">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+                                </svg>
+                            </div>
                             <div>
-                                <h2 class="text-xl font-bold text-white drop-shadow-lg">Weather</h2>
-                                <p id="location-name" class="text-sm text-white drop-shadow-md">Loading...</p>
+                                <h2 class="text-xl font-bold text-white">Weather</h2>
+                                <p id="location-name" class="text-sm text-white/80">Loading...</p>
                             </div>
                         </div>
                     </div>
-                    <p id="temperature" class="text-5xl font-bold mb-2 text-white drop-shadow-lg">--°F / --°C</p>
-                    <p id="weather-advice" class="text-white text-lg drop-shadow-md"></p>
+                    <p id="temperature" class="text-5xl font-bold mb-2 text-white relative z-10">--°F / --°C</p>
+                    <p id="weather-advice" class="text-white/90 text-lg relative z-10"></p>
                 </div>
 
                 <!-- Reminders List -->
-                <div id="reminders-section" class="hidden bg-gray-50 p-6 rounded-2xl mb-6">
-                    <div class="flex items-center gap-2 mb-4">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-purple-600">
-                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                        </svg>
-                        <h2 class="text-xl font-bold text-gray-800">Your Reminders</h2>
+                <div id="reminders-section" class="hidden bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-slate-800 dark:to-slate-700 p-6 rounded-2xl mb-6 border border-purple-100 dark:border-slate-600">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-purple-600 dark:text-purple-400">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            </svg>
+                        </div>
+                        <h2 class="text-xl font-bold text-gray-800 dark:text-white">Your Reminders</h2>
                     </div>
                     <div id="reminders-list" class="space-y-3"></div>
                 </div>
 
                 <!-- Suggestion Buttons - Dynamic based on context -->
-                <div id="initial-suggestions" class="bg-purple-50 p-6 rounded-2xl">
-                    <h3 class="font-bold text-gray-900 mb-3">Try asking me:</h3>
-                    <div id="suggestion-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div id="initial-suggestions" class="suggestions-container">
+                    <h3 class="font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-purple-500">
+                            <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                        </svg>
+                        Try asking me:
+                    </h3>
+                    <div id="suggestion-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <!-- Will be populated dynamically -->
                     </div>
                 </div>
@@ -1322,49 +1790,53 @@
         </div>
     </div>
     
-    <!-- Loading Overlay -->
+    <!-- Loading Overlay - Enhanced -->
     <div id="loading-overlay" class="loading-overlay hidden">
-        <div class="loading-card">
-            <div class="loading-spinner"></div>
-            <div class="loading-text" id="loading-text">Processing...</div>
+        <div class="glass-card p-8 text-center max-w-sm mx-4">
+            <div class="typing-indicator justify-center mb-4">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+            <div class="loading-text text-gray-700 dark:text-gray-200 font-medium" id="loading-text">JARVIS is thinking...</div>
         </div>
     </div>
 
-    <!-- ChatGPT-style Input at Bottom -->
-    <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
+    <!-- ChatGPT-style Input at Bottom - Enhanced -->
+    <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 floating-input-bar z-40">
         <div class="max-w-4xl mx-auto p-4">
-            <div id="input-bar-inner" class="flex items-center gap-3 bg-gray-50 rounded-full border-2 border-gray-200 px-4 py-3 hover:border-purple-300 transition-all">
-                <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group" title="Help & Tips">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-600 hover:text-purple-600 transition-all">
+            <div id="input-bar-inner" class="flex items-center gap-3 modern-input px-5 py-4">
+                <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group p-2 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
                     </svg>
                     <!-- Tooltip -->
-                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
                         Help & Tips
                     </div>
                 </button>
-                
-                <input 
-                    type="text" 
+
+                <input
+                    type="text"
                     id="text-input"
-                    placeholder="Ask anything..."
-                    class="flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-500 dark-mode-text"
+                    placeholder="Ask JARVIS anything..."
+                    class="flex-1 bg-transparent outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-base font-medium"
                     onkeypress="if(event.key === 'Enter') sendTextInput()"
                     oninput="toggleSendButton()"
                 />
-                
+
                 <!-- Send Button (shows when typing) -->
-                <button onclick="sendTextInput()" id="send-btn" class="hidden flex-shrink-0 p-2 rounded-full bg-indigo-600 hover:bg-indigo-700 transition-all">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
+                <button onclick="sendTextInput()" id="send-btn" class="hidden flex-shrink-0 p-3 rounded-xl gradient-btn shadow-lg">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-white">
                         <line x1="22" y1="2" x2="11" y2="13"></line>
                         <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                     </svg>
                 </button>
-                
+
                 <!-- Voice Button (shows when not typing) -->
-                <button onclick="toggleListening()" id="voice-btn" class="flex-shrink-0 p-2 rounded-full bg-gray-900 hover:bg-gray-800 transition-all">
+                <button onclick="toggleListening()" id="voice-btn" class="flex-shrink-0 p-3 rounded-xl gradient-btn voice-pulse shadow-lg">
                     <svg id="mic-icon-bottom" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
                         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                         <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -1379,17 +1851,17 @@
                 </button>
             </div>
             <!-- Footer with disclaimer and request button - centered -->
-            <div class="flex items-center justify-center mt-2 gap-2">
-                <p id="footer-disclaimer" class="text-xs text-gray-500">JARVIS can make mistakes. Check important info.</p>
-                <button 
-                    onclick="openFeatureRequest()" 
-                    class="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-xs font-medium flex items-center gap-1 transition-all hover:scale-105"
+            <div class="flex items-center justify-center mt-3 gap-3">
+                <p id="footer-disclaimer" class="text-xs text-gray-400 font-medium">JARVIS can make mistakes. Check important info.</p>
+                <button
+                    onclick="openFeatureRequest()"
+                    class="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all hover:scale-105 shadow-md hover:shadow-lg"
                     title="Request a Feature">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M12 20h9"></path>
                         <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
                     </svg>
-                    Request
+                    Request Feature
                 </button>
             </div>
         </div>
@@ -1598,7 +2070,7 @@ function showInitialSuggestions() {
         { icon: '☀️', text: "What's the weather?", query: "What's the weather like today?" },
         { icon: '🛒', text: 'Add 2 lbs chicken to list', query: 'Add 2 pounds of chicken to my shopping list' },
         { icon: '⏰', text: 'Remind me to call mom', query: 'Remind me to call mom at 5pm' },
-        { icon: '🔑', text: 'My keys are on counter', query: 'My car keys are on the counter' },
+        { icon: '🌐', text: 'Translate to Tamil', query: 'Speak in Tamil' },
         { icon: '❓', text: 'What can you do?', query: 'What can you do?' },
         { icon: '✈️', text: 'Plan a trip to Paris', query: 'Plan a weekend trip to Paris' }
     ];
@@ -1609,11 +2081,12 @@ function showInitialSuggestions() {
 function updateSuggestionBox(suggestions) {
     const grid = document.getElementById('suggestion-grid');
     if (!grid) return;
-    
+
     grid.innerHTML = suggestions.map(s => `
-        <button onclick="processSuggestion('${s.query.replace(/'/g, "\\'")} ')" 
-                class="text-left bg-white hover:bg-purple-100 text-purple-800 p-3 rounded-xl text-sm font-medium shadow-sm border border-purple-200 transition-all">
-            ${s.icon} ${s.text}
+        <button onclick="processSuggestion('${s.query.replace(/'/g, "\\'")} ')"
+                class="suggestion-chip text-left flex items-center gap-3 group">
+            <span class="text-xl group-hover:scale-110 transition-transform">${s.icon}</span>
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-200">${s.text}</span>
         </button>
     `).join('');
 }
@@ -1671,7 +2144,7 @@ function updateContextualSuggestions(context) {
             { icon: '✈️', text: 'Plan a trip', query: 'Plan a trip to Paris' },
             { icon: '🛒', text: 'Shopping list', query: 'Add milk to my list' },
             { icon: '⏰', text: 'Set reminder', query: 'Remind me to call mom' },
-            { icon: '🔑', text: 'Store location', query: 'My keys are on the counter' },
+            { icon: '🌐', text: 'Translator', query: 'Speak in Tamil' },
             { icon: '❓', text: 'What can you do?', query: 'What can you do?' }
         ];
     }
@@ -2452,38 +2925,73 @@ ${result.translation}
 
 // Speak text in a specific language
 function speakInLanguage(text, langCode) {
+    // Stop any current speech first
+    stopSpeaking();
+
     // Try ResponsiveVoice first for better language support
     if (typeof responsiveVoice !== 'undefined') {
+        // ResponsiveVoice supported Indian language voices
         const voiceMap = {
-            'ta-IN': 'Tamil Female',
-            'kn-IN': 'Kannada Female',
-            'te-IN': 'Telugu Female',
-            'hi-IN': 'Hindi Female'
+            'ta-IN': 'Tamil India Female',
+            'kn-IN': 'Kannada India Female',
+            'te-IN': 'Telugu India Female',
+            'hi-IN': 'Hindi India Female'
         };
 
-        const voice = voiceMap[langCode] || 'UK English Female';
+        const voice = voiceMap[langCode];
 
-        responsiveVoice.speak(text, voice, {
+        if (voice) {
+            // Check if voice is available
+            const availableVoices = responsiveVoice.getVoices();
+            const voiceExists = availableVoices.some(v => v.name === voice);
+
+            if (voiceExists) {
+                responsiveVoice.speak(text, voice, {
+                    pitch: 1,
+                    rate: 0.85,
+                    volume: 1,
+                    onend: () => console.log('Translation spoken')
+                });
+                return;
+            }
+        }
+
+        // Fallback: Use Hindi Female as it's widely supported
+        responsiveVoice.speak(text, 'Hindi Female', {
             pitch: 1,
-            rate: 0.9,
+            rate: 0.85,
             volume: 1
         });
     } else {
         // Fallback to Web Speech API
         const synth = window.speechSynthesis;
-        const utterance = new SpeechSynthesisUtterance(text);
 
-        // Try to find a voice for the language
-        const voices = synth.getVoices();
-        const langVoice = voices.find(v => v.lang === langCode || v.lang.startsWith(langCode.split('-')[0]));
+        // Wait for voices to load
+        const speakWithVoices = () => {
+            const utterance = new SpeechSynthesisUtterance(text);
+            const voices = synth.getVoices();
 
-        if (langVoice) {
-            utterance.voice = langVoice;
+            // Try to find a voice for the language
+            const langVoice = voices.find(v =>
+                v.lang === langCode ||
+                v.lang.startsWith(langCode.split('-')[0])
+            );
+
+            if (langVoice) {
+                utterance.voice = langVoice;
+            }
+            utterance.lang = langCode;
+            utterance.rate = 0.85;
+            utterance.volume = 1;
+
+            synth.speak(utterance);
+        };
+
+        if (synth.getVoices().length > 0) {
+            speakWithVoices();
+        } else {
+            synth.onvoiceschanged = speakWithVoices;
         }
-        utterance.lang = langCode;
-        utterance.rate = 0.9;
-
-        synth.speak(utterance);
     }
 }
 
@@ -2663,9 +3171,11 @@ async function handleNameCorrection(text) {
         let autoSpeak = false; 
         let recognition = null;
         let continuousRecognition = null;
-        let wakeWordMode = false;  
-        let commandMode = false;    
+        let wakeWordMode = false;
+        let commandMode = false;
         let isListening = false;
+        let wakeWordCooldown = false; // Prevent double "Hey JARVIS" detection
+        let lastWakeWordTime = 0; // Track when wake word was last triggered
         let synth = window.speechSynthesis;
         let reminders = [];
         let weather = null;
@@ -2679,6 +3189,15 @@ async function handleNameCorrection(text) {
         let waitingForName = false;
         let shoppingList = [];
         let memoryStore = {};
+
+        // Noise filter settings for public places
+        let noiseFilterEnabled = false;
+        let noiseFilterLevel = 'medium'; // 'low', 'medium', 'high'
+        const NOISE_THRESHOLDS = {
+            low: { confidence: 0.6, minWords: 1 },
+            medium: { confidence: 0.75, minWords: 2 },
+            high: { confidence: 0.85, minWords: 2 }
+        };
 
         // Translator mode variables
         let translatorMode = false;
@@ -2730,20 +3249,12 @@ async function handleNameCorrection(text) {
             
             await requestMicrophonePermission();
             loadUserData();
+            loadNoiseFilterSettings();
             checkReminders();
             
             
-            const hasVisited = localStorage.getItem('unify_has_visited');
-            if (!hasVisited) {
-                showInitialSuggestions();
-                
-            } else {
-                
-                const suggestionsBox = document.getElementById('initial-suggestions');
-                if (suggestionsBox) {
-                    suggestionsBox.style.display = 'none';
-                }
-            }
+            // Always show suggestions for all users
+            showInitialSuggestions();
             
             
             const welcomeMsg = userName 
@@ -2781,98 +3292,79 @@ async function handleNameCorrection(text) {
             const tubeLight = document.getElementById('tube-light');
             const weatherEffects = document.getElementById('weather-effects');
             const receipt = document.getElementById('shopping-receipt');
-            
-            
+
             const inputBarContainer = document.getElementById('input-bar-container');
             const inputBarInner = document.getElementById('input-bar-inner');
             const textInput = document.getElementById('text-input');
-            const helpBtn = document.getElementById('help-btn');
             const footerDisclaimer = document.getElementById('footer-disclaimer');
-            
+
             if (darkMode) {
-                
+                // Dark mode
                 lightSwitch.classList.remove('on');
                 tubeLight.classList.remove('on', 'starting');
-                
-                
+
                 if (weatherEffects) weatherEffects.innerHTML = '';
-                
-                
+
                 body.classList.remove('light');
                 body.classList.add('dark');
                 body.style.background = '#000';
                 body.style.filter = 'none';
-                card.className = 'bg-gray-900 bg-opacity-90 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-gray-700 mb-6';
-                title.className = 'text-4xl font-black text-white';
-                subtitle.className = 'text-sm text-gray-300';
-                if (chatContainer) chatContainer.className = 'bg-gray-800 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6';
+                card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
+                title.className = 'text-4xl font-black jarvis-title';
+                subtitle.className = 'text-sm text-gray-400 font-medium';
+                if (chatContainer) chatContainer.className = 'bg-slate-800/50 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6 custom-scrollbar';
                 if (receipt) receipt.classList.add('dark-mode');
-                
-                
+
                 if (inputBarContainer) {
-                    inputBarContainer.className = 'fixed bottom-0 left-0 right-0 bg-gray-900 bg-opacity-95 border-t border-gray-700 shadow-lg z-40 backdrop-blur-xl';
+                    inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
                 }
                 if (inputBarInner) {
-                    inputBarInner.className = 'flex items-center gap-3 bg-gray-800 rounded-full border-2 border-gray-600 px-4 py-3 hover:border-purple-400 transition-all';
+                    inputBarInner.className = 'flex items-center gap-3 modern-input px-5 py-4';
                 }
                 if (textInput) {
-                    textInput.className = 'flex-1 bg-transparent outline-none text-white placeholder-gray-400';
-                }
-                if (helpBtn) {
-                    const svg = helpBtn.querySelector('svg');
-                    if (svg) svg.className = 'text-gray-400 hover:text-purple-400 transition-all';
+                    textInput.className = 'flex-1 bg-transparent outline-none text-white placeholder-gray-500 text-base font-medium';
                 }
                 if (footerDisclaimer) {
-                    footerDisclaimer.className = 'text-xs text-gray-400';
+                    footerDisclaimer.className = 'text-xs text-gray-500 font-medium';
                 }
             } else {
-                
+                // Light mode
                 lightSwitch.classList.add('on');
-                
-                
                 tubeLight.classList.add('starting');
-                
-                
+
                 setTimeout(() => {
                     tubeLight.classList.remove('starting');
                     tubeLight.classList.add('on');
-                    
-                    
+
                     body.classList.remove('dark');
                     body.classList.add('light');
-                    
-                    
+
                     if (weather && weather.current) {
                         createWeatherEffect(weather.current.weather_code, Math.round(weather.current.temperature_2m));
                     } else {
                         body.style.background = 'linear-gradient(to bottom right, #fce7f3, #e9d5ff, #c7d2fe)';
                         body.style.filter = 'none';
                     }
-                    
-                    card.className = 'bg-white bg-opacity-80 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white border-opacity-50 mb-6';
-                    title.className = 'text-4xl font-black text-gray-900';
-                    subtitle.className = 'text-sm text-gray-600';
-                    if (chatContainer) chatContainer.className = 'bg-gray-50 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6';
+
+                    card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
+                    title.className = 'text-4xl font-black jarvis-title';
+                    subtitle.className = 'text-sm text-gray-500 font-medium';
+                    if (chatContainer) chatContainer.className = 'bg-gray-50/80 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6 custom-scrollbar';
                     if (receipt) receipt.classList.remove('dark-mode');
-                    
-                    
+
                     if (inputBarContainer) {
-                        inputBarContainer.className = 'fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40';
+                        inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
                     }
                     if (inputBarInner) {
-                        inputBarInner.className = 'flex items-center gap-3 bg-gray-50 rounded-full border-2 border-gray-200 px-4 py-3 hover:border-purple-300 transition-all';
+                        inputBarInner.className = 'flex items-center gap-3 modern-input px-5 py-4';
                     }
                     if (textInput) {
-                        textInput.className = 'flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-500';
-                    }
-                    if (helpBtn) {
-                        const svg = helpBtn.querySelector('svg');
-                        if (svg) svg.className = 'text-gray-600 hover:text-purple-600 transition-all';
+                        textInput.className = 'flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-400 text-base font-medium';
                     }
                     if (footerDisclaimer) {
-                        footerDisclaimer.className = 'text-xs text-gray-500';
+                        footerDisclaimer.className = 'text-xs text-gray-400 font-medium';
                     }
-                }, 800); 
+                }, 800);
             }
         }
 
@@ -2881,16 +3373,30 @@ async function handleNameCorrection(text) {
         function showHelpModal() {
             const modal = document.createElement('div');
             modal.id = 'help-modal';
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
+            modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
             modal.onclick = (e) => {
                 if (e.target === modal) closeHelpModal();
             };
-            
+
             modal.innerHTML = `
-                <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-                    <div class="sticky top-0 bg-white dark:bg-gray-800 p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">✨ Help & Prompting Tips</h2>
-                        <button onclick="closeHelpModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl">×</button>
+                <div class="help-modal-enhanced max-w-2xl w-full max-h-[80vh] overflow-y-auto custom-scrollbar">
+                    <div class="sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm p-6 border-b border-gray-200/50 dark:border-gray-700/50 flex justify-between items-center">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-xl">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                </svg>
+                            </div>
+                            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Help & Tips</h2>
+                        </div>
+                        <button onclick="closeHelpModal()" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-all">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
                     </div>
                     
                     <div class="p-6 space-y-6">
@@ -2903,7 +3409,7 @@ async function handleNameCorrection(text) {
                                 <p><strong>🌤️ Weather:</strong> "What's the weather?" or "Will it rain in Seattle tomorrow?"</p>
                                 <p><strong>🛒 Shopping Lists:</strong> "Add 2 pounds of chicken to my list" or "Show my shopping list"</p>
                                 <p><strong>⏰ Reminders:</strong> "Remind me to call mom at 5pm" or "Remind me tomorrow to buy groceries"</p>
-                                <p><strong>🔑 Memory:</strong> "My car keys are on the counter" or "Where are my keys?"</p>
+                                <p><strong>🌐 Translator:</strong> "Speak in Tamil" or "Translate to Hindi"</p>
                             </div>
                         </section>
                         
@@ -2956,17 +3462,101 @@ async function handleNameCorrection(text) {
                                 <p><strong>🎫 Context Suggestions:</strong> After itineraries, I suggest hotels, restaurants, nightlife, and more</p>
                             </div>
                         </section>
-                        
+
+                        <section>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">⚙️ Settings</h3>
+                            <div class="space-y-4">
+                                <div class="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                    <div>
+                                        <p class="font-semibold text-gray-900 dark:text-white">🔇 Noise Filter</p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">Filter background noise in public places</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="noise-filter-toggle" class="sr-only peer" ${noiseFilterEnabled ? 'checked' : ''} onchange="toggleNoiseFilter(this.checked)">
+                                        <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                                    </label>
+                                </div>
+                                <div id="noise-level-selector" class="${noiseFilterEnabled ? '' : 'hidden'} pl-4">
+                                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Filter Level:</p>
+                                    <div class="flex gap-2">
+                                        <button onclick="setNoiseFilterLevel('low')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${noiseFilterLevel === 'low' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}" id="noise-level-low">Low</button>
+                                        <button onclick="setNoiseFilterLevel('medium')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${noiseFilterLevel === 'medium' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}" id="noise-level-medium">Medium</button>
+                                        <button onclick="setNoiseFilterLevel('high')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${noiseFilterLevel === 'high' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}" id="noise-level-high">High</button>
+                                    </div>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Higher = stricter filtering (may miss some commands)</p>
+                                </div>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">💡 Voice: Say "enable noise filter" or "disable noise filter"</p>
+                            </div>
+                        </section>
+
                         <div class="text-center pt-4 border-t border-gray-200 dark:border-gray-700">
                             <p class="text-sm text-gray-600 dark:text-gray-400">Need more help? Click the <strong>Request</strong> button to suggest improvements!</p>
                         </div>
                     </div>
                 </div>
             `;
-            
+
             document.body.appendChild(modal);
         }
-        
+
+        // Noise filter toggle functions
+        function toggleNoiseFilter(enabled) {
+            noiseFilterEnabled = enabled;
+            saveNoiseFilterSettings();
+
+            const levelSelector = document.getElementById('noise-level-selector');
+            if (levelSelector) {
+                levelSelector.classList.toggle('hidden', !enabled);
+            }
+
+            const msg = enabled
+                ? `🔇 Noise filter enabled (${noiseFilterLevel} level). I'll filter out background noise.`
+                : `🔊 Noise filter disabled. I'll hear everything.`;
+            addChatMessage(msg, false);
+            speak(enabled ? "Noise filter enabled" : "Noise filter disabled");
+        }
+
+        function setNoiseFilterLevel(level) {
+            noiseFilterLevel = level;
+            saveNoiseFilterSettings();
+
+            // Update button styles
+            ['low', 'medium', 'high'].forEach(l => {
+                const btn = document.getElementById(`noise-level-${l}`);
+                if (btn) {
+                    if (l === level) {
+                        btn.className = 'px-3 py-1 rounded-full text-xs font-medium transition-all bg-purple-600 text-white';
+                    } else {
+                        btn.className = 'px-3 py-1 rounded-full text-xs font-medium transition-all bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300';
+                    }
+                }
+            });
+
+            const msg = `Noise filter set to ${level} level.`;
+            addChatMessage(msg, false);
+            speak(msg);
+        }
+
+        function saveNoiseFilterSettings() {
+            try {
+                localStorage.setItem('jarvis_noise_filter', JSON.stringify({
+                    enabled: noiseFilterEnabled,
+                    level: noiseFilterLevel
+                }));
+            } catch (e) {}
+        }
+
+        function loadNoiseFilterSettings() {
+            try {
+                const saved = localStorage.getItem('jarvis_noise_filter');
+                if (saved) {
+                    const settings = JSON.parse(saved);
+                    noiseFilterEnabled = settings.enabled || false;
+                    noiseFilterLevel = settings.level || 'medium';
+                }
+            } catch (e) {}
+        }
+
         function closeHelpModal() {
             const modal = document.getElementById('help-modal');
             if (modal) modal.remove();
@@ -3007,20 +3597,19 @@ async function handleNameCorrection(text) {
         function addChatMessage(text, isUser = true, typewriter = false) {
             const chatContainer = document.getElementById('chat-container');
             const messageDiv = document.createElement('div');
-            messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-2 fade-in`;
-            
+            messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-3`;
+
             if (isUser) {
-                
+
                 const formattedText = escapeHtml(text).replace(/\n/g, '<br>');
                 messageDiv.innerHTML = `
-                    <div class="bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md shadow-sm relative group">
-                        <p class="text-sm">${formattedText}</p>
-                        <button onclick="deleteMessage(this)" class="hidden group-hover:block absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-sm hover:bg-red-600 transition-all shadow-lg">×</button>
+                    <div class="chat-bubble-user text-white px-4 py-3 max-w-md relative group">
+                        <p class="text-sm font-medium">${formattedText}</p>
+                        <button onclick="deleteMessage(this)" class="hidden group-hover:flex absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-sm hover:bg-red-600 transition-all shadow-lg items-center justify-center">×</button>
                     </div>
                 `;
             } else {
 
-                const bgClass = darkMode ? 'bg-gray-700' : 'bg-white';
                 const textClass = darkMode ? 'text-gray-200' : 'text-gray-800';
 
 
@@ -3035,26 +3624,27 @@ async function handleNameCorrection(text) {
                 if (hasHtmlContent) {
                     // For HTML content, only convert markdown links and bold, preserve other HTML
                     formattedText = text
-                        .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-blue-500 hover:text-blue-700 underline">$1</a>')
+                        .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 underline font-medium">$1</a>')
                         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
                     // Only convert newlines that are NOT inside HTML tags
                     formattedText = formattedText.replace(/\n(?![^<]*>)/g, '<br>');
                 } else {
                     formattedText = text
-                        .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-blue-500 hover:text-blue-700 underline">$1</a>')
+                        .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 underline font-medium">$1</a>')
                         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
                         .replace(/\n/g, '<br>');
                 }
 
-                // Use wider container for messages with maps/iframes
-                const containerWidth = hasHtmlContent ? 'max-w-2xl' : 'max-w-md';
+                // Use wider container for messages with maps/iframes - FULL WIDTH for maps
+                const hasMap = text.includes('<iframe') || text.includes('map-container');
+                const containerWidth = hasMap ? 'w-full max-w-4xl' : (hasHtmlContent ? 'max-w-2xl' : 'max-w-md');
 
                 messageDiv.innerHTML = `
-                    <div class="flex items-start gap-2 ${containerWidth}">
-                        <div class="${bgClass} rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex-1 overflow-hidden">
-                            <div class="text-sm ${textClass} typewriter-text"></div>
+                    <div class="flex items-start gap-3 ${containerWidth}">
+                        <div class="chat-bubble-jarvis px-4 py-3 flex-1 overflow-hidden ${hasMap ? 'map-message' : ''}">
+                            <div class="text-sm ${textClass} typewriter-text leading-relaxed"></div>
                         </div>
-                        <button onclick="toggleSpeak(\`${textForSpeech.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`, this)" class="flex-shrink-0 p-2 rounded-full bg-purple-500 hover:bg-purple-600 text-white transition-all speaker-btn">
+                        <button onclick="toggleSpeak(\`${textForSpeech.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`, this)" class="flex-shrink-0 p-2.5 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white transition-all shadow-md hover:shadow-lg speaker-btn">
                             <svg class="play-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
@@ -3415,28 +4005,68 @@ async function handleNameCorrection(text) {
             };
 
             continuousRecognition.onresult = async (event) => {
-                
+
                 const last = event.results.length - 1;
                 const result = event.results[last];
                 const text = result[0].transcript.trim().toLowerCase();
-                
+                const confidence = result[0].confidence || 0;
+
                 if (!text) return;
+
+                // Noise filter - filter out low confidence or short random noise
+                if (noiseFilterEnabled && result.isFinal) {
+                    const threshold = NOISE_THRESHOLDS[noiseFilterLevel];
+                    const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
+
+                    // Skip if confidence is too low (unless it's the wake word)
+                    const isWakeWord = text.includes('hey jarvis') || text.includes('hey davis');
+                    if (!isWakeWord && confidence > 0 && confidence < threshold.confidence) {
+                        console.log(`Noise filtered (low confidence): "${text}" (${(confidence * 100).toFixed(1)}%)`);
+                        return;
+                    }
+
+                    // Skip very short utterances that are likely noise
+                    if (!isWakeWord && wordCount < threshold.minWords && text.length < 4) {
+                        console.log(`Noise filtered (too short): "${text}"`);
+                        return;
+                    }
+
+                    // Filter common noise patterns
+                    const noisePatterns = ['uh', 'um', 'ah', 'eh', 'hmm', 'hm', 'mm'];
+                    if (noisePatterns.includes(text.trim())) {
+                        console.log(`Noise filtered (filler word): "${text}"`);
+                        return;
+                    }
+                }
                 
                 
                 if (wakeWordMode && !commandMode) {
-                    
+
                     if (text.includes('hey jarvis') || text.includes('hey davis')) {
-                        
+                        // Prevent double detection - only trigger if not in cooldown
+                        const now = Date.now();
+                        if (wakeWordCooldown || (now - lastWakeWordTime < 2000)) {
+                            // Ignore duplicate wake word within 2 seconds
+                            return;
+                        }
+
+                        // Set cooldown to prevent duplicates
+                        wakeWordCooldown = true;
+                        lastWakeWordTime = now;
+
                         commandMode = true;
                         wakeWordMode = false;
-                        
-                        
+
                         const response = "Yes, sir?";
                         addChatMessage("🎤 Hey JARVIS", true);
                         addChatMessage(response, false);
                         speak(response);
-                        
-                        
+
+                        // Reset cooldown after 2 seconds
+                        setTimeout(() => {
+                            wakeWordCooldown = false;
+                        }, 2000);
+
                         return;
                     }
                     
@@ -3552,17 +4182,18 @@ async function handleNameCorrection(text) {
                 addChatMessage("Speech recognition not available. Please use text input.", false);
                 return;
             }
-            
+
             try {
                 isListening = true;
                 continuousRecognition.start();
-                
-                
+
+                // Update voice button to listening state
+                const voiceBtn = document.getElementById('voice-btn');
                 document.getElementById('mic-icon-bottom').classList.add('hidden');
                 document.getElementById('waveform-bottom').classList.remove('hidden');
-                document.getElementById('voice-btn').classList.add('bg-purple-600', 'ring-4', 'ring-purple-200');
-                document.getElementById('voice-btn').classList.remove('bg-gray-900');
-                
+                voiceBtn.classList.add('voice-listening');
+                voiceBtn.classList.remove('voice-pulse', 'gradient-btn');
+
             } catch (e) {
                 stopListening();
             }
@@ -3570,19 +4201,20 @@ async function handleNameCorrection(text) {
 
         function stopListening() {
             isListening = false;
-            
+
             if (continuousRecognition) {
                 try {
                     continuousRecognition.stop();
                 } catch (e) {
                 }
             }
-            
-            
+
+            // Restore voice button to normal state
+            const voiceBtn = document.getElementById('voice-btn');
             document.getElementById('mic-icon-bottom')?.classList.remove('hidden');
             document.getElementById('waveform-bottom')?.classList.add('hidden');
-            document.getElementById('voice-btn')?.classList.remove('bg-purple-600', 'ring-4', 'ring-purple-200');
-            document.getElementById('voice-btn')?.classList.add('bg-gray-900');
+            voiceBtn?.classList.remove('voice-listening');
+            voiceBtn?.classList.add('voice-pulse', 'gradient-btn');
         }
 
         
@@ -3905,17 +4537,12 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
 
         async function processCommand(text) {
             const lower = text.toLowerCase();
-            
-            
+
+            // Mark as visited (for analytics) but don't hide suggestions
             if (!localStorage.getItem('unify_has_visited')) {
                 localStorage.setItem('unify_has_visited', 'true');
-                const suggestionsBox = document.getElementById('initial-suggestions');
-                if (suggestionsBox) {
-                    suggestionsBox.style.display = 'none';
-                }
             }
-            
-            
+
             const isWeatherQuery = lower.includes('weather') || lower.includes('temperature') || 
                                    lower.includes('rain') || lower.includes('snow') || 
                                    lower.includes('forecast') || lower.includes('hot') || lower.includes('cold');
@@ -4189,6 +4816,19 @@ ${cityName} is a smaller town. Here's how to get around:
                 waitingForName = true;
                 return;
             }
+
+            // Noise filter voice commands
+            if (lower.match(/\b(enable|turn on|activate)\b.*noise\s*filter/i) ||
+                lower.match(/noise\s*filter.*(enable|on|activate)/i)) {
+                toggleNoiseFilter(true);
+                return;
+            }
+
+            if (lower.match(/\b(disable|turn off|deactivate)\b.*noise\s*filter/i) ||
+                lower.match(/noise\s*filter.*(disable|off|deactivate)/i)) {
+                toggleNoiseFilter(false);
+                return;
+            }
             
             
             if (lower.match(/^(my name is|i'm|i am|call me|it's)\s+/i)) {
@@ -4389,39 +5029,11 @@ ${cityName} is a smaller town. Here's how to get around:
             else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('reminder')) {
                 clearAllReminders();
             }
-            
-            else if (
-                
-                (cleanText.toLowerCase().match(/^where\s+(is|are)\s+my\s+\w+/i) && 
-                 !cleanText.toLowerCase().includes('location')) ||
-                
-                cleanText.toLowerCase().match(/^where\s+did\s+i\s+(put|leave)\s+(my|the)\s+/i) ||
-                
-                (cleanText.toLowerCase().match(/^find\s+my\s+\w+/i) && 
-                 !cleanText.toLowerCase().includes('location'))
-            ) {
-                handleMemoryRecall(cleanText);
-                return; 
-            }
-            
-            else if (
-                (cleanText.toLowerCase().includes('my ') || 
-                 cleanText.toLowerCase().includes('i put') || 
-                 cleanText.toLowerCase().includes('i left')) && 
-                (cleanText.toLowerCase().includes(' is ') || 
-                 cleanText.toLowerCase().includes(' are ') || 
-                 cleanText.toLowerCase().includes(' in ') || 
-                 cleanText.toLowerCase().includes(' on ') || 
-                 cleanText.toLowerCase().includes(' at ')) &&
-                
-                !cleanText.toLowerCase().includes('weather') &&
-                !cleanText.toLowerCase().includes('location') &&
-                !cleanText.toLowerCase().includes('temperature')
-            ) {
-                handleMemoryStorage(cleanText);
-                return; 
-            }
-            
+
+            // Memory feature temporarily disabled - will be implemented in future
+            // else if (memory recall patterns...) { handleMemoryRecall(cleanText); }
+            // else if (memory storage patterns...) { handleMemoryStorage(cleanText); }
+
             else if (cleanText.toLowerCase().match(/\b(who (created|made|built|developed) (you|this|unify)|who (is|are) (your|the) (creator|developer|maker|author)|tell me about (your|the) creator|who owns (you|this))\b/i)) {
                 const creatorMsg = `I was created by Prithviraju Venkataraman, a developer passionate about AI and voice interfaces. I was built to help his family mainly with travel planning, weather updates, shopping lists, reminders, and more but later on thought, why not make this as a Vibe Coded Project! Cool isn't it? If you see any bugs or room for improvement, click on Request feature.`;
                 addChatMessage(creatorMsg, false);
@@ -4467,10 +5079,6 @@ ${cityName} is a smaller town. Here's how to get around:
 ⏰ Reminders - Never forget again!
   → "Remind me to call mom at 5pm"
   → "Remind me tomorrow to buy groceries"
-
-🔑 Memory - I'll remember where you put things!
-  → "My car keys are on the counter"
-  → "Where are my keys?"
 
 💡 Pro Tips:
   • Ask for local specialties (Biryani, Pizza, Pasta, etc.)
