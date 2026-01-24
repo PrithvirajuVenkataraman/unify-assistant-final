@@ -1736,8 +1736,8 @@
             <!-- Main Content Area -->
             <div id="main-card" class="glass-card rounded-3xl p-8 mb-6 card-hover">
 
-                <!-- Chat History -->
-                <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6 custom-scrollbar">
+                <!-- Chat History - Claude/ChatGPT style compact view -->
+                <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 mb-4 custom-scrollbar" style="height: calc(100vh - 480px); min-height: 150px; max-height: 350px;">
                     <!-- Welcome message -->
                 </div>
 
@@ -1804,8 +1804,8 @@
 
     <!-- ChatGPT-style Input at Bottom - Enhanced -->
     <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 floating-input-bar z-40">
-        <div class="max-w-4xl mx-auto p-4">
-            <div id="input-bar-inner" class="flex items-center gap-3 modern-input px-5 py-4">
+        <div class="max-w-4xl mx-auto px-4 py-2">
+            <div id="input-bar-inner" class="flex items-center gap-3 modern-input px-4 py-3">
                 <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group p-2 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -1851,7 +1851,7 @@
                 </button>
             </div>
             <!-- Footer with disclaimer and request button - centered -->
-            <div class="flex items-center justify-center mt-3 gap-3">
+            <div class="flex items-center justify-center mt-2 gap-3">
                 <p id="footer-disclaimer" class="text-xs text-gray-400 font-medium">JARVIS can make mistakes. Check important info.</p>
                 <button
                     onclick="openFeatureRequest()"
@@ -1903,8 +1903,79 @@ function violatesIntent(text) {
   if (ctx.itineraryOnly && containsPlaceList(text)) return true;
   if (!ctx.allowHotels && /hotel|stay|accommodation/i.test(text)) return true;
   if (!ctx.allowRestaurants && /restaurant|food|eat|biryani|curry|lunch|dinner/i.test(text)) return true;
-  return false; 
+  return false;
 }
+
+// ========== CONTENT MODERATION ==========
+function isInappropriateContent(text) {
+    const lower = text.toLowerCase();
+
+    // Explicit sexual/adult content patterns
+    const explicitPatterns = [
+        /\b(porn|xxx|sex\s*video|nude|naked|adult\s*content|erotic|explicit)\b/i,
+        /\b(nsfw|only\s*fans|onlyfans|adult\s*site|strip\s*(club|tease))\b/i,
+        /\b(escort|hooker|prostitut|brothel|massage\s*parlor)\b/i,
+        /\b(f[u\*]{1,}ck|sh[i\*]{1,}t|c[u\*]{1,}nt|d[i\*]{1,}ck|p[u\*]{1,}ssy|a[s\*]{2}hole)\b/i,
+        /\b(boob|tit|ass|butt)\s*(pic|photo|image|show|send)/i,
+        /\b(hot\s*girl|sexy\s*(girl|woman|video|pic))\b/i,
+        /\bsend\s*(nudes?|pics?|photo)/i
+    ];
+
+    // Violence/harmful content patterns
+    const violentPatterns = [
+        /\b(kill|murder|assassinat|hurt|harm)\s*(someone|people|person|him|her|them)\b/i,
+        /\bhow\s*to\s*(make|build|create)\s*(bomb|weapon|explosive)\b/i,
+        /\b(suicide|self\s*harm|cut\s*myself)\b/i,
+        /\b(terror|attack|shoot\s*up|mass\s*shoot)\b/i
+    ];
+
+    // Drug-related patterns (excluding legal medication discussions)
+    const drugPatterns = [
+        /\b(buy|sell|get|find)\s*(cocaine|heroin|meth|mdma|ecstasy|lsd|weed|marijuana)\b/i,
+        /\bhow\s*to\s*(make|cook|produce)\s*(meth|drugs|cocaine)\b/i
+    ];
+
+    // Hateful/discriminatory content
+    const hatefulPatterns = [
+        /\b(hate|kill|exterminate)\s*(jews|muslims|christians|hindus|blacks|whites|asians)\b/i,
+        /\b(racial\s*slur|n[-_]word|f[-_]word)\b/i
+    ];
+
+    // Check all patterns
+    for (const pattern of [...explicitPatterns, ...violentPatterns, ...drugPatterns, ...hatefulPatterns]) {
+        if (pattern.test(lower)) {
+            return true;
+        }
+    }
+
+    // Check for attempts to bypass filters with creative spelling
+    const bypassAttempts = [
+        /\bp\s*0\s*r\s*n/i,      // p0rn
+        /\bs\s*3\s*x/i,          // s3x
+        /\bn\s*u\s*d\s*3/i,      // nud3
+        /\bpr0n/i,
+        /\b(sexy|hot)\s+(pics?|photos?|vids?|videos?)/i
+    ];
+
+    for (const pattern of bypassAttempts) {
+        if (pattern.test(lower)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function getContentModerationResponse() {
+    const responses = [
+        "I'm designed to be a helpful assistant for travel, weather, shopping, and general knowledge. I can't help with that request. Is there something else I can assist you with?",
+        "I'm here to help with travel planning, reminders, weather, and useful information. Let me know if you have any questions in those areas!",
+        "I'm not able to help with that kind of request. I'm great at travel planning, weather updates, shopping lists, and general questions though!",
+        "That's not something I can assist with. I'm happy to help with travel itineraries, weather, reminders, or other helpful tasks!"
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
+}
+// ========== END CONTENT MODERATION ==========
 
 function getSourceAttribution(trustLevel) {
   return trustLevel === TRUST_LEVEL.VERIFIED
@@ -2608,8 +2679,10 @@ function handlePositiveFeedback(buttonElement) {
     const container = buttonElement.closest('.feedback-container');
     container.innerHTML = `
         <div class="flex items-center gap-2 text-green-500">
-            <span>👍</span>
-            <span class="text-xs">Thanks for the feedback!</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1">
+                <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+            </svg>
+            <span class="text-xs font-medium">Thanks for the feedback!</span>
         </div>
     `;
 
@@ -2630,8 +2703,10 @@ function handleNegativeFeedback(buttonElement) {
     const container = buttonElement.closest('.feedback-container');
     container.innerHTML = `
         <div class="flex items-center gap-2 text-orange-500">
-            <span>👎</span>
-            <span class="text-xs">Sorry about that. I'll try to do better!</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1">
+                <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
+            </svg>
+            <span class="text-xs font-medium">Sorry about that. I'll try to do better!</span>
         </div>
     `;
 
@@ -2655,17 +2730,21 @@ function addFeedbackButtons(query, response) {
     const textClass = darkMode ? 'text-gray-400' : 'text-gray-600';
 
     feedbackDiv.innerHTML = `
-        <div class="flex items-center gap-3 ${bgClass} rounded-full px-3 py-1.5 ml-2">
+        <div class="flex items-center gap-2 ${bgClass} rounded-full px-3 py-1.5 ml-2">
             <span class="text-xs ${textClass}">Was this helpful?</span>
             <button onclick="handlePositiveFeedback(this)"
-                    class="p-1.5 rounded-full hover:bg-green-100 dark:hover:bg-green-900 transition-all"
+                    class="p-1.5 rounded-full hover:bg-green-100 dark:hover:bg-green-900/40 transition-all group"
                     title="Yes, helpful!">
-                <span class="text-lg">👍</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-400 group-hover:text-green-500 transition-colors">
+                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                </svg>
             </button>
             <button onclick="handleNegativeFeedback(this)"
-                    class="p-1.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900 transition-all"
+                    class="p-1.5 rounded-full hover:bg-red-100 dark:hover:bg-red-900/40 transition-all group"
                     title="Not quite right">
-                <span class="text-lg">👎</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-400 group-hover:text-red-500 transition-colors">
+                    <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
+                </svg>
             </button>
         </div>
     `;
@@ -3044,6 +3123,171 @@ async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
         throw error;
     }
 }
+
+// ========== NEWS FETCHING FUNCTION ==========
+async function fetchAndDisplayNews(query) {
+    showThinkingIndicator('📰 Fetching latest news...');
+
+    try {
+        // Detect news category from query
+        const lower = query.toLowerCase();
+        let category = null;
+
+        const categoryKeywords = {
+            politics: ['politics', 'political', 'election', 'government', 'parliament'],
+            sports: ['sports', 'sport', 'football', 'cricket', 'basketball', 'tennis', 'nfl', 'nba'],
+            technology: ['tech', 'technology', 'ai', 'software', 'apple', 'google', 'microsoft'],
+            business: ['business', 'economy', 'stock', 'market', 'finance'],
+            entertainment: ['entertainment', 'movie', 'celebrity', 'music', 'hollywood'],
+            health: ['health', 'medical', 'covid', 'vaccine', 'wellness'],
+            science: ['science', 'research', 'space', 'nasa', 'climate']
+        };
+
+        for (const [cat, keywords] of Object.entries(categoryKeywords)) {
+            if (keywords.some(kw => lower.includes(kw))) {
+                category = cat;
+                break;
+            }
+        }
+
+        // Get user's country from stored location or use default
+        let countryCode = 'DEFAULT';
+        if (window.userCountryCode) {
+            countryCode = window.userCountryCode;
+        } else if (localStorage.getItem('userCountryCode')) {
+            countryCode = localStorage.getItem('userCountryCode');
+        }
+
+        // Get user's city
+        let city = null;
+        if (window.userCity) {
+            city = window.userCity;
+        } else if (localStorage.getItem('userCity')) {
+            city = localStorage.getItem('userCity');
+        }
+
+        // Make API call to news endpoint
+        const response = await fetch('/api/news', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                countryCode: countryCode,
+                city: city,
+                category: category,
+                query: category ? null : (lower.includes('about') ? query.split('about')[1]?.trim() : null)
+            })
+        });
+
+        hideThinkingIndicator();
+
+        if (!response.ok) {
+            throw new Error('News service unavailable');
+        }
+
+        const data = await response.json();
+
+        if (!data.success) {
+            const fallbackMsg = "I couldn't fetch the latest news right now. Please try again in a moment, or check out Google News for current headlines.";
+            addChatMessage(fallbackMsg, false);
+            speak("I couldn't fetch news right now. Please try again.");
+            return;
+        }
+
+        const news = data.news;
+        let newsMsg = '📰 **Latest News**\n\n';
+
+        // Handle category-specific news
+        if (news.category && news.category.length > 0) {
+            newsMsg = `📰 **${news.categoryName} News**\n\n`;
+            news.category.forEach((item, i) => {
+                newsMsg += `**${i + 1}. ${item.title}**\n`;
+                if (item.description) {
+                    newsMsg += `${item.description}\n`;
+                }
+                newsMsg += `📌 ${item.source}\n`;
+                if (item.url) {
+                    newsMsg += `[Read more](${item.url})\n`;
+                }
+                newsMsg += '\n';
+            });
+            speak(`Here are the latest ${news.categoryName} headlines.`);
+        }
+        // Handle search results
+        else if (news.search && news.search.length > 0) {
+            newsMsg = `📰 **News about "${news.searchQuery}"**\n\n`;
+            news.search.forEach((item, i) => {
+                newsMsg += `**${i + 1}. ${item.title}**\n`;
+                if (item.description) {
+                    newsMsg += `${item.description}\n`;
+                }
+                newsMsg += `📌 ${item.source}\n`;
+                if (item.url) {
+                    newsMsg += `[Read more](${item.url})\n`;
+                }
+                newsMsg += '\n';
+            });
+            speak(`Here's what I found about ${news.searchQuery}.`);
+        }
+        // Handle regular news feed
+        else {
+            let hasNews = false;
+
+            // Local news (2 items)
+            if (news.local && news.local.length > 0) {
+                newsMsg += `📍 **Local News**${city ? ` (${city})` : ''}\n`;
+                news.local.slice(0, 2).forEach(item => {
+                    newsMsg += `• **${item.title}**\n`;
+                    if (item.url) newsMsg += `  [Read more](${item.url})\n`;
+                });
+                newsMsg += '\n';
+                hasNews = true;
+            }
+
+            // Country news (2 items)
+            if (news.country && news.country.length > 0) {
+                newsMsg += `🏳️ **${news.countryName || 'National'} News**\n`;
+                news.country.slice(0, 2).forEach(item => {
+                    newsMsg += `• **${item.title}**\n`;
+                    if (item.url) newsMsg += `  [Read more](${item.url})\n`;
+                });
+                newsMsg += '\n';
+                hasNews = true;
+            }
+
+            // World news (1 item)
+            if (news.world && news.world.length > 0) {
+                newsMsg += `🌍 **World News**\n`;
+                news.world.slice(0, 1).forEach(item => {
+                    newsMsg += `• **${item.title}**\n`;
+                    if (item.url) newsMsg += `  [Read more](${item.url})\n`;
+                });
+                hasNews = true;
+            }
+
+            if (!hasNews) {
+                newsMsg = "I couldn't find any recent news. Please try again later or check Google News for the latest updates.";
+                speak("No news available right now.");
+            } else {
+                speak("Here are the latest headlines.");
+            }
+        }
+
+        newsMsg += '\n━━━━━━━━━━━━━━━━━━━━━━\n';
+        newsMsg += '💡 **Try:** "sports news", "tech news", "political news"\n';
+        newsMsg += '🔗 [Google News](https://news.google.com) for more';
+
+        addChatMessage(newsMsg, false);
+        saveToHistory(query, 'Displayed news headlines');
+
+    } catch (error) {
+        hideThinkingIndicator();
+        console.error('News fetch error:', error);
+        const errorMsg = "I'm having trouble fetching news right now. You can check [Google News](https://news.google.com) for the latest headlines.";
+        addChatMessage(errorMsg, false);
+        speak("I couldn't fetch news right now. Try Google News for updates.");
+    }
+}
+// ========== END NEWS FETCHING FUNCTION ==========
 
 async function askGeminiAI(userMessage) {
     try {
@@ -3639,12 +3883,16 @@ async function handleNameCorrection(text) {
                 const hasMap = text.includes('<iframe') || text.includes('map-container');
                 const containerWidth = hasMap ? 'w-full max-w-4xl' : (hasHtmlContent ? 'max-w-2xl' : 'max-w-md');
 
+                // Store text safely for speech - use data attribute to avoid escaping issues
+                const speechId = 'speech_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                window[speechId] = textForSpeech;
+
                 messageDiv.innerHTML = `
                     <div class="flex items-start gap-3 ${containerWidth}">
                         <div class="chat-bubble-jarvis px-4 py-3 flex-1 overflow-hidden ${hasMap ? 'map-message' : ''}">
-                            <div class="text-sm ${textClass} typewriter-text leading-relaxed"></div>
+                            <div class="text-sm text-gray-800 dark:text-white typewriter-text leading-relaxed"></div>
                         </div>
-                        <button onclick="toggleSpeak(\`${textForSpeech.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`, this)" class="flex-shrink-0 p-2.5 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white transition-all shadow-md hover:shadow-lg speaker-btn">
+                        <button data-speech-id="${speechId}" onclick="toggleSpeakById(this.dataset.speechId, this)" class="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white transition-all shadow-md hover:shadow-lg speaker-btn flex items-center justify-center">
                             <svg class="play-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
@@ -3655,7 +3903,7 @@ async function handleNameCorrection(text) {
                         </button>
                     </div>
                 `;
-                
+
                 chatContainer.appendChild(messageDiv);
                 
                 
@@ -4538,6 +4786,15 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
         async function processCommand(text) {
             const lower = text.toLowerCase();
 
+            // ========== CONTENT MODERATION CHECK ==========
+            if (isInappropriateContent(text)) {
+                const moderationMsg = getContentModerationResponse();
+                addChatMessage(moderationMsg, false);
+                speak("I'm not able to help with that. Let me know if you have other questions!");
+                return;
+            }
+            // ========== END CONTENT MODERATION CHECK ==========
+
             // Mark as visited (for analytics) but don't hide suggestions
             if (!localStorage.getItem('unify_has_visited')) {
                 localStorage.setItem('unify_has_visited', 'true');
@@ -4655,22 +4912,39 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
                     return;
                 }
 
-                // Major cities with metro/extensive public transport
-                const majorCities = [
+                // Detect if city is in India for context-appropriate transport info
+                const indianCities = [
                     'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad',
                     'pune', 'ahmedabad', 'jaipur', 'lucknow', 'kanpur', 'nagpur', 'kochi', 'cochin',
+                    'coimbatore', 'indore', 'bhopal', 'visakhapatnam', 'surat', 'mysore', 'mysuru',
+                    'goa', 'agra', 'varanasi', 'jodhpur', 'udaipur', 'amritsar', 'pondicherry',
+                    'kerala', 'tamil nadu', 'karnataka', 'maharashtra', 'rajasthan', 'gujarat'
+                ];
+
+                // Major cities with extensive public transit
+                const majorTransitCities = [
+                    'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad',
+                    'pune', 'ahmedabad', 'kochi', 'cochin',
                     'new york', 'nyc', 'los angeles', 'chicago', 'san francisco', 'boston', 'seattle',
-                    'london', 'paris', 'tokyo', 'singapore', 'dubai', 'hong kong', 'sydney', 'toronto'
+                    'washington dc', 'philadelphia', 'miami', 'atlanta', 'denver', 'portland',
+                    'london', 'paris', 'tokyo', 'singapore', 'dubai', 'hong kong', 'sydney', 'toronto',
+                    'vancouver', 'montreal', 'berlin', 'amsterdam', 'barcelona', 'madrid', 'rome',
+                    'long beach', 'san diego', 'austin', 'dallas', 'houston', 'phoenix'
                 ];
 
                 const cityLower = cityName.toLowerCase();
-                const isMajorCity = majorCities.some(city => cityLower.includes(city));
+                const isIndianCity = indianCities.some(city => cityLower.includes(city));
+                const isMajorCity = majorTransitCities.some(city => cityLower.includes(city));
 
                 let transportMsg;
 
                 if (isMajorCity) {
                     // Major city - show Google Maps transit embed
                     const transitQuery = encodeURIComponent(`transit in ${cityName}`);
+                    const rideShareLinks = isIndianCity
+                        ? `🚕 [Book a Ride](https://www.google.com/search?q=uber+ola+${encodeURIComponent(cityName)}) - Uber/Ola available`
+                        : `🚕 [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Uber/Lyft available`;
+
                     transportMsg = `🚌 **Transport in ${cityName}**
 
 ${cityName} has excellent public transportation options!
@@ -4694,13 +4968,13 @@ ${cityName} has excellent public transportation options!
 
 🚌 [Bus Stops](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(cityName)}) - Local bus routes
 
-🚕 [Book a Ride](https://www.google.com/search?q=uber+ola+${encodeURIComponent(cityName)}) - Uber/Ola available
+${rideShareLinks}
 
 📍 [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
 
                     speak(`${cityName} has good public transport including metro and buses. Check the map for stations!`);
-                } else {
-                    // Small town - auto-rickshaws and local transport
+                } else if (isIndianCity) {
+                    // Smaller Indian town - auto-rickshaws and local transport
                     transportMsg = `🚌 **Transport in ${cityName}**
 
 ${cityName} is a smaller town. Here's how to get around:
@@ -4735,6 +5009,41 @@ ${cityName} is a smaller town. Here's how to get around:
 📍 [Find Bus Stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(cityName)}) - Main bus terminal`;
 
                     speak(`${cityName} is a smaller town. Auto-rickshaws are your best bet. I've listed all your options.`);
+                } else {
+                    // Non-Indian smaller city/town
+                    transportMsg = `🚌 **Transport in ${cityName}**
+
+Here's how to get around ${cityName}:
+
+🚗 **Rideshare Services**
+- Uber and Lyft are typically available
+- Download the apps for easy booking
+- Check pricing before rides in tourist areas
+
+🚌 **Public Transit**
+- Check local bus/transit schedules
+- Google Maps shows real-time transit info
+
+🚕 **Taxis & Car Rentals**
+- Local taxi services available
+- Consider renting a car for flexibility
+
+💡 **Pro Tips:**
+- Use Google Maps for real-time transit directions
+- Rideshare apps often have the best rates
+- Ask your hotel concierge for local recommendations
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔍 **More info:**
+
+🚕 [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Rideshare options
+
+🔎 [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
+
+📍 [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
+
+                    speak(`Here are the transport options for ${cityName}. Rideshare services like Uber and Lyft are your best bet.`);
                 }
 
                 addChatMessage(transportMsg, false);
@@ -5033,6 +5342,14 @@ ${cityName} is a smaller town. Here's how to get around:
             // Memory feature temporarily disabled - will be implemented in future
             // else if (memory recall patterns...) { handleMemoryRecall(cleanText); }
             // else if (memory storage patterns...) { handleMemoryStorage(cleanText); }
+
+            // ========== NEWS HANDLING ==========
+            else if (lower.match(/\b(news|headlines?|what'?s happening|current events?|latest updates?)\b/i) &&
+                     !lower.includes('good news') && !lower.includes('bad news') && !lower.includes('some news')) {
+                await fetchAndDisplayNews(cleanText);
+                return;
+            }
+            // ========== END NEWS HANDLING ==========
 
             else if (cleanText.toLowerCase().match(/\b(who (created|made|built|developed) (you|this|unify)|who (is|are) (your|the) (creator|developer|maker|author)|tell me about (your|the) creator|who owns (you|this))\b/i)) {
                 const creatorMsg = `I was created by Prithviraju Venkataraman, a developer passionate about AI and voice interfaces. I was built to help his family mainly with travel planning, weather updates, shopping lists, reminders, and more but later on thought, why not make this as a Vibe Coded Project! Cool isn't it? If you see any bugs or room for improvement, click on Request feature.`;
@@ -5365,22 +5682,39 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     
                     // Transport query handling
                     if (queryType === 'transport') {
-                        // Major cities with metro/extensive public transport
-                        const majorCities = [
+                        // Detect if city is in India for context-appropriate transport info
+                        const indianCities = [
                             'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad',
                             'pune', 'ahmedabad', 'jaipur', 'lucknow', 'kanpur', 'nagpur', 'kochi', 'cochin',
+                            'coimbatore', 'indore', 'bhopal', 'visakhapatnam', 'surat', 'mysore', 'mysuru',
+                            'goa', 'agra', 'varanasi', 'jodhpur', 'udaipur', 'amritsar', 'pondicherry',
+                            'kerala', 'tamil nadu', 'karnataka', 'maharashtra', 'rajasthan', 'gujarat'
+                        ];
+
+                        // Major cities with extensive public transit
+                        const majorTransitCities = [
+                            'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad',
+                            'pune', 'ahmedabad', 'kochi', 'cochin',
                             'new york', 'nyc', 'los angeles', 'chicago', 'san francisco', 'boston', 'seattle',
-                            'london', 'paris', 'tokyo', 'singapore', 'dubai', 'hong kong', 'sydney', 'toronto'
+                            'washington dc', 'philadelphia', 'miami', 'atlanta', 'denver', 'portland',
+                            'london', 'paris', 'tokyo', 'singapore', 'dubai', 'hong kong', 'sydney', 'toronto',
+                            'vancouver', 'montreal', 'berlin', 'amsterdam', 'barcelona', 'madrid', 'rome',
+                            'long beach', 'san diego', 'austin', 'dallas', 'houston', 'phoenix'
                         ];
 
                         const cityLower = cityName.toLowerCase();
-                        const isMajorCity = majorCities.some(city => cityLower.includes(city));
+                        const isIndianCity = indianCities.some(city => cityLower.includes(city));
+                        const isMajorCity = majorTransitCities.some(city => cityLower.includes(city));
 
                         let transportMsg;
 
                         if (isMajorCity) {
                             // Major city - show Google Maps transit embed
                             const transitQuery = encodeURIComponent(`transit in ${cityName}`);
+                            const rideShareLinks = isIndianCity
+                                ? `🚕 [Book a Ride](https://www.google.com/search?q=uber+ola+${encodeURIComponent(cityName)}) - Uber/Ola available`
+                                : `🚕 [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Uber/Lyft available`;
+
                             transportMsg = `🚌 **Transport in ${cityName}**
 
 ${cityName} has excellent public transportation options!
@@ -5404,13 +5738,13 @@ ${cityName} has excellent public transportation options!
 
 🚌 [Bus Stops](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(cityName)}) - Local bus routes
 
-🚕 [Book a Ride](https://www.google.com/search?q=uber+ola+${encodeURIComponent(cityName)}) - Uber/Ola available
+${rideShareLinks}
 
 📍 [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
 
                             speak(`${cityName} has good public transport including metro and buses. Check the map for stations!`);
-                        } else {
-                            // Small town - auto-rickshaws and local transport
+                        } else if (isIndianCity) {
+                            // Smaller Indian town - auto-rickshaws and local transport
                             transportMsg = `🚌 **Transport in ${cityName}**
 
 ${cityName} is a smaller town. Here's how to get around:
@@ -5445,6 +5779,41 @@ ${cityName} is a smaller town. Here's how to get around:
 📍 [Find Bus Stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(cityName)}) - Main bus terminal`;
 
                             speak(`${cityName} is a smaller town. Auto-rickshaws are your best bet. I've listed all your options.`);
+                        } else {
+                            // Non-Indian smaller city/town
+                            transportMsg = `🚌 **Transport in ${cityName}**
+
+Here's how to get around ${cityName}:
+
+🚗 **Rideshare Services**
+- Uber and Lyft are typically available
+- Download the apps for easy booking
+- Check pricing before rides in tourist areas
+
+🚌 **Public Transit**
+- Check local bus/transit schedules
+- Google Maps shows real-time transit info
+
+🚕 **Taxis & Car Rentals**
+- Local taxi services available
+- Consider renting a car for flexibility
+
+💡 **Pro Tips:**
+- Use Google Maps for real-time transit directions
+- Rideshare apps often have the best rates
+- Ask your hotel concierge for local recommendations
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🔍 **More info:**
+
+🚕 [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Rideshare options
+
+🔎 [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
+
+📍 [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
+
+                            speak(`Here are the transport options for ${cityName}. Rideshare services like Uber and Lyft are your best bet.`);
                         }
 
                         addChatMessage(transportMsg, false);
@@ -6504,11 +6873,23 @@ I had trouble getting specific recommendations, but you can search directly:
         let currentUtterance = null; 
         let currentSpeakerButton = null; 
         
+        // Toggle speak using stored text ID (safer for special characters)
+        function toggleSpeakById(speechId, button) {
+            const text = window[speechId];
+            if (!text) {
+                console.error('Speech text not found for ID:', speechId);
+                return;
+            }
+            toggleSpeak(text, button);
+        }
+
         function toggleSpeak(text, button) {
-            
-            if (synth.speaking || (typeof responsiveVoice !== 'undefined' && responsiveVoice.isPlaying())) {
+            // Check if currently speaking
+            const isSpeaking = synth.speaking || (typeof responsiveVoice !== 'undefined' && responsiveVoice.isPlaying());
+
+            if (isSpeaking) {
                 stopSpeaking();
-                
+
                 document.querySelectorAll('.speaker-btn').forEach(btn => {
                     btn.querySelector('.play-icon')?.classList.remove('hidden');
                     btn.querySelector('.stop-icon')?.classList.add('hidden');
@@ -6516,12 +6897,12 @@ I had trouble getting specific recommendations, but you can search directly:
                 currentSpeakerButton = null;
                 return;
             }
-            
-            
+
+            // Start speaking
             currentSpeakerButton = button;
             button.querySelector('.play-icon')?.classList.add('hidden');
             button.querySelector('.stop-icon')?.classList.remove('hidden');
-            speak(text, true); 
+            speak(text, true);
         }
         
         function speak(text, force = false) {
