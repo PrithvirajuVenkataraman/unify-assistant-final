@@ -1,5 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
+<!--
+    JARVIS Voice Assistant
+    ======================
+    Deployment Structure (Vercel):
+    /
+    ├── index.full_with_map_preview.html (this file)
+    ├── api/
+    │   ├── chat-groq.js
+    │   └── search.js
+    └── vercel.json (create this - see below)
+
+    vercel.json contents:
+    {
+      "functions": { "api/**/*.js": { "runtime": "edge" } },
+      "rewrites": [{ "source": "/", "destination": "/index.full_with_map_preview.html" }]
+    }
+
+    Environment Variable Required:
+    - GROQ_API_KEY (get from https://console.groq.com)
+-->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -1367,13 +1387,17 @@
             border-radius: 20px 20px 20px 4px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
             animation: slideInLeft 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            color: #000000;
+            color: #000000 !important;
         }
 
         body.dark .chat-bubble-jarvis {
             background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
             border-color: rgba(255, 255, 255, 0.05);
-            color: #ffffff;
+            color: #ffffff !important;
+        }
+
+        .chat-bubble-jarvis * {
+            color: inherit !important;
         }
 
         @keyframes slideInRight {
@@ -1790,8 +1814,8 @@
 
     <!-- ChatGPT-style Input at Bottom - Enhanced -->
     <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 floating-input-bar z-40">
-        <div class="max-w-4xl mx-auto px-4 py-2">
-            <div id="input-bar-inner" class="flex items-center gap-3 modern-input px-4 py-3">
+        <div class="max-w-2xl mx-auto px-3 py-1">
+            <div id="input-bar-inner" class="flex items-center gap-2 modern-input px-3 py-2">
                 <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group p-2 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -3489,7 +3513,7 @@ async function handleNameCorrection(text) {
             
             const welcomeMsg = userName 
                 ? `Hi ${userName}! How can I help you today?` 
-                : "Hi! I'm JARVIS, your voice assistant. How can I help you today?";
+                : "Hi! I'm JARVIS, your personal assistant. How can I help you today?";
             
             addChatMessage(welcomeMsg, false);
             speak(welcomeMsg);
@@ -3549,7 +3573,7 @@ async function handleNameCorrection(text) {
                     inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
                 }
                 if (inputBarInner) {
-                    inputBarInner.className = 'flex items-center gap-3 modern-input px-5 py-4';
+                    inputBarInner.className = 'flex items-center gap-2 modern-input px-3 py-2';
                 }
                 if (textInput) {
                     textInput.className = 'flex-1 bg-transparent outline-none text-white placeholder-gray-500 text-base font-medium';
@@ -3586,7 +3610,7 @@ async function handleNameCorrection(text) {
                         inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
                     }
                     if (inputBarInner) {
-                        inputBarInner.className = 'flex items-center gap-3 modern-input px-5 py-4';
+                        inputBarInner.className = 'flex items-center gap-2 modern-input px-3 py-2';
                     }
                     if (textInput) {
                         textInput.className = 'flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-400 text-base font-medium';
