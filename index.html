@@ -1,25 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-<!--
-    JARVIS Voice Assistant
-    ======================
-    Deployment Structure (Vercel):
-    /
-    ├── index.full_with_map_preview.html (this file)
-    ├── api/
-    │   ├── chat-groq.js
-    │   └── search.js
-    └── vercel.json (create this - see below)
-
-    vercel.json contents:
-    {
-      "functions": { "api/**/*.js": { "runtime": "edge" } },
-      "rewrites": [{ "source": "/", "destination": "/index.full_with_map_preview.html" }]
-    }
-
-    Environment Variable Required:
-    - GROQ_API_KEY (get from https://console.groq.com)
--->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -1789,7 +1769,7 @@
                     <!-- Right Column: Chat -->
                     <div class="lg:w-3/5 order-1 lg:order-2">
                         <!-- Chat History - Claude/ChatGPT style compact view -->
-                        <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar" style="height: calc(100vh - 400px); min-height: 200px; max-height: 450px;">
+                        <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar" style="height: calc(100vh - 300px); min-height: 300px; max-height: 600px;">
                             <!-- Welcome message -->
                         </div>
                     </div>
@@ -3862,7 +3842,7 @@ async function handleNameCorrection(text) {
                 `;
             } else {
 
-                const textClass = darkMode ? 'text-gray-200' : 'text-gray-800';
+                const textClass = darkMode ? 'text-white' : 'text-black';
 
 
                 const textForSpeech = text.replace(/<[^>]*>/g, '');
@@ -3898,7 +3878,7 @@ async function handleNameCorrection(text) {
                 messageDiv.innerHTML = `
                     <div class="flex items-start gap-3 ${containerWidth}">
                         <div class="chat-bubble-jarvis px-4 py-3 flex-1 overflow-hidden ${hasMap ? 'map-message' : ''}">
-                            <div class="text-sm text-black dark:text-white typewriter-text leading-relaxed"></div>
+                            <div class="text-sm ${textClass} typewriter-text leading-relaxed"></div>
                         </div>
                         <button data-speech-id="${speechId}" onclick="toggleSpeakById(this.dataset.speechId, this)" class="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white transition-all shadow-md hover:shadow-lg speaker-btn flex items-center justify-center">
                             <svg class="play-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
