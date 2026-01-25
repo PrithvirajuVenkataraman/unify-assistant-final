@@ -487,60 +487,61 @@
             z-index: 2;
         }
         
-        /* Light Switch Styles - Smaller */
+        /* Light Switch Styles - Horizontal */
         .light-switch-container {
             position: relative;
-            width: 60px;          /* Was 80px */
-            height: 105px;        /* Was 140px */
+            width: 90px;
+            height: 50px;
             background: linear-gradient(145deg, #e6e6e6, #ffffff);
-            border-radius: 6px;   /* Was 8px */
+            border-radius: 6px;
             box-shadow: 0 3px 8px rgba(0,0,0,0.1),
                         inset 0 1px 0 rgba(255,255,255,0.8);
-            padding: 11px;        /* Was 15px */
+            padding: 8px;
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             align-items: center;
             justify-content: center;
         }
-        
+
         .light-switch {
-            width: 30px;          /* Was 40px */
-            height: 52px;         /* Was 70px */
+            width: 52px;
+            height: 28px;
             background: #fff;
-            border-radius: 3px;   /* Was 4px */
+            border-radius: 3px;
             position: relative;
             cursor: pointer;
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
             transition: all 0.3s ease;
         }
-        
+
         .switch-toggle {
-            width: 27px;          /* Was 36px */
-            height: 24px;         /* Was 32px */
+            width: 24px;
+            height: 24px;
             background: linear-gradient(145deg, #f0f0f0, #d9d9d9);
-            border-radius: 2px;   /* Was 3px */
+            border-radius: 2px;
             position: absolute;
-            left: 1.5px;          /* Was 2px */
-            top: 1.5px;           /* Was 2px */
+            left: 2px;
+            top: 2px;
             transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
             box-shadow: 0 2px 3px rgba(0,0,0,0.3),
                         inset 0 1px 0 rgba(255,255,255,0.8);
         }
-        
+
         .switch-toggle::before {
             content: '';
             position: absolute;
-            width: 15px;          /* Was 20px */
-            height: 2px;          /* Was 3px */
+            width: 2px;
+            height: 12px;
             background: #999;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            border-radius: 1px;   /* Was 2px */
+            border-radius: 1px;
         }
-        
+
         .light-switch.on .switch-toggle {
-            top: 27px;          /* Was 36px - adjusted for smaller size */
+            left: 26px;
+            top: 2px;
             background: linear-gradient(145deg, #d9d9d9, #c9c9c9);
         }
         
@@ -1072,23 +1073,24 @@
             }
             
             .light-switch-container {
-                width: 60px;
-                height: 110px;
-                padding: 10px;
+                width: 80px;
+                height: 45px;
+                padding: 6px;
             }
-            
+
             .light-switch {
-                width: 35px;
-                height: 60px;
+                width: 48px;
+                height: 26px;
             }
-            
+
             .switch-toggle {
-                width: 31px;
-                height: 27px;
+                width: 22px;
+                height: 22px;
             }
-            
+
             .light-switch.on .switch-toggle {
-                top: 23px;          /* Was 31px - adjusted for smaller size */
+                left: 24px;
+                top: 2px;
             }
         }
         
@@ -1371,6 +1373,23 @@
 
         body.dark .suggestion-chip::before {
             background: linear-gradient(135deg, rgba(0, 217, 255, 0.1) 0%, rgba(0, 255, 136, 0.1) 100%);
+        }
+
+        /* Suggestion text colors - explicit for body.dark system */
+        .suggestion-chip span {
+            color: #000000 !important;
+        }
+
+        body.dark .suggestion-chip span {
+            color: #ffffff !important;
+        }
+
+        .suggestions-container h3 {
+            color: #000000 !important;
+        }
+
+        body.dark .suggestions-container h3 {
+            color: #ffffff !important;
         }
 
         /* Chat message bubbles enhancement */
@@ -1743,7 +1762,7 @@
                     <div class="lg:w-2/5 order-2 lg:order-1">
                         <!-- Suggestion Buttons - Dynamic based on context -->
                         <div id="initial-suggestions" class="suggestions-container">
-                            <h3 class="font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+                            <h3 class="font-semibold text-black dark:text-white mb-4 flex items-center gap-2">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-purple-500">
                                     <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
                                 </svg>
@@ -1814,8 +1833,8 @@
 
     <!-- ChatGPT-style Input at Bottom - Enhanced -->
     <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 floating-input-bar z-40">
-        <div class="max-w-2xl mx-auto px-3 py-1">
-            <div id="input-bar-inner" class="flex items-center gap-2 modern-input px-3 py-2">
+        <div class="max-w-xl mx-auto px-2 py-1">
+            <div id="input-bar-inner" class="flex items-center gap-2 modern-input px-2 py-1.5">
                 <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group p-2 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -2167,7 +2186,7 @@ function updateSuggestionBox(suggestions) {
         <button onclick="processSuggestion('${s.query.replace(/'/g, "\\'")} ')"
                 class="suggestion-chip text-left flex items-center gap-3 group">
             <span class="text-xl group-hover:scale-110 transition-transform">${s.icon}</span>
-            <span class="text-sm font-medium text-gray-700 dark:text-gray-200">${s.text}</span>
+            <span class="text-sm font-medium text-black dark:text-white">${s.text}</span>
         </button>
     `).join('');
 }
@@ -3573,7 +3592,7 @@ async function handleNameCorrection(text) {
                     inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
                 }
                 if (inputBarInner) {
-                    inputBarInner.className = 'flex items-center gap-2 modern-input px-3 py-2';
+                    inputBarInner.className = 'flex items-center gap-2 modern-input px-2 py-1.5';
                 }
                 if (textInput) {
                     textInput.className = 'flex-1 bg-transparent outline-none text-white placeholder-gray-500 text-base font-medium';
@@ -3610,7 +3629,7 @@ async function handleNameCorrection(text) {
                         inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
                     }
                     if (inputBarInner) {
-                        inputBarInner.className = 'flex items-center gap-2 modern-input px-3 py-2';
+                        inputBarInner.className = 'flex items-center gap-2 modern-input px-2 py-1.5';
                     }
                     if (textInput) {
                         textInput.className = 'flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-400 text-base font-medium';
