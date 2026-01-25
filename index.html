@@ -29,6 +29,10 @@
     <title>JARVIS - Just A Rather Very Intelligent System</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js?key=jQZ2zpcE"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
     <style>
         @keyframes waveform {
             0%, 100% { transform: scaleY(0.5); }
@@ -1334,8 +1338,8 @@
         .suggestion-chip {
             background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%);
             border: 1px solid rgba(139, 92, 246, 0.15);
-            border-radius: 12px;
-            padding: 12px 16px;
+            border-radius: 10px;
+            padding: 8px 12px;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             cursor: pointer;
             position: relative;
@@ -1715,6 +1719,29 @@
     <div id="alarm-overlay" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50"></div>
     <div id="alarm-notification" class="hidden"></div>
 
+    <!-- Device Pairing Modal -->
+    <div id="pairing-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <span>📱</span> Pair Your Phone
+                </h2>
+                <button onclick="closePairingModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 text-2xl">&times;</button>
+            </div>
+
+            <div id="pairing-content">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Permission Banner -->
+    <div id="notification-banner" class="hidden fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-4">
+        <span>🔔 Enable notifications to receive reminders on this device</span>
+        <button onclick="requestNotificationPermission()" class="bg-white text-purple-600 px-4 py-1 rounded-lg font-semibold hover:bg-gray-100 transition-all">Enable</button>
+        <button onclick="dismissNotificationBanner()" class="text-white/70 hover:text-white">&times;</button>
+    </div>
+
     <div class="min-h-screen pb-32">
         <div id="bg-effects" class="fixed inset-0 overflow-hidden pointer-events-none">
             <div class="absolute top-20 left-20 w-72 h-72 bg-slate-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
@@ -1746,10 +1773,23 @@
                     </div>
                 </div>
 
-                <!-- Light Switch -->
-                <div class="light-switch-container" onclick="toggleDarkMode()">
-                    <div id="light-switch" class="light-switch on">
-                        <div class="switch-toggle"></div>
+                <!-- Pairing & Light Switch -->
+                <div class="flex items-center gap-3">
+                    <!-- Pair Phone Button -->
+                    <button onclick="openPairingModal()" id="pair-btn" class="relative p-2 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all group" title="Pair Phone for Notifications">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
+                            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                            <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                        </svg>
+                        <!-- Pairing status indicator -->
+                        <div id="pairing-status" class="hidden absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                    </button>
+
+                    <!-- Light Switch -->
+                    <div class="light-switch-container" onclick="toggleDarkMode()">
+                        <div id="light-switch" class="light-switch on">
+                            <div class="switch-toggle"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2171,7 +2211,6 @@ function showInitialSuggestions() {
         { icon: '🛒', text: 'Add 2 lbs chicken to list', query: 'Add 2 pounds of chicken to my shopping list' },
         { icon: '⏰', text: 'Remind me to call mom', query: 'Remind me to call mom at 5pm' },
         { icon: '🌐', text: 'Translate to Tamil', query: 'Speak in Tamil' },
-        { icon: '❓', text: 'What can you do?', query: 'What can you do?' },
         { icon: '✈️', text: 'Plan a trip to Paris', query: 'Plan a weekend trip to Paris' }
     ];
     
@@ -2184,9 +2223,9 @@ function updateSuggestionBox(suggestions) {
 
     grid.innerHTML = suggestions.map(s => `
         <button onclick="processSuggestion('${s.query.replace(/'/g, "\\'")} ')"
-                class="suggestion-chip text-left flex items-center gap-3 group">
-            <span class="text-xl group-hover:scale-110 transition-transform">${s.icon}</span>
-            <span class="text-sm font-medium text-black dark:text-white">${s.text}</span>
+                class="suggestion-chip text-left flex items-center gap-2 group">
+            <span class="text-base group-hover:scale-110 transition-transform">${s.icon}</span>
+            <span class="text-xs font-medium text-black dark:text-white">${s.text}</span>
         </button>
     `).join('');
 }
@@ -2244,8 +2283,7 @@ function updateContextualSuggestions(context) {
             { icon: '✈️', text: 'Plan a trip', query: 'Plan a trip to Paris' },
             { icon: '🛒', text: 'Shopping list', query: 'Add milk to my list' },
             { icon: '⏰', text: 'Set reminder', query: 'Remind me to call mom' },
-            { icon: '🌐', text: 'Translator', query: 'Speak in Tamil' },
-            { icon: '❓', text: 'What can you do?', query: 'What can you do?' }
+            { icon: '🌐', text: 'Translator', query: 'Speak in Tamil' }
         ];
     }
     
@@ -5326,30 +5364,37 @@ Here's how to get around ${cityName}:
             
             if (cleanText.toLowerCase().includes('add') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('shopping') || cleanText.toLowerCase().includes('to my list') || cleanText.toLowerCase().includes('to list'))) {
                 handleAddToShoppingList(cleanText);
+                return;
             }
-            
+
             else if (cleanText.toLowerCase().match(/\b(also|and|plus)\s+add\b/i) || cleanText.toLowerCase().match(/\badd\s+(also|too)\b/i)) {
                 handleAddToShoppingList(cleanText);
+                return;
             }
-            
+
             else if (cleanText.toLowerCase().startsWith('add ') && shoppingList.length > 0) {
                 handleAddToShoppingList(cleanText);
+                return;
             }
             else if (cleanText.toLowerCase().includes('remove') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('from shopping'))) {
                 handleRemoveFromShoppingList(cleanText);
+                return;
             }
             else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('what') || cleanText.toLowerCase().includes('read')) && cleanText.toLowerCase().includes('shopping')) {
                 showShoppingList();
+                return;
             }
             else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('shopping')) {
                 clearShoppingList();
+                return;
             }
-            
+
             else if (cleanText.toLowerCase().includes('remind')) {
                 createReminderFromText(cleanText);
+                return;
             }
             
-            else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('my reminder') || cleanText.toLowerCase().includes('list reminder')) && 
+            else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('my reminder') || cleanText.toLowerCase().includes('list reminder')) &&
                      !cleanText.toLowerCase().includes('shopping')) {
                 if (reminders.length === 0) {
                     const msg = "You haven't set any reminders yet. Would you like me to remind you of something?";
@@ -5362,10 +5407,12 @@ Here's how to get around ${cityName}:
                     speak(msg);
                     document.getElementById('reminders-section').classList.remove('hidden');
                 }
+                return;
             }
-            
+
             else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('reminder')) {
                 clearAllReminders();
+                return;
             }
 
             // Memory feature temporarily disabled - will be implemented in future
@@ -7249,6 +7296,624 @@ loadHistory();
    - Call showError("Error message") instead of addChatMessage for errors
    - Visual shake animation + auto-dismiss
 */
+
+// ========== FIREBASE & PUSH NOTIFICATIONS ==========
+
+// Firebase Configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyBVpkEMOSZXVkKVrlEAksL1R1Rv0tJmdxQ",
+    authDomain: "jarvis-assistant-f1abb.firebaseapp.com",
+    projectId: "jarvis-assistant-f1abb",
+    storageBucket: "jarvis-assistant-f1abb.firebasestorage.app",
+    messagingSenderId: "673211850778",
+    appId: "1:673211850778:web:5787ef037b14d5addc31a3"
+};
+
+// Initialize Firebase
+let firebaseApp = null;
+let firestore = null;
+let messaging = null;
+let fcmToken = null;
+let deviceId = null;
+let pairedDevices = [];
+
+async function initializeFirebase() {
+    try {
+        // Initialize Firebase
+        firebaseApp = firebase.initializeApp(firebaseConfig);
+        firestore = firebase.firestore();
+
+        // Generate or retrieve device ID
+        deviceId = localStorage.getItem('jarvis_device_id');
+        if (!deviceId) {
+            deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('jarvis_device_id', deviceId);
+        }
+
+        // Initialize messaging if supported
+        if ('serviceWorker' in navigator && 'PushManager' in window) {
+            try {
+                // Register service worker
+                const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+                console.log('Service Worker registered:', registration);
+
+                messaging = firebase.messaging();
+
+                // Check notification permission
+                if (Notification.permission === 'granted') {
+                    await getAndSaveFCMToken();
+                    updatePairingStatus(true);
+                } else if (Notification.permission === 'default') {
+                    // Show notification banner after a delay
+                    setTimeout(() => {
+                        document.getElementById('notification-banner')?.classList.remove('hidden');
+                    }, 10000);
+                }
+
+                // Listen for foreground messages
+                messaging.onMessage((payload) => {
+                    console.log('Foreground message received:', payload);
+                    showForegroundNotification(payload);
+                });
+
+            } catch (err) {
+                console.log('Messaging not supported:', err);
+            }
+        }
+
+        // Load paired devices
+        await loadPairedDevices();
+
+        // Sync reminders to Firebase
+        await syncRemindersToFirebase();
+
+        // Listen for reminder updates from other devices
+        listenForReminderUpdates();
+
+        console.log('Firebase initialized successfully');
+
+    } catch (error) {
+        console.error('Firebase initialization error:', error);
+    }
+}
+
+// Get FCM Token and save to Firestore
+async function getAndSaveFCMToken() {
+    try {
+        fcmToken = await messaging.getToken({
+            vapidKey: 'BLBz6PWHp5OBpBVAXqNAFrVzRnWmPvOVWaCJlU8C6wqNPJJRtJxJxJxJxJ' // We'll generate this
+        });
+
+        if (fcmToken) {
+            console.log('FCM Token:', fcmToken);
+
+            // Save token to Firestore
+            await firestore.collection('devices').doc(deviceId).set({
+                fcmToken: fcmToken,
+                deviceType: detectDeviceType(),
+                lastActive: firebase.firestore.FieldValue.serverTimestamp(),
+                userName: userName || 'Unknown',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+
+            localStorage.setItem('jarvis_fcm_token', fcmToken);
+        }
+    } catch (error) {
+        console.error('Error getting FCM token:', error);
+    }
+}
+
+// Detect device type
+function detectDeviceType() {
+    const ua = navigator.userAgent;
+    if (/mobile/i.test(ua)) return 'mobile';
+    if (/tablet|ipad/i.test(ua)) return 'tablet';
+    return 'desktop';
+}
+
+// Request notification permission
+async function requestNotificationPermission() {
+    try {
+        const permission = await Notification.requestPermission();
+
+        if (permission === 'granted') {
+            await getAndSaveFCMToken();
+            updatePairingStatus(true);
+            document.getElementById('notification-banner')?.classList.add('hidden');
+
+            const msg = "Notifications enabled! You'll receive reminders on this device.";
+            addChatMessage(msg, false);
+            speak(msg);
+        } else {
+            const msg = "Notifications blocked. You can enable them in browser settings.";
+            addChatMessage(msg, false);
+            speak(msg);
+        }
+    } catch (error) {
+        console.error('Permission error:', error);
+    }
+}
+
+// Dismiss notification banner
+function dismissNotificationBanner() {
+    document.getElementById('notification-banner')?.classList.add('hidden');
+    localStorage.setItem('jarvis_notification_dismissed', 'true');
+}
+
+// Update pairing status indicator
+function updatePairingStatus(connected) {
+    const indicator = document.getElementById('pairing-status');
+    if (indicator) {
+        if (connected) {
+            indicator.classList.remove('hidden');
+        } else {
+            indicator.classList.add('hidden');
+        }
+    }
+}
+
+// Show foreground notification
+function showForegroundNotification(payload) {
+    const title = payload.notification?.title || 'JARVIS Reminder';
+    const body = payload.notification?.body || 'You have a reminder!';
+
+    // Show in chat
+    addChatMessage(`🔔 **Reminder:** ${body}`, false);
+    speak(body);
+
+    // Also show browser notification
+    if (Notification.permission === 'granted') {
+        new Notification(title, {
+            body: body,
+            icon: '/jarvis-icon.png',
+            tag: 'jarvis-reminder'
+        });
+    }
+}
+
+// ========== DEVICE PAIRING SYSTEM ==========
+
+let pairingCode = null;
+let pairingListener = null;
+
+// Open pairing modal
+function openPairingModal() {
+    const modal = document.getElementById('pairing-modal');
+    const content = document.getElementById('pairing-content');
+
+    const deviceType = detectDeviceType();
+
+    if (deviceType === 'desktop') {
+        // Desktop: Show pairing code
+        showPairingCodeUI(content);
+    } else {
+        // Mobile: Show code entry
+        showCodeEntryUI(content);
+    }
+
+    modal.classList.remove('hidden');
+}
+
+// Close pairing modal
+function closePairingModal() {
+    const modal = document.getElementById('pairing-modal');
+    modal.classList.add('hidden');
+
+    // Stop listening for pairing
+    if (pairingListener) {
+        pairingListener();
+        pairingListener = null;
+    }
+}
+
+// Generate 6-digit pairing code
+function generatePairingCode() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Show pairing code UI (for laptop)
+async function showPairingCodeUI(container) {
+    pairingCode = generatePairingCode();
+
+    container.innerHTML = `
+        <div class="text-center">
+            <p class="text-gray-600 dark:text-gray-400 mb-4">
+                Enter this code on your phone to receive reminders:
+            </p>
+
+            <div class="bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-xl p-6 mb-4">
+                <div class="text-4xl font-mono font-bold tracking-widest text-purple-700 dark:text-purple-300" id="pairing-code-display">
+                    ${pairingCode.split('').join(' ')}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-4">
+                <div class="animate-pulse w-2 h-2 bg-green-500 rounded-full"></div>
+                <span>Waiting for connection...</span>
+            </div>
+
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                On your phone:<br>
+                1. Open JARVIS<br>
+                2. Tap the phone icon 📱<br>
+                3. Enter this code
+            </p>
+
+            <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">Paired Devices:</p>
+                <div id="paired-devices-list" class="space-y-2">
+                    <p class="text-xs text-gray-400">No devices paired yet</p>
+                </div>
+            </div>
+
+            <button onclick="refreshPairingCode()" class="mt-4 text-purple-600 hover:text-purple-700 text-sm font-medium">
+                🔄 Generate New Code
+            </button>
+        </div>
+    `;
+
+    // Save pairing code to Firestore
+    await firestore.collection('pairing_codes').doc(pairingCode).set({
+        deviceId: deviceId,
+        fcmToken: fcmToken || null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+        status: 'waiting'
+    });
+
+    // Listen for pairing completion
+    pairingListener = firestore.collection('pairing_codes').doc(pairingCode)
+        .onSnapshot((doc) => {
+            if (doc.exists && doc.data().status === 'paired') {
+                handlePairingSuccess(doc.data());
+            }
+        });
+
+    // Load paired devices list
+    loadPairedDevicesList();
+}
+
+// Show code entry UI (for phone)
+function showCodeEntryUI(container) {
+    container.innerHTML = `
+        <div class="text-center">
+            <p class="text-gray-600 dark:text-gray-400 mb-4">
+                Enter the code shown on your laptop:
+            </p>
+
+            <div class="flex justify-center gap-2 mb-4">
+                <input type="text" id="pairing-input-1" maxlength="1" class="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none dark:bg-gray-700 dark:text-white" oninput="handlePairingInput(this, 1)">
+                <input type="text" id="pairing-input-2" maxlength="1" class="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none dark:bg-gray-700 dark:text-white" oninput="handlePairingInput(this, 2)">
+                <input type="text" id="pairing-input-3" maxlength="1" class="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none dark:bg-gray-700 dark:text-white" oninput="handlePairingInput(this, 3)">
+                <input type="text" id="pairing-input-4" maxlength="1" class="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none dark:bg-gray-700 dark:text-white" oninput="handlePairingInput(this, 4)">
+                <input type="text" id="pairing-input-5" maxlength="1" class="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none dark:bg-gray-700 dark:text-white" oninput="handlePairingInput(this, 5)">
+                <input type="text" id="pairing-input-6" maxlength="1" class="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none dark:bg-gray-700 dark:text-white" oninput="handlePairingInput(this, 6)">
+            </div>
+
+            <div id="pairing-status-msg" class="text-sm mb-4"></div>
+
+            <button onclick="submitPairingCode()" id="pair-submit-btn" class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 rounded-xl font-semibold hover:from-purple-700 hover:to-indigo-700 transition-all disabled:opacity-50" disabled>
+                Connect
+            </button>
+
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-4">
+                Make sure notifications are enabled on this device to receive reminders.
+            </p>
+        </div>
+    `;
+}
+
+// Handle pairing code input
+function handlePairingInput(input, index) {
+    const value = input.value.replace(/[^0-9]/g, '');
+    input.value = value;
+
+    if (value && index < 6) {
+        document.getElementById(`pairing-input-${index + 1}`)?.focus();
+    }
+
+    // Check if all inputs filled
+    let code = '';
+    for (let i = 1; i <= 6; i++) {
+        code += document.getElementById(`pairing-input-${i}`).value;
+    }
+
+    const submitBtn = document.getElementById('pair-submit-btn');
+    if (code.length === 6) {
+        submitBtn.disabled = false;
+    } else {
+        submitBtn.disabled = true;
+    }
+}
+
+// Submit pairing code (from phone)
+async function submitPairingCode() {
+    let code = '';
+    for (let i = 1; i <= 6; i++) {
+        code += document.getElementById(`pairing-input-${i}`).value;
+    }
+
+    const statusMsg = document.getElementById('pairing-status-msg');
+    statusMsg.innerHTML = '<span class="text-blue-500">Connecting...</span>';
+
+    try {
+        // Look up pairing code
+        const doc = await firestore.collection('pairing_codes').doc(code).get();
+
+        if (!doc.exists) {
+            statusMsg.innerHTML = '<span class="text-red-500">Invalid code. Please try again.</span>';
+            return;
+        }
+
+        const data = doc.data();
+
+        if (data.status === 'paired') {
+            statusMsg.innerHTML = '<span class="text-yellow-500">This code has already been used.</span>';
+            return;
+        }
+
+        // Request notification permission first
+        if (Notification.permission !== 'granted') {
+            await requestNotificationPermission();
+        }
+
+        // Get FCM token for this device
+        if (messaging && !fcmToken) {
+            await getAndSaveFCMToken();
+        }
+
+        // Update pairing document
+        await firestore.collection('pairing_codes').doc(code).update({
+            status: 'paired',
+            pairedDeviceId: deviceId,
+            pairedFcmToken: fcmToken,
+            pairedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Save paired device relationship
+        await firestore.collection('device_pairs').add({
+            primaryDeviceId: data.deviceId,
+            secondaryDeviceId: deviceId,
+            primaryFcmToken: data.fcmToken,
+            secondaryFcmToken: fcmToken,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Save to local storage
+        const pairs = JSON.parse(localStorage.getItem('jarvis_paired_devices') || '[]');
+        pairs.push({
+            deviceId: data.deviceId,
+            pairedAt: new Date().toISOString()
+        });
+        localStorage.setItem('jarvis_paired_devices', JSON.stringify(pairs));
+
+        statusMsg.innerHTML = '<span class="text-green-500">✓ Connected successfully!</span>';
+        updatePairingStatus(true);
+
+        // Close modal after delay
+        setTimeout(() => {
+            closePairingModal();
+            const msg = "Phone paired! You'll receive reminder notifications here.";
+            addChatMessage(msg, false);
+            speak(msg);
+        }, 1500);
+
+    } catch (error) {
+        console.error('Pairing error:', error);
+        statusMsg.innerHTML = '<span class="text-red-500">Connection failed. Please try again.</span>';
+    }
+}
+
+// Handle pairing success (on laptop when phone connects)
+function handlePairingSuccess(data) {
+    const codeDisplay = document.getElementById('pairing-code-display');
+    if (codeDisplay) {
+        codeDisplay.innerHTML = '✓ Connected!';
+        codeDisplay.classList.remove('text-purple-700', 'dark:text-purple-300');
+        codeDisplay.classList.add('text-green-600', 'dark:text-green-400');
+    }
+
+    updatePairingStatus(true);
+    loadPairedDevicesList();
+
+    setTimeout(() => {
+        closePairingModal();
+        const msg = "Phone paired successfully! Reminders will be sent to your phone.";
+        addChatMessage(msg, false);
+        speak(msg);
+    }, 1500);
+}
+
+// Refresh pairing code
+async function refreshPairingCode() {
+    // Delete old code
+    if (pairingCode) {
+        await firestore.collection('pairing_codes').doc(pairingCode).delete();
+    }
+
+    // Generate and show new code
+    const content = document.getElementById('pairing-content');
+    showPairingCodeUI(content);
+}
+
+// Load paired devices
+async function loadPairedDevices() {
+    try {
+        const snapshot = await firestore.collection('device_pairs')
+            .where('primaryDeviceId', '==', deviceId)
+            .get();
+
+        pairedDevices = [];
+        snapshot.forEach(doc => {
+            pairedDevices.push({ id: doc.id, ...doc.data() });
+        });
+
+        // Also check if this device is a secondary
+        const snapshot2 = await firestore.collection('device_pairs')
+            .where('secondaryDeviceId', '==', deviceId)
+            .get();
+
+        snapshot2.forEach(doc => {
+            pairedDevices.push({ id: doc.id, ...doc.data() });
+        });
+
+        if (pairedDevices.length > 0) {
+            updatePairingStatus(true);
+        }
+
+    } catch (error) {
+        console.error('Error loading paired devices:', error);
+    }
+}
+
+// Load paired devices list for display
+async function loadPairedDevicesList() {
+    const container = document.getElementById('paired-devices-list');
+    if (!container) return;
+
+    await loadPairedDevices();
+
+    if (pairedDevices.length === 0) {
+        container.innerHTML = '<p class="text-xs text-gray-400">No devices paired yet</p>';
+        return;
+    }
+
+    container.innerHTML = pairedDevices.map(device => `
+        <div class="flex items-center justify-between bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2">
+            <div class="flex items-center gap-2">
+                <span>📱</span>
+                <span class="text-sm text-gray-700 dark:text-gray-300">Mobile Device</span>
+            </div>
+            <button onclick="unpairDevice('${device.id}')" class="text-red-500 text-xs hover:text-red-600">Remove</button>
+        </div>
+    `).join('');
+}
+
+// Unpair a device
+async function unpairDevice(pairId) {
+    if (!confirm('Remove this paired device?')) return;
+
+    try {
+        await firestore.collection('device_pairs').doc(pairId).delete();
+        await loadPairedDevices();
+        loadPairedDevicesList();
+
+        if (pairedDevices.length === 0) {
+            updatePairingStatus(false);
+        }
+    } catch (error) {
+        console.error('Error unpairing device:', error);
+    }
+}
+
+// ========== REMINDER SYNC WITH FIREBASE ==========
+
+// Sync reminders to Firebase
+async function syncRemindersToFirebase() {
+    if (!firestore || !deviceId) return;
+
+    try {
+        // Upload local reminders
+        for (const reminder of reminders) {
+            await firestore.collection('reminders').doc(reminder.id.toString()).set({
+                ...reminder,
+                deviceId: deviceId,
+                alarmTime: reminder.alarmTime ? reminder.alarmTime.toISOString() : null,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        }
+
+        console.log('Reminders synced to Firebase');
+    } catch (error) {
+        console.error('Error syncing reminders:', error);
+    }
+}
+
+// Listen for reminder updates from other devices
+function listenForReminderUpdates() {
+    if (!firestore || !deviceId) return;
+
+    // Listen for reminders from paired devices
+    firestore.collection('reminders')
+        .where('deviceId', '==', deviceId)
+        .onSnapshot((snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'added' || change.type === 'modified') {
+                    const data = change.doc.data();
+                    // Schedule notification for this reminder
+                    scheduleReminderNotification(data);
+                }
+            });
+        });
+}
+
+// Schedule a reminder notification
+async function scheduleReminderNotification(reminder) {
+    if (!reminder.alarmTime) return;
+
+    const alarmTime = new Date(reminder.alarmTime);
+    const now = new Date();
+    const timeUntilAlarm = alarmTime - now;
+
+    if (timeUntilAlarm <= 0) return; // Already passed
+
+    // For paired devices, send push notification
+    if (pairedDevices.length > 0) {
+        // Schedule notification via server
+        setTimeout(async () => {
+            for (const device of pairedDevices) {
+                const targetToken = device.secondaryFcmToken || device.primaryFcmToken;
+                if (targetToken && targetToken !== fcmToken) {
+                    await sendPushNotification(targetToken, reminder);
+                }
+            }
+        }, timeUntilAlarm);
+    }
+}
+
+// Send push notification via API
+async function sendPushNotification(token, reminder) {
+    try {
+        const response = await fetch('/api/send-notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                token: token,
+                title: '⏰ JARVIS Reminder',
+                body: reminder.text,
+                data: {
+                    reminderId: reminder.id,
+                    type: 'reminder'
+                }
+            })
+        });
+
+        const result = await response.json();
+        console.log('Notification sent:', result);
+    } catch (error) {
+        console.error('Error sending notification:', error);
+    }
+}
+
+// Override createReminderFromText to sync with Firebase
+const originalCreateReminder = createReminderFromText;
+createReminderFromText = function(text) {
+    originalCreateReminder(text);
+
+    // Sync to Firebase after creating reminder
+    setTimeout(() => {
+        syncRemindersToFirebase();
+    }, 500);
+};
+
+// Initialize Firebase when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    // Delay Firebase init to not block main load
+    setTimeout(initializeFirebase, 2000);
+});
+
+// ========== END FIREBASE & PUSH NOTIFICATIONS ==========
+
 </script>
 </body>
 </html>
