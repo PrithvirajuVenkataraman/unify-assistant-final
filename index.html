@@ -5,11 +5,11 @@
     ======================
     Deployment Structure (Vercel):
     /
-    ├── index.full_with_map_preview.html (this file)
-    ├── api/
-    │   ├── chat-groq.js
-    │   └── search.js
-    └── vercel.json (create this - see below)
+    â”œâ”€â”€ index.full_with_map_preview.html (this file)
+    â”œâ”€â”€ api/
+    â”‚   â”œâ”€â”€ chat-groq.js
+    â”‚   â””â”€â”€ search.js
+    â””â”€â”€ vercel.json (create this - see below)
 
     vercel.json contents:
     {
@@ -1697,7 +1697,7 @@
         </div>
         <div class="jarvis-text">J.A.R.V.I.S</div>
         <div class="jarvis-subtitle">Just A Rather Very Intelligent System</div>
-        <div class="init-status">◢ Initializing systems...</div>
+        <div class="init-status">â—¢ Initializing systems...</div>
     </div>
     
     <!-- Weather Effects Container -->
@@ -1706,10 +1706,10 @@
     <!-- Shopping List Receipt -->
     <div id="shopping-receipt" class="shopping-receipt hidden">
         <!-- Close button - absolute positioned -->
-        <button onclick="closeShoppingList()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-3xl leading-none z-10" title="Close" style="background: none; border: none; cursor: pointer;">×</button>
+        <button onclick="closeShoppingList()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-3xl leading-none z-10" title="Close" style="background: none; border: none; cursor: pointer;">Ã—</button>
         
         <div class="receipt-header">
-            <div class="receipt-store">🛒 JARVIS MARKET</div>
+            <div class="receipt-store">ðŸ›’ JARVIS MARKET</div>
             <div class="receipt-title">SHOPPING LIST</div>
             <div class="receipt-subtitle" id="receipt-date">---</div>
             <div class="receipt-divider">- - - - - - - - - - - - - - - -</div>
@@ -1726,7 +1726,7 @@
                 <span id="receipt-count" class="receipt-count-number">0</span>
             </div>
             <div class="receipt-thank-you">Thank you for shopping!</div>
-            <button onclick="clearShoppingList()" class="receipt-clear-btn">🗑️ Clear All</button>
+            <button onclick="clearShoppingList()" class="receipt-clear-btn">ðŸ—‘ï¸ Clear All</button>
         </div>
     </div>
     
@@ -1745,7 +1745,7 @@
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <span>📱</span> Pair Your Phone
+                    <span>ðŸ“±</span> Pair Your Phone
                 </h2>
                 <button onclick="closePairingModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 text-2xl">&times;</button>
             </div>
@@ -1758,7 +1758,7 @@
 
     <!-- Notification Permission Banner -->
     <div id="notification-banner" class="hidden fixed top-3 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-2 py-1.5 rounded-lg shadow-md flex items-center gap-1.5 max-w-[68vw] sm:max-w-[560px] text-[11px] sm:text-xs">
-        <span class="leading-tight truncate">🔔 Enable notifications to receive reminders on this device</span>
+        <span class="leading-tight truncate">ðŸ”” Enable notifications to receive reminders on this device</span>
         <button onclick="requestNotificationPermission()" class="bg-white text-purple-700 px-2.5 py-0.5 rounded-md text-[11px] sm:text-xs font-semibold hover:bg-gray-100 transition-all">Enable</button>
         <button onclick="dismissNotificationBanner()" class="text-white/70 hover:text-white text-base leading-none px-1">&times;</button>
     </div>
@@ -1849,7 +1849,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <p id="temperature" class="text-5xl font-bold mb-2 text-white relative z-10">--°F / --°C</p>
+                            <p id="temperature" class="text-5xl font-bold mb-2 text-white relative z-10">--Â°F / --Â°C</p>
                             <p id="weather-advice" class="text-white/90 text-lg relative z-10"></p>
                         </div>
 
@@ -1962,8 +1962,8 @@
 const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'};
 function getTrustLabel(trustLevel) {
   return trustLevel === TRUST_LEVEL.VERIFIED
-    ? '✅ Verified by location data'
-    : 'ℹ Generated (structure only)';
+    ? 'âœ… Verified by location data'
+    : 'â„¹ Generated (structure only)';
 }
 
 function isVerifiedPlace(obj) {
@@ -1976,7 +1976,7 @@ function isVerifiedPlace(obj) {
 
 function containsPlaceList(text) {
   if (typeof text !== 'string') return false;
-  return /🏨|🍽️|hotel|restaurant|stay|biryani|curry/i.test(text);
+  return /ðŸ¨|ðŸ½ï¸|hotel|restaurant|stay|biryani|curry/i.test(text);
 }
 
 function getUserIntent(text) {
@@ -2069,8 +2069,166 @@ function getContentModerationResponse() {
 
 function getSourceAttribution(trustLevel) {
   return trustLevel === TRUST_LEVEL.VERIFIED
-    ? '📍 Source: OpenStreetMap / Brave Search'
-    : '🧠 Source: Language model (no live location lookup)';
+    ? 'ðŸ“ Source: OpenStreetMap / Brave Search'
+    : 'ðŸ§  Source: Language model (no live location lookup)';
+}
+
+// ========== VERIFIED PLACES + BUDGET + CALENDAR FEATURES ==========
+function isVerifiedPlacesRequest(text) {
+    const t = text.toLowerCase();
+    return (t.includes('verified') && (t.includes('hotel') || t.includes('restaurant') || t.includes('place'))) ||
+           t.includes('verified places') ||
+           t.includes('trusted places near');
+}
+
+function isBudgetTripRequest(text) {
+    const t = text.toLowerCase();
+    return t.includes('budget trip') ||
+           (t.includes('budget') && (t.includes('trip') || t.includes('travel') || t.includes('itinerary'))) ||
+           t.includes('plan trip under');
+}
+
+function isCalendarSyncRequest(text) {
+    const t = text.toLowerCase();
+    return t.includes('calendar sync') ||
+           t.includes('sync to calendar') ||
+           t.includes('add to calendar') ||
+           t.includes('save trip to calendar');
+}
+
+async function handleVerifiedPlacesMode(text) {
+    try {
+        addChatMessage('Checking verified places near your destination...', false);
+        const type = text.toLowerCase().includes('restaurant') ? 'restaurant' : 'hotel';
+
+        const response = await fetch('/api/places', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: text, type })
+        });
+
+        if (!response.ok) throw new Error('places request failed');
+
+        const data = await response.json();
+        if (!data.success || !Array.isArray(data.places) || data.places.length === 0) {
+            const msg = 'I could not find verified places for that location. Try: "verified hotels in Austin".';
+            addChatMessage(msg, false);
+            speak(msg);
+            return;
+        }
+
+        lastVerifiedPlaces = data;
+
+        const top = data.places.slice(0, 5);
+        const lines = top.map((p, i) => {
+            const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${p.name} ${p.address || ''}`)}`;
+            return `${i + 1}. ${p.name} - ${p.address || 'Address unavailable'} - ${mapUrl}`;
+        });
+
+        const msg = `Verified ${type}s near ${data.locationName}:\n${lines.join('\n')}`;
+        addChatMessage(msg, false);
+        speak(`I found ${top.length} verified ${type} options near ${data.locationName}.`);
+    } catch (error) {
+        console.error('Verified places error:', error);
+        const msg = 'Verified places lookup failed. Please try again in a moment.';
+        addChatMessage(msg, false);
+        speak(msg);
+    }
+}
+
+async function handleBudgetTripPlanner(text) {
+    try {
+        addChatMessage('Building your budget trip plan...', false);
+        const response = await fetch('/api/budget-plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: text })
+        });
+
+        if (!response.ok) throw new Error('budget plan request failed');
+
+        const data = await response.json();
+        if (!data.success || !data.plan) {
+            const msg = 'I could not build a budget plan. Try: "budget trip to Seattle for 3 days under 900 USD".';
+            addChatMessage(msg, false);
+            speak(msg);
+            return;
+        }
+
+        lastBudgetPlan = data.plan;
+
+        const p = data.plan;
+        const msg = [
+            `Budget Trip Plan: ${p.destination}`,
+            `Duration: ${p.days} day(s)`,
+            `Total Budget: ${p.currency} ${p.totalBudget}`,
+            `Lodging: ${p.currency} ${p.breakdown.lodging}`,
+            `Food: ${p.currency} ${p.breakdown.food}`,
+            `Transport: ${p.currency} ${p.breakdown.transport}`,
+            `Activities: ${p.currency} ${p.breakdown.activities}`,
+            `Buffer: ${p.currency} ${p.breakdown.buffer}`,
+            `Daily Budget: ${p.currency} ${p.dailyBudget}`,
+            `Tip: ${p.tip}`,
+            `Say "sync to calendar" to save this trip.`
+        ].join('\n');
+
+        addChatMessage(msg, false);
+        speak(`Your ${p.days}-day budget plan for ${p.destination} is ready.`);
+    } catch (error) {
+        console.error('Budget planner error:', error);
+        const msg = 'Budget trip planner failed. Please try again.';
+        addChatMessage(msg, false);
+        speak(msg);
+    }
+}
+
+async function handleCalendarSync(text) {
+    if (!lastBudgetPlan) {
+        const msg = 'Please create a budget trip plan first, then I can sync it to calendar.';
+        addChatMessage(msg, false);
+        speak(msg);
+        return;
+    }
+
+    try {
+        addChatMessage('Creating calendar event...', false);
+        const response = await fetch('/api/calendar-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ plan: lastBudgetPlan })
+        });
+
+        if (!response.ok) throw new Error('calendar sync request failed');
+
+        const data = await response.json();
+        if (!data.success) throw new Error('calendar sync failed');
+
+        downloadIcsFromBase64(data.icsBase64, data.fileName || 'trip-plan.ics');
+
+        const msg = `Calendar event created. ICS downloaded as ${data.fileName}.\nGoogle Calendar quick add: ${data.googleCalendarUrl}`;
+        addChatMessage(msg, false);
+        speak('Calendar sync complete. I downloaded an event file for you.');
+    } catch (error) {
+        console.error('Calendar sync error:', error);
+        const msg = 'Calendar sync failed. Please try again.';
+        addChatMessage(msg, false);
+        speak(msg);
+    }
+}
+
+function downloadIcsFromBase64(base64, fileName) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 function retryWithStricterPrompt() {
@@ -2140,9 +2298,9 @@ function getRegionalFood(context) {
         lower.includes('mysore') || lower.includes('coimbatore') || lower.includes('madurai') ||
         lower.includes('kochi') || lower.includes('kerala') || lower.includes('andhra') || lower.includes('karnataka')) {
         return [
-            { icon: '🍛', text: 'Best Biryani spots' },
-            { icon: '☕', text: 'Filter coffee places' },
-            { icon: '🥘', text: 'Dosa & Idli spots' }
+            { icon: 'ðŸ›', text: 'Best Biryani spots' },
+            { icon: 'â˜•', text: 'Filter coffee places' },
+            { icon: 'ðŸ¥˜', text: 'Dosa & Idli spots' }
         ];
     }
     
@@ -2150,62 +2308,62 @@ function getRegionalFood(context) {
         lower.includes('agra') || lower.includes('kolkata') || lower.includes('punjab') ||
         lower.includes('rajasthan')) {
         return [
-            { icon: '🍛', text: 'Butter chicken spots' },
-            { icon: '🫓', text: 'Naan & Tandoor' },
-            { icon: '🥘', text: 'Street chaat' }
+            { icon: 'ðŸ›', text: 'Butter chicken spots' },
+            { icon: 'ðŸ«“', text: 'Naan & Tandoor' },
+            { icon: 'ðŸ¥˜', text: 'Street chaat' }
         ];
     }
     
     if (lower.includes('india')) {
         return [
-            { icon: '🍛', text: 'Biryani near me' },
-            { icon: '🍲', text: 'Curry places' },
-            { icon: '☕', text: 'Chai shops' }
+            { icon: 'ðŸ›', text: 'Biryani near me' },
+            { icon: 'ðŸ²', text: 'Curry places' },
+            { icon: 'â˜•', text: 'Chai shops' }
         ];
     }
     
     if (lower.includes('italy') || lower.includes('rome') || lower.includes('milan') ||
         lower.includes('florence') || lower.includes('venice') || lower.includes('naples')) {
         return [
-            { icon: '🍝', text: 'Authentic Pasta' },
-            { icon: '🍕', text: 'Best Pizzerias' },
-            { icon: '🍦', text: 'Gelato shops' }
+            { icon: 'ðŸ', text: 'Authentic Pasta' },
+            { icon: 'ðŸ•', text: 'Best Pizzerias' },
+            { icon: 'ðŸ¦', text: 'Gelato shops' }
         ];
     }
     
     if (lower.includes('new york') || lower.includes('nyc') || lower.includes('manhattan') ||
         lower.includes('brooklyn')) {
         return [
-            { icon: '🍕', text: 'Classic NYC Pizza' },
-            { icon: '🥯', text: 'Best Bagels' },
-            { icon: '🌭', text: 'Hot dog stands' }
+            { icon: 'ðŸ•', text: 'Classic NYC Pizza' },
+            { icon: 'ðŸ¥¯', text: 'Best Bagels' },
+            { icon: 'ðŸŒ­', text: 'Hot dog stands' }
         ];
     }
     
     if (lower.includes('mexico') || lower.includes('cancun') || lower.includes('cabo') ||
         lower.includes('guadalajara')) {
         return [
-            { icon: '🌮', text: 'Best Tacos' },
-            { icon: '🫔', text: 'Street food' },
-            { icon: '🌯', text: 'Burrito spots' }
+            { icon: 'ðŸŒ®', text: 'Best Tacos' },
+            { icon: 'ðŸ«”', text: 'Street food' },
+            { icon: 'ðŸŒ¯', text: 'Burrito spots' }
         ];
     }
     
     if (lower.includes('japan') || lower.includes('tokyo') || lower.includes('kyoto') ||
         lower.includes('osaka')) {
         return [
-            { icon: '🍣', text: 'Sushi spots' },
-            { icon: '🍜', text: 'Ramen shops' },
-            { icon: '🥟', text: 'Izakaya' }
+            { icon: 'ðŸ£', text: 'Sushi spots' },
+            { icon: 'ðŸœ', text: 'Ramen shops' },
+            { icon: 'ðŸ¥Ÿ', text: 'Izakaya' }
         ];
     }
     
     if (lower.includes('france') || lower.includes('paris') || lower.includes('lyon') ||
         lower.includes('nice')) {
         return [
-            { icon: '🥐', text: 'Best Croissants' },
-            { icon: '🧀', text: 'Cheese & Wine' },
-            { icon: '🥖', text: 'Boulangeries' }
+            { icon: 'ðŸ¥', text: 'Best Croissants' },
+            { icon: 'ðŸ§€', text: 'Cheese & Wine' },
+            { icon: 'ðŸ¥–', text: 'Boulangeries' }
         ];
     }
     
@@ -2213,26 +2371,26 @@ function getRegionalFood(context) {
         lower.includes('mason') || lower.includes('chicago') || lower.includes('boston') ||
         lower.includes('seattle') || lower.includes('los angeles') || lower.includes('long beach')) {
         return [
-            { icon: '🍔', text: 'Best Burgers' },
-            { icon: '🍖', text: 'BBQ spots' },
-            { icon: '☕', text: 'Coffee shops' }
+            { icon: 'ðŸ”', text: 'Best Burgers' },
+            { icon: 'ðŸ–', text: 'BBQ spots' },
+            { icon: 'â˜•', text: 'Coffee shops' }
         ];
     }
     
     return [
-        { icon: '🍽️', text: 'Local restaurants' },
-        { icon: '☕', text: 'Coffee shops' },
-        { icon: '🍰', text: 'Dessert places' }
+        { icon: 'ðŸ½ï¸', text: 'Local restaurants' },
+        { icon: 'â˜•', text: 'Coffee shops' },
+        { icon: 'ðŸ°', text: 'Dessert places' }
     ];
 }
 
 function showInitialSuggestions() {
     const suggestions = [
-        { icon: '☀️', text: "What's the weather?", query: "What's the weather like today?" },
-        { icon: '🛒', text: 'Add 2 lbs chicken to list', query: 'Add 2 pounds of chicken to my shopping list' },
-        { icon: '⏰', text: 'Remind me to call mom', query: 'Remind me to call mom at 5pm' },
-        { icon: '🌐', text: 'Translate to Tamil', query: 'Speak in Tamil' },
-        { icon: '✈️', text: 'Plan a trip to Paris', query: 'Plan a weekend trip to Paris' }
+        { icon: 'â˜€ï¸', text: "What's the weather?", query: "What's the weather like today?" },
+        { icon: 'ðŸ›’', text: 'Add 2 lbs chicken to list', query: 'Add 2 pounds of chicken to my shopping list' },
+        { icon: 'â°', text: 'Remind me to call mom', query: 'Remind me to call mom at 5pm' },
+        { icon: 'ðŸŒ', text: 'Translate to Tamil', query: 'Speak in Tamil' },
+        { icon: 'âœˆï¸', text: 'Plan a trip to Paris', query: 'Plan a weekend trip to Paris' }
     ];
     
     updateSuggestionBox(suggestions);
@@ -2265,46 +2423,46 @@ function updateContextualSuggestions(context) {
         (lower.includes('duration') && lower.includes('hours'))) {
         const city = extractCityFromText(context);
         suggestions = [
-            { icon: '🏨', text: `Hotels in ${city || 'this area'}`, query: `Hotels in ${city || 'the area'}` },
-            { icon: '🍽️', text: 'Best restaurants', query: `Best restaurants in ${city || 'the area'}` },
-            { icon: '🎫', text: 'Things to do at night', query: `Things to do at night in ${city || 'the area'}` },
-            { icon: '📸', text: 'Best photo spots', query: `Best photo spots in ${city || 'the area'}` },
-            { icon: '🚌', text: 'How to get around', query: `Transport in ${city || 'the area'}` },
-            { icon: '🛍️', text: 'Shopping areas', query: `Shopping areas in ${city || 'the area'}` }
+            { icon: 'ðŸ¨', text: `Hotels in ${city || 'this area'}`, query: `Hotels in ${city || 'the area'}` },
+            { icon: 'ðŸ½ï¸', text: 'Best restaurants', query: `Best restaurants in ${city || 'the area'}` },
+            { icon: 'ðŸŽ«', text: 'Things to do at night', query: `Things to do at night in ${city || 'the area'}` },
+            { icon: 'ðŸ“¸', text: 'Best photo spots', query: `Best photo spots in ${city || 'the area'}` },
+            { icon: 'ðŸšŒ', text: 'How to get around', query: `Transport in ${city || 'the area'}` },
+            { icon: 'ðŸ›ï¸', text: 'Shopping areas', query: `Shopping areas in ${city || 'the area'}` }
         ];
     }
     
-    else if ((lower.includes('🏨') || lower.includes('hotel')) && lower.includes('food:')) {
+    else if ((lower.includes('ðŸ¨') || lower.includes('hotel')) && lower.includes('food:')) {
         const city = extractCityFromText(context);
         suggestions = [
-            { icon: '🍽️', text: 'Restaurants nearby', query: `Best restaurants in ${city || 'the area'}` },
-            { icon: '🗺️', text: 'Things to do', query: `Things to do in ${city || 'the area'}` },
-            { icon: '🚌', text: 'Transport info', query: `How to get around ${city || 'the area'}` },
-            { icon: '☕', text: 'Coffee shops', query: `Coffee shops in ${city || 'the area'}` },
-            { icon: '🛍️', text: 'Shopping areas', query: `Shopping in ${city || 'the area'}` },
-            { icon: '🎫', text: 'Nightlife', query: `Things to do at night in ${city || 'the area'}` }
+            { icon: 'ðŸ½ï¸', text: 'Restaurants nearby', query: `Best restaurants in ${city || 'the area'}` },
+            { icon: 'ðŸ—ºï¸', text: 'Things to do', query: `Things to do in ${city || 'the area'}` },
+            { icon: 'ðŸšŒ', text: 'Transport info', query: `How to get around ${city || 'the area'}` },
+            { icon: 'â˜•', text: 'Coffee shops', query: `Coffee shops in ${city || 'the area'}` },
+            { icon: 'ðŸ›ï¸', text: 'Shopping areas', query: `Shopping in ${city || 'the area'}` },
+            { icon: 'ðŸŽ«', text: 'Nightlife', query: `Things to do at night in ${city || 'the area'}` }
         ];
     }
     
     else if (lower.includes('restaurant') || lower.includes('food:')) {
         const city = extractCityFromText(context);
         suggestions = [
-            { icon: '🏨', text: 'Hotels nearby', query: `Hotels in ${city || 'the area'}` },
-            { icon: '🗺️', text: 'Create itinerary', query: `Plan a day in ${city || 'the area'}` },
-            { icon: '☕', text: 'Coffee & desserts', query: `Best coffee and dessert places in ${city || 'the area'}` },
-            { icon: '🚌', text: 'Transport', query: `Transport in ${city || 'the area'}` },
-            { icon: '🍔', text: 'Fast food', query: 'Fast food near me' },
-            { icon: '📸', text: 'Photo spots', query: `Photo spots in ${city || 'the area'}` }
+            { icon: 'ðŸ¨', text: 'Hotels nearby', query: `Hotels in ${city || 'the area'}` },
+            { icon: 'ðŸ—ºï¸', text: 'Create itinerary', query: `Plan a day in ${city || 'the area'}` },
+            { icon: 'â˜•', text: 'Coffee & desserts', query: `Best coffee and dessert places in ${city || 'the area'}` },
+            { icon: 'ðŸšŒ', text: 'Transport', query: `Transport in ${city || 'the area'}` },
+            { icon: 'ðŸ”', text: 'Fast food', query: 'Fast food near me' },
+            { icon: 'ðŸ“¸', text: 'Photo spots', query: `Photo spots in ${city || 'the area'}` }
         ];
     }
     
     else {
         suggestions = [
-            { icon: '☀️', text: "What's the weather?", query: "What's the weather?" },
-            { icon: '✈️', text: 'Plan a trip', query: 'Plan a trip to Paris' },
-            { icon: '🛒', text: 'Shopping list', query: 'Add milk to my list' },
-            { icon: '⏰', text: 'Set reminder', query: 'Remind me to call mom' },
-            { icon: '🌐', text: 'Translator', query: 'Speak in Tamil' }
+            { icon: 'â˜€ï¸', text: "What's the weather?", query: "What's the weather?" },
+            { icon: 'âœˆï¸', text: 'Plan a trip', query: 'Plan a trip to Paris' },
+            { icon: 'ðŸ›’', text: 'Shopping list', query: 'Add milk to my list' },
+            { icon: 'â°', text: 'Set reminder', query: 'Remind me to call mom' },
+            { icon: 'ðŸŒ', text: 'Translator', query: 'Speak in Tamil' }
         ];
     }
     
@@ -2339,7 +2497,7 @@ function isHotelListing(text) {
         /Rating:/i,          // Rating mention
         /per night/i,        // Per night pricing
         /\$\d+/,             // Dollar amount
-        /₹\d+/,              // Rupee amount
+        /â‚¹\d+/,              // Rupee amount
         /stars?:/i,          // Star rating
         /check-in/i,         // Check-in info
         /amenities/i,        // Amenities list
@@ -2378,11 +2536,11 @@ function suggestQuickReplies(context) {
     if (context.includes('itinerary') || context.includes('Day 1') || context.includes('Enjoy exploring')) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
-            { icon: '🏨', text: 'Hotels nearby' },
-            { icon: '🍽️', text: 'Restaurants nearby' },
+            { icon: 'ðŸ¨', text: 'Hotels nearby' },
+            { icon: 'ðŸ½ï¸', text: 'Restaurants nearby' },
             ...regionalFood.slice(0, 1),
-            { icon: '🎫', text: 'Things to do at night' },
-            { icon: '📸', text: 'Best photo spots' }
+            { icon: 'ðŸŽ«', text: 'Things to do at night' },
+            { icon: 'ðŸ“¸', text: 'Best photo spots' }
         );
 
         addShareButton(context, 'itinerary');
@@ -2391,11 +2549,11 @@ function suggestQuickReplies(context) {
     else if (isHotelListing(context)) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
-            { icon: '🍽️', text: 'Restaurants nearby' },
-            { icon: '🗺️', text: 'Plan activities' },
+            { icon: 'ðŸ½ï¸', text: 'Restaurants nearby' },
+            { icon: 'ðŸ—ºï¸', text: 'Plan activities' },
             ...regionalFood.slice(0, 1),
-            { icon: '🛍️', text: 'Shopping areas' },
-            { icon: '☕', text: 'Coffee shops' }
+            { icon: 'ðŸ›ï¸', text: 'Shopping areas' },
+            { icon: 'â˜•', text: 'Coffee shops' }
         );
 
         addShareButton(context, 'hotels');
@@ -2404,28 +2562,28 @@ function suggestQuickReplies(context) {
     else if (isRestaurantListing(context)) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
-            { icon: '🏨', text: 'Hotels nearby' },
-            { icon: '🗺️', text: 'Things to do' },
+            { icon: 'ðŸ¨', text: 'Hotels nearby' },
+            { icon: 'ðŸ—ºï¸', text: 'Things to do' },
             ...regionalFood.slice(0, 2),
-            { icon: '🍰', text: 'Dessert places' }
+            { icon: 'ðŸ°', text: 'Dessert places' }
         );
 
         addShareButton(context, 'restaurants');
     }
     // Weather responses
-    else if (context.includes('weather') || context.includes('temperature') || context.includes('°')) {
+    else if (context.includes('weather') || context.includes('temperature') || context.includes('Â°')) {
         suggestions.push(
-            { icon: '🏨', text: 'Hotels nearby' },
-            { icon: '🍽️', text: 'Best restaurants' },
-            { icon: '🗺️', text: 'Things to do' }
+            { icon: 'ðŸ¨', text: 'Hotels nearby' },
+            { icon: 'ðŸ½ï¸', text: 'Best restaurants' },
+            { icon: 'ðŸ—ºï¸', text: 'Things to do' }
         );
     }
     // Default suggestions
     else {
         suggestions.push(
-            { icon: '🌤️', text: 'Weather' },
-            { icon: '🗺️', text: 'Plan a trip' },
-            { icon: '🛒', text: 'Shopping list' }
+            { icon: 'ðŸŒ¤ï¸', text: 'Weather' },
+            { icon: 'ðŸ—ºï¸', text: 'Plan a trip' },
+            { icon: 'ðŸ›’', text: 'Shopping list' }
         );
     }
 
@@ -2446,7 +2604,7 @@ function addShareButton(content, type) {
     const emailTextClass = darkMode ? 'text-purple-200' : 'text-purple-900';
 
 
-    const cleanContent = content.replace(/<[^>]*>/g, '').replace(/\[📍.*?\]/g, '');
+    const cleanContent = content.replace(/<[^>]*>/g, '').replace(/\[ðŸ“.*?\]/g, '');
 
     // Store content globally for email modal
     window.pendingEmailContent = { content: cleanContent, type: type };
@@ -2454,12 +2612,12 @@ function addShareButton(content, type) {
     shareBox.innerHTML = `
         <button onclick="shareContent(\`${cleanContent.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`, '${type}')"
                 class="${bgClass} border-2 ${darkMode ? 'border-blue-600' : 'border-blue-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2">
-            <span class="text-xl">📤</span>
+            <span class="text-xl">ðŸ“¤</span>
             <span class="text-sm font-medium ${textClass}">Share this ${type}</span>
         </button>
         <button onclick="openEmailModal('${type}')"
                 class="${emailBgClass} border-2 ${darkMode ? 'border-purple-600' : 'border-purple-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2">
-            <span class="text-xl">📧</span>
+            <span class="text-xl">ðŸ“§</span>
             <span class="text-sm font-medium ${emailTextClass}">Email this ${type}</span>
         </button>
     `;
@@ -2480,7 +2638,7 @@ async function shareContent(content, type) {
                 text: text
             });
             
-            showTemporaryMessage('✅ Shared successfully!');
+            showTemporaryMessage('âœ… Shared successfully!');
         } catch (error) {
             if (error.name !== 'AbortError') {
                 
@@ -2495,9 +2653,9 @@ async function shareContent(content, type) {
 
 function copyToClipboard(text) {
     navigator.clipboard.writeText(text).then(() => {
-        showTemporaryMessage('📋 Copied to clipboard! Now you can paste it into SMS, WhatsApp, or any app!');
+        showTemporaryMessage('ðŸ“‹ Copied to clipboard! Now you can paste it into SMS, WhatsApp, or any app!');
     }).catch(err => {
-        showTemporaryMessage('❌ Failed to copy. Please try again.');
+        showTemporaryMessage('âŒ Failed to copy. Please try again.');
     });
 }
 
@@ -2526,7 +2684,7 @@ function openEmailModal(type) {
     modal.innerHTML = `
         <div class="${modalBg} rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold ${textColor}">📧 Email Your ${type.charAt(0).toUpperCase() + type.slice(1)}</h3>
+                <h3 class="text-xl font-bold ${textColor}">ðŸ“§ Email Your ${type.charAt(0).toUpperCase() + type.slice(1)}</h3>
                 <button onclick="closeEmailModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
             </div>
 
@@ -2591,21 +2749,21 @@ function sendEmail(type) {
     const email = emailInput?.value?.trim();
 
     if (!email) {
-        showTemporaryMessage('❌ Please enter an email address');
+        showTemporaryMessage('âŒ Please enter an email address');
         return;
     }
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-        showTemporaryMessage('❌ Please enter a valid email address');
+        showTemporaryMessage('âŒ Please enter a valid email address');
         return;
     }
 
     // Get the stored content
     const pending = window.pendingEmailContent;
     if (!pending || !pending.content) {
-        showTemporaryMessage('❌ No content to send. Please try again.');
+        showTemporaryMessage('âŒ No content to send. Please try again.');
         closeEmailModal();
         return;
     }
@@ -2616,14 +2774,14 @@ function sendEmail(type) {
 
     // Format content for email (limit length for mailto)
     let emailBody = `Hi!\n\nHere's your ${type} from JARVIS Voice Assistant:\n\n`;
-    emailBody += '═'.repeat(40) + '\n\n';
+    emailBody += 'â•'.repeat(40) + '\n\n';
     emailBody += pending.content.substring(0, 1500); // Limit content length
     if (pending.content.length > 1500) {
         emailBody += '\n\n[Content truncated - full version available in app]';
     }
-    emailBody += '\n\n' + '═'.repeat(40);
+    emailBody += '\n\n' + 'â•'.repeat(40);
     emailBody += '\n\nSent via JARVIS Voice Assistant';
-    emailBody += '\n\nHave a great trip! 🌟';
+    emailBody += '\n\nHave a great trip! ðŸŒŸ';
 
     const body = encodeURIComponent(emailBody);
 
@@ -2642,7 +2800,7 @@ function sendEmail(type) {
 
     // Close modal and show success
     closeEmailModal();
-    showTemporaryMessage('📧 Opening your email app...');
+    showTemporaryMessage('ðŸ“§ Opening your email app...');
 }
 
 // Load saved email when opening modal (auto-fill)
@@ -2870,13 +3028,13 @@ function detectTranslatorRequest(text) {
         // "speak in Tamil", "talk in Hindi", etc.
         /(?:speak|talk|translate|switch|change)\s+(?:in|to)\s+(tamil|kannada|telugu|hindi)/i,
         // "Tamil la pesu" (Tamil: speak in Tamil)
-        /tamil\s+(?:la|le|ல)\s+(?:pesu|peslama|pesalam)/i,
+        /tamil\s+(?:la|le|à®²)\s+(?:pesu|peslama|pesalam)/i,
         // "Kannada alli maathaadu" (Kannada: speak in Kannada)
-        /kannada\s+(?:alli|alli|ಅಲ್ಲಿ)\s+(?:maathaadu|matadi)/i,
+        /kannada\s+(?:alli|alli|à²…à²²à³à²²à²¿)\s+(?:maathaadu|matadi)/i,
         // "Hindi mein bolo" (Hindi: speak in Hindi)
-        /hindi\s+(?:mein|me|में)\s+(?:bolo|baat)/i,
+        /hindi\s+(?:mein|me|à¤®à¥‡à¤‚)\s+(?:bolo|baat)/i,
         // "Telugu lo cheppu" (Telugu: speak in Telugu)
-        /telugu\s+(?:lo|లో)\s+(?:cheppu|matlaadu)/i,
+        /telugu\s+(?:lo|à°²à±‹)\s+(?:cheppu|matlaadu)/i,
         // "help me speak to" patterns
         /help\s+(?:me\s+)?(?:speak|talk|communicate)\s+(?:to|with).*(?:in\s+)?(tamil|kannada|telugu|hindi)/i,
         // "I need to talk to auto/rickshaw driver in Kannada"
@@ -2919,7 +3077,7 @@ function activateTranslatorMode(language) {
     // Show translator mode UI
     showTranslatorModeUI(langInfo);
 
-    const activationMsg = `🌐 **Translator Mode Activated - ${langInfo.name} (${langInfo.nativeName})**
+    const activationMsg = `ðŸŒ **Translator Mode Activated - ${langInfo.name} (${langInfo.nativeName})**
 
 I'll now help you communicate in ${langInfo.name}!
 
@@ -2929,16 +3087,16 @@ I'll now help you communicate in ${langInfo.name}!
 3. I'll also speak it out loud so you can use it directly
 
 **Example phrases I can help with:**
-• "How much does this cost?"
-• "Take me to the railway station"
-• "Where is the nearest ATM?"
-• "I need help"
+â€¢ "How much does this cost?"
+â€¢ "Take me to the railway station"
+â€¢ "Where is the nearest ATM?"
+â€¢ "I need help"
 
 **To exit translator mode:** Say "stop translator" or "switch to English"
 
-━━━━━━━━━━━━━━━━━━━━━━
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-🎤 **Ready!** What would you like to say in ${langInfo.name}?`;
+ðŸŽ¤ **Ready!** What would you like to say in ${langInfo.name}?`;
 
     addChatMessage(activationMsg, false);
     speak(`Translator mode activated for ${langInfo.name}. Tell me what you want to say and I'll translate it for you.`);
@@ -2958,7 +3116,7 @@ function deactivateTranslatorMode() {
     hideTranslatorModeUI();
 
     if (wasActive) {
-        const exitMsg = `✅ **Translator Mode Ended**
+        const exitMsg = `âœ… **Translator Mode Ended**
 
 Switched back to English. I'm ready to help you with anything else!`;
         addChatMessage(exitMsg, false);
@@ -2979,8 +3137,8 @@ function showTranslatorModeUI(langInfo) {
 
     indicator.innerHTML = `
         <div class="${bgClass} text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-3">
-            <span class="text-lg">🌐</span>
-            <span class="font-medium">Translator: English → ${langInfo.name}</span>
+            <span class="text-lg">ðŸŒ</span>
+            <span class="font-medium">Translator: English â†’ ${langInfo.name}</span>
             <button onclick="deactivateTranslatorMode()" class="ml-2 bg-white/20 hover:bg-white/30 rounded-full px-2 py-0.5 text-sm transition-all">
                 Exit
             </button>
@@ -3061,20 +3219,20 @@ async function processTranslatorMode(text) {
     const result = await translateText(text, translatorLanguage);
 
     if (result && result.translation) {
-        const translationMsg = `🗣️ **Your phrase in ${langInfo.name}:**
+        const translationMsg = `ðŸ—£ï¸ **Your phrase in ${langInfo.name}:**
 
-━━━━━━━━━━━━━━━━━━━━━━
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
 **English:** "${text}"
 
 **${langInfo.name}:**
 ${result.translation}
 
-━━━━━━━━━━━━━━━━━━━━━━
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-🔊 *Click the speaker button to hear it!*
+ðŸ”Š *Click the speaker button to hear it!*
 
-💡 **Tip:** Show this to the person you're talking to, or play the audio.`;
+ðŸ’¡ **Tip:** Show this to the person you're talking to, or play the audio.`;
 
         addChatMessage(translationMsg, false);
 
@@ -3084,7 +3242,7 @@ ${result.translation}
         // Try to speak in the target language
         speakInLanguage(translationOnly, langInfo.voiceLang);
     } else {
-        const errorMsg = `❌ Sorry, I couldn't translate that. Please try again with a simpler phrase.`;
+        const errorMsg = `âŒ Sorry, I couldn't translate that. Please try again with a simpler phrase.`;
         addChatMessage(errorMsg, false);
         speak("Sorry, I couldn't translate that. Please try a simpler phrase.");
     }
@@ -3166,28 +3324,28 @@ function speakInLanguage(text, langCode) {
 function getQuickTranslationPhrases(language) {
     const phrases = {
         'tamil': [
-            { english: 'How much?', native: 'எவ்வளவு?' },
-            { english: 'Thank you', native: 'நன்றி' },
-            { english: 'Where is...?', native: '...எங்கே?' },
-            { english: 'Please stop here', native: 'தயவுசெய்து இங்கே நிறுத்துங்கள்' }
+            { english: 'How much?', native: 'à®Žà®µà¯à®µà®³à®µà¯?' },
+            { english: 'Thank you', native: 'à®¨à®©à¯à®±à®¿' },
+            { english: 'Where is...?', native: '...à®Žà®™à¯à®•à¯‡?' },
+            { english: 'Please stop here', native: 'à®¤à®¯à®µà¯à®šà¯†à®¯à¯à®¤à¯ à®‡à®™à¯à®•à¯‡ à®¨à®¿à®±à¯à®¤à¯à®¤à¯à®™à¯à®•à®³à¯' }
         ],
         'kannada': [
-            { english: 'How much?', native: 'ಎಷ್ಟು?' },
-            { english: 'Thank you', native: 'ಧನ್ಯವಾದ' },
-            { english: 'Where is...?', native: '...ಎಲ್ಲಿದೆ?' },
-            { english: 'Please stop here', native: 'ದಯವಿಟ್ಟು ಇಲ್ಲಿ ನಿಲ್ಲಿಸಿ' }
+            { english: 'How much?', native: 'à²Žà²·à³à²Ÿà³?' },
+            { english: 'Thank you', native: 'à²§à²¨à³à²¯à²µà²¾à²¦' },
+            { english: 'Where is...?', native: '...à²Žà²²à³à²²à²¿à²¦à³†?' },
+            { english: 'Please stop here', native: 'à²¦à²¯à²µà²¿à²Ÿà³à²Ÿà³ à²‡à²²à³à²²à²¿ à²¨à²¿à²²à³à²²à²¿à²¸à²¿' }
         ],
         'telugu': [
-            { english: 'How much?', native: 'ఎంత?' },
-            { english: 'Thank you', native: 'ధన్యవాదాలు' },
-            { english: 'Where is...?', native: '...ఎక్కడ?' },
-            { english: 'Please stop here', native: 'దయచేసి ఇక్కడ ఆపండి' }
+            { english: 'How much?', native: 'à°Žà°‚à°¤?' },
+            { english: 'Thank you', native: 'à°§à°¨à±à°¯à°µà°¾à°¦à°¾à°²à±' },
+            { english: 'Where is...?', native: '...à°Žà°•à±à°•à°¡?' },
+            { english: 'Please stop here', native: 'à°¦à°¯à°šà±‡à°¸à°¿ à°‡à°•à±à°•à°¡ à°†à°ªà°‚à°¡à°¿' }
         ],
         'hindi': [
-            { english: 'How much?', native: 'कितना?' },
-            { english: 'Thank you', native: 'धन्यवाद' },
-            { english: 'Where is...?', native: '...कहाँ है?' },
-            { english: 'Please stop here', native: 'कृपया यहाँ रुकिए' }
+            { english: 'How much?', native: 'à¤•à¤¿à¤¤à¤¨à¤¾?' },
+            { english: 'Thank you', native: 'à¤§à¤¨à¥à¤¯à¤µà¤¾à¤¦' },
+            { english: 'Where is...?', native: '...à¤•à¤¹à¤¾à¤ à¤¹à¥ˆ?' },
+            { english: 'Please stop here', native: 'à¤•à¥ƒà¤ªà¤¯à¤¾ à¤¯à¤¹à¤¾à¤ à¤°à¥à¤•à¤¿à¤' }
         ]
     };
 
@@ -3214,7 +3372,7 @@ async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
 
 // ========== NEWS FETCHING FUNCTION ==========
 async function fetchAndDisplayNews(query) {
-    showThinkingIndicator('📰 Fetching latest news...');
+    showThinkingIndicator('ðŸ“° Fetching latest news...');
 
     try {
         // Detect news category from query
@@ -3282,17 +3440,17 @@ async function fetchAndDisplayNews(query) {
         }
 
         const news = data.news;
-        let newsMsg = '📰 **Latest News**\n\n';
+        let newsMsg = 'ðŸ“° **Latest News**\n\n';
 
         // Handle category-specific news
         if (news.category && news.category.length > 0) {
-            newsMsg = `📰 **${news.categoryName} News**\n\n`;
+            newsMsg = `ðŸ“° **${news.categoryName} News**\n\n`;
             news.category.forEach((item, i) => {
                 newsMsg += `**${i + 1}. ${item.title}**\n`;
                 if (item.description) {
                     newsMsg += `${item.description}\n`;
                 }
-                newsMsg += `📌 ${item.source}\n`;
+                newsMsg += `ðŸ“Œ ${item.source}\n`;
                 if (item.url) {
                     newsMsg += `[Read more](${item.url})\n`;
                 }
@@ -3302,13 +3460,13 @@ async function fetchAndDisplayNews(query) {
         }
         // Handle search results
         else if (news.search && news.search.length > 0) {
-            newsMsg = `📰 **News about "${news.searchQuery}"**\n\n`;
+            newsMsg = `ðŸ“° **News about "${news.searchQuery}"**\n\n`;
             news.search.forEach((item, i) => {
                 newsMsg += `**${i + 1}. ${item.title}**\n`;
                 if (item.description) {
                     newsMsg += `${item.description}\n`;
                 }
-                newsMsg += `📌 ${item.source}\n`;
+                newsMsg += `ðŸ“Œ ${item.source}\n`;
                 if (item.url) {
                     newsMsg += `[Read more](${item.url})\n`;
                 }
@@ -3322,9 +3480,9 @@ async function fetchAndDisplayNews(query) {
 
             // Local news (2 items)
             if (news.local && news.local.length > 0) {
-                newsMsg += `📍 **Local News**${city ? ` (${city})` : ''}\n`;
+                newsMsg += `ðŸ“ **Local News**${city ? ` (${city})` : ''}\n`;
                 news.local.slice(0, 2).forEach(item => {
-                    newsMsg += `• **${item.title}**\n`;
+                    newsMsg += `â€¢ **${item.title}**\n`;
                     if (item.url) newsMsg += `  [Read more](${item.url})\n`;
                 });
                 newsMsg += '\n';
@@ -3333,9 +3491,9 @@ async function fetchAndDisplayNews(query) {
 
             // Country news (2 items)
             if (news.country && news.country.length > 0) {
-                newsMsg += `🏳️ **${news.countryName || 'National'} News**\n`;
+                newsMsg += `ðŸ³ï¸ **${news.countryName || 'National'} News**\n`;
                 news.country.slice(0, 2).forEach(item => {
-                    newsMsg += `• **${item.title}**\n`;
+                    newsMsg += `â€¢ **${item.title}**\n`;
                     if (item.url) newsMsg += `  [Read more](${item.url})\n`;
                 });
                 newsMsg += '\n';
@@ -3344,9 +3502,9 @@ async function fetchAndDisplayNews(query) {
 
             // World news (1 item)
             if (news.world && news.world.length > 0) {
-                newsMsg += `🌍 **World News**\n`;
+                newsMsg += `ðŸŒ **World News**\n`;
                 news.world.slice(0, 1).forEach(item => {
-                    newsMsg += `• **${item.title}**\n`;
+                    newsMsg += `â€¢ **${item.title}**\n`;
                     if (item.url) newsMsg += `  [Read more](${item.url})\n`;
                 });
                 hasNews = true;
@@ -3360,9 +3518,9 @@ async function fetchAndDisplayNews(query) {
             }
         }
 
-        newsMsg += '\n━━━━━━━━━━━━━━━━━━━━━━\n';
-        newsMsg += '💡 **Try:** "sports news", "tech news", "political news"\n';
-        newsMsg += '🔗 [Google News](https://news.google.com) for more';
+        newsMsg += '\nâ”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n';
+        newsMsg += 'ðŸ’¡ **Try:** "sports news", "tech news", "political news"\n';
+        newsMsg += 'ðŸ”— [Google News](https://news.google.com) for more';
 
         addChatMessage(newsMsg, false);
         saveToHistory(query, 'Displayed news headlines');
@@ -3391,7 +3549,7 @@ async function askGeminiAI(userMessage) {
         
         const systemPrompt = `You are JARVIS, a helpful voice assistant.${userName ? ` The user's name is ${userName}. Use their name naturally and occasionally.` : ' Be friendly and conversational.'}
 
-⛔ CRITICAL ANTI-HALLUCINATION RULES:
+â›” CRITICAL ANTI-HALLUCINATION RULES:
 1. NEVER make up or invent names of places, hotels, restaurants, or attractions
 2. If you're not 100% CERTAIN something exists, DO NOT mention it
 3. For location-based queries, only mention places you're ABSOLUTELY SURE are real
@@ -3445,7 +3603,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('❌ API Response not OK:', response.status, errorText);
+            console.error('âŒ API Response not OK:', response.status, errorText);
             throw new Error(`AI request failed: ${response.status}`);
         }
         
@@ -3521,6 +3679,8 @@ async function handleNameCorrection(text) {
         let waitingForName = false;
         let shoppingList = [];
         let memoryStore = {};
+        let lastBudgetPlan = null;
+        let lastVerifiedPlaces = null;
 
         // Noise filter settings for public places
         let noiseFilterEnabled = false;
@@ -3535,10 +3695,10 @@ async function handleNameCorrection(text) {
         let translatorMode = false;
         let translatorLanguage = null;
         const supportedLanguages = {
-            'tamil': { code: 'ta', name: 'Tamil', nativeName: 'தமிழ்', voiceLang: 'ta-IN' },
-            'kannada': { code: 'kn', name: 'Kannada', nativeName: 'ಕನ್ನಡ', voiceLang: 'kn-IN' },
-            'telugu': { code: 'te', name: 'Telugu', nativeName: 'తెలుగు', voiceLang: 'te-IN' },
-            'hindi': { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', voiceLang: 'hi-IN' }
+            'tamil': { code: 'ta', name: 'Tamil', nativeName: 'à®¤à®®à®¿à®´à¯', voiceLang: 'ta-IN' },
+            'kannada': { code: 'kn', name: 'Kannada', nativeName: 'à²•à²¨à³à²¨à²¡', voiceLang: 'kn-IN' },
+            'telugu': { code: 'te', name: 'Telugu', nativeName: 'à°¤à±†à°²à±à°—à±', voiceLang: 'te-IN' },
+            'hindi': { code: 'hi', name: 'Hindi', nativeName: 'à¤¹à¤¿à¤¨à¥à¤¦à¥€', voiceLang: 'hi-IN' }
         };
 
 
@@ -3733,36 +3893,36 @@ async function handleNameCorrection(text) {
                     
                     <div class="p-6 space-y-6">
                         <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">🎯 What I Can Do</h3>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">ðŸŽ¯ What I Can Do</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p><strong>✈️ Travel Planning:</strong> "Plan a 3-day trip to Tokyo" or "Hotels in Paris with vegetarian food"</p>
-                                <p><strong>🍽️ Food Recommendations:</strong> "Best restaurants in Rome" or "Biryani places in Chennai"</p>
-                                <p><strong>🚌 Transport Info:</strong> "How to get around London?" or "Transport in Mumbai"</p>
-                                <p><strong>🌤️ Weather:</strong> "What's the weather?" or "Will it rain in Seattle tomorrow?"</p>
-                                <p><strong>🛒 Shopping Lists:</strong> "Add 2 pounds of chicken to my list" or "Show my shopping list"</p>
-                                <p><strong>⏰ Reminders:</strong> "Remind me to call mom at 5pm" or "Remind me tomorrow to buy groceries"</p>
-                                <p><strong>🌐 Translator:</strong> "Speak in Tamil" or "Translate to Hindi"</p>
+                                <p><strong>âœˆï¸ Travel Planning:</strong> "Plan a 3-day trip to Tokyo" or "Hotels in Paris with vegetarian food"</p>
+                                <p><strong>ðŸ½ï¸ Food Recommendations:</strong> "Best restaurants in Rome" or "Biryani places in Chennai"</p>
+                                <p><strong>ðŸšŒ Transport Info:</strong> "How to get around London?" or "Transport in Mumbai"</p>
+                                <p><strong>ðŸŒ¤ï¸ Weather:</strong> "What's the weather?" or "Will it rain in Seattle tomorrow?"</p>
+                                <p><strong>ðŸ›’ Shopping Lists:</strong> "Add 2 pounds of chicken to my list" or "Show my shopping list"</p>
+                                <p><strong>â° Reminders:</strong> "Remind me to call mom at 5pm" or "Remind me tomorrow to buy groceries"</p>
+                                <p><strong>ðŸŒ Translator:</strong> "Speak in Tamil" or "Translate to Hindi"</p>
                             </div>
                         </section>
                         
                         <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">💡 Pro Tips for Better Results</h3>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">ðŸ’¡ Pro Tips for Better Results</h3>
                             <div class="space-y-3 text-sm text-gray-700 dark:text-gray-300">
                                 <div>
                                     <p class="font-semibold text-gray-900 dark:text-white">Be Specific:</p>
-                                    <p class="text-gray-600 dark:text-gray-400">❌ "Hotels"</p>
-                                    <p class="text-green-600 dark:text-green-400">✅ "Hotels in Chennai with non-vegetarian food"</p>
+                                    <p class="text-gray-600 dark:text-gray-400">âŒ "Hotels"</p>
+                                    <p class="text-green-600 dark:text-green-400">âœ… "Hotels in Chennai with non-vegetarian food"</p>
                                 </div>
                                 
                                 <div>
                                     <p class="font-semibold text-gray-900 dark:text-white">Ask for Local Specialties:</p>
-                                    <p class="text-green-600 dark:text-green-400">✅ "Biryani places in Hyderabad" or "Pizza spots in NYC"</p>
+                                    <p class="text-green-600 dark:text-green-400">âœ… "Biryani places in Hyderabad" or "Pizza spots in NYC"</p>
                                     <p class="text-xs text-gray-500 mt-1">I'll suggest region-specific dishes based on location!</p>
                                 </div>
                                 
                                 <div>
                                     <p class="font-semibold text-gray-900 dark:text-white">Use the Share Button:</p>
-                                    <p class="text-gray-600 dark:text-gray-400">After getting recommendations, click "📤 Share" to send via SMS or WhatsApp!</p>
+                                    <p class="text-gray-600 dark:text-gray-400">After getting recommendations, click "ðŸ“¤ Share" to send via SMS or WhatsApp!</p>
                                 </div>
                                 
                                 <div>
@@ -3778,29 +3938,29 @@ async function handleNameCorrection(text) {
                         </section>
                         
                         <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">🗣️ Voice Commands</h3>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">ðŸ—£ï¸ Voice Commands</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p>Just press the <strong>🎤 microphone button</strong> and speak naturally!</p>
+                                <p>Just press the <strong>ðŸŽ¤ microphone button</strong> and speak naturally!</p>
                                 <p class="text-xs text-gray-500">Examples: "What's the weather?" or "Add milk to my shopping list"</p>
                             </div>
                         </section>
                         
                         <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">🌍 Smart Features</h3>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">ðŸŒ Smart Features</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p><strong>🔍 Web Search:</strong> I verify hotel specialties using real web data</p>
-                                <p><strong>📍 Location-Aware:</strong> I detect if you're in a big city or small town for transport advice</p>
-                                <p><strong>🍛 Regional Food:</strong> Get Biryani in India, Pizza in NYC, Pasta in Italy automatically!</p>
-                                <p><strong>🎫 Context Suggestions:</strong> After itineraries, I suggest hotels, restaurants, nightlife, and more</p>
+                                <p><strong>ðŸ” Web Search:</strong> I verify hotel specialties using real web data</p>
+                                <p><strong>ðŸ“ Location-Aware:</strong> I detect if you're in a big city or small town for transport advice</p>
+                                <p><strong>ðŸ› Regional Food:</strong> Get Biryani in India, Pizza in NYC, Pasta in Italy automatically!</p>
+                                <p><strong>ðŸŽ« Context Suggestions:</strong> After itineraries, I suggest hotels, restaurants, nightlife, and more</p>
                             </div>
                         </section>
 
                         <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">⚙️ Settings</h3>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">âš™ï¸ Settings</h3>
                             <div class="space-y-4">
                                 <div class="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                     <div>
-                                        <p class="font-semibold text-gray-900 dark:text-white">🔇 Noise Filter</p>
+                                        <p class="font-semibold text-gray-900 dark:text-white">ðŸ”‡ Noise Filter</p>
                                         <p class="text-xs text-gray-500 dark:text-gray-400">Filter background noise in public places</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
@@ -3817,7 +3977,7 @@ async function handleNameCorrection(text) {
                                     </div>
                                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Higher = stricter filtering (may miss some commands)</p>
                                 </div>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">💡 Voice: Say "enable noise filter" or "disable noise filter"</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">ðŸ’¡ Voice: Say "enable noise filter" or "disable noise filter"</p>
                             </div>
                         </section>
 
@@ -3910,7 +4070,7 @@ async function handleNameCorrection(text) {
           }
 
           if (containsPlaceList(text) && trustLevel !== TRUST_LEVEL.VERIFIED) {
-            text = '⚠️ This response contains generated structure only. ' + 
+            text = 'âš ï¸ This response contains generated structure only. ' + 
             'Specific places are shown separately using verified location data.\n\n' + text;
         }
 
@@ -3931,7 +4091,7 @@ async function handleNameCorrection(text) {
                 messageDiv.innerHTML = `
                     <div class="chat-bubble-user text-white px-4 py-3 max-w-md relative group">
                         <p class="text-sm font-medium">${formattedText}</p>
-                        <button onclick="deleteMessage(this)" class="hidden group-hover:flex absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-sm hover:bg-red-600 transition-all shadow-lg items-center justify-center">×</button>
+                        <button onclick="deleteMessage(this)" class="hidden group-hover:flex absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-sm hover:bg-red-600 transition-all shadow-lg items-center justify-center">Ã—</button>
                     </div>
                 `;
             } else {
@@ -4144,8 +4304,8 @@ async function handleNameCorrection(text) {
                 
                 const priceColor = hotel.price === 'Budget' ? 'text-green-600' : 
                                   hotel.price === 'Luxury' ? 'text-purple-600' : 'text-blue-600';
-                const foodIcon = hotel.food === 'Pure Veg' ? '🥬' : 
-                                hotel.food === 'Non-Veg' ? '🍖' : '🍽️';
+                const foodIcon = hotel.food === 'Pure Veg' ? 'ðŸ¥¬' : 
+                                hotel.food === 'Non-Veg' ? 'ðŸ–' : 'ðŸ½ï¸';
                 
                 displayHtml += `
                     <div class="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4 shadow-md">
@@ -4153,16 +4313,16 @@ async function handleNameCorrection(text) {
                             <h3 class="text-lg font-bold text-gray-900">${hotel.name}</h3>
                             <a href="${mapUrl}" target="_blank" 
                                class="flex items-center gap-1 bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-medium transition-all">
-                                📍 Directions
+                                ðŸ“ Directions
                             </a>
                         </div>
                         <p class="text-sm text-gray-700 mb-2">${hotel.desc}</p>
                         <div class="flex flex-wrap gap-2 mb-2">
-                            <span class="px-2 py-1 ${priceColor} bg-white rounded-full text-xs font-semibold border">💰 ${hotel.price}</span>
+                            <span class="px-2 py-1 ${priceColor} bg-white rounded-full text-xs font-semibold border">ðŸ’° ${hotel.price}</span>
                             <span class="px-2 py-1 text-gray-700 bg-white rounded-full text-xs font-semibold border">${foodIcon} ${hotel.food}</span>
                         </div>
-                        <p class="text-sm text-purple-700 font-medium mb-1">🍴 Try: ${hotel.specialty}</p>
-                        <p class="text-xs text-gray-600">✨ ${hotel.why}</p>
+                        <p class="text-sm text-purple-700 font-medium mb-1">ðŸ´ Try: ${hotel.specialty}</p>
+                        <p class="text-xs text-gray-600">âœ¨ ${hotel.why}</p>
                     </div>
                 `;
             }
@@ -4224,34 +4384,34 @@ async function handleNameCorrection(text) {
             
             const regionalButtons = {
                 'south-india': [
-                    { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' },
-                    { emoji: '🍛', title: 'Biryani', query: 'biryani near me' },
-                    { emoji: '☕', title: 'Filter Coffee', query: 'filter coffee near me' }
+                    { emoji: 'ðŸ”', title: 'Fast Food', query: 'fast food near me' },
+                    { emoji: 'ðŸ›', title: 'Biryani', query: 'biryani near me' },
+                    { emoji: 'â˜•', title: 'Filter Coffee', query: 'filter coffee near me' }
                 ],
                 'north-india': [
-                    { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' },
-                    { emoji: '🍛', title: 'Biryani', query: 'biryani near me' },
-                    { emoji: '🫓', title: 'Dhaba', query: 'dhaba near me' }
+                    { emoji: 'ðŸ”', title: 'Fast Food', query: 'fast food near me' },
+                    { emoji: 'ðŸ›', title: 'Biryani', query: 'biryani near me' },
+                    { emoji: 'ðŸ«“', title: 'Dhaba', query: 'dhaba near me' }
                 ],
                 'usa': [
-                    { emoji: '☕', title: 'Coffee Shops', query: 'coffee shops near me' },
-                    { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' },
-                    { emoji: '🍕', title: 'Pizza', query: 'pizza near me' }
+                    { emoji: 'â˜•', title: 'Coffee Shops', query: 'coffee shops near me' },
+                    { emoji: 'ðŸ”', title: 'Fast Food', query: 'fast food near me' },
+                    { emoji: 'ðŸ•', title: 'Pizza', query: 'pizza near me' }
                 ],
                 'uk': [
-                    { emoji: '☕', title: 'Coffee', query: 'coffee shops near me' },
-                    { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' },
-                    { emoji: '🍟', title: 'Fish & Chips', query: 'fish and chips near me' }
+                    { emoji: 'â˜•', title: 'Coffee', query: 'coffee shops near me' },
+                    { emoji: 'ðŸ”', title: 'Fast Food', query: 'fast food near me' },
+                    { emoji: 'ðŸŸ', title: 'Fish & Chips', query: 'fish and chips near me' }
                 ],
                 'middle-east': [
-                    { emoji: '🥙', title: 'Shawarma', query: 'shawarma near me' },
-                    { emoji: '☕', title: 'Coffee', query: 'coffee shops near me' },
-                    { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' }
+                    { emoji: 'ðŸ¥™', title: 'Shawarma', query: 'shawarma near me' },
+                    { emoji: 'â˜•', title: 'Coffee', query: 'coffee shops near me' },
+                    { emoji: 'ðŸ”', title: 'Fast Food', query: 'fast food near me' }
                 ],
                 'international': [
-                    { emoji: '🍔', title: 'Fast Food', query: 'fast food near me' },
-                    { emoji: '☕', title: 'Coffee', query: 'coffee shops near me' },
-                    { emoji: '🍕', title: 'Pizza', query: 'pizza near me' }
+                    { emoji: 'ðŸ”', title: 'Fast Food', query: 'fast food near me' },
+                    { emoji: 'â˜•', title: 'Coffee', query: 'coffee shops near me' },
+                    { emoji: 'ðŸ•', title: 'Pizza', query: 'pizza near me' }
                 ]
             };
             
@@ -4276,7 +4436,7 @@ async function handleNameCorrection(text) {
             
             boxDiv.innerHTML = `
                 <div class="w-full text-center mb-3 mt-4">
-                    <span class="text-sm font-medium text-gray-600 dark:text-gray-400">🎯 Quick Access</span>
+                    <span class="text-sm font-medium text-gray-600 dark:text-gray-400">ðŸŽ¯ Quick Access</span>
                 </div>
                 <div class="flex flex-wrap justify-center gap-4">
                     ${buttonsHTML}
@@ -4297,7 +4457,7 @@ async function handleNameCorrection(text) {
             suggestionDiv.innerHTML = `
                 <button onclick="askAboutTransport()"
                    class="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-5 py-2 rounded-full shadow-md transition-all text-sm font-medium">
-                    🚌 Need transport info?
+                    ðŸšŒ Need transport info?
                 </button>
             `;
             chatContainer.appendChild(suggestionDiv);
@@ -4388,7 +4548,7 @@ async function handleNameCorrection(text) {
                         wakeWordMode = false;
 
                         const response = "Yes, sir?";
-                        addChatMessage("🎤 Hey JARVIS", true);
+                        addChatMessage("ðŸŽ¤ Hey JARVIS", true);
                         addChatMessage(response, false);
                         speak(response);
 
@@ -4503,7 +4663,7 @@ async function handleNameCorrection(text) {
                 wakeWordMode = true;
                 commandMode = false;
                 startListening();
-                addChatMessage('🎤 Listening... (Say "Hey JARVIS" or speak directly)', false);
+                addChatMessage('ðŸŽ¤ Listening... (Say "Hey JARVIS" or speak directly)', false);
             }
         }
 
@@ -4569,7 +4729,7 @@ async function handleNameCorrection(text) {
             
             
             
-            const hotelMatches = [...responseText.matchAll(/🏨\s+([^\n\[]+?)(?:\s*\[|$)/gm)];
+            const hotelMatches = [...responseText.matchAll(/ðŸ¨\s+([^\n\[]+?)(?:\s*\[|$)/gm)];
             
             if (hotelMatches.length === 0) return responseText;
             
@@ -4615,7 +4775,7 @@ async function handleNameCorrection(text) {
                                 
                                 
                                 const hotelBlockRegex = new RegExp(
-                                    `(🏨\\s+${hotelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^⭐]*⭐\\s*Specialty:\\s*)([^\\n]+)`,
+                                    `(ðŸ¨\\s+${hotelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[^â­]*â­\\s*Specialty:\\s*)([^\\n]+)`,
                                     'i'
                                 );
                                 
@@ -4689,13 +4849,13 @@ async function handleNameCorrection(text) {
             fastFoodBox.innerHTML = `
                 <div class="${bgClass} border-2 rounded-xl p-4 max-w-md shadow-md">
                     <div class="flex items-center gap-2 mb-2">
-                        <span class="text-2xl">🍔</span>
+                        <span class="text-2xl">ðŸ”</span>
                         <h3 class="font-bold ${textClass}">Quick Bite?</h3>
                     </div>
                     <p class="text-sm ${textClass} mb-3">Looking for fast food nearby?</p>
                     <a href="https://www.google.com/search?q=fast+food+near+me" target="_blank" 
                        class="${buttonClass} text-white px-4 py-2 rounded-lg text-sm font-medium inline-block transition-all hover:scale-105">
-                        🔍 Search Fast Food Near Me
+                        ðŸ” Search Fast Food Near Me
                     </a>
                 </div>
             `;
@@ -4722,7 +4882,7 @@ async function handleNameCorrection(text) {
             transportBox.innerHTML = `
                 <button onclick="getTransportInfo('${cityName}')" 
                         class="${bgClass} border-2 ${darkMode ? 'border-gray-600' : 'border-blue-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2">
-                    <span class="text-xl">🚌</span>
+                    <span class="text-xl">ðŸšŒ</span>
                     <span class="text-sm font-medium ${textClass}">How to get around ${cityName}?</span>
                 </button>
             `;
@@ -4757,7 +4917,7 @@ async function handleNameCorrection(text) {
             const isMetro = metroCities.some(city => cityName.toLowerCase().includes(city));
             const isTier2 = tier2Cities.some(city => cityName.toLowerCase().includes(city));
             
-            showThinkingIndicator('🚌 Checking transport options...');
+            showThinkingIndicator('ðŸšŒ Checking transport options...');
             
             if (isMetro) {
                 
@@ -4771,17 +4931,17 @@ CRITICAL FORMATTING - READ CAREFULLY:
 
 Format (NO ASTERISKS):
 
-🚇 Metro/Subway:
+ðŸš‡ Metro/Subway:
 - Main lines and routes
 - Operating hours
 - Average frequency
                 
-🚌 Bus System:
+ðŸšŒ Bus System:
 - Main bus operators
 - Coverage areas
 - Typical timings
                 
-🚕 Ride-Sharing & Taxis:
+ðŸš• Ride-Sharing & Taxis:
 - Uber and Ola availability
 - Auto-rickshaw availability
 - Typical fare ranges
@@ -4797,26 +4957,26 @@ CRITICAL: Do NOT use ** or * anywhere in your response. Use plain text with dash
             } else if (isTier2) {
                 
                 hideThinkingIndicator();
-                const tier2Msg = `🚌 Transport in ${cityName}:
+                const tier2Msg = `ðŸšŒ Transport in ${cityName}:
 
 ${cityName} is a tourist-friendly town with decent transport options.
 
-🚕 Ride-Sharing:
+ðŸš• Ride-Sharing:
 - Uber/Ola may be available but with limited drivers
 - Wait times can be longer (10-20 mins)
 - Better availability during tourist season
 
-🛺 Local Options:
+ðŸ›º Local Options:
 - Auto-rickshaws are the most reliable option
 - Negotiate fare before starting (or insist on meter)
 - Available throughout the town
 
-🚌 Public Transport:
+ðŸšŒ Public Transport:
 - Local and intercity buses available at bus stand
 - Check timings at the local bus depot
 - State transport buses connect to major cities
 
-💡 Best Advice for ${cityName}:
+ðŸ’¡ Best Advice for ${cityName}:
 - For sightseeing: Hire an auto for half-day/full-day (negotiate beforehand)
 - For short trips: Use auto-rickshaws
 - For intercity: Book bus tickets in advance during peak season
@@ -4827,29 +4987,29 @@ ${cityName} is a tourist-friendly town with decent transport options.
             } else {
                 
                 hideThinkingIndicator();
-                const smallTownMsg = `🚌 Transport in ${cityName}:
+                const smallTownMsg = `ðŸšŒ Transport in ${cityName}:
 
 ${cityName} is a smaller town without major ride-sharing services like Uber or Ola.
 
-🛺 What's Available:
+ðŸ›º What's Available:
 - Auto-rickshaws (most common and reliable)
 - Cycle rickshaws in some areas
 - Local shared autos/vans for specific routes
 - Town buses (limited schedules)
 
-🚌 Intercity Travel:
+ðŸšŒ Intercity Travel:
 - State transport buses from the bus stand
 - Private buses to nearby cities
 - Shared taxis/vans to neighboring towns
 
-💡 Pro Tips for ${cityName}:
+ðŸ’¡ Pro Tips for ${cityName}:
 - Ask your hotel to arrange a trusted auto driver
 - Negotiate auto fare before starting your trip
 - For temple visits, many autos offer package rates
 - Local drivers often double as guides - utilize their knowledge!
 - Keep cash handy as digital payments may not work everywhere
 
-🚗 Best Option:
+ðŸš— Best Option:
 If visiting multiple places, consider hiring a local taxi/auto for the full day. Ask your accommodation for recommendations - they usually know trustworthy drivers.`;
                 
                 addChatMessage(smallTownMsg, false);
@@ -4987,6 +5147,21 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
                 return;
             }
 
+            if (isVerifiedPlacesRequest(cleanText)) {
+                await handleVerifiedPlacesMode(cleanText);
+                return;
+            }
+
+            if (isBudgetTripRequest(cleanText)) {
+                await handleBudgetTripPlanner(cleanText);
+                return;
+            }
+
+            if (isCalendarSyncRequest(cleanText)) {
+                await handleCalendarSync(cleanText);
+                return;
+            }
+
             // Handle transport location follow-up
             if (window.waitingForTransportLocation) {
                 window.waitingForTransportLocation = false;
@@ -5030,10 +5205,10 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
                     // Major city - show Google Maps transit embed
                     const transitQuery = encodeURIComponent(`transit in ${cityName}`);
                     const rideShareLinks = isIndianCity
-                        ? `🚕 [Book a Ride](https://www.google.com/search?q=uber+ola+${encodeURIComponent(cityName)}) - Uber/Ola available`
-                        : `🚕 [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Uber/Lyft available`;
+                        ? `ðŸš• [Book a Ride](https://www.google.com/search?q=uber+ola+${encodeURIComponent(cityName)}) - Uber/Ola available`
+                        : `ðŸš• [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Uber/Lyft available`;
 
-                    transportMsg = `🚌 **Transport in ${cityName}**
+                    transportMsg = `ðŸšŒ **Transport in ${cityName}**
 
 ${cityName} has excellent public transportation options!
 
@@ -5048,88 +5223,88 @@ ${cityName} has excellent public transportation options!
 </iframe>
 </div>
 
-━━━━━━━━━━━━━━━━━━━━━━
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-🔍 **Find transit options:**
+ðŸ” **Find transit options:**
 
-🚇 [Metro/Subway Stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(cityName)}) - Find nearest stations
+ðŸš‡ [Metro/Subway Stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(cityName)}) - Find nearest stations
 
-🚌 [Bus Stops](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(cityName)}) - Local bus routes
+ðŸšŒ [Bus Stops](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(cityName)}) - Local bus routes
 
 ${rideShareLinks}
 
-📍 [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
+ðŸ“ [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
 
                     speak(`${cityName} has good public transport including metro and buses. Check the map for stations!`);
                 } else if (isIndianCity) {
                     // Smaller Indian town - auto-rickshaws and local transport
-                    transportMsg = `🚌 **Transport in ${cityName}**
+                    transportMsg = `ðŸšŒ **Transport in ${cityName}**
 
 ${cityName} is a smaller town. Here's how to get around:
 
-🛺 **Auto-Rickshaws** (Most Reliable)
+ðŸ›º **Auto-Rickshaws** (Most Reliable)
 - Available throughout town
 - Negotiate fare before starting OR insist on meter
-- Typical fare: ₹20-50 for short trips
+- Typical fare: â‚¹20-50 for short trips
 
-🚌 **Local Buses**
+ðŸšŒ **Local Buses**
 - Available from the bus stand
 - Ask locals for routes and timings
 - Very affordable option
 
-🚗 **Taxi/Cab Services**
+ðŸš— **Taxi/Cab Services**
 - Uber/Ola may have limited availability
 - Ask your hotel to arrange a trusted driver
 - Consider hiring for full-day sightseeing
 
-💡 **Pro Tips:**
+ðŸ’¡ **Pro Tips:**
 - Download Ola/Uber as backup but don't rely on them
 - Ask hotel staff for trusted auto drivers
 - For temple visits, autos often offer package rates
 - Keep cash handy - digital payments may not work everywhere
 
-━━━━━━━━━━━━━━━━━━━━━━
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-🔍 **More info:**
+ðŸ” **More info:**
 
-🔎 [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
+ðŸ”Ž [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
 
-📍 [Find Bus Stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(cityName)}) - Main bus terminal`;
+ðŸ“ [Find Bus Stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(cityName)}) - Main bus terminal`;
 
                     speak(`${cityName} is a smaller town. Auto-rickshaws are your best bet. I've listed all your options.`);
                 } else {
                     // Non-Indian smaller city/town
-                    transportMsg = `🚌 **Transport in ${cityName}**
+                    transportMsg = `ðŸšŒ **Transport in ${cityName}**
 
 Here's how to get around ${cityName}:
 
-🚗 **Rideshare Services**
+ðŸš— **Rideshare Services**
 - Uber and Lyft are typically available
 - Download the apps for easy booking
 - Check pricing before rides in tourist areas
 
-🚌 **Public Transit**
+ðŸšŒ **Public Transit**
 - Check local bus/transit schedules
 - Google Maps shows real-time transit info
 
-🚕 **Taxis & Car Rentals**
+ðŸš• **Taxis & Car Rentals**
 - Local taxi services available
 - Consider renting a car for flexibility
 
-💡 **Pro Tips:**
+ðŸ’¡ **Pro Tips:**
 - Use Google Maps for real-time transit directions
 - Rideshare apps often have the best rates
 - Ask your hotel concierge for local recommendations
 
-━━━━━━━━━━━━━━━━━━━━━━
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-🔍 **More info:**
+ðŸ” **More info:**
 
-🚕 [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Rideshare options
+ðŸš• [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Rideshare options
 
-🔎 [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
+ðŸ”Ž [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
 
-📍 [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
+ðŸ“ [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
 
                     speak(`Here are the transport options for ${cityName}. Rideshare services like Uber and Lyft are your best bet.`);
                 }
@@ -5258,7 +5433,7 @@ Here's how to get around ${cityName}:
                         if (willRain) {
                             rainMsg = `Yes, it looks like rain is expected today. ${getWeatherAdvice(weather)}`;
                         } else {
-                            rainMsg = `No, it won't rain today. The temperature is ${fahrenheit}°F (${celsius}°C). ${getWeatherAdvice(weather)}`;
+                            rainMsg = `No, it won't rain today. The temperature is ${fahrenheit}Â°F (${celsius}Â°C). ${getWeatherAdvice(weather)}`;
                         }
                         addChatMessage(rainMsg, false);
                         speak(rainMsg);
@@ -5273,7 +5448,7 @@ Here's how to get around ${cityName}:
                         if (willSnow) {
                             snowMsg = `Yes, snow is expected! ${getWeatherAdvice(weather)}`;
                         } else {
-                            snowMsg = `No, it won't snow today. The temperature is ${fahrenheit}°F (${celsius}°C). ${getWeatherAdvice(weather)}`;
+                            snowMsg = `No, it won't snow today. The temperature is ${fahrenheit}Â°F (${celsius}Â°C). ${getWeatherAdvice(weather)}`;
                         }
                         addChatMessage(snowMsg, false);
                         speak(snowMsg);
@@ -5283,7 +5458,7 @@ Here's how to get around ${cityName}:
                         const celsius = Math.round(weather.current.temperature_2m);
                         const fahrenheit = Math.round((celsius * 9/5) + 32);
                         const advice = getWeatherAdvice(weather);
-                        const weatherMsg = `The temperature is ${fahrenheit}°F (${celsius}°C). ${advice}`;
+                        const weatherMsg = `The temperature is ${fahrenheit}Â°F (${celsius}Â°C). ${advice}`;
                         addChatMessage(weatherMsg, false);
                         speak(weatherMsg);
                     }
@@ -5352,7 +5527,7 @@ Here's how to get around ${cityName}:
                                 let askMsg;
                                 if (error.code === 1) {
                                     
-                                    askMsg = "📍 Location permission was denied. Please tell me your city, or check your browser settings to enable location access.";
+                                    askMsg = "ðŸ“ Location permission was denied. Please tell me your city, or check your browser settings to enable location access.";
                                 } else if (error.code === 2) {
                                     
                                     askMsg = "I couldn't determine your location. Where are you? Just say your city!";
@@ -5460,45 +5635,45 @@ Here's how to get around ${cityName}:
                      cleanText.toLowerCase().match(/what (do|can) you (do|offer|provide)/i)) {
                 const helpMsg = `Hey! I'm here to make your life easier. Here's what I can help with:
 
-✈️ Travel Planning - Complete trip assistance!
-  → "Plan a 3-day trip to Tokyo"
-  → "Create an itinerary for NYC"
-  → "Hotels in Chennai with non-veg"
-  → "Best restaurants in Paris"
-  → Dynamic suggestions (Biryani in India, Pizza in NYC, etc.)
-  → Share recommendations via SMS/WhatsApp/Email
+âœˆï¸ Travel Planning - Complete trip assistance!
+  â†’ "Plan a 3-day trip to Tokyo"
+  â†’ "Create an itinerary for NYC"
+  â†’ "Hotels in Chennai with non-veg"
+  â†’ "Best restaurants in Paris"
+  â†’ Dynamic suggestions (Biryani in India, Pizza in NYC, etc.)
+  â†’ Share recommendations via SMS/WhatsApp/Email
 
-🌐 Translator Mode - Communicate with locals!
-  → "Speak in Tamil" / "Tamil la peslama"
-  → "Help me talk to auto driver in Kannada"
-  → "Translate to Hindi" / "Telugu lo cheppu"
-  → Supports: Tamil, Kannada, Telugu, Hindi
-  → Say "stop translator" to exit
+ðŸŒ Translator Mode - Communicate with locals!
+  â†’ "Speak in Tamil" / "Tamil la peslama"
+  â†’ "Help me talk to auto driver in Kannada"
+  â†’ "Translate to Hindi" / "Telugu lo cheppu"
+  â†’ Supports: Tamil, Kannada, Telugu, Hindi
+  â†’ Say "stop translator" to exit
 
-🚌 Transport Info - Get around easily!
-  → "How to get around Chennai?"
-  → "Transport in Long Beach"
-  → Smart advice for big cities vs small towns
+ðŸšŒ Transport Info - Get around easily!
+  â†’ "How to get around Chennai?"
+  â†’ "Transport in Long Beach"
+  â†’ Smart advice for big cities vs small towns
 
-🌤️ Weather - Check weather anywhere!
-  → "What's the weather?"
-  → "Will it rain in Seattle?"
-  → "Temperature in Paris?"
+ðŸŒ¤ï¸ Weather - Check weather anywhere!
+  â†’ "What's the weather?"
+  â†’ "Will it rain in Seattle?"
+  â†’ "Temperature in Paris?"
 
-🛒 Shopping Lists - Add items with quantities!
-  → "Add 2 pounds of chicken to my list"
-  → "Add 1 gallon of milk"
-  → "Show my shopping list"
+ðŸ›’ Shopping Lists - Add items with quantities!
+  â†’ "Add 2 pounds of chicken to my list"
+  â†’ "Add 1 gallon of milk"
+  â†’ "Show my shopping list"
 
-⏰ Reminders - Never forget again!
-  → "Remind me to call mom at 5pm"
-  → "Remind me tomorrow to buy groceries"
+â° Reminders - Never forget again!
+  â†’ "Remind me to call mom at 5pm"
+  â†’ "Remind me tomorrow to buy groceries"
 
-💡 Pro Tips:
-  • Ask for local specialties (Biryani, Pizza, Pasta, etc.)
-  • Use "Share" or "Email" buttons to save recommendations
-  • Use Translator to talk to rickshaw drivers, shopkeepers!
-  • I remember your name and preferences!
+ðŸ’¡ Pro Tips:
+  â€¢ Ask for local specialties (Biryani, Pizza, Pasta, etc.)
+  â€¢ Use "Share" or "Email" buttons to save recommendations
+  â€¢ Use Translator to talk to rickshaw drivers, shopkeepers!
+  â€¢ I remember your name and preferences!
 
 Just talk to me naturally!`;
                 addChatMessage(helpMsg, false);
@@ -5557,10 +5732,10 @@ Just talk to me naturally!`;
 LOCATION: ${itineraryLocation || 'Extract from user query'}
 ${placeSearchResults}
 
-⛔ CRITICAL: EVERY ENTRY MUST BE A SPECIFIC, NAMED PLACE
+â›” CRITICAL: EVERY ENTRY MUST BE A SPECIFIC, NAMED PLACE
 Each activity must have a real, proper name - not generic descriptions.
 
-✅ GOOD (specific names):
+âœ… GOOD (specific names):
 - "Eiffel Tower" NOT "famous tower"
 - "Central Park" NOT "a park in the city"
 - "Taj Mahal" NOT "historic monument"
@@ -5569,7 +5744,7 @@ Each activity must have a real, proper name - not generic descriptions.
 - "Grand Bazaar" NOT "local market"
 - "Louvre Museum" NOT "art museum"
 
-❌ FORBIDDEN - NEVER INCLUDE THESE:
+âŒ FORBIDDEN - NEVER INCLUDE THESE:
 - Generic activities: "take a walk", "explore the area", "get familiar"
 - Transportation as activities: "ride the subway", "take a bus tour"
 - Vague suggestions: "visit local shops", "grab lunch", "try street food"
@@ -5577,14 +5752,14 @@ Each activity must have a real, proper name - not generic descriptions.
 - Filler content: "relax", "reflect on trip", "enjoy the views", "take a break"
 - Rest time: "rest at hotel", "unwind", "free time"
 
-⛔ NO REPETITION:
+â›” NO REPETITION:
 - Each place appears ONLY ONCE across all days
 - For week-long trips, include day trips to nearby areas
 
-⛔ EXCLUDE:
+â›” EXCLUDE:
 - Sports matches, concerts, date-specific events
 
-✅ INCLUDE (always with SPECIFIC NAMES):
+âœ… INCLUDE (always with SPECIFIC NAMES):
 - Landmarks and monuments (actual names)
 - Museums and galleries (specific names)
 - Historic sites (proper names)
@@ -5598,11 +5773,11 @@ FORMAT (no ** markers):
 
 Day 1 in ${itineraryLocation || '[City]'}:
 
-9:00am: 🏛️ [SPECIFIC PLACE NAME]
+9:00am: ðŸ›ï¸ [SPECIFIC PLACE NAME]
    - What to see/do there
    - Duration: X hours
 
-12:00pm: 🗽 [ANOTHER SPECIFIC PLACE]
+12:00pm: ðŸ—½ [ANOTHER SPECIFIC PLACE]
    - Key highlights
    - Duration: X hours
 
@@ -5612,7 +5787,7 @@ End with: "Enjoy exploring ${itineraryLocation || 'the area'}! Ask me about hote
 
 BEFORE RESPONDING: Check that EVERY entry has a specific place name, not generic text!`;
                 
-                const aiResponse = await callAIWithTyping(itineraryPrompt, '🗺️ Planning your itinerary...');
+                const aiResponse = await callAIWithTyping(itineraryPrompt, 'ðŸ—ºï¸ Planning your itinerary...');
                 addChatMessage(aiResponse.response, false);
                 speak("I've created an itinerary for you. Check the chat for details!");
                 
@@ -5640,7 +5815,7 @@ BEFORE RESPONDING: Check that EVERY entry has a specific place name, not generic
                 
                 const specialtyPrompt = `${userName ? `The user's name is ${userName}.` : ''} Answer this question about local food and specialties: "${text}"
 
-⛔ ANTI-HALLUCINATION RULES:
+â›” ANTI-HALLUCINATION RULES:
 1. ONLY mention dishes that are REAL and ACTUALLY from the region
 2. DO NOT invent dish names
 3. Stick to well-known, verifiable regional dishes
@@ -5649,24 +5824,24 @@ BEFORE RESPONDING: Check that EVERY entry has a specific place name, not generic
 Provide information about the LOCAL FOOD CULTURE and FAMOUS DISHES of the region mentioned.
 
 Format:
-🍽️ Famous Local Dishes:
+ðŸ½ï¸ Famous Local Dishes:
 - Dish name - Brief description and what makes it special
 - Where it's typically served (occasion/context)
 
 Include 5-7 REAL signature dishes that represent the local cuisine.
 
 Example for Tamil Nadu region:
-🍽️ Famous Tamil Nadu Dishes:
+ðŸ½ï¸ Famous Tamil Nadu Dishes:
 - Idli & Sambar - Soft steamed rice cakes with lentil stew, breakfast staple
 - Dosa - Crispy rice crepe, served with chutneys and sambar
 - Chettinad Chicken - Fiery red curry with aromatic spices, regional specialty
 - Pongal - Savory rice and lentil dish, comfort food
 - Filter Coffee - Strong South Indian coffee, cultural icon
 
-🌶️ What Makes It Special:
+ðŸŒ¶ï¸ What Makes It Special:
 [Brief description of the cuisine's characteristics]
 
-💡 Pro Tip: [One helpful tip about trying local food]
+ðŸ’¡ Pro Tip: [One helpful tip about trying local food]
 
 DO NOT make up dish names! Only include dishes you're 100% sure exist in that region.`;
                 
@@ -5753,7 +5928,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     // Show Google Maps embed - FREE, no API needed!
                     if (queryType === 'hotel') {
                         const searchQuery = encodeURIComponent(`hotels in ${fullLocation || cityName}`);
-                        const hotelMsg = `🏨 **Hotels in ${cityName}**
+                        const hotelMsg = `ðŸ¨ **Hotels in ${cityName}**
 
 <div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
 <iframe 
@@ -5767,7 +5942,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 </iframe>
 </div>
 
-📍 Click on markers to see ratings, reviews & directions!`;
+ðŸ“ Click on markers to see ratings, reviews & directions!`;
 
                         addChatMessage(hotelMsg, false);
                         speak(`Here are hotels in ${cityName}. You can see them on the map!`);
@@ -5809,10 +5984,10 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                             // Major city - show Google Maps transit embed
                             const transitQuery = encodeURIComponent(`transit in ${cityName}`);
                             const rideShareLinks = isIndianCity
-                                ? `🚕 [Book a Ride](https://www.google.com/search?q=uber+ola+${encodeURIComponent(cityName)}) - Uber/Ola available`
-                                : `🚕 [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Uber/Lyft available`;
+                                ? `ðŸš• [Book a Ride](https://www.google.com/search?q=uber+ola+${encodeURIComponent(cityName)}) - Uber/Ola available`
+                                : `ðŸš• [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Uber/Lyft available`;
 
-                            transportMsg = `🚌 **Transport in ${cityName}**
+                            transportMsg = `ðŸšŒ **Transport in ${cityName}**
 
 ${cityName} has excellent public transportation options!
 
@@ -5827,88 +6002,88 @@ ${cityName} has excellent public transportation options!
 </iframe>
 </div>
 
-━━━━━━━━━━━━━━━━━━━━━━
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-🔍 **Find transit options:**
+ðŸ” **Find transit options:**
 
-🚇 [Metro/Subway Stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(cityName)}) - Find nearest stations
+ðŸš‡ [Metro/Subway Stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(cityName)}) - Find nearest stations
 
-🚌 [Bus Stops](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(cityName)}) - Local bus routes
+ðŸšŒ [Bus Stops](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(cityName)}) - Local bus routes
 
 ${rideShareLinks}
 
-📍 [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
+ðŸ“ [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
 
                             speak(`${cityName} has good public transport including metro and buses. Check the map for stations!`);
                         } else if (isIndianCity) {
                             // Smaller Indian town - auto-rickshaws and local transport
-                            transportMsg = `🚌 **Transport in ${cityName}**
+                            transportMsg = `ðŸšŒ **Transport in ${cityName}**
 
 ${cityName} is a smaller town. Here's how to get around:
 
-🛺 **Auto-Rickshaws** (Most Reliable)
+ðŸ›º **Auto-Rickshaws** (Most Reliable)
 - Available throughout town
 - Negotiate fare before starting OR insist on meter
-- Typical fare: ₹20-50 for short trips
+- Typical fare: â‚¹20-50 for short trips
 
-🚌 **Local Buses**
+ðŸšŒ **Local Buses**
 - Available from the bus stand
 - Ask locals for routes and timings
 - Very affordable option
 
-🚗 **Taxi/Cab Services**
+ðŸš— **Taxi/Cab Services**
 - Uber/Ola may have limited availability
 - Ask your hotel to arrange a trusted driver
 - Consider hiring for full-day sightseeing
 
-💡 **Pro Tips:**
+ðŸ’¡ **Pro Tips:**
 - Download Ola/Uber as backup but don't rely on them
 - Ask hotel staff for trusted auto drivers
 - For temple visits, autos often offer package rates
 - Keep cash handy - digital payments may not work everywhere
 
-━━━━━━━━━━━━━━━━━━━━━━
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-🔍 **More info:**
+ðŸ” **More info:**
 
-🔎 [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
+ðŸ”Ž [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
 
-📍 [Find Bus Stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(cityName)}) - Main bus terminal`;
+ðŸ“ [Find Bus Stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(cityName)}) - Main bus terminal`;
 
                             speak(`${cityName} is a smaller town. Auto-rickshaws are your best bet. I've listed all your options.`);
                         } else {
                             // Non-Indian smaller city/town
-                            transportMsg = `🚌 **Transport in ${cityName}**
+                            transportMsg = `ðŸšŒ **Transport in ${cityName}**
 
 Here's how to get around ${cityName}:
 
-🚗 **Rideshare Services**
+ðŸš— **Rideshare Services**
 - Uber and Lyft are typically available
 - Download the apps for easy booking
 - Check pricing before rides in tourist areas
 
-🚌 **Public Transit**
+ðŸšŒ **Public Transit**
 - Check local bus/transit schedules
 - Google Maps shows real-time transit info
 
-🚕 **Taxis & Car Rentals**
+ðŸš• **Taxis & Car Rentals**
 - Local taxi services available
 - Consider renting a car for flexibility
 
-💡 **Pro Tips:**
+ðŸ’¡ **Pro Tips:**
 - Use Google Maps for real-time transit directions
 - Rideshare apps often have the best rates
 - Ask your hotel concierge for local recommendations
 
-━━━━━━━━━━━━━━━━━━━━━━
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-🔍 **More info:**
+ðŸ” **More info:**
 
-🚕 [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Rideshare options
+ðŸš• [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Rideshare options
 
-🔎 [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
+ðŸ”Ž [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
 
-📍 [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
+ðŸ“ [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
 
                             speak(`Here are the transport options for ${cityName}. Rideshare services like Uber and Lyft are your best bet.`);
                         }
@@ -5931,20 +6106,20 @@ IMPORTANT RULES:
 
 FORMAT (no ** bold markers, use plain text):
 
-🍽️ Restaurants in ${cityName}
+ðŸ½ï¸ Restaurants in ${cityName}
 
 [If you know real restaurant names, list 3-5 with brief descriptions]
 [If unsure, describe the food scene and what to look for]
 
-🍛 Local Specialties to Try:
+ðŸ› Local Specialties to Try:
 - List 3-4 famous dishes of this region
 
-💡 Search Tips:
+ðŸ’¡ Search Tips:
 - What terms to search on Google Maps (e.g., "Mess" for local meals in Tamil Nadu)
 
 Keep response concise - under 200 words.`;
 
-                    const aiResponse = await callAIWithTyping(restaurantPrompt, '🍽️ Finding restaurants...');
+                    const aiResponse = await callAIWithTyping(restaurantPrompt, 'ðŸ½ï¸ Finding restaurants...');
 
                     // Build response with clickable search links
                     const mapsQuery = encodeURIComponent(`restaurants in ${fullLocation || cityName}`);
@@ -5953,15 +6128,15 @@ Keep response concise - under 200 words.`;
 
                     let foodMsg = aiResponse.response + `
 
-━━━━━━━━━━━━━━━━━━━━━━
+â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
-🔍 **Search for restaurants:**
+ðŸ” **Search for restaurants:**
 
-📍 [Open Google Maps](https://www.google.com/maps/search/${mapsQuery}) - See nearby places with ratings
+ðŸ“ [Open Google Maps](https://www.google.com/maps/search/${mapsQuery}) - See nearby places with ratings
 
-🔎 [Search on Google](https://www.google.com/search?q=${googleQuery}) - Read reviews and articles
+ðŸ”Ž [Search on Google](https://www.google.com/search?q=${googleQuery}) - Read reviews and articles
 
-⭐ [Check TripAdvisor](https://www.google.com/search?q=${tripadvisorQuery}) - Tourist recommendations`;
+â­ [Check TripAdvisor](https://www.google.com/search?q=${tripadvisorQuery}) - Tourist recommendations`;
 
                     addChatMessage(foodMsg, false);
                     speak(`Here are restaurant suggestions for ${cityName}. I've included search links to find more options!`);
@@ -5976,15 +6151,15 @@ Keep response concise - under 200 words.`;
                     const mapsQuery = encodeURIComponent(`restaurants in ${cityName || 'your area'}`);
                     const googleQuery = encodeURIComponent(`best restaurants in ${cityName || 'your area'}`);
 
-                    const fallbackMsg = `🍽️ **Restaurants in ${cityName || 'your area'}**
+                    const fallbackMsg = `ðŸ½ï¸ **Restaurants in ${cityName || 'your area'}**
 
 I had trouble getting specific recommendations, but you can search directly:
 
-📍 [Open Google Maps](https://www.google.com/maps/search/${mapsQuery}) - See nearby restaurants with ratings
+ðŸ“ [Open Google Maps](https://www.google.com/maps/search/${mapsQuery}) - See nearby restaurants with ratings
 
-🔎 [Search on Google](https://www.google.com/search?q=${googleQuery}) - Find reviews and articles
+ðŸ”Ž [Search on Google](https://www.google.com/search?q=${googleQuery}) - Find reviews and articles
 
-💡 **Tip:** Look for places with 4+ stars and recent reviews!`;
+ðŸ’¡ **Tip:** Look for places with 4+ stars and recent reviews!`;
                     addChatMessage(fallbackMsg, false);
                     speak(`Check the search links to find restaurants in ${cityName}!`);
                     return;
@@ -6030,7 +6205,7 @@ I had trouble getting specific recommendations, but you can search directly:
                 for (let i = 0; i < 20; i++) { 
                     const snowflake = document.createElement('div');
                     snowflake.className = 'snowflake';
-                    snowflake.textContent = '❄';
+                    snowflake.textContent = 'â„';
                     snowflake.style.left = Math.random() * 100 + '%';
                     snowflake.style.animationDuration = (Math.random() * 3 + 2) + 's';
                     snowflake.style.animationDelay = Math.random() * 5 + 's';
@@ -6251,7 +6426,7 @@ I had trouble getting specific recommendations, but you can search directly:
                 
                 document.getElementById('weather-card').classList.remove('hidden');
                 document.getElementById('location-name').textContent = displayLocation;
-                document.getElementById('temperature').textContent = `${fahrenheit}°F / ${celsius}°C`;
+                document.getElementById('temperature').textContent = `${fahrenheit}Â°F / ${celsius}Â°C`;
                 document.getElementById('weather-advice').textContent = advice;
 
                 // Hide "Try asking me" while weather card is active.
@@ -6261,7 +6436,7 @@ I had trouble getting specific recommendations, but you can search directly:
                 }
                 
                 hideLoading();
-                const weatherMsg = `The temperature in ${displayLocation} is ${fahrenheit}°F (${celsius}°C). ${advice}`;
+                const weatherMsg = `The temperature in ${displayLocation} is ${fahrenheit}Â°F (${celsius}Â°C). ${advice}`;
                 addChatMessage(weatherMsg, false);
                 speak(weatherMsg);
                 
@@ -6395,7 +6570,7 @@ I had trouble getting specific recommendations, but you can search directly:
                             <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                         </svg>
                     </div>
-                    <h2 class="text-2xl font-bold text-gray-900 mb-2">⏰ Reminder!</h2>
+                    <h2 class="text-2xl font-bold text-gray-900 mb-2">â° Reminder!</h2>
                     <p class="text-lg text-gray-700 mb-6">${escapeHtml(reminder.text)}</p>
                     <div class="flex gap-3 justify-center">
                         <button onclick="snoozeAlarm(${reminder.id})" class="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold rounded-xl transition-all">
@@ -6452,7 +6627,7 @@ I had trouble getting specific recommendations, but you can search directly:
                 div.innerHTML = `
                     <div class="flex-1">
                         <p class="text-gray-800 font-medium mb-1">${escapeHtml(r.text)}</p>
-                        <p class="text-sm text-gray-500">${escapeHtml(r.time)} • ${escapeHtml(r.created)}</p>
+                        <p class="text-sm text-gray-500">${escapeHtml(r.time)} â€¢ ${escapeHtml(r.created)}</p>
                     </div>
                     <button onclick="deleteReminder(${r.id})" class="text-red-500 hover:text-red-700 font-medium ml-4 transition-all">Delete</button>
                 `;
@@ -6647,10 +6822,10 @@ I had trouble getting specific recommendations, but you can search directly:
                 itemsContainer.innerHTML = shoppingList.map((item, index) => `
                     <div class="receipt-item">
                         <div class="receipt-item-text">
-                            <span class="receipt-bullet">•</span>
+                            <span class="receipt-bullet">â€¢</span>
                             <span>${escapeHtml(item)}</span>
                         </div>
-                        <button onclick="removeShoppingItem(${index})" class="receipt-delete" title="Remove item">✕</button>
+                        <button onclick="removeShoppingItem(${index})" class="receipt-delete" title="Remove item">âœ•</button>
                     </div>
                 `).join('');
             }
@@ -7162,7 +7337,7 @@ function showHistoryPanel() {
         <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
             <div class="p-4 border-b border-gray-200 flex justify-between items-center">
                 <h2 class="text-xl font-bold text-gray-900">Conversation History</h2>
-                <button onclick="closeHistoryPanel()" class="text-gray-500 hover:text-gray-700 text-2xl">×</button>
+                <button onclick="closeHistoryPanel()" class="text-gray-500 hover:text-gray-700 text-2xl">Ã—</button>
             </div>
             <div class="p-4 border-b border-gray-200">
                 <input 
@@ -7567,7 +7742,7 @@ function showForegroundNotification(payload) {
     const body = payload.notification?.body || 'You have a reminder!';
 
     // Show in chat
-    addChatMessage(`🔔 **Reminder:** ${body}`, false);
+    addChatMessage(`ðŸ”” **Reminder:** ${body}`, false);
     speak(body);
 
     // Also show browser notification
@@ -7647,7 +7822,7 @@ async function showPairingCodeUI(container) {
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
                 On your phone:<br>
                 1. Open JARVIS<br>
-                2. Tap the phone icon 📱<br>
+                2. Tap the phone icon ðŸ“±<br>
                 3. Enter this code
             </p>
 
@@ -7659,7 +7834,7 @@ async function showPairingCodeUI(container) {
             </div>
 
             <button onclick="refreshPairingCode()" class="mt-4 text-purple-600 hover:text-purple-700 text-sm font-medium">
-                🔄 Generate New Code
+                ðŸ”„ Generate New Code
             </button>
         </div>
     `;
@@ -7799,7 +7974,7 @@ async function submitPairingCode() {
         });
         localStorage.setItem('jarvis_paired_devices', JSON.stringify(pairs));
 
-        statusMsg.innerHTML = '<span class="text-green-500">✓ Connected successfully!</span>';
+        statusMsg.innerHTML = '<span class="text-green-500">âœ“ Connected successfully!</span>';
         updatePairingStatus(true);
 
         // Close modal after delay
@@ -7820,7 +7995,7 @@ async function submitPairingCode() {
 function handlePairingSuccess(data) {
     const codeDisplay = document.getElementById('pairing-code-display');
     if (codeDisplay) {
-        codeDisplay.innerHTML = '✓ Connected!';
+        codeDisplay.innerHTML = 'âœ“ Connected!';
         codeDisplay.classList.remove('text-purple-700', 'dark:text-purple-300');
         codeDisplay.classList.add('text-green-600', 'dark:text-green-400');
     }
@@ -7893,7 +8068,7 @@ async function loadPairedDevicesList() {
     container.innerHTML = pairedDevices.map(device => `
         <div class="flex items-center justify-between bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2">
             <div class="flex items-center gap-2">
-                <span>📱</span>
+                <span>ðŸ“±</span>
                 <span class="text-sm text-gray-700 dark:text-gray-300">Mobile Device</span>
             </div>
             <button onclick="unpairDevice('${device.id}')" class="text-red-500 text-xs hover:text-red-600">Remove</button>
@@ -7991,7 +8166,7 @@ async function sendPushNotification(token, reminder) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 token: token,
-                title: '⏰ JARVIS Reminder',
+                title: 'â° JARVIS Reminder',
                 body: reminder.text,
                 data: {
                     reminderId: reminder.id,
