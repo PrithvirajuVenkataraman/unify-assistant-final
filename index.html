@@ -4897,6 +4897,12 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
                 if (weatherCard && !weatherCard.classList.contains('hidden')) {
                     weatherCard.classList.add('hidden');
                 }
+
+                // Bring back "Try asking me" once user moves away from weather flow.
+                const suggestionsPanel = document.getElementById('initial-suggestions');
+                if (suggestionsPanel && suggestionsPanel.classList.contains('hidden')) {
+                    suggestionsPanel.classList.remove('hidden');
+                }
             }
             
             
@@ -6247,6 +6253,12 @@ I had trouble getting specific recommendations, but you can search directly:
                 document.getElementById('location-name').textContent = displayLocation;
                 document.getElementById('temperature').textContent = `${fahrenheit}°F / ${celsius}°C`;
                 document.getElementById('weather-advice').textContent = advice;
+
+                // Hide "Try asking me" while weather card is active.
+                const suggestionsPanel = document.getElementById('initial-suggestions');
+                if (suggestionsPanel && !suggestionsPanel.classList.contains('hidden')) {
+                    suggestionsPanel.classList.add('hidden');
+                }
                 
                 hideLoading();
                 const weatherMsg = `The temperature in ${displayLocation} is ${fahrenheit}°F (${celsius}°C). ${advice}`;
@@ -7223,29 +7235,23 @@ function clearHistory() {
 }
 */
 
-function showThinkingIndicator() {
-    const chatContainer = document.getElementById('chat-container');
-    if (!chatContainer) return;
-
+function showThinkingIndicator(message = 'Thinking') {
     hideThinkingIndicator();
 
     const thinkingDiv = document.createElement('div');
     thinkingDiv.id = 'thinking-indicator';
-    thinkingDiv.className = 'flex justify-start items-start gap-2 fade-in';
-
-    const bubbleClass = darkMode
-        ? 'thinking-bubble bg-slate-700/75 border border-slate-600/70'
-        : 'thinking-bubble bg-gray-100/90 border border-gray-200';
-    const textClass = darkMode ? 'text-gray-200' : 'text-gray-700';
+    thinkingDiv.className = 'floating-thinking-indicator fade-in';
 
     thinkingDiv.innerHTML = `
-        <div class="${bubbleClass} rounded-2xl rounded-tl-sm px-3 py-2 shadow-sm flex items-center">
-            <p class="text-xs font-medium ${textClass}">Thinking</p>
-        </div>
+        <span class="floating-thinking-text">${escapeHtml(message)}</span>
+        <span class="thinking-dots">
+            <span class="thinking-dot"></span>
+            <span class="thinking-dot"></span>
+            <span class="thinking-dot"></span>
+        </span>
     `;
 
-    chatContainer.appendChild(thinkingDiv);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    document.body.appendChild(thinkingDiv);
 }
 
 function hideThinkingIndicator() {
@@ -7311,7 +7317,12 @@ style.textContent = `
         width: 7px;
         height: 7px;
         border-radius: 9999px;
+        background: #8b5cf6;
         animation: thinkingDotWave 1.1s ease-in-out infinite;
+    }
+
+    body.dark .thinking-dot {
+        background: #a78bfa;
     }
 
     .thinking-dot:nth-child(2) {
@@ -7320,6 +7331,28 @@ style.textContent = `
 
     .thinking-dot:nth-child(3) {
         animation-delay: 0.3s;
+    }
+
+    .floating-thinking-indicator {
+        position: fixed;
+        right: 18px;
+        bottom: 96px;
+        z-index: 70;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        pointer-events: none;
+    }
+
+    .floating-thinking-text {
+        font-size: 12px;
+        font-weight: 600;
+        color: #7c3aed;
+        letter-spacing: 0.01em;
+    }
+
+    body.dark .floating-thinking-text {
+        color: #a78bfa;
     }
 
     .thinking-text-dots {
@@ -7992,6 +8025,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ========== END FIREBASE & PUSH NOTIFICATIONS ==========
+
 </script>
 </body>
 </html>
