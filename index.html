@@ -1661,6 +1661,27 @@
         body.dark .card-hover:hover {
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
         }
+
+        /* Keep content clear of the fixed bottom input bar across screen sizes */
+        .page-shell {
+            min-height: 100vh;
+            padding-bottom: 14rem;
+        }
+
+        /* Responsive chat panel height to avoid pushing left cards too low */
+        .chat-panel-height {
+            height: clamp(260px, 50vh, 520px);
+            min-height: 260px;
+            max-height: 520px;
+        }
+
+        @media (max-height: 820px) {
+            .chat-panel-height {
+                height: clamp(240px, 44vh, 460px);
+                min-height: 240px;
+                max-height: 460px;
+            }
+        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -1742,7 +1763,7 @@
         <button onclick="dismissNotificationBanner()" class="text-white/70 hover:text-white text-base leading-none px-1">&times;</button>
     </div>
 
-    <div class="min-h-screen pb-44">
+    <div class="page-shell">
         <div id="bg-effects" class="fixed inset-0 overflow-hidden pointer-events-none">
             <div class="absolute top-20 left-20 w-72 h-72 bg-slate-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
             <div class="absolute bottom-20 right-20 w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style="animation-delay: 1s;"></div>
@@ -1850,7 +1871,7 @@
                     <!-- Right Column: Chat -->
                     <div class="lg:w-3/5 order-1 lg:order-2">
                         <!-- Chat History - Claude/ChatGPT style compact view -->
-                        <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar" style="height: calc(100vh - 360px); min-height: 280px; max-height: 560px;">
+                        <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height">
                             <!-- Welcome message -->
                         </div>
                     </div>
