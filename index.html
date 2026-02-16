@@ -2129,7 +2129,6 @@ async function handleVerifiedPlacesMode(text) {
         addChatMessage(msg, false);
         speak(`I found ${top.length} verified ${type} options near ${data.locationName}.`);
     } catch (error) {
-        console.error('Verified places error:', error);
         const msg = 'Verified places lookup failed. Please try again in a moment.';
         addChatMessage(msg, false);
         speak(msg);
@@ -2175,7 +2174,6 @@ async function handleBudgetTripPlanner(text) {
         addChatMessage(msg, false);
         speak(`Your ${p.days}-day budget plan for ${p.destination} is ready.`);
     } catch (error) {
-        console.error('Budget planner error:', error);
         const msg = 'Budget trip planner failed. Please try again.';
         addChatMessage(msg, false);
         speak(msg);
@@ -2209,7 +2207,6 @@ async function handleCalendarSync(text) {
         addChatMessage(msg, false);
         speak('Calendar sync complete. I downloaded an event file for you.');
     } catch (error) {
-        console.error('Calendar sync error:', error);
         const msg = 'Calendar sync failed. Please try again.';
         addChatMessage(msg, false);
         speak(msg);
@@ -2864,7 +2861,6 @@ function saveLearnedPreferences(prefs) {
         prefs.lastUpdated = new Date().toISOString();
         localStorage.setItem('jarvis_learned_preferences', JSON.stringify(prefs));
     } catch (e) {
-        console.log('Could not save preferences:', e);
     }
 }
 
@@ -3201,7 +3197,6 @@ Format your response EXACTLY like this:
         }
     } catch (error) {
         hideThinkingIndicator();
-        console.error('Translation error:', error);
     }
 
     return null;
@@ -3275,7 +3270,6 @@ function speakInLanguage(text, langCode) {
                     pitch: 1,
                     rate: 0.85,
                     volume: 1,
-                    onend: () => console.log('Translation spoken')
                 });
                 return;
             }
@@ -3527,7 +3521,6 @@ async function fetchAndDisplayNews(query) {
 
     } catch (error) {
         hideThinkingIndicator();
-        console.error('News fetch error:', error);
         const errorMsg = "I'm having trouble fetching news right now. You can check [Google News](https://news.google.com) for the latest headlines.";
         addChatMessage(errorMsg, false);
         speak("I couldn't fetch news right now. Try Google News for updates.");
@@ -3595,7 +3588,6 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: userMessage,
-                systemPrompt: systemPrompt,
                 userName: userName
             })
         });
@@ -3603,7 +3595,6 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('âŒ API Response not OK:', response.status, errorText);
             throw new Error(`AI request failed: ${response.status}`);
         }
         
@@ -4511,20 +4502,17 @@ async function handleNameCorrection(text) {
                     // Skip if confidence is too low (unless it's the wake word)
                     const isWakeWord = text.includes('hey jarvis') || text.includes('hey davis');
                     if (!isWakeWord && confidence > 0 && confidence < threshold.confidence) {
-                        console.log(`Noise filtered (low confidence): "${text}" (${(confidence * 100).toFixed(1)}%)`);
                         return;
                     }
 
                     // Skip very short utterances that are likely noise
                     if (!isWakeWord && wordCount < threshold.minWords && text.length < 4) {
-                        console.log(`Noise filtered (too short): "${text}"`);
                         return;
                     }
 
                     // Filter common noise patterns
                     const noisePatterns = ['uh', 'um', 'ah', 'eh', 'hmm', 'hm', 'mm'];
                     if (noisePatterns.includes(text.trim())) {
-                        console.log(`Noise filtered (filler word): "${text}"`);
                         return;
                     }
                 }
@@ -7155,7 +7143,6 @@ I had trouble getting specific recommendations, but you can search directly:
         function toggleSpeakById(speechId, button) {
             const text = window[speechId];
             if (!text) {
-                console.error('Speech text not found for ID:', speechId);
                 return;
             }
             toggleSpeak(text, button);
@@ -7615,8 +7602,6 @@ async function initializeFirebase() {
             try {
                 // Register service worker
                 const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-                console.log('Service Worker registered:', registration);
-
                 messaging = firebase.messaging();
 
                 // Check notification permission
@@ -7627,12 +7612,10 @@ async function initializeFirebase() {
 
                 // Listen for foreground messages
                 messaging.onMessage((payload) => {
-                    console.log('Foreground message received:', payload);
                     showForegroundNotification(payload);
                 });
 
             } catch (err) {
-                console.log('Messaging not supported:', err);
             }
         }
 
@@ -7645,10 +7628,7 @@ async function initializeFirebase() {
         // Listen for reminder updates from other devices
         listenForReminderUpdates();
 
-        console.log('Firebase initialized successfully');
-
     } catch (error) {
-        console.error('Firebase initialization error:', error);
     }
 }
 
@@ -7660,8 +7640,6 @@ async function getAndSaveFCMToken() {
         });
 
         if (fcmToken) {
-            console.log('FCM Token:', fcmToken);
-
             // Save token to Firestore
             await firestore.collection('devices').doc(deviceId).set({
                 fcmToken: fcmToken,
@@ -7674,7 +7652,6 @@ async function getAndSaveFCMToken() {
             localStorage.setItem('jarvis_fcm_token', fcmToken);
         }
     } catch (error) {
-        console.error('Error getting FCM token:', error);
     }
 }
 
@@ -7705,7 +7682,6 @@ async function requestNotificationPermission() {
             speak(msg);
         }
     } catch (error) {
-        console.error('Permission error:', error);
     }
 }
 
@@ -7986,7 +7962,6 @@ async function submitPairingCode() {
         }, 1500);
 
     } catch (error) {
-        console.error('Pairing error:', error);
         statusMsg.innerHTML = '<span class="text-red-500">Connection failed. Please try again.</span>';
     }
 }
@@ -8049,7 +8024,6 @@ async function loadPairedDevices() {
         }
 
     } catch (error) {
-        console.error('Error loading paired devices:', error);
     }
 }
 
@@ -8089,7 +8063,6 @@ async function unpairDevice(pairId) {
             updatePairingStatus(false);
         }
     } catch (error) {
-        console.error('Error unpairing device:', error);
     }
 }
 
@@ -8110,9 +8083,7 @@ async function syncRemindersToFirebase() {
             }, { merge: true });
         }
 
-        console.log('Reminders synced to Firebase');
     } catch (error) {
-        console.error('Error syncing reminders:', error);
     }
 }
 
@@ -8176,9 +8147,7 @@ async function sendPushNotification(token, reminder) {
         });
 
         const result = await response.json();
-        console.log('Notification sent:', result);
     } catch (error) {
-        console.error('Error sending notification:', error);
     }
 }
 
