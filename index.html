@@ -1736,10 +1736,10 @@
     </div>
 
     <!-- Notification Permission Banner -->
-    <div id="notification-banner" class="hidden fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-4">
-        <span>🔔 Enable notifications to receive reminders on this device</span>
-        <button onclick="requestNotificationPermission()" class="bg-white text-purple-600 px-4 py-1 rounded-lg font-semibold hover:bg-gray-100 transition-all">Enable</button>
-        <button onclick="dismissNotificationBanner()" class="text-white/70 hover:text-white">&times;</button>
+    <div id="notification-banner" class="hidden fixed top-3 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-3 py-2 rounded-lg shadow-md flex items-center gap-2 max-w-[92vw] text-xs sm:text-sm">
+        <span class="leading-tight">🔔 Enable notifications to receive reminders on this device</span>
+        <button onclick="requestNotificationPermission()" class="bg-white text-purple-700 px-3 py-0.5 rounded-md text-xs sm:text-sm font-semibold hover:bg-gray-100 transition-all">Enable</button>
+        <button onclick="dismissNotificationBanner()" class="text-white/70 hover:text-white text-lg leading-none px-1">&times;</button>
     </div>
 
     <div class="min-h-screen pb-32">
