@@ -1736,10 +1736,10 @@
     </div>
 
     <!-- Notification Permission Banner -->
-    <div id="notification-banner" class="hidden fixed top-3 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-3 py-2 rounded-lg shadow-md flex items-center gap-2 max-w-[92vw] text-xs sm:text-sm">
-        <span class="leading-tight">🔔 Enable notifications to receive reminders on this device</span>
-        <button onclick="requestNotificationPermission()" class="bg-white text-purple-700 px-3 py-0.5 rounded-md text-xs sm:text-sm font-semibold hover:bg-gray-100 transition-all">Enable</button>
-        <button onclick="dismissNotificationBanner()" class="text-white/70 hover:text-white text-lg leading-none px-1">&times;</button>
+    <div id="notification-banner" class="hidden fixed top-3 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-2 py-1.5 rounded-lg shadow-md flex items-center gap-1.5 max-w-[68vw] sm:max-w-[560px] text-[11px] sm:text-xs">
+        <span class="leading-tight truncate">🔔 Enable notifications to receive reminders on this device</span>
+        <button onclick="requestNotificationPermission()" class="bg-white text-purple-700 px-2.5 py-0.5 rounded-md text-[11px] sm:text-xs font-semibold hover:bg-gray-100 transition-all">Enable</button>
+        <button onclick="dismissNotificationBanner()" class="text-white/70 hover:text-white text-base leading-none px-1">&times;</button>
     </div>
 
     <div class="min-h-screen pb-32">
@@ -1873,9 +1873,9 @@
 
     <!-- ChatGPT-style Input at Bottom - Enhanced -->
     <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 floating-input-bar z-40">
-        <div class="max-w-xl mx-auto px-2 py-1">
-            <div id="input-bar-inner" class="flex items-center gap-2 modern-input px-2 py-1.5">
-                <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group p-2 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
+        <div class="max-w-xl mx-auto px-2 py-0.5">
+            <div id="input-bar-inner" class="flex items-center gap-1.5 modern-input px-2 py-1">
+                <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
                         <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
@@ -1891,13 +1891,13 @@
                     type="text"
                     id="text-input"
                     placeholder="Ask JARVIS anything..."
-                    class="flex-1 bg-transparent outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-base font-medium"
+                    class="flex-1 bg-transparent outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm font-medium"
                     onkeypress="if(event.key === 'Enter') sendTextInput()"
                     oninput="toggleSendButton()"
                 />
 
                 <!-- Send Button (shows when typing) -->
-                <button onclick="sendTextInput()" id="send-btn" class="hidden flex-shrink-0 p-3 rounded-xl gradient-btn shadow-lg">
+                <button onclick="sendTextInput()" id="send-btn" class="hidden flex-shrink-0 p-2.5 rounded-xl gradient-btn shadow-lg">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-white">
                         <line x1="22" y1="2" x2="11" y2="13"></line>
                         <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -1905,7 +1905,7 @@
                 </button>
 
                 <!-- Voice Button (shows when not typing) -->
-                <button onclick="toggleListening()" id="voice-btn" class="flex-shrink-0 p-3 rounded-xl gradient-btn voice-pulse shadow-lg">
+                <button onclick="toggleListening()" id="voice-btn" class="flex-shrink-0 p-2.5 rounded-xl gradient-btn voice-pulse shadow-lg">
                     <svg id="mic-icon-bottom" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
                         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                         <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -3630,10 +3630,10 @@ async function handleNameCorrection(text) {
                     inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
                 }
                 if (inputBarInner) {
-                    inputBarInner.className = 'flex items-center gap-2 modern-input px-2 py-1.5';
+                    inputBarInner.className = 'flex items-center gap-1.5 modern-input px-2 py-1';
                 }
                 if (textInput) {
-                    textInput.className = 'flex-1 bg-transparent outline-none text-white placeholder-gray-500 text-base font-medium';
+                    textInput.className = 'flex-1 bg-transparent outline-none text-white placeholder-gray-500 text-sm font-medium';
                 }
                 if (footerDisclaimer) {
                     footerDisclaimer.className = 'text-xs text-gray-500 font-medium';
@@ -3667,10 +3667,10 @@ async function handleNameCorrection(text) {
                         inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
                     }
                     if (inputBarInner) {
-                        inputBarInner.className = 'flex items-center gap-2 modern-input px-2 py-1.5';
+                        inputBarInner.className = 'flex items-center gap-1.5 modern-input px-2 py-1';
                     }
                     if (textInput) {
-                        textInput.className = 'flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-400 text-base font-medium';
+                        textInput.className = 'flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-400 text-sm font-medium';
                     }
                     if (footerDisclaimer) {
                         footerDisclaimer.className = 'text-xs text-gray-400 font-medium';
@@ -7917,3 +7917,4 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
