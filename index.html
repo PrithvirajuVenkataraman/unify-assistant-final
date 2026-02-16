@@ -1,25 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-<!--
-    JARVIS Voice Assistant
-    ======================
-    Deployment Structure (Vercel):
-    /
-    ├── index.full_with_map_preview.html (this file)
-    ├── api/
-    │   ├── chat-groq.js
-    │   └── search.js
-    └── vercel.json (create this - see below)
-
-    vercel.json contents:
-    {
-      "functions": { "api/**/*.js": { "runtime": "edge" } },
-      "rewrites": [{ "source": "/", "destination": "/index.full_with_map_preview.html" }]
-    }
-
-    Environment Variable Required:
-    - GROQ_API_KEY (get from https://console.groq.com)
--->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -1742,7 +1722,7 @@
         <button onclick="dismissNotificationBanner()" class="text-white/70 hover:text-white text-base leading-none px-1">&times;</button>
     </div>
 
-    <div class="min-h-screen pb-32">
+    <div class="min-h-screen pb-44">
         <div id="bg-effects" class="fixed inset-0 overflow-hidden pointer-events-none">
             <div class="absolute top-20 left-20 w-72 h-72 bg-slate-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
             <div class="absolute bottom-20 right-20 w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style="animation-delay: 1s;"></div>
@@ -1751,7 +1731,7 @@
 
         <div class="max-w-4xl mx-auto relative z-10 p-6">
             <!-- Header - Enhanced -->
-            <div class="header-enhanced mb-8">
+            <div class="header-enhanced mb-6">
                 <div class="flex items-center gap-4">
                     <div class="logo-container">
                         <!-- Arc Reactor Icon -->
@@ -1850,7 +1830,7 @@
                     <!-- Right Column: Chat -->
                     <div class="lg:w-3/5 order-1 lg:order-2">
                         <!-- Chat History - Claude/ChatGPT style compact view -->
-                        <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar" style="height: calc(100vh - 300px); min-height: 300px; max-height: 600px;">
+                        <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar" style="height: calc(100vh - 360px); min-height: 280px; max-height: 560px;">
                             <!-- Welcome message -->
                         </div>
                     </div>
@@ -7208,26 +7188,27 @@ function clearHistory() {
 }
 */
 
-function showThinkingIndicator(message = 'Thinking...') {
+function showThinkingIndicator() {
     const chatContainer = document.getElementById('chat-container');
+    if (!chatContainer) return;
+
+    hideThinkingIndicator();
+
     const thinkingDiv = document.createElement('div');
     thinkingDiv.id = 'thinking-indicator';
     thinkingDiv.className = 'flex justify-start items-start gap-2 fade-in';
-    
-    const bgClass = darkMode ? 'bg-gray-700' : 'bg-gray-100';
-    const textClass = darkMode ? 'text-gray-300' : 'text-gray-600';
-    
+
+    const bubbleClass = darkMode
+        ? 'thinking-bubble bg-slate-700/75 border border-slate-600/70'
+        : 'thinking-bubble bg-gray-100/90 border border-gray-200';
+    const textClass = darkMode ? 'text-gray-200' : 'text-gray-700';
+
     thinkingDiv.innerHTML = `
-        <div class="${bgClass} rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-2">
-            <div class="flex gap-1">
-                <div class="w-2 h-2 ${bgClass === 'bg-gray-700' ? 'bg-purple-400' : 'bg-purple-600'} rounded-full animate-bounce" style="animation-delay: 0s;"></div>
-                <div class="w-2 h-2 ${bgClass === 'bg-gray-700' ? 'bg-purple-400' : 'bg-purple-600'} rounded-full animate-bounce" style="animation-delay: 0.2s;"></div>
-                <div class="w-2 h-2 ${bgClass === 'bg-gray-700' ? 'bg-purple-400' : 'bg-purple-600'} rounded-full animate-bounce" style="animation-delay: 0.4s;"></div>
-            </div>
-            <p class="text-sm ${textClass}">${message}</p>
+        <div class="${bubbleClass} rounded-2xl rounded-tl-sm px-3 py-2 shadow-sm flex items-center">
+            <p class="text-xs font-medium ${textClass}">Thinking</p>
         </div>
     `;
-    
+
     chatContainer.appendChild(thinkingDiv);
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
@@ -7272,6 +7253,62 @@ style.textContent = `
     }
     .animate-shake {
         animation: shake 0.5s;
+    }
+
+    @keyframes thinkingDotWave {
+        0%, 80%, 100% {
+            transform: translateY(0) scale(0.9);
+            opacity: 0.45;
+        }
+        40% {
+            transform: translateY(-3px) scale(1);
+            opacity: 1;
+        }
+    }
+
+    .thinking-dots {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+    }
+
+    .thinking-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 9999px;
+        animation: thinkingDotWave 1.1s ease-in-out infinite;
+    }
+
+    .thinking-dot:nth-child(2) {
+        animation-delay: 0.15s;
+    }
+
+    .thinking-dot:nth-child(3) {
+        animation-delay: 0.3s;
+    }
+
+    .thinking-text-dots {
+        display: inline-flex;
+        width: 18px;
+        justify-content: flex-start;
+    }
+
+    .thinking-text-dots span {
+        opacity: 0.2;
+        animation: thinkingTextDots 1.2s ease-in-out infinite;
+    }
+
+    .thinking-text-dots span:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+
+    .thinking-text-dots span:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+
+    @keyframes thinkingTextDots {
+        0%, 100% { opacity: 0.2; }
+        50% { opacity: 1; }
     }
 `;
 document.head.appendChild(style);
@@ -7343,11 +7380,6 @@ async function initializeFirebase() {
                 if (Notification.permission === 'granted') {
                     await getAndSaveFCMToken();
                     updatePairingStatus(true);
-                } else if (Notification.permission === 'default') {
-                    // Show notification banner after a delay
-                    setTimeout(() => {
-                        document.getElementById('notification-banner')?.classList.remove('hidden');
-                    }, 10000);
                 }
 
                 // Listen for foreground messages
@@ -7434,6 +7466,15 @@ async function requestNotificationPermission() {
     }
 }
 
+// Show notification banner only when user triggers pairing flow
+function showNotificationBannerFromPairing() {
+    const dismissed = localStorage.getItem('jarvis_notification_dismissed') === 'true';
+    if (dismissed) return;
+    if (Notification.permission === 'default') {
+        document.getElementById('notification-banner')?.classList.remove('hidden');
+    }
+}
+
 // Dismiss notification banner
 function dismissNotificationBanner() {
     document.getElementById('notification-banner')?.classList.add('hidden');
@@ -7480,6 +7521,9 @@ let pairingListener = null;
 function openPairingModal() {
     const modal = document.getElementById('pairing-modal');
     const content = document.getElementById('pairing-content');
+
+    // Banner is user-triggered from phone icon flow only
+    showNotificationBannerFromPairing();
 
     const deviceType = detectDeviceType();
 
@@ -7913,8 +7957,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ========== END FIREBASE & PUSH NOTIFICATIONS ==========
-
 </script>
 </body>
 </html>
-
