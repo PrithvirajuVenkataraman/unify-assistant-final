@@ -1,5 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
+<!--
+    JARVIS Voice Assistant
+    ======================
+    Deployment Structure (Vercel):
+    /
+    ├── index.full_with_map_preview.html (this file)
+    ├── api/
+    │   ├── chat-groq.js
+    │   └── search.js
+    └── vercel.json (create this - see below)
+
+    vercel.json contents:
+    {
+      "functions": { "api/**/*.js": { "runtime": "edge" } },
+      "rewrites": [{ "source": "/", "destination": "/index.full_with_map_preview.html" }]
+    }
+
+    Environment Variable Required:
+    - GROQ_API_KEY (get from https://console.groq.com)
+-->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -3800,11 +3820,7 @@ async function handleNameCorrection(text) {
                 levelSelector.classList.toggle('hidden', !enabled);
             }
 
-            const msg = enabled
-                ? `🔇 Noise filter enabled (${noiseFilterLevel} level). I'll filter out background noise.`
-                : `🔊 Noise filter disabled. I'll hear everything.`;
-            addChatMessage(msg, false);
-            speak(enabled ? "Noise filter enabled" : "Noise filter disabled");
+            // Keep this as a silent setting change to avoid chat clutter.
         }
 
         function setNoiseFilterLevel(level) {
@@ -3823,9 +3839,7 @@ async function handleNameCorrection(text) {
                 }
             });
 
-            const msg = `Noise filter set to ${level} level.`;
-            addChatMessage(msg, false);
-            speak(msg);
+            // Keep this as a silent setting change to avoid chat clutter.
         }
 
         function saveNoiseFilterSettings() {
