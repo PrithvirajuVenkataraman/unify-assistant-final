@@ -1311,6 +1311,23 @@
             box-shadow: 0 0 0 4px rgba(0, 217, 255, 0.15);
         }
 
+        /* Keep typed text readable regardless of Tailwind dark/media behavior */
+        #text-input {
+            color: #111827 !important;
+        }
+
+        #text-input::placeholder {
+            color: #9ca3af !important;
+        }
+
+        body.dark #text-input {
+            color: #ffffff !important;
+        }
+
+        body.dark #text-input::placeholder {
+            color: #6b7280 !important;
+        }
+
         /* Animated gradient button */
         .gradient-btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -1610,6 +1627,36 @@
             box-shadow: 0 25px 80px rgba(0, 0, 0, 0.15);
         }
 
+        /* Improve readability in light mode */
+        body:not(.dark) .help-modal-enhanced {
+            color: #1f2937;
+        }
+
+        body:not(.dark) .help-modal-enhanced h2 {
+            color: #111827 !important;
+        }
+
+        body:not(.dark) .help-modal-enhanced h3 {
+            color: #7c3aed !important;
+        }
+
+        body:not(.dark) .help-modal-enhanced p {
+            color: #374151 !important;
+        }
+
+        body:not(.dark) .help-modal-enhanced .text-xs {
+            color: #4b5563 !important;
+        }
+
+        body:not(.dark) .help-modal-enhanced .text-gray-400,
+        body:not(.dark) .help-modal-enhanced .text-gray-500,
+        body:not(.dark) .help-modal-enhanced .text-gray-600,
+        body:not(.dark) .help-modal-enhanced .text-gray-700,
+        body:not(.dark) .help-modal-enhanced .text-gray-800,
+        body:not(.dark) .help-modal-enhanced .text-gray-900 {
+            color: #374151 !important;
+        }
+
         body.dark .help-modal-enhanced {
             background: rgba(15, 23, 42, 0.98);
         }
@@ -1849,7 +1896,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <p id="temperature" class="text-5xl font-bold mb-2 text-white relative z-10">--�F / --�C</p>
+                            <p id="temperature" class="text-5xl font-bold mb-2 text-white relative z-10">--&#176;F / --&#176;C</p>
                             <p id="weather-advice" class="text-white/90 text-lg relative z-10"></p>
                         </div>
 
@@ -5433,7 +5480,7 @@ Here's how to get around ${cityName}:
                         if (willRain) {
                             rainMsg = `Yes, it looks like rain is expected today. ${getWeatherAdvice(weather)}`;
                         } else {
-                            rainMsg = `No, it won't rain today. The temperature is ${fahrenheit}�F (${celsius}�C). ${getWeatherAdvice(weather)}`;
+                            rainMsg = `No, it won't rain today. The temperature is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${getWeatherAdvice(weather)}`;
                         }
                         addChatMessage(rainMsg, false);
                         speak(rainMsg);
@@ -5448,7 +5495,7 @@ Here's how to get around ${cityName}:
                         if (willSnow) {
                             snowMsg = `Yes, snow is expected! ${getWeatherAdvice(weather)}`;
                         } else {
-                            snowMsg = `No, it won't snow today. The temperature is ${fahrenheit}�F (${celsius}�C). ${getWeatherAdvice(weather)}`;
+                            snowMsg = `No, it won't snow today. The temperature is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${getWeatherAdvice(weather)}`;
                         }
                         addChatMessage(snowMsg, false);
                         speak(snowMsg);
@@ -5458,7 +5505,7 @@ Here's how to get around ${cityName}:
                         const celsius = Math.round(weather.current.temperature_2m);
                         const fahrenheit = Math.round((celsius * 9/5) + 32);
                         const advice = getWeatherAdvice(weather);
-                        const weatherMsg = `The temperature is ${fahrenheit}�F (${celsius}�C). ${advice}`;
+                        const weatherMsg = `The temperature is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${advice}`;
                         addChatMessage(weatherMsg, false);
                         speak(weatherMsg);
                     }
@@ -5773,17 +5820,38 @@ FORMAT (no ** markers):
 
 Day 1 in ${itineraryLocation || '[City]'}:
 
-9:00am: [Biryani]? [SPECIFIC PLACE NAME]
-   - What to see/do there
-   - Duration: X hours
+Morning (8:00am-11:30am):
+- [SPECIFIC PLACE NAME]
+  - Why go: one short line
+  - Top things to do: 2-3 concise bullets
+  - Time needed: X hr
+  - Approx cost: Free or $$
+  - Transit from previous stop: X mins
 
-12:00pm: [Place] [ANOTHER SPECIFIC PLACE]
-   - Key highlights
-   - Duration: X hours
+Lunch (12:00pm-1:15pm):
+- [SPECIFIC RESTAURANT OR FOOD HALL NAME]
+  - Must-try item: [specific dish]
+  - Approx cost: $
 
-3-4 NAMED attractions per day. NO generic filler.
+Afternoon (1:30pm-5:00pm):
+- [SPECIFIC PLACE NAME]
+  - Why go: one short line
+  - Top things to do: 2-3 concise bullets
+  - Time needed: X hr
+  - Transit from previous stop: X mins
 
-End with: "Enjoy exploring ${itineraryLocation || 'the area'}! Ask me about hotels or restaurants separately."
+Evening (5:30pm-9:00pm):
+- [SPECIFIC PLACE NAME]
+  - Sunset/night highlight: one short line
+  - Dinner suggestion nearby: [specific place]
+  - Transit back to hotel/downtown: X mins
+
+Use 4-6 named stops total for 1-day itineraries and keep all places geographically practical.
+If the user asked for "1 day", only return Day 1.
+No placeholders like "[City]" in final output.
+
+End with exactly:
+Enjoy exploring ${itineraryLocation || 'the area'}! Ask me if you want hotels, restaurants, or transport options next.
 
 BEFORE RESPONDING: Check that EVERY entry has a specific place name, not generic text!`;
                 
@@ -6426,7 +6494,7 @@ I had trouble getting specific recommendations, but you can search directly:
                 
                 document.getElementById('weather-card').classList.remove('hidden');
                 document.getElementById('location-name').textContent = displayLocation;
-                document.getElementById('temperature').textContent = `${fahrenheit}�F / ${celsius}�C`;
+                document.getElementById('temperature').textContent = `${fahrenheit}\u00B0F / ${celsius}\u00B0C`;
                 document.getElementById('weather-advice').textContent = advice;
 
                 // Hide "Try asking me" while weather card is active.
@@ -6436,7 +6504,7 @@ I had trouble getting specific recommendations, but you can search directly:
                 }
                 
                 hideLoading();
-                const weatherMsg = `The temperature in ${displayLocation} is ${fahrenheit}�F (${celsius}�C). ${advice}`;
+                const weatherMsg = `The temperature in ${displayLocation} is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${advice}`;
                 addChatMessage(weatherMsg, false);
                 speak(weatherMsg);
                 
