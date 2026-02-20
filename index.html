@@ -2059,6 +2059,11 @@
                     <option value="elder">Mode: Elder-friendly</option>
                     <option value="wheelchair">Mode: Wheelchair</option>
                 </select>
+                <select id="support-mode-lock" onchange="setSupportModeLock(this.value)" class="px-2 py-1 rounded-full text-xs font-semibold border border-emerald-300 bg-white/90 text-emerald-700 dark:bg-slate-800 dark:text-emerald-200 dark:border-emerald-700">
+                    <option value="balanced">Support: Balanced</option>
+                    <option value="supportive">Support: Supportive</option>
+                    <option value="debate">Support: Debate</option>
+                </select>
                 <button
                     id="converse-mode-btn"
                     onclick="toggleConverseMode()"
@@ -2094,6 +2099,11 @@ const TRAVEL_MODE_HINTS = {
   elder: 'elder-friendly with less walking, easy seating, and comfort',
   wheelchair: 'wheelchair-accessible routes and venues'
 };
+const SUPPORT_MODE_HINTS = {
+    balanced: 'Be clear, practical, and warm. Keep a neutral supportive tone.',
+    supportive: 'Use an empathetic and motivating tone while staying concrete and direct.',
+    debate: 'Use claim, evidence, and rebuttal structure. Be precise, direct, and avoid vague language.'
+};
 
 function getTrustLabel(trustLevel) { 
   return trustLevel === TRUST_LEVEL.VERIFIED 
@@ -2116,6 +2126,10 @@ function getTravelModeSearchSuffix() {
         wheelchair: ' wheelchair accessible'
     };
     return suffixMap[mode] || '';
+}
+
+function getSupportModeHint() {
+    return SUPPORT_MODE_HINTS[window.supportModeLock || 'balanced'] || SUPPORT_MODE_HINTS.balanced;
 }
 
 function isVerifiedPlace(obj) {
@@ -3680,6 +3694,10 @@ RULES:
 - ${userName ? `The user's name is ${userName} - use it!` : 'You do NOT know the user\'s name. NEVER say "User" or "Hi User!" - just say "Hi!" or be friendly without using a name.'}
 - Be natural and conversational
 - If asked about specific places/hotels/restaurants you're unsure about, recommend checking Google Maps, MakeMyTrip, or TripAdvisor
+- Be concrete and on-point; avoid vague answers
+- Be supportive in tone
+- Avoid repeating the same phrases across consecutive replies
+- If a user discusses mental health, respond with empathy and practical coping support; if persistent sadness/hopelessness appears, suggest seeing a certified mental health specialist as a final step
 
 Your capabilities:
 - Weather (say "check weather")
@@ -3693,6 +3711,9 @@ For name corrections like "no, my name is X", extract the name.
 
 Recent conversation:
 ${contextMessages}
+
+Support mode:
+- ${supportModeLock || 'balanced'}: ${getSupportModeHint()}
 
 Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         const intent = getUserIntent(userMessage);
@@ -3709,9 +3730,10 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
 
         const isTravelMessage = /\b(hotel|hotels|restaurant|restaurants|trip|itinerary|travel|transport|stay|food|visit|things to do|get around)\b/i.test(userMessage);
         const modeHint = getTravelModeHint();
+        const supportHint = getSupportModeHint();
         const effectiveMessage = (isTravelMessage && modeHint)
-            ? `${userMessage}\n\nTravel mode lock: ${modeHint}. Prioritize this in your answer.`
-            : userMessage;
+            ? `${userMessage}\n\nTravel mode lock: ${modeHint}. Prioritize this in your answer.\n\nSupport mode lock: ${supportModeLock || 'balanced'}. ${supportHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`
+            : `${userMessage}\n\nSupport mode lock: ${supportModeLock || 'balanced'}. ${supportHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`;
 
          
         const response = await fetch('/api/chat-groq', { 
@@ -3719,6 +3741,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ 
                 message: effectiveMessage, 
+                systemPrompt: systemPrompt,
                 userName: userName 
             }) 
         }); 
@@ -3808,6 +3831,7 @@ async function handleNameCorrection(text) {
         let lastVerifiedPlaces = null; 
         let lastResolvedTravelLocation = null; 
         let travelModeLock = 'default';
+        let supportModeLock = 'balanced';
         let converseMode = false;
 
         // Noise filter settings for public places
@@ -4185,6 +4209,7 @@ async function handleNameCorrection(text) {
             try {
                 localStorage.setItem('jarvis_assistant_modes', JSON.stringify({
                     travelModeLock,
+                    supportModeLock,
                     converseMode
                 }));
             } catch (e) {}
@@ -4194,6 +4219,10 @@ async function handleNameCorrection(text) {
             const select = document.getElementById('travel-mode-lock');
             if (select) {
                 select.value = travelModeLock || 'default';
+            }
+            const supportSelect = document.getElementById('support-mode-lock');
+            if (supportSelect) {
+                supportSelect.value = supportModeLock || 'balanced';
             }
             const btn = document.getElementById('converse-mode-btn');
             if (btn) {
@@ -4210,16 +4239,19 @@ async function handleNameCorrection(text) {
 
         function loadAssistantModes() {
             travelModeLock = 'default';
+            supportModeLock = 'balanced';
             converseMode = false;
             try {
                 const saved = localStorage.getItem('jarvis_assistant_modes');
                 if (saved) {
                     const parsed = JSON.parse(saved);
                     travelModeLock = parsed.travelModeLock || 'default';
+                    supportModeLock = parsed.supportModeLock || 'balanced';
                     converseMode = typeof parsed.converseMode === 'boolean' ? parsed.converseMode : false;
                 }
             } catch (e) {}
             window.travelModeLock = travelModeLock;
+            window.supportModeLock = supportModeLock;
             updateAssistantModeUI();
             if (converseMode) {
                 showConverseToast(true, true);
@@ -4240,6 +4272,19 @@ async function handleNameCorrection(text) {
                 ? `Travel mode locked: ${travelModeLock}. I will prioritize ${hint}.`
                 : 'Travel mode reset to default.';
             addChatMessage(msg, false);
+        }
+
+        function setSupportModeLock(mode) {
+            supportModeLock = mode || 'balanced';
+            window.supportModeLock = supportModeLock;
+            saveAssistantModes();
+            updateAssistantModeUI();
+            const msgMap = {
+                balanced: 'Support mode set to Balanced.',
+                supportive: 'Support mode set to Supportive. I will be more empathetic and motivating.',
+                debate: 'Support mode set to Debate. I will answer with sharper point-by-point reasoning.'
+            };
+            addChatMessage(msgMap[supportModeLock] || msgMap.balanced, false);
         }
 
         function toggleConverseMode() {
@@ -5323,8 +5368,9 @@ function isInvalidLocationCandidate(candidate) {
 }
 
 function getLocationFromRecentContext() {
-    if (window.lastResolvedTravelLocation && !isInvalidLocationCandidate(window.lastResolvedTravelLocation)) {
-        return window.lastResolvedTravelLocation;
+    const cachedLocation = lastResolvedTravelLocation || window.lastResolvedTravelLocation;
+    if (cachedLocation && !isInvalidLocationCandidate(cachedLocation)) {
+        return cachedLocation;
     }
 
     const recent = (conversationContext || []) 
@@ -5342,6 +5388,13 @@ function getLocationFromRecentContext() {
     }
     return ''; 
 } 
+
+function setLastResolvedTravelLocation(location) {
+    const normalized = String(location || '').trim();
+    if (!normalized || isInvalidLocationCandidate(normalized)) return;
+    lastResolvedTravelLocation = normalized;
+    window.lastResolvedTravelLocation = normalized;
+}
 
 function formatSourceLinksWithIcons(urls) {  
     return (urls || []).map((url) => {  
@@ -5510,6 +5563,21 @@ function askTransportSuggestionFor(cityName) {
     addChatMessage(`Do you need a transport suggestion for ${city}? Reply with "yes transport" or "no".`, false);
 }
 
+function isDebateIntent(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(debate|argue|argument|counterargument|counterpoint|rebut|prove|defend|criticize|disagree)\b/.test(t);
+}
+
+function isMentalHealthConversation(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(sad|depress|depressed|anxious|anxiety|panic|lonely|hopeless|overwhelmed|stressed|burnout|mental health|not okay|feeling low|empty|worthless)\b/.test(t);
+}
+
+function isHighRiskMentalHealth(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(suicide|kill myself|end my life|self harm|hurt myself|want to die|can't go on)\b/.test(t);
+}
+
         async function processCommand(text) {
             const lower = text.toLowerCase();
 
@@ -5586,6 +5654,57 @@ function askTransportSuggestionFor(cityName) {
                 cleanText = cleanText.replace(regex, ''); 
             } 
 
+            if (isHighRiskMentalHealth(cleanText)) {
+                const urgentMsg = `I'm really glad you told me. You deserve immediate support right now.
+
+Please contact a certified mental health professional or emergency support immediately.
+- In the U.S. and Canada: call or text 988 (Suicide & Crisis Lifeline)
+- If you're in immediate danger, call emergency services now
+
+If you want, I can stay with you and help you write a short message to someone you trust.`;
+                addChatMessage(urgentMsg, false);
+                speak("I'm here with you. Please contact emergency or a crisis line right now. You matter.");
+                saveToHistory(text, urgentMsg);
+                return;
+            }
+
+            if (isMentalHealthConversation(cleanText)) {
+                const mhPrompt = `The user is sharing a mental-health related message: "${text}".
+
+Respond with:
+1) Warm validation and empathy (no judgment)
+2) Short, practical coping steps for right now
+3) Motivating, supportive tone
+4) If they sound persistently sad/hopeless, gently suggest as the LAST step to speak to a certified mental health specialist
+
+Important:
+- Be concrete and specific, not vague
+- Avoid repeating stock phrases used in prior messages
+- Keep it concise and human`;
+                const mhResponse = await callAIWithTyping(mhPrompt, 'I am here with you...');
+                addChatMessage(mhResponse.response, false);
+                speak("I'm here for you.");
+                saveToHistory(text, mhResponse.response);
+                return;
+            }
+
+            if (isDebateIntent(cleanText)) {
+                const debatePrompt = `User message: "${text}"
+
+Respond in a debate style that is:
+- Precise, direct, and on-point
+- Not vague, with clear claim -> evidence -> rebuttal structure
+- Respectful and supportive in tone
+- Concise, practical, and specific
+
+Do not use repetitive filler or generic wording.`;
+                const debateResponse = await callAIWithTyping(debatePrompt, 'Preparing a focused response...');
+                addChatMessage(debateResponse.response, false);
+                speak("Here is a focused response.");
+                saveToHistory(text, debateResponse.response);
+                return;
+            }
+
             if (/\bconverse mode\b/i.test(cleanText)) {
                 if (/\b(on|enable|start)\b/i.test(cleanText)) {
                     if (!converseMode) toggleConverseMode();
@@ -5603,6 +5722,12 @@ function askTransportSuggestionFor(cityName) {
                 return;
             }
 
+            const supportModeMatch = cleanText.match(/\b(?:set|change|switch)\s+support\s+mode\s+(balanced|supportive|debate)\b/i);
+            if (supportModeMatch) {
+                setSupportModeLock(supportModeMatch[1].toLowerCase());
+                return;
+            }
+
             if (/^\s*hey\s+(jarvis|davis)\s*[.!?]*$/i.test(cleanText)) { 
                 const wakeReply = "Yes, sir?"; 
                 addChatMessage(wakeReply, false); 
@@ -5615,9 +5740,11 @@ function askTransportSuggestionFor(cityName) {
                 const chosen = window.pendingLocationDisambiguation.options[idx];
                 if (chosen) {
                     const locationName = [chosen.city, chosen.state, chosen.country].filter(Boolean).join(', ');
+                    setLastResolvedTravelLocation(locationName);
                     window.pendingLocationDisambiguation = null;
                     if (window.pendingLocationQueryType === 'transport') {
                         const resolved = await resolveLocationForTravel(locationName);
+                        setLastResolvedTravelLocation(resolved?.fullLocation || locationName);
                         addChatMessage(buildTransportMessage(resolved), false);
                         speak(`Here are transport suggestions for ${resolved?.cityName || locationName}.`);
                         return;
@@ -6123,6 +6250,10 @@ Just talk to me naturally!`;
                 // Extract location for web search
                 const locationMatch = text.match(/(?:in|to|for|at)\s+([^,?.!]+)/i);
                 const itineraryLocation = locationMatch ? locationMatch[1].trim() : '';
+                const itineraryContextLocation = itineraryLocation || detectPrimaryLocationFromText(text);
+                if (itineraryContextLocation && !isInvalidLocationCandidate(itineraryContextLocation)) {
+                    setLastResolvedTravelLocation(itineraryContextLocation);
+                }
                 
                 // Do web search first to get real places
                 let placeSearchResults = '';
@@ -6307,9 +6438,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         
                         // If no city in current text, check conversation context
                         if (!cityName) {
-                            const deictic = /\b(there|here)\b/i.test(cleanText);
                             const ctxLoc = getLocationFromRecentContext();
-                            if (deictic && ctxLoc) {
+                            if (ctxLoc) {
                                 fullLocation = ctxLoc;
                                 cityName = ctxLoc.split(',')[0].trim();
                             } else {
@@ -6383,7 +6513,7 @@ ${modeHint ? `\n[Tip] Mode lock: ${travelModeLock}` : ''}`;
                         addChatMessage(hotelMsg, false);
                         speak(`Here are hotels in ${cityName}. You can see them on the map!`);
                         
-                        lastResolvedTravelLocation = fullLocation || cityName;
+                        setLastResolvedTravelLocation(fullLocation || cityName);
                         saveToHistory(text, `Hotel search for ${cityName}`);
                         askTransportSuggestionFor(cityName);
                         showFastFoodBox();
@@ -6404,7 +6534,7 @@ ${modeHint ? `\n[Tip] Mode lock: ${travelModeLock}` : ''}`;
                         }
                         addChatMessage(buildTransportMessage(resolved), false);
                         speak(`Here are the transport options for ${resolved?.cityName || cityName}.`);
-                        lastResolvedTravelLocation = resolved?.fullLocation || cityName;
+                        setLastResolvedTravelLocation(resolved?.fullLocation || cityName);
                         saveToHistory(text, `Transport info for ${resolved?.fullLocation || cityName}`);
                         return;
                     }
@@ -6423,7 +6553,7 @@ ${modeHint ? `\n[Tip] Mode lock: ${travelModeLock}` : ''}`;
 
                     const finalLocation = resolved?.fullLocation || fullLocation || cityName; 
                     const locationCity = resolved?.cityName || cityName; 
-                    lastResolvedTravelLocation = finalLocation || locationCity; 
+                    setLastResolvedTravelLocation(finalLocation || locationCity); 
 
                     const mapsQuery = encodeURIComponent(`restaurants in ${finalLocation}${modeSuffix}`); 
                     const googleQuery = encodeURIComponent(`best restaurants in ${finalLocation}${modeSuffix}`); 
@@ -7883,25 +8013,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
-/*
-1. TYPING INDICATOR:
-   - Call showTypingIndicator() before AI response
-   - Call hideTypingIndicator() before showing response
-
-2. DELETE MESSAGES:
-   - Already integrated in addChatMessage() with delete button
-   - Shows on hover over user messages
-
-3. CONVERSATION HISTORY:
-   - Call saveToHistory(userMsg, aiMsg) after each exchange
-   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
-   - Search, export, and clear functions included
-
-4. ERROR FEEDBACK:
-   - Call showError("Error message") instead of addChatMessage for errors
-   - Visual shake animation + auto-dismiss
-*/
 
 </script>
 </body>
