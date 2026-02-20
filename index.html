@@ -3599,6 +3599,7 @@ async function askGeminiAI(userMessage) {
 5. Better to give less information than false information
 6. DO NOT invent hotel names, restaurant names, or attraction names
 7. For small/unknown towns, admit you don't have specific info rather than guessing
+8. Do NOT suggest hills/treks/mountain hikes for flat towns (example: Chidambaram)
 
 RULES:
 - ${userName ? `The user's name is ${userName} - use it!` : 'You do NOT know the user\'s name. NEVER say "User" or "Hi User!" - just say "Hi!" or be friendly without using a name.'}
@@ -5067,10 +5068,142 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
         }
         
         
-        function processSuggestion(text) {
-            document.getElementById('text-input').value = text;
-            sendTextInput();
-        }
+function processSuggestion(text) {
+    document.getElementById('text-input').value = text;
+    sendTextInput();
+}
+
+function detectPrimaryLocationFromText(text) {
+    if (!text) return '';
+    const match = text.match(/\b(?:in|at|near|to)\s+([A-Za-z][A-Za-z\s,.-]{1,80})/i);
+    if (match && match[1]) return match[1].trim().replace(/[?.!,]$/, '');
+    return '';
+}
+
+function sanitizeHallucinatedTerrain(responseText, userText, resolvedLocationName = '') {
+    if (!responseText) return responseText;
+    const context = `${userText || ''} ${resolvedLocationName || ''}`.toLowerCase();
+    const flatTownSignals = ['chidambaram'];
+    const isFlatTownContext = flatTownSignals.some(s => context.includes(s));
+    if (!isFlatTownContext) return responseText;
+
+    const terrainPattern = /\b(hill|hills|trek|trekking|mountain|mountains|hike|hiking)\b/i;
+    if (!terrainPattern.test(responseText)) return responseText;
+
+    const safeLines = responseText
+        .split('\n')
+        .filter(line => !terrainPattern.test(line));
+
+    safeLines.push('[Note] Chidambaram is generally flat. Prefer temple walks, local heritage spots, local bus/auto-rickshaws, or a car for comfort.');
+    return safeLines.join('\n').trim();
+}
+
+async function geocodeLocationCandidates(query, limit = 5) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+    try {
+        const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=${limit}&q=${encodeURIComponent(q)}`;
+        const res = await fetch(url);
+        if (!res.ok) return [];
+        const data = await res.json();
+        if (!Array.isArray(data)) return [];
+        return data.map(item => {
+            const addr = item.address || {};
+            return {
+                displayName: item.display_name || q,
+                city: addr.city || addr.town || addr.village || addr.municipality || q,
+                state: addr.state || '',
+                country: addr.country || '',
+                countryCode: (addr.country_code || '').toUpperCase(),
+                type: item.type || '',
+                importance: Number(item.importance || 0),
+                lat: Number(item.lat),
+                lon: Number(item.lon)
+            };
+        }).filter(Boolean);
+    } catch (e) {
+        return [];
+    }
+}
+
+async function resolveLocationForTravel(rawLocation) {
+    const input = String(rawLocation || '').trim();
+    if (!input) return null;
+
+    const hasQualifier = /,|\b(india|usa|us|united states|uk|england|canada|australia)\b/i.test(input);
+    const candidates = await geocodeLocationCandidates(input, 6);
+    if (!candidates.length) {
+        return {
+            cityName: input,
+            fullLocation: input,
+            countryCode: '',
+            country: '',
+            isMajorCity: false,
+            isSmallTown: false
+        };
+    }
+
+    const deduped = [];
+    const seen = new Set();
+    for (const c of candidates) {
+        const key = `${(c.city || '').toLowerCase()}|${(c.state || '').toLowerCase()}|${(c.countryCode || '').toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(c);
+    }
+
+    const countries = new Set(deduped.map(c => c.countryCode).filter(Boolean));
+    if (!hasQualifier && countries.size > 1) {
+        return { needsClarification: true, options: deduped.slice(0, 5), rawInput: input };
+    }
+
+    const best = deduped[0];
+    const type = (best.type || '').toLowerCase();
+    const isSmallTown = ['village', 'hamlet', 'suburb', 'town'].includes(type) || best.importance < 0.45;
+    const majorCityList = [
+        'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad',
+        'new york', 'los angeles', 'chicago', 'san francisco', 'seattle', 'boston',
+        'london', 'paris', 'tokyo', 'singapore', 'dubai', 'toronto', 'sydney'
+    ];
+    const isMajorCity = majorCityList.some(c => (best.city || '').toLowerCase().includes(c)) || (!isSmallTown && best.importance >= 0.55);
+
+    const parts = [best.city, best.state, best.country].filter(Boolean);
+    return {
+        cityName: best.city || input,
+        fullLocation: parts.join(', ') || input,
+        countryCode: best.countryCode,
+        country: best.country,
+        isMajorCity,
+        isSmallTown
+    };
+}
+
+function buildTransportMessage(locationInfo) {
+    const city = locationInfo?.cityName || 'this place';
+    const countryCode = (locationInfo?.countryCode || '').toUpperCase();
+    const isMajorCity = !!locationInfo?.isMajorCity;
+    const isSmallTown = !!locationInfo?.isSmallTown;
+
+    if (isMajorCity) {
+        return `[Bus] **Transport in ${city}**\n\n${city} has strong public transport and ride options.\n\n[Metro] [Metro/Subway stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(city)})\n[Bus] [Bus stops and routes](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(city)})\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Taxi] [Ride options](https://www.google.com/search?q=${countryCode === 'IN' ? 'uber+ola+' : 'uber+lyft+'}${encodeURIComponent(city)})`;
+    }
+
+    if (countryCode === 'IN' && !isMajorCity) {
+        return `[Bus] **Transport in ${city}**\n\nFor smaller towns, use:\n- Local Bus for low-cost travel\n- Auto-rickshaws for quick local rides\n- Car/taxi if you want comfortable travel\n\n[Map] [Bus stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(city)})\n[Search] [Local travel options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(city)})`;
+    }
+
+    if (isSmallTown) {
+        return `[Bus] **Transport in ${city}**\n\nFor smaller towns, use:\n- Local bus/train where available\n- Local taxi or rideshare\n- Car rental for comfortable travel\n\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Search] [Local travel options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(city)})`;
+    }
+
+    return `[Bus] **Transport in ${city}**\n\nRecommended options:\n- Local bus or train where available\n- Uber/Lyft or local taxi apps\n- Car rental for flexible travel\n\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Taxi] [Ride options](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(city)})`;
+}
+
+function askTransportSuggestionFor(cityName) {
+    const city = cityName || 'this place';
+    window.pendingTransportSuggestionCity = city;
+    addChatMessage(`Do you need a transport suggestion for ${city}? Reply with "yes transport" or "no".`, false);
+}
 
         async function processCommand(text) {
             const lower = text.toLowerCase();
@@ -5146,6 +5279,39 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
             for (const prefix of prefixes) {
                 const regex = new RegExp(`^${prefix}[,\\s]+`, 'i');
                 cleanText = cleanText.replace(regex, '');
+            }
+
+            if (window.pendingLocationDisambiguation && /^\s*[1-5]\s*$/.test(cleanText)) {
+                const idx = Math.max(0, parseInt(cleanText.trim(), 10) - 1);
+                const chosen = window.pendingLocationDisambiguation.options[idx];
+                if (chosen) {
+                    const locationName = [chosen.city, chosen.state, chosen.country].filter(Boolean).join(', ');
+                    window.pendingLocationDisambiguation = null;
+                    if (window.pendingLocationQueryType === 'transport') {
+                        const resolved = await resolveLocationForTravel(locationName);
+                        addChatMessage(buildTransportMessage(resolved), false);
+                        speak(`Here are transport suggestions for ${resolved?.cityName || locationName}.`);
+                        return;
+                    }
+                    if (window.pendingLocationQueryType === 'food') {
+                        cleanText = `restaurants in ${locationName}`;
+                    }
+                }
+            }
+
+            if (window.pendingTransportSuggestionCity) {
+                if (/\b(yes|yep|yeah|sure|ok|okay)\b/i.test(cleanText) && /\btransport\b/i.test(cleanText)) {
+                    const resolved = await resolveLocationForTravel(window.pendingTransportSuggestionCity);
+                    window.pendingTransportSuggestionCity = null;
+                    addChatMessage(buildTransportMessage(resolved), false);
+                    speak(`Here is transport guidance for ${resolved?.cityName || 'your location'}.`);
+                    return;
+                }
+                if (/^\s*no\b/i.test(cleanText)) {
+                    window.pendingTransportSuggestionCity = null;
+                    addChatMessage('No problem. Ask anytime if you need transport options.', false);
+                    return;
+                }
             }
 
             // ========== TRANSLATOR MODE HANDLING ==========
@@ -5234,142 +5400,20 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
                     return;
                 }
 
-                // Detect if city is in India for context-appropriate transport info
-                const indianCities = [
-                    'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad',
-                    'pune', 'ahmedabad', 'jaipur', 'lucknow', 'kanpur', 'nagpur', 'kochi', 'cochin',
-                    'coimbatore', 'indore', 'bhopal', 'visakhapatnam', 'surat', 'mysore', 'mysuru',
-                    'goa', 'agra', 'varanasi', 'jodhpur', 'udaipur', 'amritsar', 'pondicherry',
-                    'kerala', 'tamil nadu', 'karnataka', 'maharashtra', 'rajasthan', 'gujarat'
-                ];
-
-                // Major cities with extensive public transit
-                const majorTransitCities = [
-                    'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad',
-                    'pune', 'ahmedabad', 'kochi', 'cochin',
-                    'new york', 'nyc', 'los angeles', 'chicago', 'san francisco', 'boston', 'seattle',
-                    'washington dc', 'philadelphia', 'miami', 'atlanta', 'denver', 'portland',
-                    'london', 'paris', 'tokyo', 'singapore', 'dubai', 'hong kong', 'sydney', 'toronto',
-                    'vancouver', 'montreal', 'berlin', 'amsterdam', 'barcelona', 'madrid', 'rome',
-                    'long beach', 'san diego', 'austin', 'dallas', 'houston', 'phoenix'
-                ];
-
-                const cityLower = cityName.toLowerCase();
-                const isIndianCity = indianCities.some(city => cityLower.includes(city));
-                const isMajorCity = majorTransitCities.some(city => cityLower.includes(city));
-
-                let transportMsg;
-
-                if (isMajorCity) {
-                    // Major city - show Google Maps transit embed
-                    const transitQuery = encodeURIComponent(`transit in ${cityName}`);
-                    const rideShareLinks = isIndianCity
-                        ? `[Taxi] [Book a Ride](https://www.google.com/search?q=uber+ola+${encodeURIComponent(cityName)}) - Uber/Ola available`
-                        : `[Taxi] [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Uber/Lyft available`;
-
-                    transportMsg = `[Bus] **Transport in ${cityName}**
-
-${cityName} has excellent public transportation options!
-
-<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
-<iframe
-  src="https://maps.google.com/maps?q=metro+stations+${transitQuery}&output=embed"
-  width="100%"
-  height="300"
-  style="border:0; display:block;"
-  allowfullscreen=""
-  loading="lazy">
-</iframe>
-</div>
-
-----------------------
-
-[Map] **Find transit options:**
-
-[Metro] [Metro/Subway Stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(cityName)}) - Find nearest stations
-
-[Bus] [Bus Stops](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(cityName)}) - Local bus routes
-
-${rideShareLinks}
-
-[Map] [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
-
-                    speak(`${cityName} has good public transport including metro and buses. Check the map for stations!`);
-                } else if (isIndianCity) {
-                    // Smaller Indian town - auto-rickshaws and local transport
-                    transportMsg = `[Bus] **Transport in ${cityName}**
-
-${cityName} is a smaller town. Here's how to get around:
-
-[Auto] **Auto-Rickshaws** (Most Reliable)
-- Available throughout town
-- Negotiate fare before starting OR insist on meter
-- Typical fare: ?,?20-50 for short trips
-
-[Bus] **Local Buses**
-- Available from the bus stand
-- Ask locals for routes and timings
-- Very affordable option
-
-[Car] **Taxi/Cab Services**
-- Uber/Ola may have limited availability
-- Ask your hotel to arrange a trusted driver
-- Consider hiring for full-day sightseeing
-
-[Tip] **Pro Tips:**
-- Download Ola/Uber as backup but don't rely on them
-- Ask hotel staff for trusted auto drivers
-- For temple visits, autos often offer package rates
-- Keep cash handy - digital payments may not work everywhere
-
-----------------------
-
-[Map] **More info:**
-
-[Search] [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
-
-[Map] [Find Bus Stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(cityName)}) - Main bus terminal`;
-
-                    speak(`${cityName} is a smaller town. Auto-rickshaws are your best bet. I've listed all your options.`);
-                } else {
-                    // Non-Indian smaller city/town
-                    transportMsg = `[Bus] **Transport in ${cityName}**
-
-Here's how to get around ${cityName}:
-
-[Car] **Rideshare Services**
-- Uber and Lyft are typically available
-- Download the apps for easy booking
-- Check pricing before rides in tourist areas
-
-[Bus] **Public Transit**
-- Check local bus/transit schedules
-- Google Maps shows real-time transit info
-
-[Taxi] **Taxis & Car Rentals**
-- Local taxi services available
-- Consider renting a car for flexibility
-
-[Tip] **Pro Tips:**
-- Use Google Maps for real-time transit directions
-- Rideshare apps often have the best rates
-- Ask your hotel concierge for local recommendations
-
-----------------------
-
-[Map] **More info:**
-
-[Taxi] [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Rideshare options
-
-[Search] [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
-
-[Map] [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
-
-                    speak(`Here are the transport options for ${cityName}. Rideshare services like Uber and Lyft are your best bet.`);
+                const resolved = await resolveLocationForTravel(cityName);
+                if (resolved?.needsClarification && Array.isArray(resolved.options) && resolved.options.length) {
+                    window.pendingLocationDisambiguation = { options: resolved.options };
+                    window.pendingLocationQueryType = 'transport';
+                    const opts = resolved.options.map((o, i) => `${i + 1}. ${[o.city, o.state, o.country].filter(Boolean).join(', ')}`).join('\n');
+                    const clarifyMsg = `I found multiple places named "${resolved.rawInput}". Which one do you mean?\n\n${opts}\n\nReply with the number.`;
+                    addChatMessage(clarifyMsg, false);
+                    speak(`I found multiple places named ${resolved.rawInput}. Please choose a number.`);
+                    return;
                 }
 
-                addChatMessage(transportMsg, false);
-                saveToHistory(text, `Transport info for ${cityName}`);
+                addChatMessage(buildTransportMessage(resolved), false);
+                speak(`Here are the transport options for ${resolved?.cityName || cityName}.`);
+                saveToHistory(text, `Transport info for ${resolved?.fullLocation || cityName}`);
                 return;
             }
 
@@ -5996,202 +6040,76 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         speak(`Here are hotels in ${cityName}. You can see them on the map!`);
                         
                         saveToHistory(text, `Hotel search for ${cityName}`);
+                        askTransportSuggestionFor(cityName);
                         showFastFoodBox();
                         return;
                     }
                     
                     // Transport query handling
                     if (queryType === 'transport') {
-                        // Detect if city is in India for context-appropriate transport info
-                        const indianCities = [
-                            'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad',
-                            'pune', 'ahmedabad', 'jaipur', 'lucknow', 'kanpur', 'nagpur', 'kochi', 'cochin',
-                            'coimbatore', 'indore', 'bhopal', 'visakhapatnam', 'surat', 'mysore', 'mysuru',
-                            'goa', 'agra', 'varanasi', 'jodhpur', 'udaipur', 'amritsar', 'pondicherry',
-                            'kerala', 'tamil nadu', 'karnataka', 'maharashtra', 'rajasthan', 'gujarat'
-                        ];
-
-                        // Major cities with extensive public transit
-                        const majorTransitCities = [
-                            'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad',
-                            'pune', 'ahmedabad', 'kochi', 'cochin',
-                            'new york', 'nyc', 'los angeles', 'chicago', 'san francisco', 'boston', 'seattle',
-                            'washington dc', 'philadelphia', 'miami', 'atlanta', 'denver', 'portland',
-                            'london', 'paris', 'tokyo', 'singapore', 'dubai', 'hong kong', 'sydney', 'toronto',
-                            'vancouver', 'montreal', 'berlin', 'amsterdam', 'barcelona', 'madrid', 'rome',
-                            'long beach', 'san diego', 'austin', 'dallas', 'houston', 'phoenix'
-                        ];
-
-                        const cityLower = cityName.toLowerCase();
-                        const isIndianCity = indianCities.some(city => cityLower.includes(city));
-                        const isMajorCity = majorTransitCities.some(city => cityLower.includes(city));
-
-                        let transportMsg;
-
-                        if (isMajorCity) {
-                            // Major city - show Google Maps transit embed
-                            const transitQuery = encodeURIComponent(`transit in ${cityName}`);
-                            const rideShareLinks = isIndianCity
-                                ? `[Taxi] [Book a Ride](https://www.google.com/search?q=uber+ola+${encodeURIComponent(cityName)}) - Uber/Ola available`
-                                : `[Taxi] [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Uber/Lyft available`;
-
-                            transportMsg = `[Bus] **Transport in ${cityName}**
-
-${cityName} has excellent public transportation options!
-
-<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
-<iframe
-  src="https://maps.google.com/maps?q=metro+stations+${transitQuery}&output=embed"
-  width="100%"
-  height="300"
-  style="border:0; display:block;"
-  allowfullscreen=""
-  loading="lazy">
-</iframe>
-</div>
-
-----------------------
-
-[Map] **Find transit options:**
-
-[Metro] [Metro/Subway Stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(cityName)}) - Find nearest stations
-
-[Bus] [Bus Stops](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(cityName)}) - Local bus routes
-
-${rideShareLinks}
-
-[Map] [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
-
-                            speak(`${cityName} has good public transport including metro and buses. Check the map for stations!`);
-                        } else if (isIndianCity) {
-                            // Smaller Indian town - auto-rickshaws and local transport
-                            transportMsg = `[Bus] **Transport in ${cityName}**
-
-${cityName} is a smaller town. Here's how to get around:
-
-[Auto] **Auto-Rickshaws** (Most Reliable)
-- Available throughout town
-- Negotiate fare before starting OR insist on meter
-- Typical fare: ?,?20-50 for short trips
-
-[Bus] **Local Buses**
-- Available from the bus stand
-- Ask locals for routes and timings
-- Very affordable option
-
-[Car] **Taxi/Cab Services**
-- Uber/Ola may have limited availability
-- Ask your hotel to arrange a trusted driver
-- Consider hiring for full-day sightseeing
-
-[Tip] **Pro Tips:**
-- Download Ola/Uber as backup but don't rely on them
-- Ask hotel staff for trusted auto drivers
-- For temple visits, autos often offer package rates
-- Keep cash handy - digital payments may not work everywhere
-
-----------------------
-
-[Map] **More info:**
-
-[Search] [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
-
-[Map] [Find Bus Stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(cityName)}) - Main bus terminal`;
-
-                            speak(`${cityName} is a smaller town. Auto-rickshaws are your best bet. I've listed all your options.`);
-                        } else {
-                            // Non-Indian smaller city/town
-                            transportMsg = `[Bus] **Transport in ${cityName}**
-
-Here's how to get around ${cityName}:
-
-[Car] **Rideshare Services**
-- Uber and Lyft are typically available
-- Download the apps for easy booking
-- Check pricing before rides in tourist areas
-
-[Bus] **Public Transit**
-- Check local bus/transit schedules
-- Google Maps shows real-time transit info
-
-[Taxi] **Taxis & Car Rentals**
-- Local taxi services available
-- Consider renting a car for flexibility
-
-[Tip] **Pro Tips:**
-- Use Google Maps for real-time transit directions
-- Rideshare apps often have the best rates
-- Ask your hotel concierge for local recommendations
-
-----------------------
-
-[Map] **More info:**
-
-[Taxi] [Book a Ride](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(cityName)}) - Rideshare options
-
-[Search] [Search Transport Options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(cityName)}) - Local guides
-
-[Map] [Google Maps Transit](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cityName)}&travelmode=transit) - Plan your route`;
-
-                            speak(`Here are the transport options for ${cityName}. Rideshare services like Uber and Lyft are your best bet.`);
+                        const resolved = await resolveLocationForTravel(fullLocation || cityName);
+                        if (resolved?.needsClarification && Array.isArray(resolved.options) && resolved.options.length) {
+                            window.pendingLocationDisambiguation = { options: resolved.options };
+                            window.pendingLocationQueryType = 'transport';
+                            const opts = resolved.options.map((o, i) => `${i + 1}. ${[o.city, o.state, o.country].filter(Boolean).join(', ')}`).join('\n');
+                            const clarifyMsg = `I found multiple places named "${resolved.rawInput}". Which one do you mean?\n\n${opts}\n\nReply with the number.`;
+                            addChatMessage(clarifyMsg, false);
+                            speak(`I found multiple places named ${resolved.rawInput}. Please choose a number.`);
+                            return;
                         }
-
-                        addChatMessage(transportMsg, false);
-                        saveToHistory(text, `Transport info for ${cityName}`);
+                        addChatMessage(buildTransportMessage(resolved), false);
+                        speak(`Here are the transport options for ${resolved?.cityName || cityName}.`);
+                        saveToHistory(text, `Transport info for ${resolved?.fullLocation || cityName}`);
                         return;
                     }
 
-                    // Restaurant query - Use AI + Google Search links
-                    const restaurantPrompt = `List restaurants and food places in ${fullLocation || cityName}.
+                    // Restaurant query - verified places + map embed + explicit sources
+                    const resolved = await resolveLocationForTravel(fullLocation || cityName);
+                    if (resolved?.needsClarification && Array.isArray(resolved.options) && resolved.options.length) {
+                        window.pendingLocationDisambiguation = { options: resolved.options };
+                        window.pendingLocationQueryType = 'food';
+                        const opts = resolved.options.map((o, i) => `${i + 1}. ${[o.city, o.state, o.country].filter(Boolean).join(', ')}`).join('\n');
+                        const clarifyMsg = `I found multiple places named "${resolved.rawInput}". Which one do you mean for restaurants?\n\n${opts}\n\nReply with the number.`;
+                        addChatMessage(clarifyMsg, false);
+                        speak(`I found multiple places named ${resolved.rawInput}. Please choose a number.`);
+                        return;
+                    }
 
-IMPORTANT RULES:
-1. ONLY mention restaurants you are 100% CERTAIN exist - well-known chains or famous local spots
-2. If you're not sure about specific restaurant names in ${cityName}, focus on:
-   - Types of restaurants available (vegetarian, non-veg, multi-cuisine)
-   - Local food specialties to try
-   - What to search for on Google Maps
-3. DO NOT invent restaurant names
+                    const finalLocation = resolved?.fullLocation || fullLocation || cityName;
+                    const locationCity = resolved?.cityName || cityName;
+                    const placesRes = await fetch('/api/places', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: `restaurants in ${finalLocation}`, type: 'restaurant' })
+                    });
 
-FORMAT (no ** bold markers, use plain text):
+                    const mapsQuery = encodeURIComponent(`restaurants in ${finalLocation}`);
+                    const googleQuery = encodeURIComponent(`best restaurants in ${finalLocation}`);
+                    const tripadvisorQuery = encodeURIComponent(`${finalLocation} restaurants tripadvisor`);
 
-[Food] Restaurants in ${cityName}
+                    if (placesRes.ok) {
+                        const placesData = await placesRes.json();
+                        const list = (placesData?.places || []).slice(0, 6);
+                        const lines = list.length
+                            ? list.map((p, i) => {
+                                const mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${p.name} ${p.address || ''}`)}`;
+                                return `${i + 1}. [${p.name}](${mapLink})${p.address ? ` - ${p.address}` : ''}`;
+                            }).join('\n')
+                            : 'No verified restaurant entries found from OpenStreetMap near this location.';
 
-[If you know real restaurant names, list 3-5 with brief descriptions]
-[If unsure, describe the food scene and what to look for]
+                        const foodMsg = `[Food] **Restaurants in ${locationCity}**\n\n<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">\n<iframe src="https://maps.google.com/maps?q=restaurants+in+${mapsQuery}&output=embed" width="100%" height="320" style="border:0; display:block;" allowfullscreen="" loading="lazy"></iframe>\n</div>\n\n${lines}\n\n----------------------\n[Map] [Open Google Maps](https://www.google.com/maps/search/${mapsQuery})\n[Search] [Quick Google search](https://www.google.com/search?q=${googleQuery})\n[Search] [TripAdvisor search](https://www.google.com/search?q=${tripadvisorQuery})\n\n**Sources looked at:**\n- OpenStreetMap (Overpass via /api/places)\n- Google Maps search results\n- Google web search links`;
 
-[Biryani] Local Specialties to Try:
-- List 3-4 famous dishes of this region
+                        addChatMessage(foodMsg, false);
+                        speak(`I found restaurant options for ${locationCity}.`);
+                        saveToHistory(text, `Restaurant search for ${finalLocation}`);
+                        askTransportSuggestionFor(locationCity);
+                        return;
+                    }
 
-[Tip] Search Tips:
-- What terms to search on Google Maps (e.g., "Mess" for local meals in Tamil Nadu)
-
-Keep response concise - under 200 words.`;
-
-                    const aiResponse = await callAIWithTyping(restaurantPrompt, '[Food] Finding restaurants...');
-
-                    // Build response with clickable search links
-                    const mapsQuery = encodeURIComponent(`restaurants in ${fullLocation || cityName}`);
-                    const googleQuery = encodeURIComponent(`best restaurants in ${fullLocation || cityName}`);
-                    const tripadvisorQuery = encodeURIComponent(`${fullLocation || cityName} restaurants tripadvisor`);
-
-                    let foodMsg = aiResponse.response + `
-
-----------------------
-
-[Map] **Search for restaurants:**
-
-[Map] [Open Google Maps](https://www.google.com/maps/search/${mapsQuery}) - See nearby places with ratings
-
-[Search] [Search on Google](https://www.google.com/search?q=${googleQuery}) - Read reviews and articles
-
-? [Check TripAdvisor](https://www.google.com/search?q=${tripadvisorQuery}) - Tourist recommendations`;
-
-                    addChatMessage(foodMsg, false);
-                    speak(`Here are restaurant suggestions for ${cityName}. I've included search links to find more options!`);
-
-                    saveToHistory(text, `Restaurant search for ${cityName}`);
-                    showFastFoodBox();
-                    showTransportSuggestion();
+                    const fallbackMsg = `[Food] **Restaurants in ${locationCity}**\n\nI couldn't fetch verified entries right now. Use these quick links:\n\n[Map] [Open Google Maps](https://www.google.com/maps/search/${mapsQuery})\n[Search] [Quick Google search](https://www.google.com/search?q=${googleQuery})\n[Search] [TripAdvisor search](https://www.google.com/search?q=${tripadvisorQuery})\n\n**Sources looked at:**\n- Google Maps search\n- Google search`;
+                    addChatMessage(fallbackMsg, false);
+                    speak(`I couldn't fetch verified restaurant data right now, but I shared quick search links.`);
+                    askTransportSuggestionFor(locationCity);
                     return;
                 } catch (error) {
                     hideThinkingIndicator();
@@ -6210,6 +6128,7 @@ I had trouble getting specific recommendations, but you can search directly:
 [Tip] **Tip:** Look for places with 4+ stars and recent reviews!`;
                     addChatMessage(fallbackMsg, false);
                     speak(`Check the search links to find restaurants in ${cityName}!`);
+                    askTransportSuggestionFor(cityName || 'this place');
                     return;
                 }
             }
@@ -6217,17 +6136,19 @@ I had trouble getting specific recommendations, but you can search directly:
             else {
 
                 const aiResponse = await callAIWithTyping(text);
-                addChatMessage(aiResponse.response, false);
-                speak(aiResponse.response);
+                const inferredLocation = detectPrimaryLocationFromText(text);
+                const safeResponse = sanitizeHallucinatedTerrain(aiResponse.response, text, inferredLocation);
+                addChatMessage(safeResponse, false);
+                speak(safeResponse);
 
 
-                saveToHistory(text, aiResponse.response);
+                saveToHistory(text, safeResponse);
 
 
-                suggestQuickReplies(aiResponse.response);
+                suggestQuickReplies(safeResponse);
 
                 // Add feedback buttons for learning
-                addFeedbackButtons(text, aiResponse.response);
+                addFeedbackButtons(text, safeResponse);
             }
         }
 
