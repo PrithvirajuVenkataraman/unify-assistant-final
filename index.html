@@ -4599,7 +4599,7 @@ async function handleNameCorrection(text) {
                         wakeWordMode = false;
 
                         const response = "Yes, sir?";
-                        addChatMessage("[Mic] Hey JARVIS", true);
+                        addChatMessage("Hey JARVIS", true); 
                         addChatMessage(response, false);
                         speak(response);
 
@@ -4721,7 +4721,7 @@ async function handleNameCorrection(text) {
                 wakeWordMode = true;
                 commandMode = false;
                 startListening();
-                addChatMessage('[Mic] Listening... (Say "Hey JARVIS" or speak directly)', false);
+                addChatMessage('Listening... (Say "Hey JARVIS" or speak directly)', false); 
             }
         }
 
@@ -5111,7 +5111,11 @@ function getLocationFromRecentContext() {
         return window.lastResolvedTravelLocation;
     }
 
-    const recent = (conversationContext || []).slice(-10).map(m => m.text || '').join(' ');
+    const recent = (conversationContext || []) 
+        .filter(m => m && m.role === 'user') 
+        .slice(-10) 
+        .map(m => m.text || '') 
+        .join(' '); 
     const matches = recent.match(/\b(?:in|at|near|to)\s+([A-Za-z][A-Za-z\s,.-]{1,80})/ig) || [];
     for (let i = matches.length - 1; i >= 0; i--) {
         const m = matches[i].match(/\b(?:in|at|near|to)\s+([A-Za-z][A-Za-z\s,.-]{1,80})/i);
@@ -5120,8 +5124,49 @@ function getLocationFromRecentContext() {
             return loc;
         }
     }
-    return '';
-}
+    return ''; 
+} 
+
+function formatSourceLinksWithIcons(urls) {  
+    return (urls || []).map((url) => {  
+        let host = '';  
+        let path = '';  
+        let lowerUrl = String(url || '').toLowerCase();  
+        try {  
+            const parsed = new URL(url);  
+            host = parsed.hostname;  
+            path = parsed.pathname || '';  
+            lowerUrl = parsed.href.toLowerCase();  
+        } catch (e) {  
+            host = '';  
+        }  
+ 
+        let displayName = host || url;  
+        let logoDomain = host;  
+ 
+        if (/reddit\.com/.test(lowerUrl)) {  
+            displayName = 'Reddit';  
+            logoDomain = 'reddit.com';  
+        } else if ((/google\./.test(host) && /\/maps\//.test(path)) || /maps\.google\./.test(host)) {  
+            displayName = 'Google Maps';  
+            logoDomain = 'maps.google.com';  
+        } else if (/tripadvisor/.test(lowerUrl)) {  
+            displayName = 'TripAdvisor';  
+            logoDomain = 'tripadvisor.com';  
+        } else if (/google\./.test(host) && /\/search/.test(path)) {  
+            displayName = 'Google Search';  
+            logoDomain = 'google.com';  
+        } else if (/openstreetmap|overpass/.test(lowerUrl)) {  
+            displayName = 'OpenStreetMap';  
+            logoDomain = 'openstreetmap.org';  
+        }  
+ 
+        const icon = logoDomain  
+            ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(logoDomain)}&sz=16`  
+            : '';  
+        return `- <a href="${url}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 underline"><img src="${icon}" alt="" width="16" height="16" style="display:inline-block;border-radius:3px;vertical-align:middle;">${displayName}</a>`;  
+    }).join('\n');  
+}  
 
 function sanitizeHallucinatedTerrain(responseText, userText, resolvedLocationName = '') {
     if (!responseText) return responseText;
@@ -6003,8 +6048,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
             if (isRestaurantMatch || isHotelMatch || isTransportMatch) {
 
-                const queryType = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation)\b/i) ? 'hotel' : 
-                                  cleanText.toLowerCase().match(/\b(transport|bus|train|taxi)\b/i) ? 'transport' : 'food';
+                const queryType = isHotelMatch ? 'hotel' : (isTransportMatch ? 'transport' : 'food'); 
                 
                 // Extract location
                 let cityName = '';
@@ -6034,7 +6078,11 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                                 fullLocation = ctxLoc;
                                 cityName = ctxLoc.split(',')[0].trim();
                             } else {
-                                const contextText = conversationContext.slice(-6).map(m => m.text).join(' ');
+                                const contextText = (conversationContext || []) 
+                                    .filter(m => m && m.role === 'user') 
+                                    .slice(-8) 
+                                    .map(m => m.text || '') 
+                                    .join(' '); 
                                 const contextMatch = contextText.match(/(?:hotels?|restaurants?|trip|itinerary|visit)\s+(?:in|to|at|near)\s+([A-Za-z][a-z]+(?:[\s,]+[A-Za-z][a-z]+)*)/i) ||
                                                      contextText.match(/\b(?:in|at|near|to)\s+([A-Za-z][a-z]+(?:,\s*[A-Za-z][a-z]+)*)/i);
                                 if (contextMatch) {
@@ -6149,9 +6197,14 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     const mapsQuery = encodeURIComponent(`restaurants in ${finalLocation}`);
                     const googleQuery = encodeURIComponent(`best restaurants in ${finalLocation}`);
                     const tripadvisorQuery = encodeURIComponent(`${finalLocation} restaurants tripadvisor`);
-                    const mapsSearchUrl = `https://www.google.com/maps/search/${mapsQuery}`;
-                    const googleSearchUrl = `https://www.google.com/search?q=${googleQuery}`;
-                    const tripadvisorSearchUrl = `https://www.google.com/search?q=${tripadvisorQuery}`;
+                    const mapsSearchUrl = `https://www.google.com/maps/search/${mapsQuery}`; 
+                    const googleSearchUrl = `https://www.google.com/search?q=${googleQuery}`; 
+                    const tripadvisorSearchUrl = `https://www.google.com/search?q=${tripadvisorQuery}`; 
+                    const sourceLinksBlock = formatSourceLinksWithIcons([ 
+                        mapsSearchUrl, 
+                        googleSearchUrl, 
+                        tripadvisorSearchUrl 
+                    ]); 
 
                     if (placesRes.ok) {
                         const placesData = await placesRes.json();
@@ -6163,7 +6216,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                             }).join('\n')
                             : 'No verified restaurant entries found from OpenStreetMap near this location.';
 
-                        const foodMsg = `[Food] **Restaurants in ${locationCity}**\n\n<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">\n<iframe src="https://maps.google.com/maps?q=restaurants+in+${mapsQuery}&output=embed" width="100%" height="320" style="border:0; display:block;" allowfullscreen="" loading="lazy"></iframe>\n</div>\n\n${lines}\n\n----------------------\n[Map] [Open Google Maps](${mapsSearchUrl})\n[Search] [Quick Google search](${googleSearchUrl})\n[Search] [TripAdvisor search](${tripadvisorSearchUrl})\n\n**Sources looked at (exact links):**\n- [${mapsSearchUrl}](${mapsSearchUrl})\n- [${googleSearchUrl}](${googleSearchUrl})\n- [${tripadvisorSearchUrl}](${tripadvisorSearchUrl})\n- Local verifier API: \`/api/places\``;
+                        const foodMsg = `[Food] **Restaurants in ${locationCity}**\n\n<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">\n<iframe src="https://maps.google.com/maps?q=restaurants+in+${mapsQuery}&output=embed" width="100%" height="320" style="border:0; display:block;" allowfullscreen="" loading="lazy"></iframe>\n</div>\n\n${lines}\n\n----------------------\n[Map] [Open Google Maps](${mapsSearchUrl})\n[Search] [Quick Google search](${googleSearchUrl})\n[Search] [TripAdvisor search](${tripadvisorSearchUrl})\n\n**Sources looked at (exact links):**\n${sourceLinksBlock}\n- Local verifier API: \`/api/places\``; 
 
                         addChatMessage(foodMsg, false);
                         speak(`I found restaurant options for ${locationCity}.`);
@@ -6172,7 +6225,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         return;
                     }
 
-                    const fallbackMsg = `[Food] **Restaurants in ${locationCity}**\n\nI couldn't fetch verified entries right now. Use these quick links:\n\n[Map] [Open Google Maps](${mapsSearchUrl})\n[Search] [Quick Google search](${googleSearchUrl})\n[Search] [TripAdvisor search](${tripadvisorSearchUrl})\n\n**Sources looked at (exact links):**\n- [${mapsSearchUrl}](${mapsSearchUrl})\n- [${googleSearchUrl}](${googleSearchUrl})\n- [${tripadvisorSearchUrl}](${tripadvisorSearchUrl})`;
+                    const fallbackMsg = `[Food] **Restaurants in ${locationCity}**\n\nI couldn't fetch verified entries right now. Use these quick links:\n\n[Map] [Open Google Maps](${mapsSearchUrl})\n[Search] [Quick Google search](${googleSearchUrl})\n[Search] [TripAdvisor search](${tripadvisorSearchUrl})\n\n**Sources looked at (exact links):**\n${sourceLinksBlock}`; 
                     addChatMessage(fallbackMsg, false);
                     speak(`I couldn't fetch verified restaurant data right now, but I shared quick search links.`);
                     askTransportSuggestionFor(locationCity);
@@ -6183,26 +6236,29 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     const mapsQuery = encodeURIComponent(`restaurants in ${cityName || 'your area'}`);
                     const googleQuery = encodeURIComponent(`best restaurants in ${cityName || 'your area'}`);
                     const tripadvisorQuery = encodeURIComponent(`${cityName || 'your area'} restaurants tripadvisor`);
-                    const mapsSearchUrl = `https://www.google.com/maps/search/${mapsQuery}`;
-                    const googleSearchUrl = `https://www.google.com/search?q=${googleQuery}`;
-                    const tripadvisorSearchUrl = `https://www.google.com/search?q=${tripadvisorQuery}`;
-
-                    const fallbackMsg = `[Food] **Restaurants in ${cityName || 'your area'}**
-
-I had trouble getting specific recommendations, but you can search directly:
+                    const mapsSearchUrl = `https://www.google.com/maps/search/${mapsQuery}`; 
+                    const googleSearchUrl = `https://www.google.com/search?q=${googleQuery}`; 
+                    const tripadvisorSearchUrl = `https://www.google.com/search?q=${tripadvisorQuery}`; 
+                    const sourceLinksBlock = formatSourceLinksWithIcons([ 
+                        mapsSearchUrl, 
+                        googleSearchUrl, 
+                        tripadvisorSearchUrl 
+                    ]); 
+ 
+                    const fallbackMsg = `[Food] **Restaurants in ${cityName || 'your area'}** 
+ 
+I had trouble getting specific recommendations, but you can search directly: 
 
 [Map] [Open Google Maps](${mapsSearchUrl}) - See nearby restaurants with ratings
 
-[Search] [Search on Google](${googleSearchUrl}) - Find reviews and articles
-
-[Search] [TripAdvisor search](${tripadvisorSearchUrl})
-
-**Sources looked at (exact links):**
-- [${mapsSearchUrl}](${mapsSearchUrl})
-- [${googleSearchUrl}](${googleSearchUrl})
-- [${tripadvisorSearchUrl}](${tripadvisorSearchUrl})
-
-[Tip] **Tip:** Look for places with 4+ stars and recent reviews!`;
+[Search] [Search on Google](${googleSearchUrl}) - Find reviews and articles 
+ 
+[Search] [TripAdvisor search](${tripadvisorSearchUrl}) 
+ 
+**Sources looked at (exact links):** 
+${sourceLinksBlock} 
+ 
+[Tip] **Tip:** Look for places with 4+ stars and recent reviews!`; 
                     addChatMessage(fallbackMsg, false);
                     speak(`Check the search links to find restaurants in ${cityName}!`);
                     askTransportSuggestionFor(cityName || 'this place');
