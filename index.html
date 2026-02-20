@@ -1792,7 +1792,7 @@
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <span>[Map]</span> Pair Your Phone
+                    <span>[Map]</span> Phone Notifications (Coming Soon)
                 </h2>
                 <button onclick="closePairingModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 text-2xl">&times;</button>
             </div>
@@ -1805,8 +1805,8 @@
 
     <!-- Notification Permission Banner -->
     <div id="notification-banner" class="hidden fixed top-3 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-2 py-1.5 rounded-lg shadow-md flex items-center gap-1.5 max-w-[68vw] sm:max-w-[560px] text-[11px] sm:text-xs">
-        <span class="leading-tight truncate">Enable notifications to receive reminders on this device</span>
-        <button onclick="requestNotificationPermission()" class="bg-white text-purple-700 px-2.5 py-0.5 rounded-md text-[11px] sm:text-xs font-semibold hover:bg-gray-100 transition-all">Enable</button>
+        <span class="leading-tight truncate">Reminder notifications on phone: Coming soon</span>
+        <button class="bg-white text-purple-700 px-2.5 py-0.5 rounded-md text-[11px] sm:text-xs font-semibold opacity-70 cursor-not-allowed" disabled>Coming soon</button>
         <button onclick="dismissNotificationBanner()" class="text-white/70 hover:text-white text-base leading-none px-1">&times;</button>
     </div>
 
@@ -1844,7 +1844,7 @@
                 <!-- Pairing & Light Switch -->
                 <div class="flex items-center gap-3">
                     <!-- Pair Phone Button -->
-                    <button onclick="openPairingModal()" id="pair-btn" class="relative p-2 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all group" title="Pair Phone for Notifications">
+                    <button onclick="openPairingModal()" id="pair-btn" class="relative p-2 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all group" title="Phone notifications (Coming soon)">
                         <svg width="24" height="24" viewBox="0 0 24 24" stroke-width="2" class="transition-all">
                             <rect x="5" y="2" width="14" height="20" rx="2" ry="2" fill="none" stroke="#9CA3AF" class="group-hover:stroke-purple-500"></rect>
                             <circle cx="12" cy="18" r="1.5" fill="#9CA3AF" class="group-hover:fill-purple-500"></circle>
@@ -1909,7 +1909,7 @@
                                         <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                                     </svg>
                                 </div>
-                                <h2 class="text-xl font-bold text-gray-800 dark:text-white">Your Reminders</h2>
+                                <h2 class="text-xl font-bold text-gray-800 dark:text-white">Reminders (Coming soon)</h2>
                             </div>
                             <div id="reminders-list" class="space-y-3"></div>
                         </div>
@@ -2505,7 +2505,7 @@ function updateContextualSuggestions(context) {
             { icon: '\u2600\uFE0F', text: "What's the weather?", query: "What's the weather?" },
             { icon: '\u2708\uFE0F', text: 'Plan a trip', query: 'Plan a trip to Paris' },
             { icon: '\u{1F6D2}', text: 'Shopping list', query: 'Add milk to my list' },
-            { icon: '\u23F0', text: 'Set reminder', query: 'Remind me to call mom' },
+            { icon: '\u23F0', text: 'Set reminder (Coming soon)', query: 'Reminders coming soon' },
             { icon: '\u{1F310}', text: 'Translator', query: 'Speak in Tamil' }
         ];
     }
@@ -3940,7 +3940,7 @@ async function handleNameCorrection(text) {
                                 <p><strong>Transport Info:</strong> "How to get around London?" or "Transport in Mumbai"</p>
                                 <p><strong>Weather:</strong> "What's the weather?" or "Will it rain in Seattle tomorrow?"</p>
                                 <p><strong>Shopping Lists:</strong> "Add 2 pounds of chicken to my list" or "Show my shopping list"</p>
-                                <p><strong>Reminders:</strong> "Remind me to call mom at 5pm" or "Remind me tomorrow to buy groceries"</p>
+                                <p><strong>Reminders:</strong> Coming soon</p>
                                 <p><strong>Translator:</strong> "Speak in Tamil" or "Translate to Hindi"</p>
                             </div>
                         </section>
@@ -3951,7 +3951,7 @@ async function handleNameCorrection(text) {
                                 <p><strong>Verified Places:</strong> "verified hotels in Austin" or "verified restaurants in Seattle"</p>
                                 <p><strong>Budget Trip Planner:</strong> "budget trip to Seattle for 3 days under 900 USD"</p>
                                 <p><strong>Calendar Sync:</strong> After creating a budget plan, say "sync to calendar"</p>
-                                <p><strong>Phone Pairing for Reminders:</strong> Use the phone icon in the header to pair this device</p>
+                                <p><strong>Phone Pairing for Reminders:</strong> Coming soon</p>
                             </div>
                         </section>
                         
@@ -5097,6 +5097,18 @@ If visiting multiple places, consider hiring a local taxi/auto for the full day.
                                     (lower.includes('add') && lower.includes('list'));
             
             const isReminderQuery = lower.includes('remind') || lower.includes('reminder');
+            const isPhoneNotificationQuery =
+                lower.includes('notification') ||
+                lower.includes('pair phone') ||
+                lower.includes('pairing') ||
+                lower.includes('phone alert');
+
+            if (isReminderQuery || isPhoneNotificationQuery) {
+                const soonMsg = 'Reminder and phone notification features are coming soon.';
+                addChatMessage(soonMsg, false);
+                speak('Reminder and phone notifications are coming soon.');
+                return;
+            }
             
             
             if (!isWeatherQuery && !waitingForLocation) {
@@ -5774,86 +5786,54 @@ Just talk to me naturally!`;
                     } catch (e) {}
                 }
                 
-                const itineraryPrompt = `${userName ? `The user's name is ${userName}.` : ''} Create a day-by-day itinerary for: "${text}".
+                const itineraryPrompt = `${userName ? `The user's name is ${userName}.` : ''} Create a rich, engaging, practical itinerary for: "${text}".
 
 LOCATION: ${itineraryLocation || 'Extract from user query'}
 ${placeSearchResults}
 
-?>" CRITICAL: EVERY ENTRY MUST BE A SPECIFIC, NAMED PLACE
-Each activity must have a real, proper name - not generic descriptions.
+IMPORTANT STYLE TARGET:
+- Match a premium travel-assistant tone (warm opening + practical details)
+- Not just a short bullet list of place names
+- Include useful structure, timing, food, transit, and quick tips
+- Keep it readable and skimmable
 
-[OK] GOOD (specific names):
-- "Eiffel Tower" NOT "famous tower"
-- "Central Park" NOT "a park in the city"
-- "Taj Mahal" NOT "historic monument"
-- "Marina Beach" NOT "visit the beach"
-- "Meenakshi Temple" NOT "local temple"
-- "Grand Bazaar" NOT "local market"
-- "Louvre Museum" NOT "art museum"
+ACCURACY RULES:
+1. Use specific real place names only (no invented places).
+2. If the user already gave place names/day plan, KEEP those places and enrich them.
+3. Do not add fake events, fake restaurants, or date-locked events unless certain.
+4. If uncertain, clearly mark as "optional" instead of asserting.
 
-[Error] FORBIDDEN - NEVER INCLUDE THESE:
-- Generic activities: "take a walk", "explore the area", "get familiar"
-- Transportation as activities: "ride the subway", "take a bus tour"
-- Vague suggestions: "visit local shops", "grab lunch", "try street food"
-- Unnamed places: "a local temple", "nearby park", "famous monument"
-- Filler content: "relax", "reflect on trip", "enjoy the views", "take a break"
-- Rest time: "rest at hotel", "unwind", "free time"
+FORMAT TO FOLLOW:
+- Start with a friendly 1-2 line intro about the destination vibe.
+- Then use:
+  Day 1 / Day 2 / etc.
+  Morning / Breakfast / Late Morning / Lunch / Afternoon / Evening blocks (as relevant).
+- For each main stop include:
+  - Why visit (short line)
+  - What not to miss (2-4 bullets)
+  - Best time (if relevant)
+  - Time needed
+  - Transit hint from previous stop
+- Include food guidance naturally:
+  - Suggested local dish styles or area to eat (do not invent specific restaurants if unsure).
+- Include optional alternatives as:
+  Option 1 / Option 2 / Option 3
+- End with:
+  Quick Tips
+  - Best season
+  - Clothing
+  - Getting around
+  - Area to stay
+  - One line asking user preference (relaxed/luxury/backpacker/photography/spiritual)
 
-?>" NO REPETITION:
-- Each place appears ONLY ONCE across all days
-- For week-long trips, include day trips to nearby areas
+STRICTLY AVOID:
+- Plain output like only:
+  "Day 1: Place A, Place B..."
+- Generic filler with no practical info.
+- Placeholder labels like [City] in final answer.
 
-?>" EXCLUDE:
-- Sports matches, concerts, date-specific events
-
-[OK] INCLUDE (always with SPECIFIC NAMES):
-- Landmarks and monuments (actual names)
-- Museums and galleries (specific names)
-- Historic sites (proper names)
-- Named parks and gardens
-- Famous markets (by name)
-- Viewpoints and observation decks (specific names)
-- Religious sites (specific temple/church names)
-- Notable neighborhoods (by name)
-
-FORMAT (no ** markers):
-
-Day 1 in ${itineraryLocation || '[City]'}:
-
-Morning (8:00am-11:30am):
-- [SPECIFIC PLACE NAME]
-  - Why go: one short line
-  - Top things to do: 2-3 concise bullets
-  - Time needed: X hr
-  - Approx cost: Free or $$
-  - Transit from previous stop: X mins
-
-Lunch (12:00pm-1:15pm):
-- [SPECIFIC RESTAURANT OR FOOD HALL NAME]
-  - Must-try item: [specific dish]
-  - Approx cost: $
-
-Afternoon (1:30pm-5:00pm):
-- [SPECIFIC PLACE NAME]
-  - Why go: one short line
-  - Top things to do: 2-3 concise bullets
-  - Time needed: X hr
-  - Transit from previous stop: X mins
-
-Evening (5:30pm-9:00pm):
-- [SPECIFIC PLACE NAME]
-  - Sunset/night highlight: one short line
-  - Dinner suggestion nearby: [specific place]
-  - Transit back to hotel/downtown: X mins
-
-Use 4-6 named stops total for 1-day itineraries and keep all places geographically practical.
-If the user asked for "1 day", only return Day 1.
-No placeholders like "[City]" in final output.
-
-End with exactly:
-Enjoy exploring ${itineraryLocation || 'the area'}! Ask me if you want hotels, restaurants, or transport options next.
-
-BEFORE RESPONDING: Check that EVERY entry has a specific place name, not generic text!`;
+If the user asks for 1 day, return only Day 1.
+If user asks for 2 days, provide both days with balanced pacing.`;
                 
                 const aiResponse = await callAIWithTyping(itineraryPrompt, '[Plan] Planning your itinerary...');
                 addChatMessage(aiResponse.response, false);
@@ -7745,33 +7725,17 @@ function detectDeviceType() {
 
 // Request notification permission
 async function requestNotificationPermission() {
-    try {
-        const permission = await Notification.requestPermission();
-
-        if (permission === 'granted') {
-            await getAndSaveFCMToken();
-            updatePairingStatus(true);
-            document.getElementById('notification-banner')?.classList.add('hidden');
-
-            const msg = "Notifications enabled! You'll receive reminders on this device.";
-            addChatMessage(msg, false);
-            speak(msg);
-        } else {
-            const msg = "Notifications blocked. You can enable them in browser settings.";
-            addChatMessage(msg, false);
-            speak(msg);
-        }
-    } catch (error) {
-    }
+    document.getElementById('notification-banner')?.classList.add('hidden');
+    const msg = "Reminder and phone notifications are coming soon.";
+    addChatMessage(msg, false);
+    speak("Reminder and phone notifications are coming soon.");
 }
 
 // Show notification banner only when user triggers pairing flow
 function showNotificationBannerFromPairing() {
     const dismissed = localStorage.getItem('jarvis_notification_dismissed') === 'true';
     if (dismissed) return;
-    if (Notification.permission === 'default') {
-        document.getElementById('notification-banner')?.classList.remove('hidden');
-    }
+    document.getElementById('notification-banner')?.classList.remove('hidden');
 }
 
 // Dismiss notification banner
@@ -7820,19 +7784,14 @@ let pairingListener = null;
 function openPairingModal() {
     const modal = document.getElementById('pairing-modal');
     const content = document.getElementById('pairing-content');
-
-    // Banner is user-triggered from phone icon flow only
-    showNotificationBannerFromPairing();
-
-    const deviceType = detectDeviceType();
-
-    if (deviceType === 'desktop') {
-        // Desktop: Show pairing code
-        showPairingCodeUI(content);
-    } else {
-        // Mobile: Show code entry
-        showCodeEntryUI(content);
-    }
+    content.innerHTML = `
+        <div class="text-center py-6">
+            <p class="text-gray-700 dark:text-gray-200 font-semibold mb-2">Coming soon</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                Phone pairing and reminder notifications will be available in a future update.
+            </p>
+        </div>
+    `;
 
     modal.classList.remove('hidden');
 }
