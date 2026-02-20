@@ -1988,12 +1988,26 @@
                 </button>
             </div>
             <!-- Footer with disclaimer and request button - centered -->
-            <div class="flex items-center justify-center mt-2 gap-3">
-                <p id="footer-disclaimer" class="text-xs text-gray-400 font-medium">JARVIS can make mistakes. Check important info.</p>
+            <div class="flex items-center justify-center mt-2 gap-3"> 
+                <p id="footer-disclaimer" class="text-xs text-gray-400 font-medium">JARVIS can make mistakes. Check important info.</p> 
+                <select id="travel-mode-lock" onchange="setTravelModeLock(this.value)" class="px-2 py-1 rounded-full text-xs font-semibold border border-purple-300 bg-white/90 text-purple-700 dark:bg-slate-800 dark:text-purple-200 dark:border-purple-700">
+                    <option value="default">Mode: Default</option>
+                    <option value="solo">Mode: Solo</option>
+                    <option value="family">Mode: Family</option>
+                    <option value="kids">Mode: Kids</option>
+                    <option value="elder">Mode: Elder-friendly</option>
+                    <option value="wheelchair">Mode: Wheelchair</option>
+                </select>
                 <button
-                    onclick="openFeatureRequest()"
-                    class="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all hover:scale-105 shadow-md hover:shadow-lg"
-                    title="Request a Feature">
+                    id="converse-mode-btn"
+                    onclick="toggleConverseMode()"
+                    class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-full text-xs font-semibold transition-all">
+                    Converse: Off
+                </button>
+                <button 
+                    onclick="openFeatureRequest()" 
+                    class="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all hover:scale-105 shadow-md hover:shadow-lg" 
+                    title="Request a Feature"> 
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M12 20h9"></path>
                         <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
@@ -2006,11 +2020,37 @@
 
 <script>
 
-const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'};
-function getTrustLabel(trustLevel) {
-  return trustLevel === TRUST_LEVEL.VERIFIED
-    ? '[OK] Verified by location data'
-    : '?"? Generated (structure only)';
+const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'}; 
+const TRAVEL_MODE_HINTS = {
+  default: '',
+  solo: 'solo traveler, fast and flexible options',
+  family: 'family-friendly places, safer and comfortable options',
+  kids: 'kid-friendly places with easy access and low wait times',
+  elder: 'elder-friendly with less walking, easy seating, and comfort',
+  wheelchair: 'wheelchair-accessible routes and venues'
+};
+
+function getTrustLabel(trustLevel) { 
+  return trustLevel === TRUST_LEVEL.VERIFIED 
+    ? '[OK] Verified by location data' 
+    : '?"? Generated (structure only)'; 
+} 
+
+function getTravelModeHint() {
+    return TRAVEL_MODE_HINTS[window.travelModeLock || 'default'] || '';
+}
+
+function getTravelModeSearchSuffix() {
+    const mode = window.travelModeLock || 'default';
+    const suffixMap = {
+        default: '',
+        solo: ' solo traveler',
+        family: ' family friendly',
+        kids: ' kids friendly',
+        elder: ' elder friendly easy access',
+        wheelchair: ' wheelchair accessible'
+    };
+    return suffixMap[mode] || '';
 }
 
 function isVerifiedPlace(obj) {
@@ -3630,17 +3670,23 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             !intent.wantsRestaurants, 
           __retried: false };
 
-        window.__lastUserMessage = userMessage;
+        window.__lastUserMessage = userMessage; 
 
-        
-        const response = await fetch('/api/chat-groq', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: userMessage,
-                userName: userName
-            })
-        });
+        const isTravelMessage = /\b(hotel|hotels|restaurant|restaurants|trip|itinerary|travel|transport|stay|food|visit|things to do|get around)\b/i.test(userMessage);
+        const modeHint = getTravelModeHint();
+        const effectiveMessage = (isTravelMessage && modeHint)
+            ? `${userMessage}\n\nTravel mode lock: ${modeHint}. Prioritize this in your answer.`
+            : userMessage;
+
+         
+        const response = await fetch('/api/chat-groq', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ 
+                message: effectiveMessage, 
+                userName: userName 
+            }) 
+        }); 
         
         
         if (!response.ok) {
@@ -3704,11 +3750,13 @@ async function handleNameCorrection(text) {
         let continuousRecognition = null;
         let wakeWordMode = false;
         let commandMode = false;
-        let isListening = false;
-        let wakeWordCooldown = false; // Prevent double "Hey JARVIS" detection
-        let lastWakeWordTime = 0; // Track when wake word was last triggered
-        let lastWakeAckTime = 0; // Prevent duplicate wake acknowledgments from STT repeats
-        let synth = window.speechSynthesis;
+        let isListening = false; 
+        let listeningRequested = false;
+        let wakeWordCooldown = false; // Prevent double "Hey JARVIS" detection 
+        let lastWakeWordTime = 0; // Track when wake word was last triggered 
+        let lastWakeAckTime = 0; // Prevent duplicate wake acknowledgments from STT repeats 
+        let isAssistantSpeaking = false;
+        let synth = window.speechSynthesis; 
         let reminders = [];
         let weather = null;
         let waitingForLocation = false;
@@ -3722,8 +3770,10 @@ async function handleNameCorrection(text) {
         let shoppingList = [];
         let memoryStore = {};
         let lastBudgetPlan = null;
-        let lastVerifiedPlaces = null;
-        let lastResolvedTravelLocation = null;
+        let lastVerifiedPlaces = null; 
+        let lastResolvedTravelLocation = null; 
+        let travelModeLock = 'default';
+        let converseMode = false;
 
         // Noise filter settings for public places
         let noiseFilterEnabled = false;
@@ -3782,10 +3832,11 @@ async function handleNameCorrection(text) {
                 }, 500);
             }, 5000);
             
-            await requestMicrophonePermission();
-            loadUserData();
-            loadNoiseFilterSettings();
-            checkReminders();
+            await requestMicrophonePermission(); 
+            loadUserData(); 
+            loadNoiseFilterSettings(); 
+            loadAssistantModes();
+            checkReminders(); 
             
             
             // Always show suggestions for all users
@@ -4094,6 +4145,68 @@ async function handleNameCorrection(text) {
                     noiseFilterLevel = settings.level || 'medium';
                 }
             } catch (e) {}
+        }
+
+        function saveAssistantModes() {
+            try {
+                localStorage.setItem('jarvis_assistant_modes', JSON.stringify({
+                    travelModeLock,
+                    converseMode
+                }));
+            } catch (e) {}
+        }
+
+        function updateAssistantModeUI() {
+            const select = document.getElementById('travel-mode-lock');
+            if (select) {
+                select.value = travelModeLock || 'default';
+            }
+            const btn = document.getElementById('converse-mode-btn');
+            if (btn) {
+                const on = !!converseMode;
+                btn.textContent = `Converse: ${on ? 'On' : 'Off'}`;
+                btn.className = on
+                    ? 'px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-xs font-semibold transition-all'
+                    : 'px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-full text-xs font-semibold transition-all';
+            }
+        }
+
+        function loadAssistantModes() {
+            try {
+                const saved = localStorage.getItem('jarvis_assistant_modes');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    travelModeLock = parsed.travelModeLock || 'default';
+                    converseMode = !!parsed.converseMode;
+                }
+            } catch (e) {}
+            window.travelModeLock = travelModeLock;
+            updateAssistantModeUI();
+        }
+
+        function setTravelModeLock(mode) {
+            travelModeLock = mode || 'default';
+            window.travelModeLock = travelModeLock;
+            saveAssistantModes();
+            updateAssistantModeUI();
+            const hint = getTravelModeHint();
+            const msg = hint
+                ? `Travel mode locked: ${travelModeLock}. I will prioritize ${hint}.`
+                : 'Travel mode reset to default.';
+            addChatMessage(msg, false);
+        }
+
+        function toggleConverseMode() {
+            converseMode = !converseMode;
+            saveAssistantModes();
+            updateAssistantModeUI();
+            const msg = converseMode
+                ? 'Converse mode enabled. I will keep listening after replies.'
+                : 'Converse mode disabled.';
+            addChatMessage(msg, false);
+            if (converseMode && !isListening && listeningRequested) {
+                setTimeout(() => startListening(), 120);
+            }
         }
 
         function closeHelpModal() {
@@ -4643,7 +4756,9 @@ async function handleNameCorrection(text) {
                     wakeWordMode = false;
                     
                     
-                    stopListening();
+                    if (!converseMode) {
+                        stopListening();
+                    }
                     
                     
                     if (isProcessing) {
@@ -4699,30 +4814,49 @@ async function handleNameCorrection(text) {
                 } 
             };
 
-            continuousRecognition.onerror = (event) => {
-                stopListening();
-            };
-
-            continuousRecognition.onend = () => {
-                stopListening();
-            };
-        }
-
-        function toggleListening() {
-            if (isListening && wakeWordMode) {
-                
-                stopListening();
-                wakeWordMode = false;
-                addChatMessage("Wake word mode disabled", false);
-            } else if (isListening) {
-                stopListening();
-            } else {
-                
-                wakeWordMode = true;
-                commandMode = false;
-                startListening();
-                addChatMessage('Listening... (Say "Hey JARVIS" or speak directly)', false); 
-            }
+            continuousRecognition.onerror = (event) => { 
+                if (converseMode && listeningRequested) {
+                    setTimeout(() => {
+                        if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking) {
+                            startListening();
+                        }
+                    }, 500);
+                    return;
+                }
+                stopListening(); 
+            }; 
+ 
+            continuousRecognition.onend = () => { 
+                if (converseMode && listeningRequested) {
+                    setTimeout(() => {
+                        if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking) {
+                            startListening();
+                        }
+                    }, 300);
+                    return;
+                }
+                stopListening(); 
+            }; 
+        } 
+ 
+        function toggleListening() { 
+            if (isListening && wakeWordMode) { 
+                 
+                listeningRequested = false;
+                stopListening(); 
+                wakeWordMode = false; 
+                addChatMessage("Wake word mode disabled", false); 
+            } else if (isListening) { 
+                listeningRequested = false;
+                stopListening(); 
+            } else { 
+                 
+                listeningRequested = true;
+                wakeWordMode = true; 
+                commandMode = false; 
+                startListening(); 
+                addChatMessage('Listening... (Say "Hey JARVIS" or speak directly)', false);  
+            } 
         }
 
         function startListening() {
@@ -4731,9 +4865,10 @@ async function handleNameCorrection(text) {
                 return;
             }
 
-            try {
-                isListening = true;
-                continuousRecognition.start();
+            try { 
+                listeningRequested = true;
+                isListening = true; 
+                continuousRecognition.start(); 
 
                 // Update voice button to listening state
                 const voiceBtn = document.getElementById('voice-btn');
@@ -4747,8 +4882,9 @@ async function handleNameCorrection(text) {
             }
         }
 
-        function stopListening() {
-            isListening = false;
+        function stopListening() { 
+            listeningRequested = false;
+            isListening = false; 
 
             if (continuousRecognition) {
                 try {
@@ -5266,26 +5402,27 @@ async function resolveLocationForTravel(rawLocation) {
     };
 }
 
-function buildTransportMessage(locationInfo) {
-    const city = locationInfo?.cityName || 'this place';
-    const countryCode = (locationInfo?.countryCode || '').toUpperCase();
-    const isMajorCity = !!locationInfo?.isMajorCity;
-    const isSmallTown = !!locationInfo?.isSmallTown;
+function buildTransportMessage(locationInfo) { 
+    const city = locationInfo?.cityName || 'this place'; 
+    const countryCode = (locationInfo?.countryCode || '').toUpperCase(); 
+    const isMajorCity = !!locationInfo?.isMajorCity; 
+    const isSmallTown = !!locationInfo?.isSmallTown; 
+    const modeNote = getTravelModeHint() ? `\n[Tip] Mode lock: ${travelModeLock}` : '';
 
     if (isMajorCity) {
-        return `[Bus] **Transport in ${city}**\n\n${city} has strong public transport and ride options.\n\n[Metro] [Metro/Subway stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(city)})\n[Bus] [Bus stops and routes](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(city)})\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Taxi] [Ride options](https://www.google.com/search?q=${countryCode === 'IN' ? 'uber+ola+' : 'uber+lyft+'}${encodeURIComponent(city)})`;
-    }
-
-    if (countryCode === 'IN' && !isMajorCity) {
-        return `[Bus] **Transport in ${city}**\n\nFor smaller towns, use:\n- Local Bus for low-cost travel\n- Auto-rickshaws for quick local rides\n- Car/taxi if you want comfortable travel\n\n[Map] [Bus stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(city)})\n[Search] [Local travel options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(city)})`;
-    }
-
-    if (isSmallTown) {
-        return `[Bus] **Transport in ${city}**\n\nFor smaller towns, use:\n- Local bus/train where available\n- Local taxi or rideshare\n- Car rental for comfortable travel\n\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Search] [Local travel options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(city)})`;
-    }
-
-    return `[Bus] **Transport in ${city}**\n\nRecommended options:\n- Local bus or train where available\n- Uber/Lyft or local taxi apps\n- Car rental for flexible travel\n\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Taxi] [Ride options](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(city)})`;
-}
+        return `[Bus] **Transport in ${city}**\n\n${city} has strong public transport and ride options.\n\n[Metro] [Metro/Subway stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(city)})\n[Bus] [Bus stops and routes](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(city)})\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Taxi] [Ride options](https://www.google.com/search?q=${countryCode === 'IN' ? 'uber+ola+' : 'uber+lyft+'}${encodeURIComponent(city)})${modeNote}`; 
+    } 
+ 
+    if (countryCode === 'IN' && !isMajorCity) { 
+        return `[Bus] **Transport in ${city}**\n\nFor smaller towns, use:\n- Local Bus for low-cost travel\n- Auto-rickshaws for quick local rides\n- Car/taxi if you want comfortable travel\n\n[Map] [Bus stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(city)})\n[Search] [Local travel options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(city)})${modeNote}`; 
+    } 
+ 
+    if (isSmallTown) { 
+        return `[Bus] **Transport in ${city}**\n\nFor smaller towns, use:\n- Local bus/train where available\n- Local taxi or rideshare\n- Car rental for comfortable travel\n\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Search] [Local travel options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(city)})${modeNote}`; 
+    } 
+ 
+    return `[Bus] **Transport in ${city}**\n\nRecommended options:\n- Local bus or train where available\n- Uber/Lyft or local taxi apps\n- Car rental for flexible travel\n\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Taxi] [Ride options](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(city)})${modeNote}`; 
+} 
 
 function askTransportSuggestionFor(cityName) {
     const city = cityName || 'this place';
@@ -5364,15 +5501,32 @@ function askTransportSuggestionFor(cityName) {
             
             let cleanText = text;
             const prefixes = ['hey', 'hi', 'hello', 'ok', 'okay', 'well', 'so', 'um', 'uh'];
-            for (const prefix of prefixes) {
-                const regex = new RegExp(`^${prefix}[,\\s]+`, 'i');
-                cleanText = cleanText.replace(regex, '');
+            for (const prefix of prefixes) { 
+                const regex = new RegExp(`^${prefix}[,\\s]+`, 'i'); 
+                cleanText = cleanText.replace(regex, ''); 
+            } 
+
+            if (/\bconverse mode\b/i.test(cleanText)) {
+                if (/\b(on|enable|start)\b/i.test(cleanText)) {
+                    if (!converseMode) toggleConverseMode();
+                    return;
+                }
+                if (/\b(off|disable|stop)\b/i.test(cleanText)) {
+                    if (converseMode) toggleConverseMode();
+                    return;
+                }
             }
 
-            if (/^\s*hey\s+(jarvis|davis)\s*[.!?]*$/i.test(cleanText)) {
-                const wakeReply = "Yes, sir?";
-                addChatMessage(wakeReply, false);
-                speak(wakeReply);
+            const modeMatch = cleanText.match(/\b(?:set|change|switch)\s+travel\s+mode\s+(default|solo|family|kids|elder|wheelchair)\b/i);
+            if (modeMatch) {
+                setTravelModeLock(modeMatch[1].toLowerCase());
+                return;
+            }
+
+            if (/^\s*hey\s+(jarvis|davis)\s*[.!?]*$/i.test(cleanText)) { 
+                const wakeReply = "Yes, sir?"; 
+                addChatMessage(wakeReply, false); 
+                speak(wakeReply); 
                 return;
             }
 
@@ -5670,9 +5824,7 @@ function askTransportSuggestionFor(cityName) {
                             async (position) => {
                                 const lat = position.coords.latitude;
                                 const lon = position.coords.longitude;
-                                
-                                
-                                
+                                                                
                                 try {
                                     const reverseResponse = await fetch(
                                         `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
@@ -6046,9 +6198,11 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const isHotelMatch = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i);
             const isTransportMatch = cleanText.toLowerCase().match(/\b(transport|transportation|bus|train|taxi|uber|ola|auto|rickshaw|metro|subway|getting around|get around|how to reach|how do i get|travel to)\b/i);
 
-            if (isRestaurantMatch || isHotelMatch || isTransportMatch) {
+            if (isRestaurantMatch || isHotelMatch || isTransportMatch) { 
 
                 const queryType = isHotelMatch ? 'hotel' : (isTransportMatch ? 'transport' : 'food'); 
+                const modeSuffix = getTravelModeSearchSuffix();
+                const modeHint = getTravelModeHint();
                 
                 // Extract location
                 let cityName = '';
@@ -6126,9 +6280,9 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         return;
                     }
                     // Show Google Maps embed - FREE, no API needed!
-                    if (queryType === 'hotel') {
-                        const searchQuery = encodeURIComponent(`hotels in ${fullLocation || cityName}`);
-                        const hotelMsg = `[Hotel] **Hotels in ${cityName}**
+                    if (queryType === 'hotel') { 
+                        const searchQuery = encodeURIComponent(`hotels in ${fullLocation || cityName}${modeSuffix}`); 
+                        const hotelMsg = `[Hotel] **Hotels in ${cityName}** 
 
 <div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
 <iframe 
@@ -6142,7 +6296,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 </iframe>
 </div>
 
-[Map] Click on markers to see ratings, reviews & directions!`;
+[Map] Click on markers to see ratings, reviews & directions!
+${modeHint ? `\n[Tip] Mode lock: ${travelModeLock}` : ''}`; 
 
                         addChatMessage(hotelMsg, false);
                         speak(`Here are hotels in ${cityName}. You can see them on the map!`);
@@ -6185,18 +6340,18 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         return;
                     }
 
-                    const finalLocation = resolved?.fullLocation || fullLocation || cityName;
-                    const locationCity = resolved?.cityName || cityName;
-                    lastResolvedTravelLocation = finalLocation || locationCity;
-                    const placesRes = await fetch('/api/places', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ query: `restaurants in ${finalLocation}`, type: 'restaurant' })
-                    });
+                    const finalLocation = resolved?.fullLocation || fullLocation || cityName; 
+                    const locationCity = resolved?.cityName || cityName; 
+                    lastResolvedTravelLocation = finalLocation || locationCity; 
+                    const placesRes = await fetch('/api/places', { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify({ query: `restaurants in ${finalLocation}${modeSuffix}`, type: 'restaurant' }) 
+                    }); 
 
-                    const mapsQuery = encodeURIComponent(`restaurants in ${finalLocation}`);
-                    const googleQuery = encodeURIComponent(`best restaurants in ${finalLocation}`);
-                    const tripadvisorQuery = encodeURIComponent(`${finalLocation} restaurants tripadvisor`);
+                    const mapsQuery = encodeURIComponent(`restaurants in ${finalLocation}${modeSuffix}`); 
+                    const googleQuery = encodeURIComponent(`best restaurants in ${finalLocation}${modeSuffix}`); 
+                    const tripadvisorQuery = encodeURIComponent(`${finalLocation} restaurants tripadvisor${modeSuffix}`); 
                     const mapsSearchUrl = `https://www.google.com/maps/search/${mapsQuery}`; 
                     const googleSearchUrl = `https://www.google.com/search?q=${googleQuery}`; 
                     const tripadvisorSearchUrl = `https://www.google.com/search?q=${tripadvisorQuery}`; 
@@ -6216,7 +6371,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                             }).join('\n')
                             : 'No verified restaurant entries found from OpenStreetMap near this location.';
 
-                        const foodMsg = `[Food] **Restaurants in ${locationCity}**\n\n<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">\n<iframe src="https://maps.google.com/maps?q=restaurants+in+${mapsQuery}&output=embed" width="100%" height="320" style="border:0; display:block;" allowfullscreen="" loading="lazy"></iframe>\n</div>\n\n${lines}\n\n----------------------\n[Map] [Open Google Maps](${mapsSearchUrl})\n[Search] [Quick Google search](${googleSearchUrl})\n[Search] [TripAdvisor search](${tripadvisorSearchUrl})\n\n**Sources looked at (exact links):**\n${sourceLinksBlock}\n- Local verifier API: \`/api/places\``; 
+                        const foodMsg = `[Food] **Restaurants in ${locationCity}**\n\n<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">\n<iframe src="https://maps.google.com/maps?q=restaurants+in+${mapsQuery}&output=embed" width="100%" height="320" style="border:0; display:block;" allowfullscreen="" loading="lazy"></iframe>\n</div>\n\n${lines}\n\n----------------------\n[Map] [Open Google Maps](${mapsSearchUrl})\n[Search] [Quick Google search](${googleSearchUrl})\n[Search] [TripAdvisor search](${tripadvisorSearchUrl})\n${modeHint ? `[Tip] Mode lock: ${travelModeLock}\n` : ''}\n**Sources looked at (exact links):**\n${sourceLinksBlock}\n- Local verifier API: \`/api/places\``;  
 
                         addChatMessage(foodMsg, false);
                         speak(`I found restaurant options for ${locationCity}.`);
@@ -7284,18 +7439,28 @@ ${sourceLinksBlock}
             speak(text, true);
         }
         
-        function speak(text, force = false) {
-            
-            if (!autoSpeak && !force) return;
-            
-            const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-            
-            
-            if (typeof responsiveVoice !== 'undefined') {
-                responsiveVoice.cancel();
-                responsiveVoice.speak(cleanText, "UK English Male", { pitch: 0.9, rate: 0.95, volume: 1 });
-                return;
+        function speak(text, force = false) { 
+             
+            if (!autoSpeak && !force) return; 
+             
+            const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim(); 
+
+            if (converseMode && isListening && continuousRecognition) {
+                try { continuousRecognition.stop(); } catch (e) {}
             }
+            isAssistantSpeaking = true;
+             
+             
+            if (typeof responsiveVoice !== 'undefined') { 
+                responsiveVoice.cancel(); 
+                responsiveVoice.speak(cleanText, "UK English Male", {
+                    pitch: 0.9,
+                    rate: 0.95,
+                    volume: 1,
+                    onend: () => { isAssistantSpeaking = false; }
+                }); 
+                return; 
+            } 
             
             synth.cancel();
             setTimeout(() => {
@@ -7330,9 +7495,10 @@ ${sourceLinksBlock}
                 currentUtterance = utterance;
                 
                 
-                utterance.onend = () => {
-                    currentUtterance = null;
-                    if (currentSpeakerButton) {
+                utterance.onend = () => { 
+                    isAssistantSpeaking = false;
+                    currentUtterance = null; 
+                    if (currentSpeakerButton) { 
                         currentSpeakerButton.querySelector('.play-icon')?.classList.remove('hidden');
                         currentSpeakerButton.querySelector('.stop-icon')?.classList.add('hidden');
                         currentSpeakerButton = null;
@@ -7344,10 +7510,11 @@ ${sourceLinksBlock}
         }
         
         
-        function stopSpeaking() {
-            if (typeof responsiveVoice !== 'undefined') {
-                responsiveVoice.cancel();
-            }
+        function stopSpeaking() { 
+            isAssistantSpeaking = false;
+            if (typeof responsiveVoice !== 'undefined') { 
+                responsiveVoice.cancel(); 
+            } 
             synth.cancel();
             currentUtterance = null;
         }
