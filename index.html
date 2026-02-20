@@ -1554,6 +1554,87 @@
             color: #9ca3af;
         }
 
+        .converse-live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #14b8a6, #06b6d4);
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            box-shadow: 0 6px 20px rgba(6, 182, 212, 0.35);
+            animation: converseBreath 1.8s ease-in-out infinite;
+        }
+
+        .converse-live-indicator.hidden {
+            display: none;
+        }
+
+        .converse-live-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.8);
+            animation: conversePing 1.6s ease-out infinite;
+        }
+
+        #voice-btn.converse-armed {
+            box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.45), 0 0 22px rgba(20, 184, 166, 0.45);
+            animation: converseMicPulse 1.6s ease-in-out infinite;
+        }
+
+        .converse-toast {
+            position: fixed;
+            right: 16px;
+            bottom: 90px;
+            z-index: 55;
+            padding: 10px 14px;
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+            opacity: 0;
+            transform: translateY(10px) scale(0.96);
+            animation: converseToastInOut 2.2s ease forwards;
+        }
+
+        .converse-toast.on {
+            background: linear-gradient(135deg, #14b8a6, #0891b2);
+        }
+
+        .converse-toast.off {
+            background: linear-gradient(135deg, #475569, #334155);
+        }
+
+        @keyframes converseBreath {
+            0%, 100% { transform: translateY(0); filter: saturate(1); }
+            50% { transform: translateY(-1px); filter: saturate(1.2); }
+        }
+
+        @keyframes conversePing {
+            0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.75); }
+            70% { box-shadow: 0 0 0 9px rgba(255, 255, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+        }
+
+        @keyframes converseMicPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.42), 0 0 22px rgba(20, 184, 166, 0.38); }
+            50% { transform: scale(1.04); box-shadow: 0 0 0 12px rgba(20, 184, 166, 0), 0 0 28px rgba(20, 184, 166, 0.52); }
+        }
+
+        @keyframes converseToastInOut {
+            0% { opacity: 0; transform: translateY(10px) scale(0.96); }
+            14% { opacity: 1; transform: translateY(0) scale(1); }
+            82% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(8px) scale(0.98); }
+        }
+
         /* Enhanced header with better spacing */
         .header-enhanced {
             display: flex;
@@ -1984,6 +2065,10 @@
                     class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-full text-xs font-semibold transition-all">
                     Converse: Off
                 </button>
+                <div id="converse-live-indicator" class="converse-live-indicator hidden" aria-live="polite">
+                    <span class="converse-live-dot"></span>
+                    <span>Converse Active</span>
+                </div>
                 <button 
                     onclick="openFeatureRequest()" 
                     class="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all hover:scale-105 shadow-md hover:shadow-lg" 
@@ -4148,20 +4233,28 @@ async function handleNameCorrection(text) {
                 btn.className = on
                     ? 'px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-xs font-semibold transition-all'
                     : 'px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-full text-xs font-semibold transition-all';
+                btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+                btn.title = on ? 'Converse mode is active' : 'Converse mode is inactive';
             }
+            updateConverseIndicator();
         }
 
         function loadAssistantModes() {
+            travelModeLock = 'default';
+            converseMode = false;
             try {
                 const saved = localStorage.getItem('jarvis_assistant_modes');
                 if (saved) {
                     const parsed = JSON.parse(saved);
                     travelModeLock = parsed.travelModeLock || 'default';
-                    converseMode = !!parsed.converseMode;
+                    converseMode = typeof parsed.converseMode === 'boolean' ? parsed.converseMode : false;
                 }
             } catch (e) {}
             window.travelModeLock = travelModeLock;
             updateAssistantModeUI();
+            if (converseMode) {
+                showConverseToast(true, true);
+            }
         }
 
         function setTravelModeLock(mode) {
@@ -4180,13 +4273,40 @@ async function handleNameCorrection(text) {
             converseMode = !converseMode;
             saveAssistantModes();
             updateAssistantModeUI();
-            const msg = converseMode
-                ? 'Converse mode enabled. I will keep listening after replies.'
-                : 'Converse mode disabled.';
-            addChatMessage(msg, false);
+            showConverseToast(converseMode, false);
             if (converseMode && !isListening && listeningRequested) {
                 setTimeout(() => startListening(), 120);
             }
+        }
+
+        function updateConverseIndicator() {
+            const indicator = document.getElementById('converse-live-indicator');
+            const voiceBtn = document.getElementById('voice-btn');
+            const isOn = !!converseMode;
+
+            if (indicator) {
+                indicator.classList.toggle('hidden', !isOn);
+            }
+            if (voiceBtn) {
+                voiceBtn.classList.toggle('converse-armed', isOn);
+            }
+        }
+
+        function showConverseToast(isOn, isRestore = false) {
+            const existing = document.getElementById('converse-toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.id = 'converse-toast';
+            toast.className = `converse-toast ${isOn ? 'on' : 'off'}`;
+            toast.textContent = isRestore
+                ? 'Converse mode restored: ON'
+                : (isOn ? 'Converse mode ON: Hands-free listening' : 'Converse mode OFF');
+
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.remove();
+            }, 2300);
         }
 
         function closeHelpModal() {
@@ -7825,387 +7945,6 @@ loadHistory();
    - Call showError("Error message") instead of addChatMessage for errors
    - Visual shake animation + auto-dismiss
 */
-
-// ========== FIREBASE & PUSH NOTIFICATIONS ==========
-
-// Firebase Configuration
-const firebaseConfig = {
-    apiKey: "AIzaSyBVpkEMOSZXVkKVrlEAksL1R1Rv0tJmdxQ",
-    authDomain: "jarvis-assistant-f1abb.firebaseapp.com",
-    projectId: "jarvis-assistant-f1abb",
-    storageBucket: "jarvis-assistant-f1abb.firebasestorage.app",
-    messagingSenderId: "673211850778",
-    appId: "1:673211850778:web:5787ef037b14d5addc31a3"
-};
-
-// Initialize Firebase
-let firebaseApp = null;
-let firestore = null;
-let messaging = null;
-let fcmToken = null;
-let deviceId = null;
-let pairedDevices = [];
-
-async function initializeFirebase() {
-    try {
-        // Initialize Firebase
-        firebaseApp = firebase.initializeApp(firebaseConfig);
-        firestore = firebase.firestore();
-
-        // Generate or retrieve device ID
-        deviceId = localStorage.getItem('jarvis_device_id');
-        if (!deviceId) {
-            deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            localStorage.setItem('jarvis_device_id', deviceId);
-        }
-
-        // Initialize messaging if supported
-        if ('serviceWorker' in navigator && 'PushManager' in window) {
-            try {
-                // Register service worker
-                const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-                messaging = firebase.messaging();
-
-                // Check notification permission
-                if (Notification.permission === 'granted') {
-                    await getAndSaveFCMToken();
-                    updatePairingStatus(true);
-                }
-
-                // Listen for foreground messages
-                messaging.onMessage((payload) => {
-                    showForegroundNotification(payload);
-                });
-
-            } catch (err) {
-            }
-        }
-
-        // Load paired devices
-        await loadPairedDevices();
-
-        // Sync reminders to Firebase
-        await syncRemindersToFirebase();
-
-        // Listen for reminder updates from other devices
-        listenForReminderUpdates();
-
-    } catch (error) {
-    }
-}
-
-// Get FCM Token and save to Firestore
-async function getAndSaveFCMToken() {
-    try {
-        fcmToken = await messaging.getToken({
-            vapidKey: 'BLBz6PWHp5OBpBVAXqNAFrVzRnWmPvOVWaCJlU8C6wqNPJJRtJxJxJxJxJ' // We'll generate this
-        });
-
-        if (fcmToken) {
-            // Save token to Firestore
-            await firestore.collection('devices').doc(deviceId).set({
-                fcmToken: fcmToken,
-                deviceType: detectDeviceType(),
-                lastActive: firebase.firestore.FieldValue.serverTimestamp(),
-                userName: userName || 'Unknown',
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-
-            localStorage.setItem('jarvis_fcm_token', fcmToken);
-        }
-    } catch (error) {
-    }
-}
-
-// Detect device type
-function detectDeviceType() {
-    const ua = navigator.userAgent;
-    if (/mobile/i.test(ua)) return 'mobile';
-    if (/tablet|ipad/i.test(ua)) return 'tablet';
-    return 'desktop';
-}
-
-// Request notification permission
-async function requestNotificationPermission() {
-    document.getElementById('notification-banner')?.classList.add('hidden');
-    const msg = "Reminder and phone notifications are coming soon.";
-    addChatMessage(msg, false);
-    speak("Reminder and phone notifications are coming soon.");
-}
-
-// Show notification banner only when user triggers pairing flow
-function showNotificationBannerFromPairing() {
-    const dismissed = localStorage.getItem('jarvis_notification_dismissed') === 'true';
-    if (dismissed) return;
-    document.getElementById('notification-banner')?.classList.remove('hidden');
-}
-
-// Dismiss notification banner
-function dismissNotificationBanner() {
-    document.getElementById('notification-banner')?.classList.add('hidden');
-    localStorage.setItem('jarvis_notification_dismissed', 'true');
-}
-
-// Update pairing status indicator
-function updatePairingStatus(connected) {
-    const indicator = document.getElementById('pairing-status');
-    if (indicator) {
-        if (connected) {
-            indicator.classList.remove('hidden');
-        } else {
-            indicator.classList.add('hidden');
-        }
-    }
-}
-
-// Show foreground notification
-function showForegroundNotification(payload) {
-    const title = payload.notification?.title || 'JARVIS Reminder';
-    const body = payload.notification?.body || 'You have a reminder!';
-
-    // Show in chat
-    addChatMessage(`**Reminder:** ${body}`, false);
-    speak(body);
-
-    // Also show browser notification
-    if (Notification.permission === 'granted') {
-        new Notification(title, {
-            body: body,
-            icon: '/jarvis-icon.png',
-            tag: 'jarvis-reminder'
-        });
-    }
-}
-
-// ========== DEVICE PAIRING SYSTEM ==========
-
-let pairingCode = null;
-let pairingListener = null;
-
-// Open pairing modal
-function openPairingModal() {
-    const modal = document.getElementById('pairing-modal');
-    const content = document.getElementById('pairing-content');
-    content.innerHTML = `
-        <div class="text-center py-6">
-            <p class="text-gray-700 dark:text-gray-200 font-semibold mb-2">Coming soon</p>
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-                Phone pairing and reminder notifications will be available in a future update.
-            </p>
-        </div>
-    `;
-
-    modal.classList.remove('hidden');
-}
-
-// Close pairing modal
-function closePairingModal() {
-    const modal = document.getElementById('pairing-modal');
-    modal.classList.add('hidden');
-
-    // Stop listening for pairing
-    if (pairingListener) {
-        pairingListener();
-        pairingListener = null;
-    }
-}
-
-// Generate 6-digit pairing code
-function generatePairingCode() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
-// Show pairing code UI (for laptop)
-async function showPairingCodeUI(container) {
-    pairingCode = generatePairingCode();
-
-    container.innerHTML = `
-        <div class="text-center">
-            <p class="text-gray-600 dark:text-gray-400 mb-4">
-                Enter this code on your phone to receive reminders:
-            </p>
-
-            <div class="bg-gradient-to-r from-purple-100 to-indigo-100 dark:from-purple-900/30 dark:to-indigo-900/30 rounded-xl p-6 mb-4">
-                <div class="text-4xl font-mono font-bold tracking-widest text-purple-700 dark:text-purple-300" id="pairing-code-display">
-                    ${pairingCode.split('').join(' ')}
-                </div>
-            </div>
-
-            <div class="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-4">
-                <div class="animate-pulse w-2 h-2 bg-green-500 rounded-full"></div>
-                <span>Waiting for connection...</span>
-            </div>
-
-            <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                On your phone:<br>
-                1. Open JARVIS<br>
-                2. Tap the phone icon [Map]<br>
-                3. Enter this code
-            </p>
-
-            <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
-                <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">Paired Devices:</p>
-                <div id="paired-devices-list" class="space-y-2">
-                    <p class="text-xs text-gray-400">No devices paired yet</p>
-                </div>
-            </div>
-
-            <button onclick="refreshPairingCode()" class="mt-4 text-purple-600 hover:text-purple-700 text-sm font-medium">
-                Generate New Code
-            </button>
-        </div>
-    `;
-
-    // Save pairing code to Firestore
-    await firestore.collection('pairing_codes').doc(pairingCode).set({
-        deviceId: deviceId,
-        fcmToken: fcmToken || null,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
-        status: 'waiting'
-    });
-
-    // Listen for pairing completion
-    pairingListener = firestore.collection('pairing_codes').doc(pairingCode)
-        .onSnapshot((doc) => {
-            if (doc.exists && doc.data().status === 'paired') {
-                handlePairingSuccess(doc.data());
-            }
-        });
-
-    // Load paired devices list
-    loadPairedDevicesList();
-}
-
-// Show code entry UI (for phone)
-function showCodeEntryUI(container) {
-    container.innerHTML = `
-        <div class="text-center">
-            <p class="text-gray-600 dark:text-gray-400 mb-4">
-                Enter the code shown on your laptop:
-            </p>
-
-            <div class="flex justify-center gap-2 mb-4">
-                <input type="text" id="pairing-input-1" maxlength="1" class="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none dark:bg-gray-700 dark:text-white" oninput="handlePairingInput(this, 1)">
-                <input type="text" id="pairing-input-2" maxlength="1" class="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none dark:bg-gray-700 dark:text-white" oninput="handlePairingInput(this, 2)">
-                <input type="text" id="pairing-input-3" maxlength="1" class="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none dark:bg-gray-700 dark:text-white" oninput="handlePairingInput(this, 3)">
-                <input type="text" id="pairing-input-4" maxlength="1" class="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none dark:bg-gray-700 dark:text-white" oninput="handlePairingInput(this, 4)">
-                <input type="text" id="pairing-input-5" maxlength="1" class="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none dark:bg-gray-700 dark:text-white" oninput="handlePairingInput(this, 5)">
-                <input type="text" id="pairing-input-6" maxlength="1" class="w-12 h-14 text-center text-2xl font-bold border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:border-purple-500 focus:outline-none dark:bg-gray-700 dark:text-white" oninput="handlePairingInput(this, 6)">
-            </div>
-
-            <div id="pairing-status-msg" class="text-sm mb-4"></div>
-
-            <button onclick="submitPairingCode()" id="pair-submit-btn" class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 rounded-xl font-semibold hover:from-purple-700 hover:to-indigo-700 transition-all disabled:opacity-50" disabled>
-                Connect
-            </button>
-
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-4">
-                Make sure notifications are enabled on this device to receive reminders.
-            </p>
-        </div>
-    `;
-}
-
-// Handle pairing code input
-function handlePairingInput(input, index) {
-    const value = input.value.replace(/[^0-9]/g, '');
-    input.value = value;
-
-    if (value && index < 6) {
-        document.getElementById(`pairing-input-${index + 1}`)?.focus();
-    }
-
-    // Check if all inputs filled
-    let code = '';
-    for (let i = 1; i <= 6; i++) {
-        code += document.getElementById(`pairing-input-${i}`).value;
-    }
-
-    const submitBtn = document.getElementById('pair-submit-btn');
-    if (code.length === 6) {
-        submitBtn.disabled = false;
-    } else {
-        submitBtn.disabled = true;
-    }
-}
-
-// Submit pairing code (from phone)
-async function submitPairingCode() {
-    let code = '';
-    for (let i = 1; i <= 6; i++) {
-        code += document.getElementById(`pairing-input-${i}`).value;
-    }
-
-    const statusMsg = document.getElementById('pairing-status-msg');
-    statusMsg.innerHTML = '<span class="text-blue-500">Connecting...</span>';
-
-    try {
-        // Look up pairing code
-        const doc = await firestore.collection('pairing_codes').doc(code).get();
-
-        if (!doc.exists) {
-            statusMsg.innerHTML = '<span class="text-red-500">Invalid code. Please try again.</span>';
-            return;
-        }
-
-        const data = doc.data();
-
-        if (data.status === 'paired') {
-            statusMsg.innerHTML = '<span class="text-yellow-500">This code has already been used.</span>';
-            return;
-        }
-
-        // Request notification permission first
-        if (Notification.permission !== 'granted') {
-            await requestNotificationPermission();
-        }
-
-        // Get FCM token for this device
-        if (messaging && !fcmToken) {
-            await getAndSaveFCMToken();
-        }
-
-        // Update pairing document
-        await firestore.collection('pairing_codes').doc(code).update({
-            status: 'paired',
-            pairedDeviceId: deviceId,
-            pairedFcmToken: fcmToken,
-            pairedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        // Save paired device relationship
-        await firestore.collection('device_pairs').add({
-            primaryDeviceId: data.deviceId,
-            secondaryDeviceId: deviceId,
-            primaryFcmToken: data.fcmToken,
-            secondaryFcmToken: fcmToken,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        // Save to local storage
-        const pairs = JSON.parse(localStorage.getItem('jarvis_paired_devices') || '[]');
-        pairs.push({
-            deviceId: data.deviceId,
-            pairedAt: new Date().toISOString()
-        });
-        localStorage.setItem('jarvis_paired_devices', JSON.stringify(pairs));
-
-        statusMsg.innerHTML = '<span class="text-green-500">Connected successfully!</span>';
-        updatePairingStatus(true);
-
-        // Close modal after delay
-        setTimeout(() => {
-            closePairingModal();
-            const msg = "Phone paired! You'll receive reminder notifications here.";
-            addChatMessage(msg, false);
-            speak(msg);
-        }, 1500);
-
-    } catch (error) {
-        statusMsg.innerHTML = '<span class="text-red-500">Connection failed. Please try again.</span>';
-    }
-}
 
 </script>
 </body>
