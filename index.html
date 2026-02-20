@@ -5851,6 +5851,7 @@ function askTransportSuggestionFor(cityName) {
 
                                     // Format location name based on country
                                     if (cityName) {
+                              
                                         // For US: City, State format
                                         if (addr.country_code === 'us' && addr.state) {
                                             cityName = `${cityName}, ${addr.state}`;
