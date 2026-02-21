@@ -2048,10 +2048,12 @@
                     </div>
                 </button>
             </div>
-            <!-- Footer with disclaimer and request button - centered -->
-            <div class="flex items-center justify-center mt-2 gap-3"> 
-                <p id="footer-disclaimer" class="text-xs text-gray-400 font-medium">JARVIS can make mistakes. Check important info.</p> 
-                <select id="travel-mode-lock" onchange="setTravelModeLock(this.value)" class="px-2 py-1 rounded-full text-xs font-semibold border border-purple-300 bg-white/90 text-purple-700 dark:bg-slate-800 dark:text-purple-200 dark:border-purple-700">
+            <!-- Footer controls -->
+            <div class="mt-2 space-y-2">
+                <p id="footer-disclaimer" class="text-xs text-gray-400 font-medium text-center whitespace-nowrap overflow-hidden text-ellipsis">JARVIS can make mistakes. Check important info.</p>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <select id="travel-mode-lock" onchange="setTravelModeLock(this.value)" class="w-full h-10 px-3 rounded-xl text-xs font-semibold border border-purple-300 bg-white/90 text-purple-700 dark:bg-slate-800 dark:text-purple-200 dark:border-purple-700">
                     <option value="default">Mode: Default</option>
                     <option value="solo">Mode: Solo</option>
                     <option value="family">Mode: Family</option>
@@ -2059,7 +2061,7 @@
                     <option value="elder">Mode: Elder-friendly</option>
                     <option value="wheelchair">Mode: Wheelchair</option>
                 </select>
-                <select id="support-mode-lock" onchange="setSupportModeLock(this.value)" class="px-2 py-1 rounded-full text-xs font-semibold border border-emerald-300 bg-white/90 text-emerald-700 dark:bg-slate-800 dark:text-emerald-200 dark:border-emerald-700">
+                <select id="support-mode-lock" onchange="setSupportModeLock(this.value)" class="w-full h-10 px-3 rounded-xl text-xs font-semibold border border-emerald-300 bg-white/90 text-emerald-700 dark:bg-slate-800 dark:text-emerald-200 dark:border-emerald-700">
                     <option value="balanced">Support: Balanced</option>
                     <option value="supportive">Support: Supportive</option>
                     <option value="debate">Support: Debate</option>
@@ -2067,16 +2069,12 @@
                 <button
                     id="converse-mode-btn"
                     onclick="toggleConverseMode()"
-                    class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-full text-xs font-semibold transition-all">
+                    class="w-full h-10 px-3 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-semibold transition-all">
                     Converse: Off
                 </button>
-                <div id="converse-live-indicator" class="converse-live-indicator hidden" aria-live="polite">
-                    <span class="converse-live-dot"></span>
-                    <span>Converse Active</span>
-                </div>
                 <button 
                     onclick="openFeatureRequest()" 
-                    class="px-3 py-1.5 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all hover:scale-105 shadow-md hover:shadow-lg" 
+                    class="w-full h-10 px-3 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all hover:scale-[1.02] shadow-md hover:shadow-lg" 
                     title="Request a Feature"> 
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M12 20h9"></path>
@@ -2084,6 +2082,23 @@
                     </svg>
                     Request Feature
                 </button>
+                </div>
+                <div class="flex justify-center">
+                    <div id="converse-live-indicator" class="converse-live-indicator hidden" aria-live="polite">
+                        <span class="converse-live-dot"></span>
+                        <span>Converse Active</span>
+                    </div>
+                </div>
+                <div id="ai-thinking-indicator" class="hidden flex justify-center" aria-live="polite">
+                    <div class="inline-flex items-center gap-2">
+                        <span id="ai-thinking-text" class="text-xs font-semibold text-purple-600 dark:text-purple-300">JARVIS is thinking</span>
+                        <span class="thinking-dots">
+                            <span class="thinking-dot"></span>
+                            <span class="thinking-dot"></span>
+                            <span class="thinking-dot"></span>
+                        </span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -3492,7 +3507,12 @@ async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
     
     showThinkingIndicator(loadingMessage);
     try {
-        const response = await askGeminiAI(message);
+        const responsePromise = askGeminiAI(message);
+        await Promise.all([
+            responsePromise,
+            new Promise(resolve => setTimeout(resolve, 2000))
+        ]);
+        const response = await responsePromise;
         hideThinkingIndicator();
         return response;
     } catch (error) {
@@ -4229,8 +4249,8 @@ async function handleNameCorrection(text) {
                 const on = !!converseMode;
                 btn.textContent = `Converse: ${on ? 'On' : 'Off'}`;
                 btn.className = on
-                    ? 'px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-xs font-semibold transition-all'
-                    : 'px-3 py-1.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-full text-xs font-semibold transition-all';
+                    ? 'w-full h-10 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-all'
+                    : 'w-full h-10 px-3 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-semibold transition-all';
                 btn.setAttribute('aria-pressed', on ? 'true' : 'false');
                 btn.title = on ? 'Converse mode is active' : 'Converse mode is inactive';
             }
@@ -4371,12 +4391,20 @@ async function handleNameCorrection(text) {
         addChatMessage(text, false, true); 
       }
         
+        function hideInitialSuggestions() {
+            const suggestionsPanel = document.getElementById('initial-suggestions');
+            if (suggestionsPanel && !suggestionsPanel.classList.contains('hidden')) {
+                suggestionsPanel.classList.add('hidden');
+            }
+        }
+
         function addChatMessage(text, isUser = true, typewriter = false) {
             const chatContainer = document.getElementById('chat-container');
             const messageDiv = document.createElement('div');
             messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-3`;
 
             if (isUser) {
+                hideInitialSuggestions();
 
                 const formattedText = escapeHtml(text).replace(/\n/g, '<br>');
                 messageDiv.innerHTML = `
@@ -4395,20 +4423,23 @@ async function handleNameCorrection(text) {
                 // Check if message contains HTML elements (like iframes, divs)
                 const hasHtmlContent = /<(iframe|div|img|table)\s/i.test(text);
 
+                const readableText = formatAssistantTextForReadability(text);
+
                 // Convert markdown links [text](url) to HTML anchor tags, then newlines to <br>
                 // But preserve HTML tags like <iframe>, <div>, etc.
                 let formattedText;
                 if (hasHtmlContent) {
                     // For HTML content, only convert markdown links and bold, preserve other HTML
-                    formattedText = text
+                    formattedText = readableText
                         .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 underline font-medium">$1</a>')
                         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
                     // Only convert newlines that are NOT inside HTML tags
                     formattedText = formattedText.replace(/\n(?![^<]*>)/g, '<br>');
                 } else {
-                    formattedText = text
+                    formattedText = readableText
                         .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 underline font-medium">$1</a>')
                         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                        .replace(/(^|\n)-\s+/g, '$1&#8226; ')
                         .replace(/\n/g, '<br>');
                 }
 
@@ -4793,6 +4824,7 @@ async function handleNameCorrection(text) {
                 const confidence = result[0].confidence || 0;
 
                 if (!text) return;
+                hideInitialSuggestions();
 
                 // Noise filter - filter out low confidence or short random noise
                 if (noiseFilterEnabled && result.isFinal) {
@@ -4993,6 +5025,7 @@ async function handleNameCorrection(text) {
             try { 
                 listeningRequested = true;
                 isListening = true; 
+                hideInitialSuggestions();
                 continuousRecognition.start(); 
 
                 // Update voice button to listening state
@@ -6851,7 +6884,7 @@ ${sourceLinksBlock}
 
         async function fetchWeather(lat, lon, resolvedLocation, originalQuery = null) {
             hideThinkingIndicator(); 
-            showLoading('Checking weather...');
+            showLoading('Checking weather');
             try {
                 const weatherResponse = await fetch(
                     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,precipitation&timezone=auto`
@@ -7782,114 +7815,40 @@ function searchHistory(query) {
     return results;
 }
 
-/*
-
-function showHistoryPanel() {
-    
-    const panel = document.createElement('div');
-    panel.id = 'history-panel';
-    panel.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4';
-    panel.innerHTML = `
-        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col">
-            <div class="p-4 border-b border-gray-200 flex justify-between items-center">
-                <h2 class="text-xl font-bold text-gray-900">Conversation History</h2>
-                <button onclick="closeHistoryPanel()" class="text-gray-500 hover:text-gray-700 text-2xl">?-</button>
-            </div>
-            <div class="p-4 border-b border-gray-200">
-                <input 
-                    type="text" 
-                    id="history-search" 
-                    placeholder="Search conversations..." 
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    oninput="filterHistory(this.value)"
-                />
-            </div>
-            <div id="history-list" class="flex-1 overflow-y-auto p-4 space-y-4">
-                ${renderHistoryList()}
-            </div>
-            <div class="p-4 border-t border-gray-200 flex gap-2">
-                <button onclick="exportHistory()" class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600">Export</button>
-                <button onclick="clearHistory()" class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">Clear All</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(panel);
-}
-
-function renderHistoryList(filtered = conversationHistory) {
-    if (filtered.length === 0) {
-        return '<p class="text-gray-500 text-center">No conversations yet</p>';
-    }
-    
-    return filtered.map((conv, index) => `
-        <div class="bg-gray-50 rounded-lg p-3 space-y-2">
-            <div class="text-xs text-gray-500">${conv.date} ${new Date(conv.timestamp).toLocaleTimeString()}</div>
-            <div class="text-sm">
-                <div class="font-semibold text-purple-600">You:</div>
-                <div class="text-gray-700">${escapeHtml(conv.user)}</div>
-            </div>
-            <div class="text-sm">
-                <div class="font-semibold text-blue-600">JARVIS:</div>
-                <div class="text-gray-700">${escapeHtml(conv.ai.substring(0, 150))}${conv.ai.length > 150 ? '...' : ''}</div>
-            </div>
-        </div>
-    `).join('');
-}
-
-function filterHistory(query) {
-    const results = query ? searchHistory(query) : conversationHistory;
-    document.getElementById('history-list').innerHTML = renderHistoryList(results);
-}
-
-function closeHistoryPanel() {
-    const panel = document.getElementById('history-panel');
-    if (panel) panel.remove();
-}
-
-function exportHistory() {
-    const dataStr = JSON.stringify(conversationHistory, null, 2);
-    const dataBlob = new Blob([dataStr], {type: 'application/json'});
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `unify-history-${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
-}
-
-function clearHistory() {
-    if (confirm('Clear all conversation history? This cannot be undone.')) {
-        conversationHistory = [];
-        localStorage.removeItem('unify_history');
-        closeHistoryPanel();
-        alert('History cleared!');
-    }
-}
-*/
-
 function showThinkingIndicator(message = 'Thinking') {
-    hideThinkingIndicator();
-
-    const thinkingDiv = document.createElement('div');
-    thinkingDiv.id = 'thinking-indicator';
-    thinkingDiv.className = 'floating-thinking-indicator fade-in';
-
-    thinkingDiv.innerHTML = `
-        <span class="floating-thinking-text">${escapeHtml(message)}</span>
-        <span class="thinking-dots">
-            <span class="thinking-dot"></span>
-            <span class="thinking-dot"></span>
-            <span class="thinking-dot"></span>
-        </span>
-    `;
-
-    document.body.appendChild(thinkingDiv);
+    const indicator = document.getElementById('ai-thinking-indicator');
+    const text = document.getElementById('ai-thinking-text');
+    if (!indicator || !text) return;
+    text.textContent = message || 'Thinking';
+    indicator.classList.remove('hidden');
 }
 
 function hideThinkingIndicator() {
-    const thinkingDiv = document.getElementById('thinking-indicator');
-    if (thinkingDiv) {
-        thinkingDiv.remove();
+    const indicator = document.getElementById('ai-thinking-indicator');
+    if (indicator) indicator.classList.add('hidden');
+}
+
+function formatAssistantTextForReadability(rawText) {
+    if (typeof rawText !== 'string') return rawText;
+    if (/<(iframe|div|img|table|svg|button|a)\b/i.test(rawText)) return rawText;
+    if (rawText.includes('\n')) return rawText;
+    if (/^\s*[-*]\s+/m.test(rawText) || /^\s*\d+\.\s+/m.test(rawText)) return rawText;
+    if (rawText.length < 300) return rawText;
+
+    const sentences = (rawText.match(/[^.!?]+[.!?]+/g) || []).map(s => s.trim()).filter(Boolean);
+    if (sentences.length < 5) return rawText;
+
+    let closingQuestion = '';
+    const last = sentences[sentences.length - 1] || '';
+    if (/\?$/.test(last)) {
+        closingQuestion = last;
+        sentences.pop();
     }
+
+    if (sentences.length < 3) return rawText;
+
+    const bullets = sentences.map(s => `- ${s}`).join('\n');
+    return closingQuestion ? `${bullets}\n\n${closingQuestion}` : bullets;
 }
 
 function showError(message) {
@@ -8013,6 +7972,25 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
+
+/*
+1. TYPING INDICATOR:
+   - Call showTypingIndicator() before AI response
+   - Call hideTypingIndicator() before showing response
+
+2. DELETE MESSAGES:
+   - Already integrated in addChatMessage() with delete button
+   - Shows on hover over user messages
+
+3. CONVERSATION HISTORY:
+   - Call saveToHistory(userMsg, aiMsg) after each exchange
+   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
+   - Search, export, and clear functions included
+
+4. ERROR FEEDBACK:
+   - Call showError("Error message") instead of addChatMessage for errors
+   - Visual shake animation + auto-dismiss
+*/
 
 </script>
 </body>
