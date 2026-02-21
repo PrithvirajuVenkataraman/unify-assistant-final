@@ -2002,7 +2002,7 @@
 
     <!-- ChatGPT-style Input at Bottom - Enhanced -->
     <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 floating-input-bar z-40">
-        <div class="max-w-xl mx-auto px-2 py-0.5">
+        <div class="max-w-xl sm:max-w-3xl mx-auto px-3 py-1">
             <div id="input-bar-inner" class="flex items-center gap-1.5 modern-input px-2 py-1">
                 <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
@@ -2050,10 +2050,10 @@
             </div>
             <!-- Footer controls -->
             <div class="mt-2 space-y-2">
-                <p id="footer-disclaimer" class="text-xs text-gray-400 font-medium text-center whitespace-nowrap overflow-hidden text-ellipsis">JARVIS can make mistakes. Check important info.</p>
+                <p id="footer-disclaimer" class="w-full text-xs text-gray-400 font-medium text-center">JARVIS can make mistakes. Check important info.</p>
 
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <select id="travel-mode-lock" onchange="setTravelModeLock(this.value)" class="w-full h-10 px-3 rounded-xl text-xs font-semibold border border-purple-300 bg-white/90 text-purple-700 dark:bg-slate-800 dark:text-purple-200 dark:border-purple-700">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <select id="travel-mode-lock" onchange="setTravelModeLock(this.value)" class="w-full h-11 px-4 rounded-xl text-sm font-semibold border border-purple-300 bg-white/90 text-purple-700 dark:bg-slate-800 dark:text-purple-200 dark:border-purple-700">
                     <option value="default">Mode: Default</option>
                     <option value="solo">Mode: Solo</option>
                     <option value="family">Mode: Family</option>
@@ -2061,7 +2061,7 @@
                     <option value="elder">Mode: Elder-friendly</option>
                     <option value="wheelchair">Mode: Wheelchair</option>
                 </select>
-                <select id="support-mode-lock" onchange="setSupportModeLock(this.value)" class="w-full h-10 px-3 rounded-xl text-xs font-semibold border border-emerald-300 bg-white/90 text-emerald-700 dark:bg-slate-800 dark:text-emerald-200 dark:border-emerald-700">
+                <select id="support-mode-lock" onchange="setSupportModeLock(this.value)" class="w-full h-11 px-4 rounded-xl text-sm font-semibold border border-emerald-300 bg-white/90 text-emerald-700 dark:bg-slate-800 dark:text-emerald-200 dark:border-emerald-700">
                     <option value="balanced">Support: Balanced</option>
                     <option value="supportive">Support: Supportive</option>
                     <option value="debate">Support: Debate</option>
@@ -2069,12 +2069,12 @@
                 <button
                     id="converse-mode-btn"
                     onclick="toggleConverseMode()"
-                    class="w-full h-10 px-3 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-semibold transition-all">
+                    class="w-full h-11 px-4 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-sm font-semibold transition-all">
                     Converse: Off
                 </button>
                 <button 
                     onclick="openFeatureRequest()" 
-                    class="w-full h-10 px-3 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap transition-all hover:scale-[1.02] shadow-md hover:shadow-lg" 
+                    class="w-full h-11 px-4 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 whitespace-nowrap transition-all hover:scale-[1.02] shadow-md hover:shadow-lg" 
                     title="Request a Feature"> 
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <path d="M12 20h9"></path>
@@ -7972,25 +7972,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
-/*
-1. TYPING INDICATOR:
-   - Call showTypingIndicator() before AI response
-   - Call hideTypingIndicator() before showing response
-
-2. DELETE MESSAGES:
-   - Already integrated in addChatMessage() with delete button
-   - Shows on hover over user messages
-
-3. CONVERSATION HISTORY:
-   - Call saveToHistory(userMsg, aiMsg) after each exchange
-   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
-   - Search, export, and clear functions included
-
-4. ERROR FEEDBACK:
-   - Call showError("Error message") instead of addChatMessage for errors
-   - Visual shake animation + auto-dismiss
-*/
 
 </script>
 </body>
