@@ -1970,7 +1970,7 @@
                                         <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                                     </svg>
                                 </div>
-                                <h2 class="text-xl font-bold text-gray-800 dark:text-white">Reminders (Coming soon)</h2>
+                                <h2 class="text-xl font-bold text-gray-800 dark:text-white">Reminders</h2>
                             </div>
                             <div id="reminders-list" class="space-y-3"></div>
                         </div>
@@ -2546,7 +2546,7 @@ function showInitialSuggestions() {
     const suggestions = [
         { icon: '\u2600\uFE0F', text: "What's the weather?", query: "What's the weather like today?" },
         { icon: '\u{1F6D2}', text: 'Add 2 lbs chicken to list', query: 'Add 2 pounds of chicken to my shopping list' },
-        { icon: '\u23F0', text: 'Remind me to call mom', query: 'Remind me to call mom at 5pm' },
+        { icon: '\u23F0', text: 'Remind me', query: 'Remind me' },
         { icon: '\u{1F310}', text: 'Translate to Tamil', query: 'Speak in Tamil' },
         { icon: '\u2708\uFE0F', text: 'Plan a trip to Paris', query: 'Plan a weekend trip to Paris' }
     ];
@@ -2619,7 +2619,7 @@ function updateContextualSuggestions(context) {
             { icon: '\u2600\uFE0F', text: "What's the weather?", query: "What's the weather?" },
             { icon: '\u2708\uFE0F', text: 'Plan a trip', query: 'Plan a trip to Paris' },
             { icon: '\u{1F6D2}', text: 'Shopping list', query: 'Add milk to my list' },
-            { icon: '\u23F0', text: 'Set reminder (Coming soon)', query: 'Reminders coming soon' },
+            { icon: '\u23F0', text: 'Remind me', query: 'Remind me' },
             { icon: '\u{1F310}', text: 'Translator', query: 'Speak in Tamil' }
         ];
     }
@@ -3849,6 +3849,8 @@ async function handleNameCorrection(text) {
         let weather = null;
         let waitingForLocation = false;
         let waitingForReminder = false;
+        let reminderFlowStage = null; // null | 'task' | 'time'
+        let pendingReminderTask = '';
         let chatHistory = [];
         let micPermissionGranted = false;
         
@@ -4083,7 +4085,7 @@ async function handleNameCorrection(text) {
                                 <p><strong>Transport Info:</strong> "How to get around London?" or "Transport in Mumbai"</p>
                                 <p><strong>Weather:</strong> "What's the weather?" or "Will it rain in Seattle tomorrow?"</p>
                                 <p><strong>Shopping Lists:</strong> "Add 2 pounds of chicken to my list" or "Show my shopping list"</p>
-                                <p><strong>Reminders:</strong> Coming soon</p>
+                                <p><strong>Reminders:</strong> Say "Remind me" and I will ask what and when.</p>
                                 <p><strong>Translator:</strong> "Speak in Tamil" or "Translate to Hindi"</p>
                             </div>
                         </section>
@@ -4563,8 +4565,7 @@ async function handleNameCorrection(text) {
                     waitingForLocation = false;
                     getWeatherByCity(cleanLocation);
                 } else if (waitingForReminder) {
-                    waitingForReminder = false;
-                    createReminderFromText(text);
+                    handleReminderFollowUp(text);
                 } else {
                     processCommand(text);
                 }
@@ -4962,8 +4963,7 @@ async function handleNameCorrection(text) {
                     }
                     
                     if (waitingForReminder) {
-                        waitingForReminder = false;
-                        await createReminderFromText(text);
+                        await handleReminderFollowUp(text);
                         return;
                     }
                     
@@ -5652,10 +5652,10 @@ function isHighRiskMentalHealth(text) {
                 lower.includes('pairing') ||
                 lower.includes('phone alert');
 
-            if (isReminderQuery || isPhoneNotificationQuery) {
-                const soonMsg = 'Reminder and phone notification features are coming soon.';
+            if (isPhoneNotificationQuery && !isReminderQuery) {
+                const soonMsg = 'Phone notification pairing is coming soon.';
                 addChatMessage(soonMsg, false);
-                speak('Reminder and phone notifications are coming soon.');
+                speak('Phone notification pairing is coming soon.');
                 return;
             }
             
@@ -5866,8 +5866,7 @@ Do not use repetitive filler or generic wording.`;
             }
 
             if (waitingForReminder) {
-                waitingForReminder = false;
-                createReminderFromText(cleanText);
+                await handleReminderFollowUp(cleanText);
                 return;
             }
 
@@ -6186,18 +6185,22 @@ Do not use repetitive filler or generic wording.`;
                 return;
             }
 
-            else if (cleanText.toLowerCase().includes('remind')) {
+            else if (/\b(remind me|set\s+(?:a\s+)?reminder|create reminder)\b/i.test(cleanText) ||
+                     cleanText.trim().toLowerCase() === 'reminder') {
                 createReminderFromText(cleanText);
                 return;
             }
             
-            else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('my reminder') || cleanText.toLowerCase().includes('list reminder')) &&
+            else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('list') || cleanText.toLowerCase().includes('my')) &&
+                     cleanText.toLowerCase().includes('reminder') &&
                      !cleanText.toLowerCase().includes('shopping')) {
                 if (reminders.length === 0) {
-                    const msg = "You haven't set any reminders yet. Would you like me to remind you of something?";
+                    const msg = "You haven't set any reminders yet. For what should I remind you?";
                     addChatMessage(msg, false);
                     speak(msg);
                     waitingForReminder = true;
+                    reminderFlowStage = 'task';
+                    pendingReminderTask = '';
                 } else {
                     const msg = `You have ${reminders.length} reminder${reminders.length > 1 ? 's' : ''}. Check the list below.`;
                     addChatMessage(msg, false);
@@ -6983,117 +6986,325 @@ ${sourceLinksBlock}
         }
 
         
-        function createReminderFromText(text) {
-            const reminder = {
-                id: Date.now(),
-                text: text,
-                time: extractTime(text),
-                created: new Date().toLocaleString(),
-                alarmTime: calculateAlarmTime(text)
-            };
-            reminders.push(reminder);
-            saveRemindersToStorage();
-            updateRemindersList();
-            const reminderMsg = `Got it! I'll remind you: ${text}`;
-            addChatMessage(reminderMsg, false);
-            speak(reminderMsg);
-            
-            if (reminder.alarmTime) setAlarm(reminder);
+        function clearReminderFlow() {
+            waitingForReminder = false;
+            reminderFlowStage = null;
+            pendingReminderTask = '';
         }
 
-        function extractTime(text) {
-            const lower = text.toLowerCase();
-            if (lower.includes('tomorrow')) return 'tomorrow';
-            if (lower.includes('today')) return 'today';
-            if (lower.includes('tonight')) return 'tonight';
-            const match = lower.match(/(\d{1,2})\s*(am|pm)/);
-            if (match) return match[0];
-            return 'later';
+        function formatReminderDate(date) {
+            return date.toLocaleString([], {
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit'
+            });
         }
 
-        function calculateAlarmTime(text) {
-            const lower = text.toLowerCase();
+        function parseReminderWhen(text) {
+            const raw = String(text || '').trim();
+            if (!raw) return null;
+
             const now = new Date();
-            
-            if (lower.includes('tomorrow')) {
-                const tomorrow = new Date(now);
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                tomorrow.setHours(9, 0, 0, 0);
-                return tomorrow;
+
+            const relativeMatch = raw.match(/\b(?:in|after)\s+(\d+)\s*(minute|minutes|min|mins|hour|hours|hr|hrs)\b/i);
+            if (relativeMatch) {
+                const amount = parseInt(relativeMatch[1], 10);
+                const unit = relativeMatch[2].toLowerCase();
+                const isHour = unit.startsWith('h');
+                const alarmTime = new Date(Date.now() + amount * (isHour ? 60 * 60 * 1000 : 60 * 1000));
+                return { alarmTime, label: formatReminderDate(alarmTime), matchedText: relativeMatch[0] };
             }
-            
-            const match = lower.match(/(\d{1,2})\s*(am|pm)/);
-            if (match) {
-                let hour = parseInt(match[1]);
-                const isPM = match[2] === 'pm';
-                if (isPM && hour !== 12) hour += 12;
-                if (!isPM && hour === 12) hour = 0;
+
+            const tomorrowTimeMatch = raw.match(/\btomorrow(?:\s+at)?\s*(\d{1,2})(?::([0-5]\d))?\s*(am|pm)\b/i);
+            if (tomorrowTimeMatch) {
+                let hour = parseInt(tomorrowTimeMatch[1], 10);
+                const minute = parseInt(tomorrowTimeMatch[2] || '0', 10);
+                const ampm = tomorrowTimeMatch[3].toLowerCase();
+                if (ampm === 'pm' && hour !== 12) hour += 12;
+                if (ampm === 'am' && hour === 12) hour = 0;
                 const alarmTime = new Date(now);
-                alarmTime.setHours(hour, 0, 0, 0);
-                if (alarmTime < now) alarmTime.setDate(alarmTime.getDate() + 1);
-                return alarmTime;
+                alarmTime.setDate(alarmTime.getDate() + 1);
+                alarmTime.setHours(hour, minute, 0, 0);
+                return { alarmTime, label: formatReminderDate(alarmTime), matchedText: tomorrowTimeMatch[0] };
             }
+
+            const ampmMatch = raw.match(/\b(?:at\s*)?(\d{1,2})(?::([0-5]\d))?\s*(am|pm)\b/i);
+            if (ampmMatch) {
+                let hour = parseInt(ampmMatch[1], 10);
+                const minute = parseInt(ampmMatch[2] || '0', 10);
+                const ampm = ampmMatch[3].toLowerCase();
+                if (ampm === 'pm' && hour !== 12) hour += 12;
+                if (ampm === 'am' && hour === 12) hour = 0;
+                const alarmTime = new Date(now);
+                alarmTime.setHours(hour, minute, 0, 0);
+                if (alarmTime <= now) alarmTime.setDate(alarmTime.getDate() + 1);
+                return { alarmTime, label: formatReminderDate(alarmTime), matchedText: ampmMatch[0] };
+            }
+
+            const time24Match = raw.match(/\b(?:at\s*)?([01]?\d|2[0-3]):([0-5]\d)\b/);
+            if (time24Match) {
+                const hour = parseInt(time24Match[1], 10);
+                const minute = parseInt(time24Match[2], 10);
+                const alarmTime = new Date(now);
+                alarmTime.setHours(hour, minute, 0, 0);
+                if (alarmTime <= now) alarmTime.setDate(alarmTime.getDate() + 1);
+                return { alarmTime, label: formatReminderDate(alarmTime), matchedText: time24Match[0] };
+            }
+
+            if (/\btomorrow\b/i.test(raw)) {
+                const alarmTime = new Date(now);
+                alarmTime.setDate(alarmTime.getDate() + 1);
+                alarmTime.setHours(9, 0, 0, 0);
+                return { alarmTime, label: formatReminderDate(alarmTime), matchedText: 'tomorrow' };
+            }
+
             return null;
         }
 
+        function ensureReminderNotificationPermission() {
+            if (!('Notification' in window)) return;
+            if (Notification.permission === 'default') {
+                Notification.requestPermission().catch(() => {});
+            }
+        }
+
+        function showSystemReminderNotification(reminder) {
+            if (!('Notification' in window)) return;
+            if (Notification.permission !== 'granted') return;
+
+            const n = new Notification('JARVIS Reminder', {
+                body: reminder.text,
+                tag: `jarvis-reminder-${reminder.id}`,
+                requireInteraction: true
+            });
+            n.onclick = () => {
+                window.focus();
+                n.close();
+            };
+        }
+
+        function createReminder(task, alarmTime, timeLabel) {
+            const reminder = {
+                id: Date.now(),
+                text: task,
+                time: timeLabel,
+                created: new Date().toLocaleString(),
+                alarmTime,
+                triggered: false
+            };
+
+            reminders.push(reminder);
+            saveRemindersToStorage();
+            updateRemindersList();
+            setAlarm(reminder);
+            ensureReminderNotificationPermission();
+
+            const msg = `Done. I will remind you to ${task} at ${timeLabel}.`;
+            addChatMessage(msg, false);
+            speak(msg);
+            clearReminderFlow();
+        }
+
+        function createReminderFromText(text) {
+            const raw = String(text || '').trim();
+            if (!raw) {
+                waitingForReminder = true;
+                reminderFlowStage = 'task';
+                pendingReminderTask = '';
+                addChatMessage('For what should I remind you?', false);
+                speak('For what should I remind you?');
+                return;
+            }
+
+            const commandMatch = raw.match(/^(?:please\s+)?(?:remind me|set\s+(?:a\s+)?reminder|reminder)\b[:,\-]?\s*(.*)$/i);
+            let remainder = commandMatch ? commandMatch[1].trim() : raw;
+            remainder = remainder.replace(/^to\s+/i, '').trim();
+
+            if (!remainder) {
+                waitingForReminder = true;
+                reminderFlowStage = 'task';
+                pendingReminderTask = '';
+                const q = 'For what should I remind you?';
+                addChatMessage(q, false);
+                speak(q);
+                return;
+            }
+
+            const when = parseReminderWhen(remainder);
+            let task = remainder;
+            if (when?.matchedText) {
+                task = task.replace(when.matchedText, '').trim();
+                task = task.replace(/\b(at|in|after|on)\s*$/i, '').trim();
+            }
+            task = task.replace(/^to\s+/i, '').replace(/[.?!,]+$/g, '').trim();
+
+            if (!task) {
+                waitingForReminder = true;
+                reminderFlowStage = 'task';
+                pendingReminderTask = '';
+                const q = 'For what should I remind you?';
+                addChatMessage(q, false);
+                speak(q);
+                return;
+            }
+
+            if (!when) {
+                waitingForReminder = true;
+                reminderFlowStage = 'time';
+                pendingReminderTask = task;
+                const q = `Okay. For "${task}", when should I remind you?`;
+                addChatMessage(q, false);
+                speak(q);
+                return;
+            }
+
+            createReminder(task, when.alarmTime, when.label);
+        }
+
+        async function handleReminderFollowUp(text) {
+            const input = String(text || '').trim();
+            if (!input) return;
+
+            if (/\b(cancel|nevermind|never mind|stop)\b/i.test(input)) {
+                clearReminderFlow();
+                const msg = 'Okay, canceled reminder setup.';
+                addChatMessage(msg, false);
+                speak(msg);
+                return;
+            }
+
+            if (reminderFlowStage === 'task') {
+                pendingReminderTask = input.replace(/[.?!,]+$/g, '').trim();
+                if (pendingReminderTask.length < 2) {
+                    const ask = 'Please tell me what I should remind you about.';
+                    addChatMessage(ask, false);
+                    speak(ask);
+                    return;
+                }
+                reminderFlowStage = 'time';
+                waitingForReminder = true;
+                const ask = `Got it. When should I remind you to ${pendingReminderTask}?`;
+                addChatMessage(ask, false);
+                speak(ask);
+                return;
+            }
+
+            if (reminderFlowStage === 'time') {
+                const when = parseReminderWhen(input);
+                if (!when) {
+                    const ask = 'Please tell me a time like "at 5 PM", "in 30 minutes", or "in 2 hours".';
+                    addChatMessage(ask, false);
+                    speak(ask);
+                    return;
+                }
+                createReminder(pendingReminderTask, when.alarmTime, when.label);
+                return;
+            }
+
+            createReminderFromText(input);
+        }
+
         function setAlarm(reminder) {
-            if (!reminder.alarmTime) return;
-            const timeUntilAlarm = reminder.alarmTime - new Date();
+            if (!reminder?.alarmTime) return;
+            const alarmDate = new Date(reminder.alarmTime);
+            reminder.alarmTime = alarmDate;
+            const timeUntilAlarm = alarmDate - new Date();
             if (timeUntilAlarm > 0) {
                 setTimeout(() => triggerAlarm(reminder), timeUntilAlarm);
             }
         }
 
         function triggerAlarm(reminder) {
+            if (!reminder) return;
+            reminder.triggered = true;
+            saveRemindersToStorage();
+
             const overlay = document.getElementById('alarm-overlay');
             const notification = document.getElementById('alarm-notification');
-            
-            overlay.classList.remove('hidden');
-            notification.className = 'alarm-notification bg-white rounded-3xl shadow-2xl p-8 max-w-md';
-            notification.innerHTML = `
-                <div class="text-center">
-                    <div class="mb-4">
-                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-purple-600 mx-auto animate-bounce">
-                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                        </svg>
+            if (overlay) overlay.classList.add('hidden');
+
+            if (notification) {
+                notification.className = 'fixed top-4 right-4 z-[9999] w-[360px] max-w-[calc(100vw-1rem)] bg-white rounded-2xl shadow-2xl border border-purple-200 p-4';
+                notification.innerHTML = `
+                    <div class="flex items-start gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl">⏰</div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs font-semibold text-purple-600 uppercase tracking-wide">Reminder</p>
+                            <p class="text-sm text-gray-900 font-semibold mt-1 break-words">${escapeHtml(reminder.text)}</p>
+                            <p class="text-xs text-gray-500 mt-1">Now</p>
+                        </div>
                     </div>
-                    <h2 class="text-2xl font-bold text-gray-900 mb-2">? Reminder!</h2>
-                    <p class="text-lg text-gray-700 mb-6">${escapeHtml(reminder.text)}</p>
-                    <div class="flex gap-3 justify-center">
-                        <button onclick="snoozeAlarm(${reminder.id})" class="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold rounded-xl transition-all">
-                            Snooze 5min
-                        </button>
-                        <button onclick="dismissAlarm(${reminder.id})" class="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-xl transition-all">
-                            Dismiss
-                        </button>
+                    <div class="mt-3 flex items-center gap-2">
+                        <button onclick="dismissAlarm(${reminder.id})" class="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-all">OK</button>
+                        <button onclick="toggleSnoozePanel(${reminder.id})" class="px-3 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-semibold rounded-lg transition-all">Snooze</button>
                     </div>
-                </div>
-            `;
+                    <div id="snooze-panel-${reminder.id}" class="hidden mt-3 flex items-center gap-2">
+                        <input id="snooze-value-${reminder.id}" type="number" min="1" value="5" class="w-16 px-2 py-1.5 border border-gray-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-purple-400" />
+                        <select id="snooze-unit-${reminder.id}" class="px-2 py-1.5 border border-gray-300 rounded-md text-sm outline-none focus:ring-2 focus:ring-purple-400">
+                            <option value="minutes">minutes</option>
+                            <option value="hours">hours</option>
+                        </select>
+                        <button onclick="applySnoozeFromUI(${reminder.id})" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-800 text-white text-sm rounded-md transition-all">Set</button>
+                    </div>
+                `;
+                notification.classList.remove('hidden');
+            }
+
+            if (document.hidden) {
+                showSystemReminderNotification(reminder);
+            }
+
             speak(`Reminder: ${reminder.text}`);
         }
 
-        function snoozeAlarm(id) {
+        function toggleSnoozePanel(id) {
+            const panel = document.getElementById(`snooze-panel-${id}`);
+            if (panel) panel.classList.toggle('hidden');
+        }
+
+        function applySnoozeFromUI(id) {
+            const valueEl = document.getElementById(`snooze-value-${id}`);
+            const unitEl = document.getElementById(`snooze-unit-${id}`);
+            const value = Math.max(1, parseInt(valueEl?.value || '5', 10));
+            const unit = unitEl?.value === 'hours' ? 'hours' : 'minutes';
+            snoozeAlarm(id, value, unit);
+        }
+
+        function snoozeAlarm(id, amount = 5, unit = 'minutes') {
             const reminder = reminders.find(r => r.id === id);
-            if (reminder) {
-                reminder.alarmTime = new Date(Date.now() + 5 * 60 * 1000);
-                setAlarm(reminder);
-                saveRemindersToStorage();
-            }
+            if (!reminder) return;
+
+            const ms = amount * (unit === 'hours' ? 60 * 60 * 1000 : 60 * 1000);
+            reminder.alarmTime = new Date(Date.now() + ms);
+            reminder.time = formatReminderDate(reminder.alarmTime);
+            reminder.triggered = false;
+            setAlarm(reminder);
+            saveRemindersToStorage();
+            updateRemindersList();
+
             dismissAlarm(id);
+
+            const msg = `Snoozed for ${amount} ${unit}. I will remind you again at ${reminder.time}.`;
+            addChatMessage(msg, false);
+            speak(msg);
         }
 
         function dismissAlarm(id) {
-            document.getElementById('alarm-overlay').classList.add('hidden');
-            document.getElementById('alarm-notification').classList.add('hidden');
+            const overlay = document.getElementById('alarm-overlay');
+            const notification = document.getElementById('alarm-notification');
+            if (overlay) overlay.classList.add('hidden');
+            if (notification) {
+                notification.classList.add('hidden');
+                notification.innerHTML = '';
+            }
         }
 
         function checkReminders() {
             setInterval(() => {
                 const now = new Date();
                 reminders.forEach(reminder => {
-                    if (reminder.alarmTime && reminder.alarmTime <= now && !reminder.triggered) {
-                        reminder.triggered = true;
+                    if (reminder.alarmTime && new Date(reminder.alarmTime) <= now && !reminder.triggered) {
                         triggerAlarm(reminder);
                     }
                 });
