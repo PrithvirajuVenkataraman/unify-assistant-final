@@ -2052,8 +2052,8 @@
             <div class="mt-2 space-y-2">
                 <p id="footer-disclaimer" class="w-full text-xs text-gray-400 font-medium text-center">JARVIS can make mistakes. Check important info.</p>
 
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <select id="travel-mode-lock" onchange="setTravelModeLock(this.value)" class="w-full h-11 px-4 rounded-xl text-sm font-semibold border border-purple-300 bg-white/90 text-purple-700 dark:bg-slate-800 dark:text-purple-200 dark:border-purple-700">
+                <div class="grid grid-cols-2 sm:grid-cols-[1fr_1.2fr_1fr_1fr] gap-3">
+                <select id="travel-mode-lock" onchange="setTravelModeLock(this.value)" class="w-full h-11 pl-4 pr-12 rounded-xl text-sm font-semibold border border-purple-300 bg-white/90 text-purple-700 dark:bg-slate-800 dark:text-purple-200 dark:border-purple-700">
                     <option value="default">Mode: Default</option>
                     <option value="solo">Mode: Solo</option>
                     <option value="family">Mode: Family</option>
@@ -2061,7 +2061,7 @@
                     <option value="elder">Mode: Elder-friendly</option>
                     <option value="wheelchair">Mode: Wheelchair</option>
                 </select>
-                <select id="support-mode-lock" onchange="setSupportModeLock(this.value)" class="w-full h-11 px-4 rounded-xl text-sm font-semibold border border-emerald-300 bg-white/90 text-emerald-700 dark:bg-slate-800 dark:text-emerald-200 dark:border-emerald-700">
+                <select id="support-mode-lock" onchange="setSupportModeLock(this.value)" class="w-full h-11 pl-4 pr-12 rounded-xl text-sm font-semibold border border-emerald-300 bg-white/90 text-emerald-700 dark:bg-slate-800 dark:text-emerald-200 dark:border-emerald-700">
                     <option value="balanced">Support: Balanced</option>
                     <option value="supportive">Support: Supportive</option>
                     <option value="debate">Support: Debate</option>
@@ -7972,6 +7972,25 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
+
+/*
+1. TYPING INDICATOR:
+   - Call showTypingIndicator() before AI response
+   - Call hideTypingIndicator() before showing response
+
+2. DELETE MESSAGES:
+   - Already integrated in addChatMessage() with delete button
+   - Shows on hover over user messages
+
+3. CONVERSATION HISTORY:
+   - Call saveToHistory(userMsg, aiMsg) after each exchange
+   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
+   - Search, export, and clear functions included
+
+4. ERROR FEEDBACK:
+   - Call showError("Error message") instead of addChatMessage for errors
+   - Visual shake animation + auto-dismiss
+*/
 
 </script>
 </body>
