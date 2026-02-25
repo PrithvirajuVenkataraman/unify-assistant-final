@@ -1401,25 +1401,6 @@
             animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .chat-bubble-jarvis {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
-            border: 1px solid rgba(0, 0, 0, 0.05);
-            border-radius: 20px 20px 20px 4px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-            animation: slideInLeft 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            color: #000000 !important;
-        }
-
-        body.dark .chat-bubble-jarvis {
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
-            border-color: rgba(255, 255, 255, 0.05);
-            color: #ffffff !important;
-        }
-
-        .chat-bubble-jarvis * {
-            color: inherit !important;
-        }
-
         @keyframes slideInRight {
             from {
                 opacity: 0;
@@ -2076,20 +2057,23 @@
                     </svg>
                 </div>
                 <button
+                    id="voice-to-text-btn"
+                    onclick="toggleVoiceToTextInput()"
+                    class="w-full h-11 px-4 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
+                    title="Voice to text">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="22"></line>
+                        <line x1="8" y1="22" x2="16" y2="22"></line>
+                    </svg>
+                    Voice to Text
+                </button>
+                <button
                     id="converse-mode-btn"
                     onclick="toggleConverseMode()"
                     class="w-full h-11 px-4 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-sm font-semibold transition-all">
                     Converse: Off
-                </button>
-                <button 
-                    onclick="openFeatureRequest()" 
-                    class="w-full h-11 px-4 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 whitespace-nowrap transition-all hover:scale-[1.02] shadow-md hover:shadow-lg" 
-                    title="Request a Feature"> 
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <path d="M12 20h9"></path>
-                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                    </svg>
-                    Request Feature
                 </button>
                 </div>
                 <div class="flex justify-center">
@@ -3868,6 +3852,9 @@ async function handleNameCorrection(text) {
         let commandMode = false;
         let isListening = false; 
         let listeningRequested = false;
+        let isVoiceTyping = false;
+        let voiceTypingRecognition = null;
+        let voiceTypingFinalText = '';
         let wakeWordCooldown = false; // Prevent double "Hey JARVIS" detection 
         let lastWakeWordTime = 0; // Track when wake word was last triggered 
         let lastWakeAckTime = 0; // Prevent duplicate wake acknowledgments from STT repeats 
@@ -3961,6 +3948,7 @@ async function handleNameCorrection(text) {
             loadAssistantModes();
             loadFavorites();
             setupInputHistoryNavigation();
+            updateVoiceToTextButton();
             window.addEventListener('online', updateOnlineStatus);
             window.addEventListener('offline', updateOnlineStatus);
             updateOnlineStatus();
@@ -4210,11 +4198,21 @@ async function handleNameCorrection(text) {
                                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Higher = stricter filtering (may miss some commands)</p>
                                 </div>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">Voice: Say "enable noise filter" or "disable noise filter"</p>
+                                <button
+                                    onclick="openFeatureRequest()"
+                                    class="w-full h-11 px-4 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 whitespace-nowrap transition-all hover:scale-[1.02] shadow-md hover:shadow-lg"
+                                    title="Request a Feature">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                                    </svg>
+                                    Request Feature
+                                </button>
                             </div>
                         </section>
 
                         <div class="text-center pt-4 border-t border-gray-200 dark:border-gray-700">
-                            <p class="text-sm text-gray-600 dark:text-gray-400">Need more help? Click the <strong>Request</strong> button to suggest improvements!</p>
+                            <p class="text-sm text-gray-600 dark:text-gray-400">Need more help? You can submit a feature request from the Settings section above.</p>
                         </div>
                     </div>
                 </div>
@@ -4509,6 +4507,103 @@ async function handleNameCorrection(text) {
             }, 2300);
         }
 
+        function updateVoiceToTextButton() {
+            const btn = document.getElementById('voice-to-text-btn');
+            if (!btn) return;
+            if (isVoiceTyping) {
+                btn.className = 'w-full h-11 px-4 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all';
+                btn.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
+                        <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+                    </svg>
+                    Stop Dictation
+                `;
+                return;
+            }
+            btn.className = 'w-full h-11 px-4 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all';
+            btn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="22"></line>
+                    <line x1="8" y1="22" x2="16" y2="22"></line>
+                </svg>
+                Voice to Text
+            `;
+        }
+
+        function initializeVoiceToTextRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) return false;
+            voiceTypingRecognition = new SpeechRecognition();
+            voiceTypingRecognition.continuous = true;
+            voiceTypingRecognition.interimResults = true;
+            voiceTypingRecognition.lang = 'en-US';
+
+            voiceTypingRecognition.onstart = () => {
+                isVoiceTyping = true;
+                voiceTypingFinalText = '';
+                updateVoiceToTextButton();
+            };
+
+            voiceTypingRecognition.onresult = (event) => {
+                const input = document.getElementById('text-input');
+                if (!input) return;
+                let interim = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript || '';
+                    if (event.results[i].isFinal) {
+                        voiceTypingFinalText += transcript + ' ';
+                    } else {
+                        interim += transcript;
+                    }
+                }
+                input.value = (voiceTypingFinalText + interim).trim();
+                toggleSendButton();
+            };
+
+            voiceTypingRecognition.onerror = () => {
+                isVoiceTyping = false;
+                updateVoiceToTextButton();
+            };
+
+            voiceTypingRecognition.onend = () => {
+                isVoiceTyping = false;
+                updateVoiceToTextButton();
+            };
+
+            return true;
+        }
+
+        function toggleVoiceToTextInput() {
+            if (!voiceTypingRecognition && !initializeVoiceToTextRecognition()) {
+                addChatMessage('Voice-to-text is not supported in this browser.', false);
+                return;
+            }
+
+            if (isVoiceTyping) {
+                try {
+                    voiceTypingRecognition.stop();
+                } catch (e) {}
+                return;
+            }
+
+            if (isListening) {
+                stopListening();
+            }
+
+            const input = document.getElementById('text-input');
+            if (input) {
+                voiceTypingFinalText = input.value ? `${input.value.trim()} ` : '';
+            } else {
+                voiceTypingFinalText = '';
+            }
+
+            try {
+                voiceTypingRecognition.start();
+            } catch (e) {}
+        }
+
         function closeHelpModal() {
             const modal = document.getElementById('help-modal');
             if (modal) modal.remove();
@@ -4608,8 +4703,8 @@ async function handleNameCorrection(text) {
 
                 messageDiv.innerHTML = `
                     <div class="flex items-start gap-3 ${containerWidth}">
-                        <div class="chat-bubble-jarvis px-4 py-3 flex-1 overflow-hidden ${hasMap ? 'map-message' : ''}">
-                            <div class="text-sm ${textClass} typewriter-text leading-relaxed"></div>
+                        <div class="flex-1 overflow-hidden ${hasMap ? 'map-message' : ''}">
+                            <div class="text-sm ${textClass} typewriter-text leading-relaxed text-left"></div>
                         </div>
                         <button onclick="copyAssistantPlan(this)" data-copy-text="${encodeURIComponent(textForSpeech)}" class="flex-shrink-0 w-8 h-8 rounded-full bg-sky-500 hover:bg-sky-600 text-white transition-all shadow-md hover:shadow-lg flex items-center justify-center" title="Copy">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
