@@ -1790,6 +1790,25 @@
                 max-height: 460px;
             }
         }
+
+        .offline-banner {
+            position: fixed;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 60;
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: #ef4444;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 700;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
+        }
+
+        .offline-banner.hidden {
+            display: none;
+        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -1847,28 +1866,8 @@
     <!-- Alarm Notification Overlay -->
     <div id="alarm-overlay" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50"></div>
     <div id="alarm-notification" class="hidden"></div>
-
-    <!-- Device Pairing Modal -->
-    <div id="pairing-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <span>[Map]</span> Phone Notifications (Coming Soon)
-                </h2>
-                <button onclick="closePairingModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 text-2xl">&times;</button>
-            </div>
-
-            <div id="pairing-content">
-                <!-- Will be populated by JavaScript -->
-            </div>
-        </div>
-    </div>
-
-    <!-- Notification Permission Banner -->
-    <div id="notification-banner" class="hidden fixed top-3 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-2 py-1.5 rounded-lg shadow-md flex items-center gap-1.5 max-w-[68vw] sm:max-w-[560px] text-[11px] sm:text-xs">
-        <span class="leading-tight truncate">Reminder notifications on phone: Coming soon</span>
-        <button class="bg-white text-purple-700 px-2.5 py-0.5 rounded-md text-[11px] sm:text-xs font-semibold opacity-70 cursor-not-allowed" disabled>Coming soon</button>
-        <button onclick="dismissNotificationBanner()" class="text-white/70 hover:text-white text-base leading-none px-1">&times;</button>
+    <div id="offline-banner" class="offline-banner hidden" role="status" aria-live="polite">
+        Offline mode: some features may be unavailable
     </div>
 
     <div class="page-shell">
@@ -1878,7 +1877,7 @@
             <div class="absolute top-1/2 left-1/2 w-72 h-72 bg-violet-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style="animation-delay: 2s;"></div>
         </div>
 
-        <div class="max-w-4xl mx-auto relative z-10 p-6">
+        <div class="max-w-5xl mx-auto relative z-10 p-6">
             <!-- Header - Enhanced -->
             <div class="header-enhanced mb-6">
                 <div class="flex items-center gap-4">
@@ -1902,18 +1901,8 @@
                     </div>
                 </div>
 
-                <!-- Pairing & Light Switch -->
+                <!-- Theme Switch -->
                 <div class="flex items-center gap-3">
-                    <!-- Pair Phone Button -->
-                    <button onclick="openPairingModal()" id="pair-btn" class="relative p-2 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all group" title="Phone notifications (Coming soon)">
-                        <svg width="24" height="24" viewBox="0 0 24 24" stroke-width="2" class="transition-all">
-                            <rect x="5" y="2" width="14" height="20" rx="2" ry="2" fill="none" stroke="#9CA3AF" class="group-hover:stroke-purple-500"></rect>
-                            <circle cx="12" cy="18" r="1.5" fill="#9CA3AF" class="group-hover:fill-purple-500"></circle>
-                        </svg>
-                        <!-- Pairing status indicator -->
-                        <div id="pairing-status" class="hidden absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
-                    </button>
-
                     <!-- Light Switch -->
                     <div class="light-switch-container" onclick="toggleDarkMode()">
                         <div id="light-switch" class="light-switch on">
@@ -1928,8 +1917,9 @@
                 <!-- Two-column layout: Suggestions left, Chat right -->
                 <div class="flex flex-col lg:flex-row gap-6">
                     <!-- Left Column: Suggestions -->
-                    <div class="lg:w-2/5 order-2 lg:order-1">
-                        <!-- Suggestion Buttons - Dynamic based on context -->
+                    <div class="lg:w-1/3 order-2 lg:order-1">
+                        <!-- Suggestion Buttons - Disabled per request -->
+                        <!--
                         <div id="initial-suggestions" class="suggestions-container">
                             <h3 class="font-semibold text-black dark:text-white mb-4 flex items-center gap-2">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-purple-500">
@@ -1938,9 +1928,9 @@
                                 Try asking me:
                             </h3>
                             <div id="suggestion-grid" class="grid grid-cols-1 gap-3">
-                                <!-- Will be populated dynamically -->
                             </div>
                         </div>
+                        -->
 
                         <!-- Weather Card -->
                         <div id="weather-card" class="hidden weather-card-enhanced text-white p-6 shadow-lg mt-6">
@@ -1974,10 +1964,23 @@
                             </div>
                             <div id="reminders-list" class="space-y-3"></div>
                         </div>
+
+                        <!-- Saved Items -->
+                        <div id="favorites-section" class="hidden bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-slate-800 dark:to-slate-700 p-6 rounded-2xl mt-6 border border-amber-100 dark:border-slate-600">
+                            <div class="flex items-center gap-3 mb-4">
+                                <div class="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-xl">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" class="text-amber-600 dark:text-amber-400">
+                                        <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path>
+                                    </svg>
+                                </div>
+                                <h2 class="text-xl font-bold text-gray-800 dark:text-white">Saved</h2>
+                            </div>
+                            <div id="favorites-list" class="space-y-2"></div>
+                        </div>
                     </div>
 
                     <!-- Right Column: Chat -->
-                    <div class="lg:w-3/5 order-1 lg:order-2">
+                    <div class="lg:w-2/3 order-1 lg:order-2">
                         <!-- Chat History - Claude/ChatGPT style compact view -->
                         <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height">
                             <!-- Welcome message -->
@@ -2049,23 +2052,9 @@
                 </button>
             </div>
             <!-- Footer controls -->
+            <p id="footer-disclaimer" class="mt-2 w-full text-xs text-gray-400 font-medium text-center">JARVIS can make mistakes. Check important info.</p>
             <div class="mt-2 space-y-2">
-                <p id="footer-disclaimer" class="w-full text-xs text-gray-400 font-medium text-center">JARVIS can make mistakes. Check important info.</p>
-
-                <div class="grid grid-cols-2 sm:grid-cols-[1fr_1.65fr_0.95fr_1.05fr] gap-3">
-                <div class="relative">
-                    <select id="travel-mode-lock" onchange="setTravelModeLock(this.value)" class="w-full h-11 pl-4 pr-12 appearance-none rounded-xl text-sm font-semibold border border-purple-300 bg-white/90 text-purple-700 dark:bg-slate-800 dark:text-purple-200 dark:border-purple-700">
-                        <option value="default">Mode: Default</option>
-                        <option value="solo">Mode: Solo</option>
-                        <option value="family">Mode: Family</option>
-                        <option value="kids">Mode: Kids</option>
-                        <option value="elder">Mode: Elder-friendly</option>
-                        <option value="wheelchair">Mode: Wheelchair</option>
-                    </select>
-                    <svg class="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-500 dark:text-purple-300" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M6 8l4 4 4-4"></path>
-                    </svg>
-                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div class="relative">
                     <select id="support-mode-lock" onchange="setSupportModeLock(this.value)" class="w-full h-11 pl-4 pr-12 appearance-none rounded-xl text-sm font-semibold border border-emerald-300 bg-white/90 text-emerald-700 dark:bg-slate-800 dark:text-emerald-200 dark:border-emerald-700">
                         <option value="balanced">Support: Balanced</option>
@@ -2073,6 +2062,16 @@
                         <option value="debate">Support: Debate</option>
                     </select>
                     <svg class="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500 dark:text-emerald-300" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M6 8l4 4 4-4"></path>
+                    </svg>
+                </div>
+                <div class="relative">
+                    <select id="response-length-control" onchange="setResponseLength(this.value)" class="w-full h-11 pl-4 pr-12 appearance-none rounded-xl text-sm font-semibold border border-blue-300 bg-white/90 text-blue-700 dark:bg-slate-800 dark:text-blue-200 dark:border-blue-700">
+                        <option value="short">Length: Short</option>
+                        <option value="normal">Length: Normal</option>
+                        <option value="detailed">Length: Detailed</option>
+                    </select>
+                    <svg class="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 dark:text-blue-300" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M6 8l4 4 4-4"></path>
                     </svg>
                 </div>
@@ -2116,18 +2115,15 @@
 <script>
 
 const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'}; 
-const TRAVEL_MODE_HINTS = {
-  default: '',
-  solo: 'solo traveler, fast and flexible options',
-  family: 'family-friendly places, safer and comfortable options',
-  kids: 'kid-friendly places with easy access and low wait times',
-  elder: 'elder-friendly with less walking, easy seating, and comfort',
-  wheelchair: 'wheelchair-accessible routes and venues'
-};
 const SUPPORT_MODE_HINTS = {
     balanced: 'Be clear, practical, and warm. Keep a neutral supportive tone.',
     supportive: 'Use an empathetic and motivating tone while staying concrete and direct.',
     debate: 'Use claim, evidence, and rebuttal structure. Be precise, direct, and avoid vague language.'
+};
+const RESPONSE_LENGTH_HINTS = {
+    short: 'Respond in 2-4 concise sentences unless a list is requested.',
+    normal: 'Respond with practical detail and clear structure.',
+    detailed: 'Respond with more depth, examples, and actionable detail.'
 };
 
 function getTrustLabel(trustLevel) { 
@@ -2136,25 +2132,12 @@ function getTrustLabel(trustLevel) {
     : '?"? Generated (structure only)'; 
 } 
 
-function getTravelModeHint() {
-    return TRAVEL_MODE_HINTS[window.travelModeLock || 'default'] || '';
-}
-
-function getTravelModeSearchSuffix() {
-    const mode = window.travelModeLock || 'default';
-    const suffixMap = {
-        default: '',
-        solo: ' solo traveler',
-        family: ' family friendly',
-        kids: ' kids friendly',
-        elder: ' elder friendly easy access',
-        wheelchair: ' wheelchair accessible'
-    };
-    return suffixMap[mode] || '';
-}
-
 function getSupportModeHint() {
     return SUPPORT_MODE_HINTS[window.supportModeLock || 'balanced'] || SUPPORT_MODE_HINTS.balanced;
+}
+
+function getResponseLengthHint() {
+    return RESPONSE_LENGTH_HINTS[window.responseLength || 'normal'] || RESPONSE_LENGTH_HINTS.normal;
 }
 
 function isVerifiedPlace(obj) {
@@ -2817,6 +2800,53 @@ function copyToClipboard(text) {
     }).catch(err => {
         showTemporaryMessage('[Error] Failed to copy. Please try again.');
     });
+}
+
+function copyAssistantPlan(button) {
+    const raw = button?.dataset?.copyText || '';
+    const text = decodeURIComponent(raw);
+    if (!text) return;
+    copyToClipboard(text);
+}
+
+function saveAssistantMessage(button) {
+    const raw = button?.dataset?.favText || '';
+    const text = decodeURIComponent(raw);
+    if (!text) return;
+    addFavorite(text);
+}
+
+function retryLastRequest() {
+    const last = window.__lastUserMessage;
+    if (!last) return;
+    const input = document.getElementById('text-input');
+    if (!input) return;
+    input.value = last;
+    toggleSendButton();
+    sendTextInput();
+}
+
+function showFailureFallbackCard(userMessage) {
+    const query = encodeURIComponent(userMessage || 'assistant help');
+    const mapsUrl = `https://www.google.com/maps/search/${query}`;
+    const searchUrl = `https://www.google.com/search?q=${query}`;
+    const chatContainer = document.getElementById('chat-container');
+    if (!chatContainer) return;
+
+    const card = document.createElement('div');
+    card.className = 'flex justify-start fade-in';
+    card.innerHTML = `
+        <div class="max-w-2xl w-full p-3 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700">
+            <p class="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-2">I hit a temporary issue. Try one of these:</p>
+            <div class="flex flex-wrap gap-2">
+                <button onclick="retryLastRequest()" class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold">Retry</button>
+                <a href="${mapsUrl}" target="_blank" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold">Open Maps</a>
+                <a href="${searchUrl}" target="_blank" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold">Web Search</a>
+            </div>
+        </div>
+    `;
+    chatContainer.appendChild(card);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
 // ============ EMAIL FUNCTIONALITY ============
@@ -3758,12 +3788,9 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
 
         window.__lastUserMessage = userMessage; 
 
-        const isTravelMessage = /\b(hotel|hotels|restaurant|restaurants|trip|itinerary|travel|transport|stay|food|visit|things to do|get around)\b/i.test(userMessage);
-        const modeHint = getTravelModeHint();
         const supportHint = getSupportModeHint();
-        const effectiveMessage = (isTravelMessage && modeHint)
-            ? `${userMessage}\n\nTravel mode lock: ${modeHint}. Prioritize this in your answer.\n\nSupport mode lock: ${supportModeLock || 'balanced'}. ${supportHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`
-            : `${userMessage}\n\nSupport mode lock: ${supportModeLock || 'balanced'}. ${supportHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`;
+        const responseHint = getResponseLengthHint();
+        const effectiveMessage = `${userMessage}\n\nSupport mode lock: ${supportModeLock || 'balanced'}. ${supportHint}\nResponse length: ${responseLength || 'normal'}. ${responseHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`;
 
          
         const response = await fetch('/api/chat-groq', { 
@@ -3789,6 +3816,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
     } catch (error) {
         
         showError(`AI request failed: ${error.message}`);
+        showFailureFallbackCard(userMessage);
         return {
             response: "I'm having trouble connecting to my AI. Please try again in a moment!",
             intent: 'error'
@@ -3851,6 +3879,7 @@ async function handleNameCorrection(text) {
         let waitingForReminder = false;
         let reminderFlowStage = null; // null | 'task' | 'time'
         let pendingReminderTask = '';
+        let reminderHeartbeat = null;
         let chatHistory = [];
         let micPermissionGranted = false;
         
@@ -3862,9 +3891,12 @@ async function handleNameCorrection(text) {
         let lastBudgetPlan = null;
         let lastVerifiedPlaces = null; 
         let lastResolvedTravelLocation = null; 
-        let travelModeLock = 'default';
         let supportModeLock = 'balanced';
+        let responseLength = 'normal';
         let converseMode = false;
+        let favorites = [];
+        let inputHistory = [];
+        let inputHistoryIndex = -1;
 
         // Noise filter settings for public places
         let noiseFilterEnabled = false;
@@ -3927,7 +3959,14 @@ async function handleNameCorrection(text) {
             loadUserData(); 
             loadNoiseFilterSettings(); 
             loadAssistantModes();
+            loadFavorites();
+            setupInputHistoryNavigation();
+            window.addEventListener('online', updateOnlineStatus);
+            window.addEventListener('offline', updateOnlineStatus);
+            updateOnlineStatus();
             checkReminders(); 
+            if (reminderHeartbeat) clearInterval(reminderHeartbeat);
+            reminderHeartbeat = setInterval(checkReminders, 30000);
             
             
             // Always show suggestions for all users
@@ -4080,22 +4119,26 @@ async function handleNameCorrection(text) {
                         <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">What I Can Do</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p><strong>Travel Planning:</strong> "Plan a 3-day trip to Tokyo" or "Hotels in Paris with vegetarian food"</p>
-                                <p><strong>Food Recommendations:</strong> "Best restaurants in Rome" or "Biryani places in Chennai"</p>
-                                <p><strong>Transport Info:</strong> "How to get around London?" or "Transport in Mumbai"</p>
-                                <p><strong>Weather:</strong> "What's the weather?" or "Will it rain in Seattle tomorrow?"</p>
-                                <p><strong>Shopping Lists:</strong> "Add 2 pounds of chicken to my list" or "Show my shopping list"</p>
-                                <p><strong>Reminders:</strong> Say "Remind me" and I will ask what and when.</p>
-                                <p><strong>Translator:</strong> "Speak in Tamil" or "Translate to Hindi"</p>
+                                <p><strong>Travel Planning:</strong> "Plan a 3-day trip to Tokyo"</p>
+                                <p><strong>Food Recommendations:</strong> "Best restaurants in Rome"</p>
+                                <p><strong>Transport Info:</strong> "How to get around London?"</p>
+                                <p><strong>Weather:</strong> "What's the weather in Seattle tomorrow?"</p>
+                                <p><strong>Shopping Lists:</strong> "Add 2 pounds of chicken to my shopping list"</p>
+                                <p><strong>Reminders:</strong> "Remind me to call mom at 5 PM"</p>
+                                <p><strong>Translator:</strong> "Speak in Tamil" or "Translate this to Hindi"</p>
+                                <p><strong>Budget Planner:</strong> "budget trip to Seattle for 3 days under 900 USD"</p>
+                                <p><strong>Calendar Sync:</strong> "sync to calendar" after a budget trip plan</p>
                             </div>
                         </section>
 
                         <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">New Features</h3>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">How to Prompt Better</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p><strong>Budget Trip Planner:</strong> "budget trip to Seattle for 3 days under 900 USD"</p>
-                                <p><strong>Calendar Sync:</strong> After creating a budget plan, say "sync to calendar"</p>
-                                <p><strong>Phone Pairing for Reminders:</strong> Coming soon</p>
+                                <p><strong>Use place + goal + constraints:</strong> City, dates, budget, food preference, mobility needs.</p>
+                                <p><strong>Strong example:</strong> "Plan 2 days in Boston under $500, kid-friendly, near public transport."</p>
+                                <p><strong>Weak example:</strong> "Plan Boston trip."</p>
+                                <p><strong>For reminders:</strong> Include task and time in one line when possible.</p>
+                                <p><strong>Example:</strong> "Remind me to take medicine tomorrow at 9 PM."</p>
                             </div>
                         </section>
                         
@@ -4123,11 +4166,6 @@ async function handleNameCorrection(text) {
                                     <p class="font-semibold text-gray-900 dark:text-white">Get GPS Directions:</p>
                                     <p class="text-gray-600 dark:text-gray-400">Hotel recommendations are based on web search results!</p>
                                 </div>
-                                
-                                <div>
-                                    <p class="font-semibold text-gray-900 dark:text-white">Dynamic Suggestions:</p>
-                                    <p class="text-gray-600 dark:text-gray-400">After each response, check the "Try asking me" box - it updates with relevant follow-up questions!</p>
-                                </div>
                             </div>
                         </section>
                         
@@ -4145,7 +4183,7 @@ async function handleNameCorrection(text) {
                                 <p><strong>Web Search:</strong> I can enrich recommendations with live search context.</p>
                                 <p><strong>Location-Aware:</strong> I adapt transport suggestions by city type.</p>
                                 <p><strong>Regional Food:</strong> I suggest cuisine ideas by destination.</p>
-                                <p><strong>Context Suggestions:</strong> I update follow-up prompts based on your latest reply.</p>
+                                <p><strong>Converse Mode:</strong> Hands-free conversation with auto speaking.</p>
                             </div>
                         </section>
 
@@ -4237,32 +4275,140 @@ async function handleNameCorrection(text) {
             } catch (e) {}
         }
 
+        function updateOnlineStatus() {
+            const banner = document.getElementById('offline-banner');
+            if (!banner) return;
+            banner.classList.toggle('hidden', navigator.onLine);
+        }
+
+        function getFavoritesStorageKey() {
+            const safeUserName = (userName || 'default_user').replace(/[^a-zA-Z0-9]/g, '_');
+            return `unify_favorites_${safeUserName}`;
+        }
+
+        function loadFavorites() {
+            try {
+                const stored = localStorage.getItem(getFavoritesStorageKey());
+                favorites = stored ? JSON.parse(stored) : [];
+            } catch (e) {
+                favorites = [];
+            }
+            renderFavorites();
+        }
+
+        function saveFavorites() {
+            try {
+                localStorage.setItem(getFavoritesStorageKey(), JSON.stringify(favorites));
+            } catch (e) {}
+        }
+
+        function addFavorite(content) {
+            const trimmed = String(content || '').trim();
+            if (!trimmed) return;
+            const item = {
+                id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+                text: trimmed.substring(0, 4000),
+                createdAt: new Date().toISOString()
+            };
+            favorites.unshift(item);
+            if (favorites.length > 30) favorites = favorites.slice(0, 30);
+            saveFavorites();
+            renderFavorites();
+            showTemporaryMessage('Saved to favorites.');
+        }
+
+        function removeFavorite(id) {
+            favorites = favorites.filter(f => f.id !== id);
+            saveFavorites();
+            renderFavorites();
+        }
+
+        function copyFavorite(id) {
+            const item = favorites.find(f => f.id === id);
+            if (!item) return;
+            copyToClipboard(item.text);
+        }
+
+        function renderFavorites() {
+            const section = document.getElementById('favorites-section');
+            const list = document.getElementById('favorites-list');
+            if (!section || !list) return;
+
+            if (!favorites.length) {
+                section.classList.add('hidden');
+                list.innerHTML = '';
+                return;
+            }
+
+            section.classList.remove('hidden');
+            list.innerHTML = favorites.map(item => {
+                const preview = escapeHtml(item.text.length > 100 ? item.text.slice(0, 100) + '...' : item.text);
+                return `
+                    <div class="p-3 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-amber-200 dark:border-slate-600">
+                        <p class="text-xs text-gray-700 dark:text-gray-300 mb-2">${preview}</p>
+                        <div class="flex gap-2">
+                            <button onclick="copyFavorite('${item.id}')" class="px-2 py-1 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold">Copy</button>
+                            <button onclick="removeFavorite('${item.id}')" class="px-2 py-1 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold">Remove</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function setupInputHistoryNavigation() {
+            const input = document.getElementById('text-input');
+            if (!input) return;
+            input.addEventListener('keydown', (event) => {
+                if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+                if (!inputHistory.length) return;
+
+                event.preventDefault();
+                if (event.key === 'ArrowUp') {
+                    if (inputHistoryIndex < inputHistory.length - 1) {
+                        inputHistoryIndex++;
+                    }
+                } else if (event.key === 'ArrowDown') {
+                    if (inputHistoryIndex > 0) {
+                        inputHistoryIndex--;
+                    } else {
+                        inputHistoryIndex = -1;
+                        input.value = '';
+                        toggleSendButton();
+                        return;
+                    }
+                }
+                const idx = inputHistory.length - 1 - inputHistoryIndex;
+                input.value = inputHistory[idx] || '';
+                toggleSendButton();
+            });
+        }
+
         function saveAssistantModes() {
             try {
                 localStorage.setItem('jarvis_assistant_modes', JSON.stringify({
-                    travelModeLock,
                     supportModeLock,
+                    responseLength,
                     converseMode
                 }));
             } catch (e) {}
         }
 
         function updateAssistantModeUI() {
-            const select = document.getElementById('travel-mode-lock');
-            if (select) {
-                select.value = travelModeLock || 'default';
-            }
             const supportSelect = document.getElementById('support-mode-lock');
             if (supportSelect) {
                 supportSelect.value = supportModeLock || 'balanced';
+            }
+            const lengthSelect = document.getElementById('response-length-control');
+            if (lengthSelect) {
+                lengthSelect.value = responseLength || 'normal';
             }
             const btn = document.getElementById('converse-mode-btn');
             if (btn) {
                 const on = !!converseMode;
                 btn.textContent = `Converse: ${on ? 'On' : 'Off'}`;
                 btn.className = on
-                    ? 'w-full h-10 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-all'
-                    : 'w-full h-10 px-3 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-semibold transition-all';
+                    ? 'w-full h-11 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-all'
+                    : 'w-full h-11 px-4 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-sm font-semibold transition-all';
                 btn.setAttribute('aria-pressed', on ? 'true' : 'false');
                 btn.title = on ? 'Converse mode is active' : 'Converse mode is inactive';
             }
@@ -4270,20 +4416,20 @@ async function handleNameCorrection(text) {
         }
 
         function loadAssistantModes() {
-            travelModeLock = 'default';
             supportModeLock = 'balanced';
+            responseLength = 'normal';
             converseMode = false;
             try {
                 const saved = localStorage.getItem('jarvis_assistant_modes');
                 if (saved) {
                     const parsed = JSON.parse(saved);
-                    travelModeLock = parsed.travelModeLock || 'default';
                     supportModeLock = parsed.supportModeLock || 'balanced';
+                    responseLength = parsed.responseLength || 'normal';
                     converseMode = typeof parsed.converseMode === 'boolean' ? parsed.converseMode : false;
                 }
             } catch (e) {}
-            window.travelModeLock = travelModeLock;
             window.supportModeLock = supportModeLock;
+            window.responseLength = responseLength;
             updateAssistantModeUI();
             if (converseMode) {
                 showConverseToast(true, true);
@@ -4292,18 +4438,6 @@ async function handleNameCorrection(text) {
                     setTimeout(() => startListening(), 160);
                 }
             }
-        }
-
-        function setTravelModeLock(mode) {
-            travelModeLock = mode || 'default';
-            window.travelModeLock = travelModeLock;
-            saveAssistantModes();
-            updateAssistantModeUI();
-            const hint = getTravelModeHint();
-            const msg = hint
-                ? `Travel mode locked: ${travelModeLock}. I will prioritize ${hint}.`
-                : 'Travel mode reset to default.';
-            addChatMessage(msg, false);
         }
 
         function setSupportModeLock(mode) {
@@ -4317,6 +4451,15 @@ async function handleNameCorrection(text) {
                 debate: 'Support mode set to Debate. I will answer with sharper point-by-point reasoning.'
             };
             addChatMessage(msgMap[supportModeLock] || msgMap.balanced, false);
+        }
+
+        function setResponseLength(mode) {
+            responseLength = ['short', 'normal', 'detailed'].includes(mode) ? mode : 'normal';
+            window.responseLength = responseLength;
+            saveAssistantModes();
+            updateAssistantModeUI();
+            const label = responseLength.charAt(0).toUpperCase() + responseLength.slice(1);
+            addChatMessage(`Response length set to ${label}.`, false);
         }
 
         function toggleConverseMode() {
@@ -4468,6 +4611,17 @@ async function handleNameCorrection(text) {
                         <div class="chat-bubble-jarvis px-4 py-3 flex-1 overflow-hidden ${hasMap ? 'map-message' : ''}">
                             <div class="text-sm ${textClass} typewriter-text leading-relaxed"></div>
                         </div>
+                        <button onclick="copyAssistantPlan(this)" data-copy-text="${encodeURIComponent(textForSpeech)}" class="flex-shrink-0 w-8 h-8 rounded-full bg-sky-500 hover:bg-sky-600 text-white transition-all shadow-md hover:shadow-lg flex items-center justify-center" title="Copy">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
+                        <button onclick="saveAssistantMessage(this)" data-fav-text="${encodeURIComponent(textForSpeech)}" class="flex-shrink-0 w-8 h-8 rounded-full bg-amber-500 hover:bg-amber-600 text-white transition-all shadow-md hover:shadow-lg flex items-center justify-center" title="Save to favorites">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5">
+                                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path>
+                            </svg>
+                        </button>
                         <button data-speech-id="${speechId}" onclick="toggleSpeakById(this.dataset.speechId, this)" class="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white transition-all shadow-md hover:shadow-lg speaker-btn flex items-center justify-center">
                             <svg class="play-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
@@ -4539,6 +4693,12 @@ async function handleNameCorrection(text) {
             const input = document.getElementById('text-input');
             const text = input.value.trim();
             if (text) {
+                window.__lastUserMessage = text;
+                if (!inputHistory.length || inputHistory[inputHistory.length - 1] !== text) {
+                    inputHistory.push(text);
+                    if (inputHistory.length > 50) inputHistory = inputHistory.slice(-50);
+                }
+                inputHistoryIndex = -1;
                 addChatMessage(text, true);
                 
                 if (waitingForName) {
@@ -5583,21 +5743,20 @@ function buildTransportMessage(locationInfo) {
     const countryCode = (locationInfo?.countryCode || '').toUpperCase(); 
     const isMajorCity = !!locationInfo?.isMajorCity; 
     const isSmallTown = !!locationInfo?.isSmallTown; 
-    const modeNote = getTravelModeHint() ? `\n[Tip] Mode lock: ${travelModeLock}` : '';
 
     if (isMajorCity) {
-        return `[Bus] **Transport in ${city}**\n\n${city} has strong public transport and ride options.\n\n[Metro] [Metro/Subway stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(city)})\n[Bus] [Bus stops and routes](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(city)})\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Taxi] [Ride options](https://www.google.com/search?q=${countryCode === 'IN' ? 'uber+ola+' : 'uber+lyft+'}${encodeURIComponent(city)})${modeNote}`; 
+        return `[Bus] **Transport in ${city}**\n\n${city} has strong public transport and ride options.\n\n[Metro] [Metro/Subway stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(city)})\n[Bus] [Bus stops and routes](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(city)})\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Taxi] [Ride options](https://www.google.com/search?q=${countryCode === 'IN' ? 'uber+ola+' : 'uber+lyft+'}${encodeURIComponent(city)})`; 
     } 
  
     if (countryCode === 'IN' && !isMajorCity) { 
-        return `[Bus] **Transport in ${city}**\n\nFor smaller towns, use:\n- Local Bus for low-cost travel\n- Auto-rickshaws for quick local rides\n- Car/taxi if you want comfortable travel\n\n[Map] [Bus stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(city)})\n[Search] [Local travel options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(city)})${modeNote}`; 
+        return `[Bus] **Transport in ${city}**\n\nFor smaller towns, use:\n- Local Bus for low-cost travel\n- Auto-rickshaws for quick local rides\n- Car/taxi if you want comfortable travel\n\n[Map] [Bus stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(city)})\n[Search] [Local travel options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(city)})`; 
     } 
  
     if (isSmallTown) { 
-        return `[Bus] **Transport in ${city}**\n\nFor smaller towns, use:\n- Local bus/train where available\n- Local taxi or rideshare\n- Car rental for comfortable travel\n\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Search] [Local travel options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(city)})${modeNote}`; 
+        return `[Bus] **Transport in ${city}**\n\nFor smaller towns, use:\n- Local bus/train where available\n- Local taxi or rideshare\n- Car rental for comfortable travel\n\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Search] [Local travel options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(city)})`; 
     } 
  
-    return `[Bus] **Transport in ${city}**\n\nRecommended options:\n- Local bus or train where available\n- Uber/Lyft or local taxi apps\n- Car rental for flexible travel\n\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Taxi] [Ride options](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(city)})${modeNote}`; 
+    return `[Bus] **Transport in ${city}**\n\nRecommended options:\n- Local bus or train where available\n- Uber/Lyft or local taxi apps\n- Car rental for flexible travel\n\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Taxi] [Ride options](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(city)})`; 
 } 
 
 function askTransportSuggestionFor(cityName) {
@@ -5646,18 +5805,6 @@ function isHighRiskMentalHealth(text) {
                                     (lower.includes('add') && lower.includes('list'));
             
             const isReminderQuery = lower.includes('remind') || lower.includes('reminder');
-            const isPhoneNotificationQuery =
-                lower.includes('notification') ||
-                lower.includes('pair phone') ||
-                lower.includes('pairing') ||
-                lower.includes('phone alert');
-
-            if (isPhoneNotificationQuery && !isReminderQuery) {
-                const soonMsg = 'Phone notification pairing is coming soon.';
-                addChatMessage(soonMsg, false);
-                speak('Phone notification pairing is coming soon.');
-                return;
-            }
             
             
             if (!isWeatherQuery && !waitingForLocation) {
@@ -5666,7 +5813,7 @@ function isHighRiskMentalHealth(text) {
                     weatherCard.classList.add('hidden');
                 }
 
-                // Bring back "Try asking me" once user moves away from weather flow.
+                // Suggestions are disabled; keep this no-op if panel is absent.
                 const suggestionsPanel = document.getElementById('initial-suggestions');
                 if (suggestionsPanel && suggestionsPanel.classList.contains('hidden')) {
                     suggestionsPanel.classList.remove('hidden');
@@ -5757,12 +5904,6 @@ Do not use repetitive filler or generic wording.`;
                     if (converseMode) toggleConverseMode();
                     return;
                 }
-            }
-
-            const modeMatch = cleanText.match(/\b(?:set|change|switch)\s+travel\s+mode\s+(default|solo|family|kids|elder|wheelchair)\b/i);
-            if (modeMatch) {
-                setTravelModeLock(modeMatch[1].toLowerCase());
-                return;
             }
 
             const supportModeMatch = cleanText.match(/\b(?:set|change|switch)\s+support\s+mode\s+(balanced|supportive|debate)\b/i);
@@ -6459,8 +6600,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             if (isRestaurantMatch || isHotelMatch || isTransportMatch) { 
 
                 const queryType = isHotelMatch ? 'hotel' : (isTransportMatch ? 'transport' : 'food'); 
-                const modeSuffix = getTravelModeSearchSuffix();
-                const modeHint = getTravelModeHint();
                 
                 // Extract location
                 let cityName = '';
@@ -6538,7 +6677,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     }
                     // Show Google Maps embed - FREE, no API needed!
                     if (queryType === 'hotel') { 
-                        const searchQuery = encodeURIComponent(`hotels in ${fullLocation || cityName}${modeSuffix}`); 
+                        const searchQuery = encodeURIComponent(`hotels in ${fullLocation || cityName}`); 
                         const hotelMsg = `[Hotel] **Hotels in ${cityName}** 
 
 <div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
@@ -6553,8 +6692,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 </iframe>
 </div>
 
-[Map] Click on markers to see ratings, reviews & directions!
-${modeHint ? `\n[Tip] Mode lock: ${travelModeLock}` : ''}`; 
+[Map] Click on markers to see ratings, reviews & directions!`; 
 
                         addChatMessage(hotelMsg, false);
                         speak(`Here are hotels in ${cityName}. You can see them on the map!`);
@@ -6601,9 +6739,9 @@ ${modeHint ? `\n[Tip] Mode lock: ${travelModeLock}` : ''}`;
                     const locationCity = resolved?.cityName || cityName; 
                     setLastResolvedTravelLocation(finalLocation || locationCity); 
 
-                    const mapsQuery = encodeURIComponent(`restaurants in ${finalLocation}${modeSuffix}`); 
-                    const googleQuery = encodeURIComponent(`best restaurants in ${finalLocation}${modeSuffix}`); 
-                    const tripadvisorQuery = encodeURIComponent(`${finalLocation} restaurants tripadvisor${modeSuffix}`); 
+                    const mapsQuery = encodeURIComponent(`restaurants in ${finalLocation}`); 
+                    const googleQuery = encodeURIComponent(`best restaurants in ${finalLocation}`); 
+                    const tripadvisorQuery = encodeURIComponent(`${finalLocation} restaurants tripadvisor`); 
                     const mapsSearchUrl = `https://www.google.com/maps/search/${mapsQuery}`; 
                     const googleSearchUrl = `https://www.google.com/search?q=${googleQuery}`; 
                     const tripadvisorSearchUrl = `https://www.google.com/search?q=${tripadvisorQuery}`; 
@@ -6613,7 +6751,7 @@ ${modeHint ? `\n[Tip] Mode lock: ${travelModeLock}` : ''}`;
                         tripadvisorSearchUrl 
                     ]); 
 
-                    const foodMsg = `[Food] **Top restaurant picks near ${locationCity}**\n\n<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">\n<iframe src="https://maps.google.com/maps?q=restaurants+in+${mapsQuery}&output=embed" width="100%" height="320" style="border:0; display:block;" allowfullscreen="" loading="lazy"></iframe>\n</div>\n\nI can suggest good restaurants using these live links:\n\n1. [Open Google Maps list](${mapsSearchUrl})\n2. [Quick Google search](${googleSearchUrl})\n3. [TripAdvisor search](${tripadvisorSearchUrl})\n\n${modeHint ? `[Tip] Mode lock: ${travelModeLock}\n` : ''}**Sources looked at (exact links):**\n${sourceLinksBlock}`;
+                    const foodMsg = `[Food] **Top restaurant picks near ${locationCity}**\n\n<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">\n<iframe src="https://maps.google.com/maps?q=restaurants+in+${mapsQuery}&output=embed" width="100%" height="320" style="border:0; display:block;" allowfullscreen="" loading="lazy"></iframe>\n</div>\n\nI can suggest good restaurants using these live links:\n\n1. [Open Google Maps list](${mapsSearchUrl})\n2. [Quick Google search](${googleSearchUrl})\n3. [TripAdvisor search](${tripadvisorSearchUrl})\n\n**Sources looked at (exact links):**\n${sourceLinksBlock}`;
                     addChatMessage(foodMsg, false);
                     speak(`Here are good restaurant options near ${locationCity}.`);
                     saveToHistory(text, `Restaurant search for ${finalLocation}`);
@@ -7073,11 +7211,27 @@ ${sourceLinksBlock}
             if (!('Notification' in window)) return;
             if (Notification.permission !== 'granted') return;
 
-            const n = new Notification('JARVIS Reminder', {
+            const title = 'JARVIS Reminder';
+            const options = {
                 body: reminder.text,
                 tag: `jarvis-reminder-${reminder.id}`,
                 requireInteraction: true
-            });
+            };
+
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready
+                    .then(registration => registration.showNotification(title, options))
+                    .catch(() => {
+                        const n = new Notification(title, options);
+                        n.onclick = () => {
+                            window.focus();
+                            n.close();
+                        };
+                    });
+                return;
+            }
+
+            const n = new Notification(title, options);
             n.onclick = () => {
                 window.focus();
                 n.close();
@@ -7251,9 +7405,7 @@ ${sourceLinksBlock}
                 notification.classList.remove('hidden');
             }
 
-            if (document.hidden) {
-                showSystemReminderNotification(reminder);
-            }
+            showSystemReminderNotification(reminder);
 
             speak(`Reminder: ${reminder.text}`);
         }
@@ -7882,12 +8034,13 @@ ${sourceLinksBlock}
         }
         
         function speak(text, force = false) { 
-             
-            if (!autoSpeak && !force) return; 
+            const shouldAutoSpeak = autoSpeak || converseMode;
+            if (!shouldAutoSpeak && !force) return; 
              
             const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim(); 
 
             if (converseMode && isListening && continuousRecognition) {
+                isListening = false;
                 try { continuousRecognition.stop(); } catch (e) {}
             }
             isAssistantSpeaking = true;
@@ -7899,7 +8052,12 @@ ${sourceLinksBlock}
                     pitch: 0.9,
                     rate: 0.95,
                     volume: 1,
-                    onend: () => { isAssistantSpeaking = false; }
+                    onend: () => {
+                        isAssistantSpeaking = false;
+                        if (converseMode && listeningRequested && !isListening && !isProcessing) {
+                            setTimeout(() => startListening(), 180);
+                        }
+                    }
                 }); 
                 return; 
             } 
@@ -7944,6 +8102,9 @@ ${sourceLinksBlock}
                         currentSpeakerButton.querySelector('.play-icon')?.classList.remove('hidden');
                         currentSpeakerButton.querySelector('.stop-icon')?.classList.add('hidden');
                         currentSpeakerButton = null;
+                    }
+                    if (converseMode && listeningRequested && !isListening && !isProcessing) {
+                        setTimeout(() => startListening(), 180);
                     }
                 };
                 
@@ -8193,25 +8354,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
-/*
-1. TYPING INDICATOR:
-   - Call showTypingIndicator() before AI response
-   - Call hideTypingIndicator() before showing response
-
-2. DELETE MESSAGES:
-   - Already integrated in addChatMessage() with delete button
-   - Shows on hover over user messages
-
-3. CONVERSATION HISTORY:
-   - Call saveToHistory(userMsg, aiMsg) after each exchange
-   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
-   - Search, export, and clear functions included
-
-4. ERROR FEEDBACK:
-   - Call showError("Error message") instead of addChatMessage for errors
-   - Visual shake animation + auto-dismiss
-*/
 
 </script>
 </body>
