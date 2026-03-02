@@ -22,10 +22,16 @@
             animation: waveform 0.8s ease-in-out infinite;
         }
         body.dark {
-            background: linear-gradient(135deg, #000000 0%, #0a1929 50%, #001f3f 100%) !important;
+            background:
+                radial-gradient(circle at 15% 15%, rgba(14, 165, 233, 0.16) 0%, transparent 35%),
+                radial-gradient(circle at 85% 85%, rgba(56, 189, 248, 0.14) 0%, transparent 32%),
+                linear-gradient(135deg, #020617 0%, #0b1220 48%, #0f172a 100%) !important;
         }
         body.light {
-            background: linear-gradient(to bottom right, #0a1929, #1e3a5f, #0d47a1) !important;
+            background:
+                radial-gradient(circle at 18% 18%, rgba(125, 211, 252, 0.28) 0%, transparent 32%),
+                radial-gradient(circle at 88% 82%, rgba(196, 181, 253, 0.26) 0%, transparent 30%),
+                linear-gradient(145deg, #f1f5f9 0%, #e2e8f0 48%, #cbd5e1 100%) !important;
         }
         
         /* ========== JARVIS INTRO ANIMATION ========== */
@@ -474,59 +480,62 @@
         /* Light Switch Styles - Horizontal */
         .light-switch-container {
             position: relative;
-            width: 90px;
-            height: 50px;
-            background: linear-gradient(145deg, #e6e6e6, #ffffff);
-            border-radius: 6px;
-            box-shadow: 0 3px 8px rgba(0,0,0,0.1),
-                        inset 0 1px 0 rgba(255,255,255,0.8);
-            padding: 8px;
+            width: 76px;
+            height: 40px;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.45);
+            background: rgba(255, 255, 255, 0.82);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+            padding: 3px;
             display: flex;
-            flex-direction: row;
             align-items: center;
             justify-content: center;
         }
 
         .light-switch {
-            width: 52px;
-            height: 28px;
-            background: #fff;
-            border-radius: 3px;
+            width: 100%;
+            height: 100%;
+            border-radius: 999px;
             position: relative;
             cursor: pointer;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
-            transition: all 0.3s ease;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            transition: all 0.28s ease;
         }
 
         .switch-toggle {
-            width: 24px;
-            height: 24px;
-            background: linear-gradient(145deg, #f0f0f0, #d9d9d9);
-            border-radius: 2px;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
             position: absolute;
-            left: 2px;
-            top: 2px;
-            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-            box-shadow: 0 2px 3px rgba(0,0,0,0.3),
-                        inset 0 1px 0 rgba(255,255,255,0.8);
+            left: 4px;
+            top: 4px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: linear-gradient(145deg, #f8fafc, #dbeafe);
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.28);
         }
 
         .switch-toggle::before {
             content: '';
             position: absolute;
-            width: 2px;
-            height: 12px;
-            background: #999;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            border-radius: 1px;
+            inset: 7px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            opacity: 0.95;
+        }
+
+        .light-switch.on {
+            background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
         }
 
         .light-switch.on .switch-toggle {
-            left: 26px;
-            top: 2px;
-            background: linear-gradient(145deg, #d9d9d9, #c9c9c9);
+            left: calc(100% - 34px);
+            background: linear-gradient(145deg, #e2e8f0, #cbd5e1);
+        }
+
+        .light-switch.on .switch-toggle::before {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
         }
         
         /* Tube Light */
@@ -1057,23 +1066,25 @@
             }
             
             .light-switch-container {
-                width: 80px;
-                height: 45px;
-                padding: 6px;
+                width: 68px;
+                height: 36px;
+                padding: 3px;
             }
 
             .light-switch {
-                width: 48px;
-                height: 26px;
+                width: 100%;
+                height: 100%;
             }
 
             .switch-toggle {
-                width: 22px;
-                height: 22px;
+                width: 26px;
+                height: 26px;
+                left: 3px;
+                top: 2px;
             }
 
             .light-switch.on .switch-toggle {
-                left: 24px;
+                left: calc(100% - 29px);
                 top: 2px;
             }
         }
@@ -1621,7 +1632,9 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 16px 0;
+            padding: 16px 0 20px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.22);
         }
 
         /* Logo container with glow */
@@ -1646,6 +1659,47 @@
         body.dark .logo-container {
             background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
             box-shadow: 0 8px 25px rgba(14, 165, 233, 0.35);
+        }
+
+        #chat-container {
+            border: 1px solid rgba(148, 163, 184, 0.24);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+        }
+
+        body.dark #chat-container {
+            border-color: rgba(71, 85, 105, 0.8);
+            box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
+        }
+
+        .chat-bubble-assistant {
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(241, 245, 249, 0.9));
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
+        }
+
+        body.dark .chat-bubble-assistant {
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.92));
+            border-color: rgba(100, 116, 139, 0.6);
+            box-shadow: 0 8px 20px rgba(2, 6, 23, 0.35);
+        }
+
+        .assistant-message-text {
+            color: #0f172a;
+        }
+
+        body.dark .assistant-message-text,
+        body.dark #chat-container .typewriter-text {
+            color: #f8fafc !important;
+        }
+
+        body.dark .assistant-message-text a {
+            color: #7dd3fc !important;
+        }
+
+        body.dark .assistant-message-text a:hover {
+            color: #bae6fd !important;
         }
 
         /* Suggestions container */
@@ -4016,7 +4070,7 @@ async function handleNameCorrection(text) {
                 card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
                 title.className = 'text-4xl font-black jarvis-title';
                 subtitle.className = 'text-sm text-gray-400 font-medium';
-                if (chatContainer) chatContainer.className = 'bg-slate-800/50 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6 custom-scrollbar';
+                if (chatContainer) chatContainer.className = 'bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height';
                 if (receipt) receipt.classList.add('dark-mode');
 
                 if (inputBarContainer) {
@@ -4053,7 +4107,7 @@ async function handleNameCorrection(text) {
                     card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
                     title.className = 'text-4xl font-black jarvis-title';
                     subtitle.className = 'text-sm text-gray-500 font-medium';
-                    if (chatContainer) chatContainer.className = 'bg-gray-50/80 rounded-2xl p-4 max-h-96 overflow-y-auto space-y-3 mb-6 custom-scrollbar';
+                    if (chatContainer) chatContainer.className = 'bg-gray-50/80 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height';
                     if (receipt) receipt.classList.remove('dark-mode');
 
                     if (inputBarContainer) {
@@ -4664,8 +4718,10 @@ async function handleNameCorrection(text) {
                     </div>
                 `;
             } else {
-
-                const textClass = darkMode ? 'text-white' : 'text-black';
+                const isDarkTheme = document.body.classList.contains('dark');
+                const linkClass = isDarkTheme
+                    ? 'text-sky-300 hover:text-sky-200 underline font-medium'
+                    : 'text-indigo-700 hover:text-indigo-900 underline font-medium';
 
 
                 const textForSpeech = text.replace(/<[^>]*>/g, '');
@@ -4681,13 +4737,13 @@ async function handleNameCorrection(text) {
                 if (hasHtmlContent) {
                     // For HTML content, only convert markdown links and bold, preserve other HTML
                     formattedText = readableText
-                        .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 underline font-medium">$1</a>')
+                        .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, `<a href="$2" target="_blank" class="${linkClass}">$1</a>`)
                         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
                     // Only convert newlines that are NOT inside HTML tags
                     formattedText = formattedText.replace(/\n(?![^<]*>)/g, '<br>');
                 } else {
                     formattedText = readableText
-                        .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" class="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 underline font-medium">$1</a>')
+                        .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, `<a href="$2" target="_blank" class="${linkClass}">$1</a>`)
                         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
                         .replace(/(^|\n)-\s+/g, '$1&#8226; ')
                         .replace(/\n/g, '<br>');
@@ -4704,7 +4760,9 @@ async function handleNameCorrection(text) {
                 messageDiv.innerHTML = `
                     <div class="flex items-start gap-3 ${containerWidth}">
                         <div class="flex-1 overflow-hidden ${hasMap ? 'map-message' : ''}">
-                            <div class="text-sm ${textClass} typewriter-text leading-relaxed text-left"></div>
+                            <div class="${hasMap ? '' : 'chat-bubble-assistant'}">
+                                <div class="assistant-message-text typewriter-text text-sm leading-relaxed text-left"></div>
+                            </div>
                         </div>
                         <button onclick="copyAssistantPlan(this)" data-copy-text="${encodeURIComponent(textForSpeech)}" class="flex-shrink-0 w-8 h-8 rounded-full bg-sky-500 hover:bg-sky-600 text-white transition-all shadow-md hover:shadow-lg flex items-center justify-center" title="Copy">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
