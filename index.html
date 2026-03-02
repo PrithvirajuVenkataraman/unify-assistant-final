@@ -480,62 +480,62 @@
         /* Light Switch Styles - Horizontal */
         .light-switch-container {
             position: relative;
-            width: 76px;
-            height: 40px;
-            border-radius: 999px;
-            border: 1px solid rgba(148, 163, 184, 0.45);
-            background: rgba(255, 255, 255, 0.82);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-            padding: 3px;
+            width: 86px;
+            height: 52px;
             display: flex;
             align-items: center;
             justify-content: center;
+            background: transparent;
+            box-shadow: none;
+            border: none;
+            padding: 0;
         }
 
         .light-switch {
-            width: 100%;
-            height: 100%;
+            width: 82px;
+            height: 46px;
             border-radius: 999px;
             position: relative;
             cursor: pointer;
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            border: 4px solid rgba(226, 232, 240, 0.9);
+            background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.95));
             transition: all 0.28s ease;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 10px 20px rgba(2, 6, 23, 0.24);
         }
 
         .switch-toggle {
-            width: 30px;
-            height: 30px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
             position: absolute;
-            left: 4px;
-            top: 4px;
+            left: 3px;
+            top: 2px;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            background: linear-gradient(145deg, #f8fafc, #dbeafe);
-            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.28);
+            background: radial-gradient(circle at 28% 28%, #f8fafc 0%, #dbeafe 72%, #bfdbfe 100%);
+            box-shadow: 0 5px 12px rgba(2, 6, 23, 0.42);
         }
 
         .switch-toggle::before {
             content: '';
             position: absolute;
-            inset: 7px;
+            inset: 9px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-            opacity: 0.95;
+            background: #f59e0b;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
         }
 
         .light-switch.on {
-            background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+            border-color: rgba(191, 219, 254, 0.95);
+            background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(30, 58, 138, 0.8));
         }
 
         .light-switch.on .switch-toggle {
-            left: calc(100% - 34px);
-            background: linear-gradient(145deg, #e2e8f0, #cbd5e1);
+            left: calc(100% - 37px);
         }
 
         .light-switch.on .switch-toggle::before {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            background: #22d3ee;
+            box-shadow: 0 0 12px rgba(34, 211, 238, 0.5);
         }
         
         /* Tube Light */
@@ -1066,25 +1066,26 @@
             }
             
             .light-switch-container {
-                width: 68px;
-                height: 36px;
-                padding: 3px;
+                width: 74px;
+                height: 44px;
+                padding: 0;
             }
 
             .light-switch {
-                width: 100%;
-                height: 100%;
+                width: 70px;
+                height: 40px;
+                border-width: 3px;
             }
 
             .switch-toggle {
-                width: 26px;
-                height: 26px;
-                left: 3px;
+                width: 30px;
+                height: 30px;
+                left: 2px;
                 top: 2px;
             }
 
             .light-switch.on .switch-toggle {
-                left: calc(100% - 29px);
+                left: calc(100% - 33px);
                 top: 2px;
             }
         }
@@ -1702,6 +1703,60 @@
             color: #bae6fd !important;
         }
 
+        .footer-action-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px;
+            border-radius: 999px;
+            background: linear-gradient(145deg, rgba(31, 41, 55, 0.92), rgba(51, 65, 85, 0.92));
+            border: 1px solid rgba(100, 116, 139, 0.35);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.24);
+        }
+
+        body.dark .footer-action-pill {
+            background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95));
+            border-color: rgba(100, 116, 139, 0.45);
+        }
+
+        .footer-action-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .footer-action-btn-mic {
+            background: transparent;
+            color: #e2e8f0;
+        }
+
+        .footer-action-btn-mic:hover {
+            background: rgba(148, 163, 184, 0.16);
+            color: #f8fafc;
+        }
+
+        .footer-action-btn-converse {
+            background: #f8fafc;
+            color: #0f172a;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.3);
+        }
+
+        .footer-action-btn-converse:hover {
+            transform: scale(1.03);
+        }
+
+        .footer-action-btn.is-active {
+            background: #0ea5e9;
+            color: #ffffff;
+            box-shadow: 0 6px 16px rgba(14, 165, 233, 0.45);
+        }
+
         /* Suggestions container */
         .suggestions-container {
             background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(236, 72, 153, 0.05) 100%);
@@ -2089,51 +2144,35 @@
             <!-- Footer controls -->
             <p id="footer-disclaimer" class="mt-2 w-full text-xs text-gray-400 font-medium text-center">JARVIS can make mistakes. Check important info.</p>
             <div class="mt-2 space-y-2">
-                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <div class="relative">
-                    <select id="support-mode-lock" onchange="setSupportModeLock(this.value)" class="w-full h-11 pl-4 pr-12 appearance-none rounded-xl text-sm font-semibold border border-emerald-300 bg-white/90 text-emerald-700 dark:bg-slate-800 dark:text-emerald-200 dark:border-emerald-700">
-                        <option value="balanced">Support: Balanced</option>
-                        <option value="supportive">Support: Supportive</option>
-                        <option value="debate">Support: Debate</option>
-                    </select>
-                    <svg class="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500 dark:text-emerald-300" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M6 8l4 4 4-4"></path>
-                    </svg>
-                </div>
-                <div class="relative">
-                    <select id="response-length-control" onchange="setResponseLength(this.value)" class="w-full h-11 pl-4 pr-12 appearance-none rounded-xl text-sm font-semibold border border-blue-300 bg-white/90 text-blue-700 dark:bg-slate-800 dark:text-blue-200 dark:border-blue-700">
-                        <option value="short">Length: Short</option>
-                        <option value="normal">Length: Normal</option>
-                        <option value="detailed">Length: Detailed</option>
-                    </select>
-                    <svg class="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 dark:text-blue-300" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M6 8l4 4 4-4"></path>
-                    </svg>
-                </div>
-                <button
-                    id="voice-to-text-btn"
-                    onclick="toggleVoiceToTextInput()"
-                    class="w-full h-11 px-4 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all"
-                    title="Voice to text">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
-                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                        <line x1="12" y1="19" x2="12" y2="22"></line>
-                        <line x1="8" y1="22" x2="16" y2="22"></line>
-                    </svg>
-                    Voice to Text
-                </button>
-                <button
-                    id="converse-mode-btn"
-                    onclick="toggleConverseMode()"
-                    class="w-full h-11 px-4 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-sm font-semibold transition-all">
-                    Converse: Off
-                </button>
-                </div>
                 <div class="flex justify-center">
-                    <div id="converse-live-indicator" class="converse-live-indicator hidden" aria-live="polite">
-                        <span class="converse-live-dot"></span>
-                        <span>Converse Active</span>
+                    <div class="footer-action-pill" role="group" aria-label="Voice actions">
+                        <button
+                            id="voice-to-text-btn"
+                            onclick="toggleVoiceToTextInput()"
+                            class="footer-action-btn footer-action-btn-mic"
+                            title="Voice to text"
+                            aria-label="Voice to text">
+                            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
+                                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="22"></line>
+                                <line x1="8" y1="22" x2="16" y2="22"></line>
+                            </svg>
+                        </button>
+                        <button
+                            id="converse-mode-btn"
+                            onclick="toggleConverseMode()"
+                            class="footer-action-btn footer-action-btn-converse"
+                            title="Converse mode"
+                            aria-label="Converse mode"
+                            aria-pressed="false">
+                            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M5 12h2"></path>
+                                <path d="M10 8v8"></path>
+                                <path d="M14 6v12"></path>
+                                <path d="M18 9v6"></path>
+                            </svg>
+                        </button>
                     </div>
                 </div>
                 <div id="ai-thinking-indicator" class="hidden flex justify-center" aria-live="polite">
@@ -2163,6 +2202,17 @@ const RESPONSE_LENGTH_HINTS = {
     normal: 'Respond with practical detail and clear structure.',
     detailed: 'Respond with more depth, examples, and actionable detail.'
 };
+
+function detectRequestedResponseLength(text) {
+    const lower = (text || '').toLowerCase();
+    if (/\b(short|brief|in short|concise|tldr|summary|summarize|few words|one line)\b/.test(lower)) {
+        return 'short';
+    }
+    if (/\b(long|detailed|in detail|elaborate|deep dive|comprehensive|step by step)\b/.test(lower)) {
+        return 'detailed';
+    }
+    return 'normal';
+}
 
 function getTrustLabel(trustLevel) { 
   return trustLevel === TRUST_LEVEL.VERIFIED 
@@ -2197,6 +2247,11 @@ function getUserIntent(text) {
     wantsRestaurants: /restaurant|food|eat|biryani|curry|lunch|dinner/i.test(text),
     wantsItinerary: /itinerary|plan|schedule|day in/i.test(text)
   };
+}
+
+function isWeatherIntentText(text) {
+    const t = (text || '').toLowerCase();
+    return /\b(weather|climate|temperature|forecast|humidity|humid|rain|raining|drizzle|snow|snowing|hot|cold|wind|windy|sunny|cloudy|overcast|storm|thunder|heat|chilly|freezing|degrees?)\b/.test(t);
 }
 
 function violatesIntent(text) {
@@ -3810,9 +3865,6 @@ For name corrections like "no, my name is X", extract the name.
 Recent conversation:
 ${contextMessages}
 
-Support mode:
-- ${supportModeLock || 'balanced'}: ${getSupportModeHint()}
-
 Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         const intent = getUserIntent(userMessage);
         window.__intentContext = {
@@ -3826,9 +3878,9 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
 
         window.__lastUserMessage = userMessage; 
 
-        const supportHint = getSupportModeHint();
-        const responseHint = getResponseLengthHint();
-        const effectiveMessage = `${userMessage}\n\nSupport mode lock: ${supportModeLock || 'balanced'}. ${supportHint}\nResponse length: ${responseLength || 'normal'}. ${responseHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`;
+        const responseMode = detectRequestedResponseLength(userMessage);
+        const responseHint = RESPONSE_LENGTH_HINTS[responseMode] || RESPONSE_LENGTH_HINTS.normal;
+        const effectiveMessage = `${userMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`;
 
          
         const response = await fetch('/api/chat-groq', { 
@@ -4446,21 +4498,10 @@ async function handleNameCorrection(text) {
         }
 
         function updateAssistantModeUI() {
-            const supportSelect = document.getElementById('support-mode-lock');
-            if (supportSelect) {
-                supportSelect.value = supportModeLock || 'balanced';
-            }
-            const lengthSelect = document.getElementById('response-length-control');
-            if (lengthSelect) {
-                lengthSelect.value = responseLength || 'normal';
-            }
             const btn = document.getElementById('converse-mode-btn');
             if (btn) {
                 const on = !!converseMode;
-                btn.textContent = `Converse: ${on ? 'On' : 'Off'}`;
-                btn.className = on
-                    ? 'w-full h-11 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-all'
-                    : 'w-full h-11 px-4 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 rounded-xl text-sm font-semibold transition-all';
+                btn.classList.toggle('is-active', on);
                 btn.setAttribute('aria-pressed', on ? 'true' : 'false');
                 btn.title = on ? 'Converse mode is active' : 'Converse mode is inactive';
             }
@@ -4565,24 +4606,22 @@ async function handleNameCorrection(text) {
             const btn = document.getElementById('voice-to-text-btn');
             if (!btn) return;
             if (isVoiceTyping) {
-                btn.className = 'w-full h-11 px-4 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all';
+                btn.classList.add('is-active');
                 btn.innerHTML = `
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
                         <rect x="6" y="6" width="12" height="12" rx="2"></rect>
                     </svg>
-                    Stop Dictation
                 `;
                 return;
             }
-            btn.className = 'w-full h-11 px-4 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all';
+            btn.classList.remove('is-active');
             btn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
                     <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                     <line x1="12" y1="19" x2="12" y2="22"></line>
                     <line x1="8" y1="22" x2="16" y2="22"></line>
                 </svg>
-                Voice to Text
             `;
         }
 
@@ -5950,9 +5989,7 @@ function isHighRiskMentalHealth(text) {
                 localStorage.setItem('unify_has_visited', 'true');
             }
 
-            const isWeatherQuery = lower.includes('weather') || lower.includes('temperature') || 
-                                   lower.includes('rain') || lower.includes('snow') || 
-                                   lower.includes('forecast') || lower.includes('hot') || lower.includes('cold');
+            const isWeatherQuery = isWeatherIntentText(lower);
             
             const isShoppingQuery = lower.includes('shopping') || lower.includes('grocery') || 
                                     (lower.includes('add') && lower.includes('list'));
@@ -6124,7 +6161,7 @@ Do not use repetitive filler or generic wording.`;
             // If translator mode is active, process text as translation
             if (translatorMode && translatorLanguage) {
                 // Don't translate common commands
-                const skipTranslation = ['help', 'stop', 'exit', 'weather', 'reminder', 'shopping'];
+                const skipTranslation = ['help', 'stop', 'exit', 'weather', 'climate', 'reminder', 'shopping'];
                 const shouldSkip = skipTranslation.some(cmd => lower.includes(cmd));
 
                 if (!shouldSkip) {
@@ -6310,7 +6347,7 @@ Do not use repetitive filler or generic wording.`;
             }
 
             
-            else if (cleanText.toLowerCase().includes('weather') || cleanText.toLowerCase().includes('temperature') || cleanText.toLowerCase().includes('rain') || cleanText.toLowerCase().includes('snow')) {
+            else if (isWeatherIntentText(cleanText)) {
                 const location = extractLocationFromSentence(cleanText);
                 
                 if (location) {
@@ -7057,7 +7094,7 @@ ${sourceLinksBlock}
             const lower = text.toLowerCase();
             
             
-            const currentLocationKeywords = ['my location', 'current location', 'my current location', 'here', 'where i am', 'my area', 'this location'];
+            const currentLocationKeywords = ['my location', 'current location', 'my current location', 'here', 'over here', 'around here', 'nearby', 'outside', 'where i am', 'my area', 'this location'];
             for (const keyword of currentLocationKeywords) {
                 if (lower.includes(keyword)) {
                     return null; 
@@ -7072,9 +7109,9 @@ ${sourceLinksBlock}
             });
             
             const patterns = [
-                /(?:weather|temperature|rain|snow|hot|cold|forecast)\s+(?:in|at|for)\s+([^?]+)/i,
-                /(?:in|at)\s+([^?]+?)\s*(?:weather|temperature|rain|snow|hot|cold)/i,
-                /(?:how'?s?|what'?s?|how is|what is)\s+(?:the\s+)?(?:weather|temperature)\s+(?:in|at|for)\s+([^?]+)/i,
+                /(?:weather|climate|temperature|humidity|rain|snow|hot|cold|forecast|conditions?|wind|windy)\s+(?:in|at|for|around|near)\s+([^?]+)/i,
+                /(?:in|at|around|near)\s+([^?]+?)\s*(?:weather|climate|temperature|humidity|rain|snow|hot|cold|forecast|conditions?|wind|windy)/i,
+                /(?:how'?s?|what'?s?|how is|what is)\s+(?:the\s+)?(?:weather|climate|temperature|humidity|forecast|conditions?)\s+(?:in|at|for|around|near)\s+([^?]+)/i,
             ];
             
             for (const pattern of patterns) {
