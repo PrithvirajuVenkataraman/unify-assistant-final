@@ -1899,6 +1899,39 @@
         .offline-banner.hidden {
             display: none;
         }
+
+        .vision-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(148, 163, 184, 0.45);
+            background: rgba(255, 255, 255, 0.9);
+            color: #0f172a;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        body.dark .vision-chip {
+            background: rgba(15, 23, 42, 0.9);
+            color: #e2e8f0;
+            border-color: rgba(100, 116, 139, 0.7);
+        }
+
+        .vision-chip button {
+            border: none;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            font-size: 12px;
+            padding: 0;
+            opacity: 0.85;
+        }
+
+        .vision-chip button:hover {
+            opacity: 1;
+        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -2097,6 +2130,7 @@
     <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 floating-input-bar z-40">
         <div class="max-w-xl sm:max-w-3xl mx-auto px-3 py-1">
             <div id="input-bar-inner" class="flex items-center gap-1.5 modern-input px-2 py-1">
+                <input type="file" id="vision-file-input" accept="image/*" class="hidden" onchange="handleVisionFileSelected(event)" />
                 <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -2106,6 +2140,16 @@
                     <!-- Tooltip -->
                     <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
                         Help & Tips
+                    </div>
+                </button>
+                <button onclick="triggerVisionUpload()" id="vision-btn" class="flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Upload image">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
+                        Upload image
                     </div>
                 </button>
 
@@ -2143,6 +2187,7 @@
             </div>
             <!-- Footer controls -->
             <p id="footer-disclaimer" class="mt-2 w-full text-xs text-gray-400 font-medium text-center">JARVIS can make mistakes. Check important info.</p>
+            <div id="vision-chip-container" class="mt-1 hidden flex justify-center"></div>
             <div class="mt-2 space-y-2">
                 <div class="flex justify-center">
                     <div class="footer-action-pill" role="group" aria-label="Voice actions">
@@ -2190,6 +2235,7 @@
     </div>
 
 <script>
+window.Tesseract = window.Tesseract || null;
 
 const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'}; 
 const SUPPORT_MODE_HINTS = {
@@ -3990,6 +4036,8 @@ async function handleNameCorrection(text) {
         let favorites = [];
         let inputHistory = [];
         let inputHistoryIndex = -1;
+        let pendingVisionImage = null;
+        let tesseractReady = false;
 
         // Noise filter settings for public places
         let noiseFilterEnabled = false;
@@ -4076,6 +4124,197 @@ async function handleNameCorrection(text) {
             
             
         };
+
+        function triggerVisionUpload() {
+            const input = document.getElementById('vision-file-input');
+            if (!input) return;
+            input.value = '';
+            input.click();
+        }
+
+        function handleVisionFileSelected(event) {
+            const file = event?.target?.files?.[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                addChatMessage('Please upload an image file (PNG, JPG, WEBP).', false);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                pendingVisionImage = {
+                    name: file.name,
+                    mimeType: file.type,
+                    dataUrl: reader.result,
+                    uploadedAt: new Date().toISOString()
+                };
+                renderVisionChip();
+                const preview = `
+<div class="p-3 rounded-xl border border-sky-300 bg-sky-50 dark:bg-sky-900/20 dark:border-sky-700">
+  <p class="text-sm font-semibold mb-2">Image ready: ${escapeHtml(file.name)}</p>
+  <img src="${reader.result}" alt="Uploaded image preview" class="w-full max-h-52 object-contain rounded-lg border border-slate-300 dark:border-slate-700" />
+  <p class="text-xs mt-2 text-slate-600 dark:text-slate-300">Now ask: "summarize this bill", "extract shopping list", or "what's in this fridge?"</p>
+</div>`;
+                addChatMessage(preview, false);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function renderVisionChip() {
+            const container = document.getElementById('vision-chip-container');
+            if (!container) return;
+            if (!pendingVisionImage) {
+                container.classList.add('hidden');
+                container.innerHTML = '';
+                return;
+            }
+            container.classList.remove('hidden');
+            container.innerHTML = `
+                <div class="vision-chip">
+                    [Camera] ${escapeHtml(pendingVisionImage.name)}
+                    <button onclick="clearVisionImage()" title="Remove image">Remove</button>
+                </div>
+            `;
+        }
+
+        function clearVisionImage() {
+            pendingVisionImage = null;
+            renderVisionChip();
+        }
+
+        function isVisionIntentText(text) {
+            const t = String(text || '').toLowerCase();
+            return /\b(image|photo|picture|screenshot|bill|receipt|invoice|fridge|extract|scan|ocr|read this)\b/.test(t);
+        }
+
+        function detectVisionTask(text) {
+            const t = String(text || '').toLowerCase();
+            if (/\b(bill|receipt|invoice|summarize)\b/.test(t)) return 'bill_summary';
+            if (/\b(shopping list|extract|items|grocery)\b/.test(t)) return 'shopping_extract';
+            if (/\b(fridge|refrigerator|what.?s in)\b/.test(t)) return 'fridge_items';
+            return 'general_vision';
+        }
+
+        function getPendingVisionBase64() {
+            if (!pendingVisionImage || !pendingVisionImage.dataUrl) return null;
+            const parts = pendingVisionImage.dataUrl.split(',');
+            return parts.length > 1 ? parts[1] : null;
+        }
+
+        async function ensureTesseractLoaded() {
+            if (window.Tesseract && window.Tesseract.recognize) return true;
+            if (tesseractReady) return false;
+            tesseractReady = true;
+            return new Promise((resolve) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+                script.onload = () => resolve(!!(window.Tesseract && window.Tesseract.recognize));
+                script.onerror = () => resolve(false);
+                document.head.appendChild(script);
+            });
+        }
+
+        function normalizeOcrLines(text) {
+            return String(text || '')
+                .split('\n')
+                .map(line => line.trim())
+                .filter(Boolean);
+        }
+
+        function extractLikelyShoppingItems(ocrText) {
+            const lines = normalizeOcrLines(ocrText);
+            return lines
+                .filter(line => !/total|subtotal|tax|receipt|invoice|cash|change|thank you|visa|mastercard|qty|price|amount/i.test(line))
+                .map(line => line.replace(/[^a-zA-Z0-9\s\-.,]/g, '').trim())
+                .filter(line => line.length >= 2 && line.length <= 50)
+                .slice(0, 20);
+        }
+
+        async function runLocalOcrVision(task, userText) {
+            const canUse = await ensureTesseractLoaded();
+            if (!canUse || !pendingVisionImage?.dataUrl) return null;
+            const result = await window.Tesseract.recognize(pendingVisionImage.dataUrl, 'eng');
+            const raw = result?.data?.text || '';
+
+            if (!raw.trim()) {
+                return 'I could not read text from this image. Try a clearer photo with better lighting.';
+            }
+
+            if (task === 'shopping_extract') {
+                const items = extractLikelyShoppingItems(raw);
+                if (!items.length) return 'I read the image, but could not confidently extract shopping items.';
+                return `Possible shopping items:\n- ${items.join('\n- ')}`;
+            }
+
+            if (task === 'bill_summary') {
+                const lines = normalizeOcrLines(raw).slice(0, 40);
+                return `Bill summary (OCR):\n- ${lines.slice(0, 12).join('\n- ')}`;
+            }
+
+            if (task === 'fridge_items') {
+                return 'Fridge object detection needs backend vision support. I can still extract visible text from labels if present.';
+            }
+
+            return `Extracted text:\n${normalizeOcrLines(raw).slice(0, 25).join('\n')}`;
+        }
+
+        async function handleVisionIntent(text) {
+            if (!pendingVisionImage) {
+                const msg = 'Upload an image first using the upload button, then ask your vision question.';
+                addChatMessage(msg, false);
+                speak(msg);
+                return;
+            }
+
+            const task = detectVisionTask(text);
+            const imageBase64 = getPendingVisionBase64();
+            const payload = {
+                prompt: text,
+                task,
+                mimeType: pendingVisionImage.mimeType,
+                imageBase64
+            };
+
+            showThinkingIndicator('Analyzing image...');
+            try {
+                const response = await fetch('/api/vision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const answer = data?.response || data?.result || 'Image analyzed, but no response text was returned.';
+                    addChatMessage(answer, false);
+                    speak('Vision analysis complete.');
+                    saveToHistory(text, answer);
+                    hideThinkingIndicator();
+                    return;
+                }
+            } catch (e) {
+            }
+
+            try {
+                const fallback = await runLocalOcrVision(task, text);
+                if (fallback) {
+                    addChatMessage(fallback, false);
+                    speak('I processed the image with local OCR fallback.');
+                    saveToHistory(text, fallback);
+                } else {
+                    const msg = 'Vision endpoint is unavailable and OCR fallback could not run.';
+                    addChatMessage(msg, false);
+                    speak(msg);
+                }
+            } catch (error) {
+                const msg = 'Vision processing failed. Try another image or check backend vision endpoint.';
+                addChatMessage(msg, false);
+                speak(msg);
+            } finally {
+                hideThinkingIndicator();
+            }
+        }
 
         async function requestMicrophonePermission() {
             try {
@@ -4222,6 +4461,7 @@ async function handleNameCorrection(text) {
                                 <p><strong>Translator:</strong> "Speak in Tamil" or "Translate this to Hindi"</p>
                                 <p><strong>Budget Planner:</strong> "budget trip to Seattle for 3 days under 900 USD"</p>
                                 <p><strong>Calendar Sync:</strong> "sync to calendar" after a budget trip plan</p>
+                                <p><strong>Vision Mode:</strong> Upload an image, then ask "summarize this bill" or "extract shopping list"</p>
                             </div>
                         </section>
 
@@ -6033,6 +6273,11 @@ function isHighRiskMentalHealth(text) {
                 const regex = new RegExp(`^${prefix}[,\\s]+`, 'i'); 
                 cleanText = cleanText.replace(regex, ''); 
             } 
+
+            if (isVisionIntentText(cleanText)) {
+                await handleVisionIntent(cleanText);
+                return;
+            }
 
             if (isHighRiskMentalHealth(cleanText)) {
                 const urgentMsg = `I'm really glad you told me. You deserve immediate support right now.
@@ -8544,6 +8789,25 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
+
+/*
+1. TYPING INDICATOR:
+   - Call showTypingIndicator() before AI response
+   - Call hideTypingIndicator() before showing response
+
+2. DELETE MESSAGES:
+   - Already integrated in addChatMessage() with delete button
+   - Shows on hover over user messages
+
+3. CONVERSATION HISTORY:
+   - Call saveToHistory(userMsg, aiMsg) after each exchange
+   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
+   - Search, export, and clear functions included
+
+4. ERROR FEEDBACK:
+   - Call showError("Error message") instead of addChatMessage for errors
+   - Visual shake animation + auto-dismiss
+*/
 
 </script>
 </body>
