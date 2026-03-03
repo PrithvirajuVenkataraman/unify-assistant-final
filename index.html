@@ -2308,6 +2308,12 @@ function isWeatherIntentText(text) {
     return /\b(weather|climate|temperature|forecast|humidity|humid|rain|raining|drizzle|snow|snowing|hot|cold|wind|windy|sunny|cloudy|overcast|storm|thunder|heat|chilly|freezing|degrees?)\b/.test(t);
 }
 
+function isTamilJokeRequest(text) {
+    const t = String(text || '').toLowerCase();
+    if (!/\bjoke|funny|laugh\b/.test(t)) return false;
+    return /\btamil\b|தமிழ்/.test(t);
+}
+
 function violatesIntent(text) {
   const ctx = window.__intentContext;
   if (!ctx || typeof text !== 'string') return false;
@@ -3872,6 +3878,83 @@ async function fetchAndDisplayNews(query) {
     }
 }
 // ========== END NEWS FETCHING FUNCTION ==========
+
+async function handleTamilJokeSearch(queryText) {
+    showThinkingIndicator('Searching web for a Tamil joke...');
+    try {
+        const response = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: 'short Tamil joke with meaning',
+                maxResults: 6
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('search failed');
+        }
+
+        const data = await response.json();
+        const results = Array.isArray(data.results) ? data.results : [];
+
+        if (!results.length) {
+            throw new Error('no results');
+        }
+
+        const snippetBlock = results
+            .slice(0, 5)
+            .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}`)
+            .join('\n\n');
+
+        const jokePrompt = `Use only the web snippets below to craft one short, family-friendly Tamil joke.
+
+Requirements:
+1. Tamil script line
+2. Romanized transliteration line
+3. English meaning line
+4. Keep it short and actually funny
+5. If snippets are weak, still produce one safe joke but do not claim false facts
+
+Web snippets:
+${snippetBlock}`;
+
+        const ai = await askGeminiAI(jokePrompt);
+        const jokeText = (ai && (ai.response || ai.text)) ? (ai.response || ai.text) : 'Could not build a good joke from search results.';
+        const sourceLines = results.slice(0, 3).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
+
+        hideThinkingIndicator();
+        const finalMsg = `[Globe] Tamil joke (web-assisted):\n\n${jokeText}\n\nSources:\n${sourceLines}`;
+        addChatMessage(finalMsg, false);
+        speak('Here is a Tamil joke for you.');
+        saveToHistory(queryText, finalMsg);
+    } catch (error) {
+        try {
+            const directPrompt = `Give one short, family-friendly Tamil joke.
+
+Format:
+1) Tamil script
+2) Romanized transliteration
+3) English meaning
+
+Keep it clean, concise, and genuinely funny.`;
+            const direct = await askGeminiAI(directPrompt);
+            const directText = (direct && (direct.response || direct.text))
+                ? (direct.response || direct.text)
+                : 'Could not generate a Tamil joke right now.';
+            hideThinkingIndicator();
+            const finalMsg = `[Globe] Tamil joke:\n\n${directText}`;
+            addChatMessage(finalMsg, false);
+            speak('Here is a Tamil joke for you.');
+            saveToHistory(queryText, finalMsg);
+        } catch (fallbackError) {
+            hideThinkingIndicator();
+            const fallback = `I could not fetch web results right now.\n\nTry this direct search:\n[Search Tamil jokes on Google](https://www.google.com/search?q=short+tamil+jokes+with+meaning)`;
+            addChatMessage(fallback, false);
+            speak('I could not fetch a live joke right now, but I shared a search link.');
+        }
+    }
+}
 
 async function askGeminiAI(userMessage) {
     try {
@@ -6391,6 +6474,11 @@ function isHighRiskMentalHealth(text) {
                 cleanText = cleanText.replace(regex, ''); 
             } 
 
+            if (isTamilJokeRequest(cleanText)) {
+                await handleTamilJokeSearch(cleanText);
+                return;
+            }
+
             if (isVisionIntentText(cleanText)) {
                 await handleVisionIntent(cleanText);
                 return;
@@ -8750,16 +8838,39 @@ function searchHistory(query) {
 }
 
 function showThinkingIndicator(message = 'Thinking') {
-    const indicator = document.getElementById('ai-thinking-indicator');
-    const text = document.getElementById('ai-thinking-text');
-    if (!indicator || !text) return;
-    text.textContent = message || 'Thinking';
-    indicator.classList.remove('hidden');
+    const chatContainer = document.getElementById('chat-container');
+    if (!chatContainer) return;
+
+    let row = document.getElementById('chat-thinking-indicator');
+    if (!row) {
+        row = document.createElement('div');
+        row.id = 'chat-thinking-indicator';
+        row.className = 'flex justify-start fade-in';
+        row.innerHTML = `
+            <div class="chat-bubble-assistant inline-flex items-center gap-2">
+                <span id="chat-thinking-text" class="text-xs font-semibold text-purple-600 dark:text-purple-300"></span>
+                <span class="thinking-dots">
+                    <span class="thinking-dot"></span>
+                    <span class="thinking-dot"></span>
+                    <span class="thinking-dot"></span>
+                </span>
+            </div>
+        `;
+        chatContainer.appendChild(row);
+    }
+
+    const text = document.getElementById('chat-thinking-text');
+    if (text) text.textContent = message || 'Thinking';
+    chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
 function hideThinkingIndicator() {
-    const indicator = document.getElementById('ai-thinking-indicator');
-    if (indicator) indicator.classList.add('hidden');
+    const row = document.getElementById('chat-thinking-indicator');
+    if (!row) return;
+    row.classList.add('fade-out');
+    setTimeout(() => {
+        if (row.parentNode) row.parentNode.removeChild(row);
+    }, 180);
 }
 
 function formatAssistantTextForReadability(rawText) {
