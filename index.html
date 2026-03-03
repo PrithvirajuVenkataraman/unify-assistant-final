@@ -4383,6 +4383,14 @@ async function handleNameCorrection(text) {
                 return;
             }
 
+            /*
+             * Vision/OCR pipeline is intentionally paused for now.
+             * This block includes:
+             * 1) /api/vision backend call
+             * 2) local OCR fallback (Tesseract)
+             * Re-enable this block later when vision/OCR work resumes.
+             */
+            /*
             const task = detectVisionTask(text);
             const imageBase64 = getPendingVisionBase64();
             const promptText = String(text || '').trim() || 'Analyze this image.';
@@ -4432,6 +4440,11 @@ async function handleNameCorrection(text) {
                 clearVisionImage();
                 hideThinkingIndicator();
             }
+            */
+
+            addChatMessage('Vision/OCR is temporarily disabled in code comments. We can re-enable it later.', false);
+            speak('Vision and OCR are temporarily disabled.');
+            clearVisionImage();
         }
 
         async function requestMicrophonePermission() {
