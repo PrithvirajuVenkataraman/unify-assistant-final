@@ -1900,36 +1900,57 @@
             display: none;
         }
 
-        .vision-chip {
+        .vision-inline-attachment {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 6px 10px;
-            border-radius: 999px;
+            padding: 4px 8px 4px 4px;
+            border-radius: 12px;
             border: 1px solid rgba(148, 163, 184, 0.45);
-            background: rgba(255, 255, 255, 0.9);
-            color: #0f172a;
-            font-size: 12px;
-            font-weight: 600;
+            background: rgba(255, 255, 255, 0.95);
+            max-width: 170px;
         }
 
-        body.dark .vision-chip {
-            background: rgba(15, 23, 42, 0.9);
+        .vision-inline-attachment img {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            object-fit: cover;
+            border: 1px solid rgba(148, 163, 184, 0.5);
+        }
+
+        .vision-inline-name {
+            font-size: 11px;
+            font-weight: 600;
+            color: #0f172a;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 95px;
+        }
+
+        body.dark .vision-inline-attachment {
+            background: rgba(15, 23, 42, 0.95);
             color: #e2e8f0;
             border-color: rgba(100, 116, 139, 0.7);
         }
 
-        .vision-chip button {
+        body.dark .vision-inline-name {
+            color: #e2e8f0;
+        }
+
+        .vision-inline-attachment button {
             border: none;
             background: transparent;
             color: inherit;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 14px;
+            line-height: 1;
             padding: 0;
             opacity: 0.85;
         }
 
-        .vision-chip button:hover {
+        .vision-inline-attachment button:hover {
             opacity: 1;
         }
     </style>
@@ -2152,6 +2173,7 @@
                         Upload image
                     </div>
                 </button>
+                <div id="vision-inline-attachment" class="hidden vision-inline-attachment"></div>
 
                 <input
                     type="text"
@@ -2187,7 +2209,6 @@
             </div>
             <!-- Footer controls -->
             <p id="footer-disclaimer" class="mt-2 w-full text-xs text-gray-400 font-medium text-center">JARVIS can make mistakes. Check important info.</p>
-            <div id="vision-chip-container" class="mt-1 hidden flex justify-center"></div>
             <div class="mt-2 space-y-2">
                 <div class="flex justify-center">
                     <div class="footer-action-pill" role="group" aria-label="Voice actions">
@@ -4037,7 +4058,7 @@ async function handleNameCorrection(text) {
         let inputHistory = [];
         let inputHistoryIndex = -1;
         let pendingVisionImage = null;
-        let tesseractReady = false;
+        let tesseractLoadPromise = null;
 
         // Noise filter settings for public places
         let noiseFilterEnabled = false;
@@ -4162,20 +4183,21 @@ async function handleNameCorrection(text) {
         }
 
         function renderVisionChip() {
-            const container = document.getElementById('vision-chip-container');
+            const container = document.getElementById('vision-inline-attachment');
             if (!container) return;
             if (!pendingVisionImage) {
                 container.classList.add('hidden');
                 container.innerHTML = '';
+                toggleSendButton();
                 return;
             }
             container.classList.remove('hidden');
             container.innerHTML = `
-                <div class="vision-chip">
-                    [Camera] ${escapeHtml(pendingVisionImage.name)}
-                    <button onclick="clearVisionImage()" title="Remove image">Remove</button>
-                </div>
+                <img src="${pendingVisionImage.dataUrl}" alt="Attachment preview" />
+                <span class="vision-inline-name" title="${escapeHtml(pendingVisionImage.name)}">${escapeHtml(pendingVisionImage.name)}</span>
+                <button onclick="clearVisionImage()" title="Remove image">&times;</button>
             `;
+            toggleSendButton();
         }
 
         function clearVisionImage() {
@@ -4185,7 +4207,7 @@ async function handleNameCorrection(text) {
 
         function isVisionIntentText(text) {
             const t = String(text || '').toLowerCase();
-            return /\b(image|photo|picture|screenshot|bill|receipt|invoice|fridge|extract|scan|ocr|read this)\b/.test(t);
+            return /\b(image|photo|picture|screenshot|bill|receipt|invoice|fridge|extract|scan|ocr|read this|detect|identify|recognize|count|object|objects|human|person|people|animal|animals|cat|dog|bird)\b/.test(t);
         }
 
         function detectVisionTask(text) {
@@ -4193,6 +4215,10 @@ async function handleNameCorrection(text) {
             if (/\b(bill|receipt|invoice|summarize)\b/.test(t)) return 'bill_summary';
             if (/\b(shopping list|extract|items|grocery)\b/.test(t)) return 'shopping_extract';
             if (/\b(fridge|refrigerator|what.?s in)\b/.test(t)) return 'fridge_items';
+            if (/\b(count|how many).*\b(people|persons|humans)\b|\b(people|persons|humans).*\b(count|how many)\b/.test(t)) return 'people_count';
+            if (/\b(animal|animals|dog|cat|bird|pet|wildlife)\b/.test(t)) return 'animal_detect';
+            if (/\b(object|objects|identify|detect|recognize|what.?s in (this )?(image|photo|picture))\b/.test(t)) return 'object_detect';
+            if (/\b(read|text|ocr|label|labels)\b/.test(t)) return 'text_extract';
             return 'general_vision';
         }
 
@@ -4204,15 +4230,28 @@ async function handleNameCorrection(text) {
 
         async function ensureTesseractLoaded() {
             if (window.Tesseract && window.Tesseract.recognize) return true;
-            if (tesseractReady) return false;
-            tesseractReady = true;
-            return new Promise((resolve) => {
+            if (tesseractLoadPromise) return tesseractLoadPromise;
+            tesseractLoadPromise = new Promise((resolve) => {
+                const existing = document.querySelector('script[data-vision-ocr="tesseract"]');
+                if (existing) {
+                    existing.addEventListener('load', () => resolve(!!(window.Tesseract && window.Tesseract.recognize)), { once: true });
+                    existing.addEventListener('error', () => {
+                        tesseractLoadPromise = null;
+                        resolve(false);
+                    }, { once: true });
+                    return;
+                }
                 const script = document.createElement('script');
                 script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+                script.dataset.visionOcr = 'tesseract';
                 script.onload = () => resolve(!!(window.Tesseract && window.Tesseract.recognize));
-                script.onerror = () => resolve(false);
+                script.onerror = () => {
+                    tesseractLoadPromise = null;
+                    resolve(false);
+                };
                 document.head.appendChild(script);
             });
+            return tesseractLoadPromise;
         }
 
         function normalizeOcrLines(text) {
@@ -4225,16 +4264,90 @@ async function handleNameCorrection(text) {
         function extractLikelyShoppingItems(ocrText) {
             const lines = normalizeOcrLines(ocrText);
             return lines
-                .filter(line => !/total|subtotal|tax|receipt|invoice|cash|change|thank you|visa|mastercard|qty|price|amount/i.test(line))
-                .map(line => line.replace(/[^a-zA-Z0-9\s\-.,]/g, '').trim())
-                .filter(line => line.length >= 2 && line.length <= 50)
+                .map(line => line.replace(/^[\W_]+|[\W_]+$/g, '').replace(/\s{2,}/g, ' ').trim())
+                .filter(line => !/^(total|subtotal|tax|receipt|invoice|cash|change|thank you|visa|mastercard|qty|price|amount|date|time|balance)\b/i.test(line))
+                .filter(line => !/^\d+([.,]\d{2})?$/.test(line))
+                .filter(line => !/[\$₹€£]\s*\d/.test(line))
+                .filter(line => line.length >= 2 && line.length <= 60)
                 .slice(0, 20);
+        }
+
+        function summarizeBillFromOcr(ocrText) {
+            const lines = normalizeOcrLines(ocrText);
+            const totals = [];
+            const items = [];
+            const totalRx = /\b(sub\s*total|subtotal|tax|cgst|sgst|vat|grand total|total)\b[^0-9]*([\$₹€£]?\s?\d+(?:[.,]\d{2})?)/i;
+            const itemRx = /^([A-Za-z][A-Za-z0-9\s\-\&\.\(\)]{1,50})\s+([\$₹€£]?\s?\d+(?:[.,]\d{2})?)$/;
+
+            for (const raw of lines) {
+                const line = raw.replace(/\s{2,}/g, ' ').trim();
+                const t = line.match(totalRx);
+                if (t) {
+                    totals.push(`${t[1].replace(/\s+/g, ' ').trim()}: ${t[2]}`);
+                    continue;
+                }
+                const item = line.match(itemRx);
+                if (item && !/total|tax|change|cash|card|balance/i.test(item[1])) {
+                    items.push(`${item[1]} - ${item[2]}`);
+                }
+            }
+
+            const out = [];
+            if (items.length) {
+                out.push('Detected line items:');
+                out.push(`- ${items.slice(0, 10).join('\n- ')}`);
+            }
+            if (totals.length) {
+                out.push('Detected totals:');
+                out.push(`- ${totals.slice(0, 8).join('\n- ')}`);
+            }
+            if (!out.length) {
+                const preview = lines.slice(0, 12).join('\n- ');
+                return `Bill summary (OCR):\n- ${preview}`;
+            }
+            return `Bill summary (OCR):\n${out.join('\n')}`;
+        }
+
+        async function preprocessImageForOcr(dataUrl) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const scale = Math.max(1.6, 1400 / Math.max(img.width, img.height));
+                    const w = Math.max(1, Math.round(img.width * scale));
+                    const h = Math.max(1, Math.round(img.height * scale));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    if (!ctx) {
+                        resolve(dataUrl);
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const imageData = ctx.getImageData(0, 0, w, h);
+                    const d = imageData.data;
+                    for (let i = 0; i < d.length; i += 4) {
+                        const gray = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+                        const boosted = gray > 160 ? 255 : gray < 85 ? 0 : gray;
+                        d[i] = boosted;
+                        d[i + 1] = boosted;
+                        d[i + 2] = boosted;
+                    }
+                    ctx.putImageData(imageData, 0, 0);
+                    resolve(canvas.toDataURL('image/png'));
+                };
+                img.onerror = () => resolve(dataUrl);
+                img.src = dataUrl;
+            });
         }
 
         async function runLocalOcrVision(task, userText) {
             const canUse = await ensureTesseractLoaded();
             if (!canUse || !pendingVisionImage?.dataUrl) return null;
-            const result = await window.Tesseract.recognize(pendingVisionImage.dataUrl, 'eng');
+            const preparedImage = await preprocessImageForOcr(pendingVisionImage.dataUrl);
+            const result = await window.Tesseract.recognize(preparedImage, 'eng', {
+                tessedit_pageseg_mode: window.Tesseract?.PSM?.AUTO || 3
+            });
             const raw = result?.data?.text || '';
 
             if (!raw.trim()) {
@@ -4248,12 +4361,15 @@ async function handleNameCorrection(text) {
             }
 
             if (task === 'bill_summary') {
-                const lines = normalizeOcrLines(raw).slice(0, 40);
-                return `Bill summary (OCR):\n- ${lines.slice(0, 12).join('\n- ')}`;
+                return summarizeBillFromOcr(raw);
             }
 
             if (task === 'fridge_items') {
-                return 'Fridge object detection needs backend vision support. I can still extract visible text from labels if present.';
+                return 'Vision backend is unavailable right now. OCR fallback can only read text labels, not full object detection.';
+            }
+
+            if (task === 'people_count' || task === 'animal_detect' || task === 'object_detect') {
+                return 'Vision backend is unavailable right now. OCR fallback can only read text, not detect people/animals/objects.';
             }
 
             return `Extracted text:\n${normalizeOcrLines(raw).slice(0, 25).join('\n')}`;
@@ -4269,8 +4385,9 @@ async function handleNameCorrection(text) {
 
             const task = detectVisionTask(text);
             const imageBase64 = getPendingVisionBase64();
+            const promptText = String(text || '').trim() || 'Analyze this image.';
             const payload = {
-                prompt: text,
+                prompt: promptText,
                 task,
                 mimeType: pendingVisionImage.mimeType,
                 imageBase64
@@ -4289,7 +4406,7 @@ async function handleNameCorrection(text) {
                     const answer = data?.response || data?.result || 'Image analyzed, but no response text was returned.';
                     addChatMessage(answer, false);
                     speak('Vision analysis complete.');
-                    saveToHistory(text, answer);
+                    saveToHistory(promptText, answer);
                     hideThinkingIndicator();
                     return;
                 }
@@ -4312,6 +4429,7 @@ async function handleNameCorrection(text) {
                 addChatMessage(msg, false);
                 speak(msg);
             } finally {
+                clearVisionImage();
                 hideThinkingIndicator();
             }
         }
@@ -4461,7 +4579,7 @@ async function handleNameCorrection(text) {
                                 <p><strong>Translator:</strong> "Speak in Tamil" or "Translate this to Hindi"</p>
                                 <p><strong>Budget Planner:</strong> "budget trip to Seattle for 3 days under 900 USD"</p>
                                 <p><strong>Calendar Sync:</strong> "sync to calendar" after a budget trip plan</p>
-                                <p><strong>Vision Mode:</strong> Upload an image, then ask "summarize this bill" or "extract shopping list"</p>
+                                <p><strong>Vision Mode:</strong> Upload an image, then ask "summarize this bill", "extract shopping list", "count people", or "detect animals/objects"</p>
                             </div>
                         </section>
 
@@ -5110,7 +5228,7 @@ async function handleNameCorrection(text) {
             const sendBtn = document.getElementById('send-btn');
             const voiceBtn = document.getElementById('voice-btn');
             
-            if (input.value.trim().length > 0) {
+            if (input.value.trim().length > 0 || !!pendingVisionImage) {
                 
                 sendBtn.classList.remove('hidden');
                 voiceBtn.classList.add('hidden');
@@ -5124,20 +5242,21 @@ async function handleNameCorrection(text) {
         function sendTextInput() {
             const input = document.getElementById('text-input');
             const text = input.value.trim();
-            if (text) {
-                window.__lastUserMessage = text;
-                if (!inputHistory.length || inputHistory[inputHistory.length - 1] !== text) {
+            if (text || pendingVisionImage) {
+                const outgoingText = text || 'Analyze this image';
+                window.__lastUserMessage = outgoingText;
+                if (text && (!inputHistory.length || inputHistory[inputHistory.length - 1] !== text)) {
                     inputHistory.push(text);
                     if (inputHistory.length > 50) inputHistory = inputHistory.slice(-50);
                 }
                 inputHistoryIndex = -1;
-                addChatMessage(text, true);
+                addChatMessage(outgoingText, true);
                 
                 if (waitingForName) {
-                    handleNameInput(text);
+                    handleNameInput(outgoingText);
                 } else if (waitingForLocation) {
                     
-                    const cleanLocation = text.trim();
+                    const cleanLocation = outgoingText.trim();
                     if (cleanLocation.length < 2) {
                         const msg = "I didn't catch that. Please tell me a city or location name.";
                         addChatMessage(msg, false);
@@ -5157,9 +5276,9 @@ async function handleNameCorrection(text) {
                     waitingForLocation = false;
                     getWeatherByCity(cleanLocation);
                 } else if (waitingForReminder) {
-                    handleReminderFollowUp(text);
+                    handleReminderFollowUp(outgoingText);
                 } else {
-                    processCommand(text);
+                    processCommand(outgoingText);
                 }
                 
                 input.value = '';
@@ -8789,25 +8908,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
-/*
-1. TYPING INDICATOR:
-   - Call showTypingIndicator() before AI response
-   - Call hideTypingIndicator() before showing response
-
-2. DELETE MESSAGES:
-   - Already integrated in addChatMessage() with delete button
-   - Shows on hover over user messages
-
-3. CONVERSATION HISTORY:
-   - Call saveToHistory(userMsg, aiMsg) after each exchange
-   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
-   - Search, export, and clear functions included
-
-4. ERROR FEEDBACK:
-   - Call showError("Error message") instead of addChatMessage for errors
-   - Visual shake animation + auto-dismiss
-*/
 
 </script>
 </body>
