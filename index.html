@@ -2059,9 +2059,9 @@
             <!-- Main Content Area -->
             <div id="main-card" class="glass-card rounded-3xl p-8 mb-6 card-hover">
                 <!-- Two-column layout: Suggestions left, Chat right -->
-                <div class="flex flex-col lg:flex-row gap-6">
+                <div class="flex flex-col gap-6">
                     <!-- Left Column: Suggestions -->
-                    <div class="lg:w-1/3 order-2 lg:order-1">
+                    <div class="w-full order-2">
                         <!-- Suggestion Buttons - Disabled per request -->
                         <!--
                         <div id="initial-suggestions" class="suggestions-container">
@@ -2124,7 +2124,7 @@
                     </div>
 
                     <!-- Right Column: Chat -->
-                    <div class="lg:w-2/3 order-1 lg:order-2">
+                    <div class="w-full order-1">
                         <!-- Chat History - Claude/ChatGPT style compact view -->
                         <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height">
                             <!-- Welcome message -->
@@ -5096,7 +5096,7 @@ async function handleNameCorrection(text) {
             }
         }
 
-        function addChatMessage(text, isUser = true, typewriter = false) {
+        function addChatMessage(text, isUser = true, typewriter = null) {
             const chatContainer = document.getElementById('chat-container');
             const messageDiv = document.createElement('div');
             messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-3`;
@@ -5145,7 +5145,7 @@ async function handleNameCorrection(text) {
 
                 // Use wider container for messages with maps/iframes - FULL WIDTH for maps
                 const hasMap = text.includes('<iframe') || text.includes('map-container');
-                const containerWidth = hasMap ? 'w-full max-w-4xl' : (hasHtmlContent ? 'max-w-2xl' : 'max-w-md');
+                const containerWidth = hasMap ? 'w-full max-w-4xl' : (hasHtmlContent ? 'w-full max-w-3xl' : 'w-full');
 
                 // Store text safely for speech - use data attribute to avoid escaping issues
                 const speechId = 'speech_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -5184,7 +5184,8 @@ async function handleNameCorrection(text) {
                 chatContainer.appendChild(messageDiv);
                 
                 
-                if (typewriter) {
+                const shouldTypewriter = typewriter === null ? true : !!typewriter;
+                if (shouldTypewriter) {
                     const textElement = messageDiv.querySelector('.typewriter-text');
                     let charIndex = 0;
                     const speed = 15; 
@@ -8905,6 +8906,7 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
+
 </script>
 </body>
 </html>
