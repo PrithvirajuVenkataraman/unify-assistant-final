@@ -2151,7 +2151,6 @@
     <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 floating-input-bar z-40">
         <div class="max-w-xl sm:max-w-3xl mx-auto px-3 py-1">
             <div id="input-bar-inner" class="flex items-center gap-1.5 modern-input px-2 py-1">
-                <input type="file" id="vision-file-input" accept="image/*" class="hidden" onchange="handleVisionFileSelected(event)" />
                 <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -2163,18 +2162,6 @@
                         Help & Tips
                     </div>
                 </button>
-                <button onclick="triggerVisionUpload()" id="vision-btn" class="flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Upload image">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="17 8 12 3 7 8"></polyline>
-                        <line x1="12" y1="3" x2="12" y2="15"></line>
-                    </svg>
-                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                        Upload image
-                    </div>
-                </button>
-                <div id="vision-inline-attachment" class="hidden vision-inline-attachment"></div>
-
                 <input
                     type="text"
                     id="text-input"
@@ -4147,13 +4134,12 @@ async function handleNameCorrection(text) {
         };
 
         function triggerVisionUpload() {
-            const input = document.getElementById('vision-file-input');
-            if (!input) return;
-            input.value = '';
-            input.click();
+            addChatMessage('Image upload is currently disabled.', false);
         }
 
         function handleVisionFileSelected(event) {
+            addChatMessage('Image upload is currently disabled.', false);
+            return;
             const file = event?.target?.files?.[0];
             if (!file) return;
 
@@ -4206,8 +4192,7 @@ async function handleNameCorrection(text) {
         }
 
         function isVisionIntentText(text) {
-            const t = String(text || '').toLowerCase();
-            return /\b(image|photo|picture|screenshot|bill|receipt|invoice|fridge|extract|scan|ocr|read this|detect|identify|recognize|count|object|objects|human|person|people|animal|animals|cat|dog|bird)\b/.test(t);
+            return false;
         }
 
         function detectVisionTask(text) {
@@ -4592,7 +4577,6 @@ async function handleNameCorrection(text) {
                                 <p><strong>Translator:</strong> "Speak in Tamil" or "Translate this to Hindi"</p>
                                 <p><strong>Budget Planner:</strong> "budget trip to Seattle for 3 days under 900 USD"</p>
                                 <p><strong>Calendar Sync:</strong> "sync to calendar" after a budget trip plan</p>
-                                <p><strong>Vision Mode:</strong> Upload an image, then ask "summarize this bill", "extract shopping list", "count people", or "detect animals/objects"</p>
                             </div>
                         </section>
 
@@ -8921,7 +8905,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
 </script>
 </body>
 </html>
