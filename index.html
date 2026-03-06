@@ -1272,7 +1272,7 @@
         /* Modern input field styling */
         .modern-input {
             background: rgba(243, 244, 246, 0.8);
-            border: 2px solid transparent;
+            border: 1.5px solid rgba(148, 163, 184, 0.45);
             border-radius: 16px;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
@@ -1290,16 +1290,17 @@
 
         body.dark .modern-input {
             background: rgba(30, 41, 59, 0.8);
+            border-color: transparent;
         }
 
         body.dark .modern-input:hover {
             background: rgba(30, 41, 59, 1);
-            border-color: rgba(0, 217, 255, 0.3);
+            border-color: transparent;
         }
 
         body.dark .modern-input:focus-within {
             background: rgba(15, 23, 42, 1);
-            border-color: rgba(0, 217, 255, 0.6);
+            border-color: transparent;
             box-shadow: 0 0 0 4px rgba(0, 217, 255, 0.15);
         }
 
@@ -2149,7 +2150,8 @@
 
     <!-- ChatGPT-style Input at Bottom - Enhanced -->
     <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 floating-input-bar z-40">
-        <div class="max-w-xl sm:max-w-3xl mx-auto px-3 py-1">
+        <div class="max-w-5xl mx-auto px-3 py-1">
+            <div class="max-w-xl sm:max-w-3xl mx-auto">
             <div id="input-bar-inner" class="flex items-center gap-1.5 modern-input px-2 py-1">
                 <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
@@ -2194,8 +2196,9 @@
                     </div>
                 </button>
             </div>
+            </div>
+            <p id="footer-disclaimer" class="mt-2 text-xs text-gray-400 font-medium text-center">JARVIS can make mistakes. Check important info.</p>
             <!-- Footer controls -->
-            <p id="footer-disclaimer" class="mt-2 w-full text-xs text-gray-400 font-medium text-center">JARVIS can make mistakes. Check important info.</p>
             <div class="mt-2 space-y-2">
                 <div class="flex justify-center">
                     <div class="footer-action-pill" role="group" aria-label="Voice actions">
@@ -2312,6 +2315,69 @@ function isTamilJokeRequest(text) {
     const t = String(text || '').toLowerCase();
     if (!/\bjoke|funny|laugh\b/.test(t)) return false;
     return /\btamil\b|தமிழ்/.test(t);
+}
+
+function extractReferenceSubject(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+
+    const patterns = [
+        /^\s*(?:what\s+is|what's|define|meaning\s+of)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
+        /^\s*(?:tell\s+me\s+about)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i
+    ];
+
+    for (const p of patterns) {
+        const m = raw.match(p);
+        if (m && m[1]) {
+            return m[1]
+                .replace(/\s+/g, ' ')
+                .replace(/[^\w\s-]/g, '')
+                .trim()
+                .slice(0, 80);
+        }
+    }
+    return '';
+}
+
+async function fetchWikipediaReferenceImage(subject) {
+    const title = String(subject || '').trim();
+    if (!title) return null;
+
+    const candidates = [title, title.replace(/\b\w/g, c => c.toUpperCase())];
+
+    for (const c of candidates) {
+        try {
+            const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(c)}`;
+            const response = await fetch(url);
+            if (!response.ok) continue;
+            const data = await response.json();
+            const imageUrl = data?.originalimage?.source || data?.thumbnail?.source || '';
+            if (!imageUrl) continue;
+
+            return {
+                title: data?.title || c,
+                imageUrl,
+                sourceUrl: data?.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(c)}`
+            };
+        } catch (e) {}
+    }
+    return null;
+}
+
+async function maybeShowReferenceImageForQuery(userText) {
+    const subject = extractReferenceSubject(userText);
+    if (!subject) return;
+
+    const ref = await fetchWikipediaReferenceImage(subject);
+    if (!ref || !ref.imageUrl) return;
+
+    const card = `
+<div class="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white/90 dark:bg-slate-900/60">
+  <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2">Reference image: ${escapeHtml(ref.title)}</p>
+  <img src="${ref.imageUrl}" alt="${escapeHtml(ref.title)} reference image" class="w-full max-h-64 object-cover rounded-lg border border-slate-300 dark:border-slate-700" />
+  <p class="text-[11px] mt-2 text-slate-500 dark:text-slate-400">Source: <a class="underline text-sky-600 dark:text-sky-300" href="${ref.sourceUrl}" target="_blank">Wikipedia</a></p>
+</div>`;
+    addChatMessage(card, false, false);
 }
 
 function violatesIntent(text) {
@@ -3907,43 +3973,65 @@ async function handleTamilJokeSearch(queryText) {
             .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}`)
             .join('\n\n');
 
-        const jokePrompt = `Use only the web snippets below to craft one short, family-friendly Tamil joke.
+        const jokePrompt = `Use the web snippets below only as support and give one VERY SIMPLE Tamil joke.
 
-Requirements:
-1. Tamil script line
-2. Romanized transliteration line
-3. English meaning line
-4. Keep it short and actually funny
-5. If snippets are weak, still produce one safe joke but do not claim false facts
+STRICT FORMAT (exactly 4 lines):
+Tamil: <Tamil script>
+Pronunciation: <simple English letters>
+Meaning: <plain English sentence>
+Why funny: <one short plain-English sentence>
+
+Rules:
+- Keep vocabulary very simple.
+- No made-up words.
+- No complex cultural references.
+- Avoid scary/violent/NSFW content.
+- Make it understandable for a non-Tamil speaker.
 
 Web snippets:
 ${snippetBlock}`;
 
         const ai = await askGeminiAI(jokePrompt);
-        const jokeText = (ai && (ai.response || ai.text)) ? (ai.response || ai.text) : 'Could not build a good joke from search results.';
+        let jokeText = (ai && (ai.response || ai.text)) ? (ai.response || ai.text) : '';
+        if (!/Tamil:\s*/i.test(jokeText) || !/Pronunciation:\s*/i.test(jokeText) || !/Meaning:\s*/i.test(jokeText)) {
+            jokeText = `Tamil: ஆசிரியர்: 2 + 2 எவ்வளவு? மாணவன்: 5... கொஞ்சம் கான்ஃபிடென்ஸுடன்!
+Pronunciation: Aasiriyar: 2 + 2 evvalavu? Maanavan: 5... konjam confidence-udan!
+Meaning: Teacher asks “What is 2+2?” Student says “5… with confidence!”
+Why funny: The wrong answer is said very confidently.`;
+        }
         const sourceLines = results.slice(0, 3).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
 
         hideThinkingIndicator();
-        const finalMsg = `[Globe] Tamil joke (web-assisted):\n\n${jokeText}\n\nSources:\n${sourceLines}`;
+        const finalMsg = `Tamil joke:\n\n${jokeText}\n\nSources:\n${sourceLines}`;
         addChatMessage(finalMsg, false);
         speak('Here is a Tamil joke for you.');
         saveToHistory(queryText, finalMsg);
     } catch (error) {
         try {
-            const directPrompt = `Give one short, family-friendly Tamil joke.
+            const directPrompt = `Give one very simple, family-friendly Tamil joke.
 
-Format:
-1) Tamil script
-2) Romanized transliteration
-3) English meaning
+STRICT FORMAT (exactly 4 lines):
+Tamil: <Tamil script>
+Pronunciation: <simple English letters>
+Meaning: <plain English sentence>
+Why funny: <one short plain-English sentence>
 
-Keep it clean, concise, and genuinely funny.`;
+Rules:
+- Easy words only
+- No made-up words
+- No confusing puns`;
             const direct = await askGeminiAI(directPrompt);
-            const directText = (direct && (direct.response || direct.text))
+            let directText = (direct && (direct.response || direct.text))
                 ? (direct.response || direct.text)
-                : 'Could not generate a Tamil joke right now.';
+                : '';
+            if (!/Tamil:\s*/i.test(directText) || !/Pronunciation:\s*/i.test(directText) || !/Meaning:\s*/i.test(directText)) {
+                directText = `Tamil: டாக்டர்: ஓய்வு எடுங்க. நோயாளர்: ஓய்வு எடுக்க லீவு யாரிடம் கேட்கணும்?
+Pronunciation: Doctor: Oyvu edunga. Noyalar: Oyvu edukka leave yaaridam kekkanum?
+Meaning: Doctor says “Take rest.” Patient asks “Whom should I ask leave from to take rest?”
+Why funny: The patient takes the advice too literally in a work context.`;
+            }
             hideThinkingIndicator();
-            const finalMsg = `[Globe] Tamil joke:\n\n${directText}`;
+            const finalMsg = `Tamil joke:\n\n${directText}`;
             addChatMessage(finalMsg, false);
             speak('Here is a Tamil joke for you.');
             saveToHistory(queryText, finalMsg);
@@ -4573,7 +4661,7 @@ async function handleNameCorrection(text) {
                     textInput.className = 'flex-1 bg-transparent outline-none text-white placeholder-gray-500 text-sm font-medium';
                 }
                 if (footerDisclaimer) {
-                    footerDisclaimer.className = 'text-xs text-gray-500 font-medium';
+                    footerDisclaimer.className = 'mt-2 text-xs text-gray-500 font-medium text-center';
                 }
             } else {
                 // Light mode
@@ -4610,7 +4698,7 @@ async function handleNameCorrection(text) {
                         textInput.className = 'flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-400 text-sm font-medium';
                     }
                     if (footerDisclaimer) {
-                        footerDisclaimer.className = 'text-xs text-gray-400 font-medium';
+                        footerDisclaimer.className = 'mt-2 text-xs text-gray-400 font-medium text-center';
                     }
                 }, 800);
             }
@@ -7440,6 +7528,7 @@ ${sourceLinksBlock}
                 const safeResponse = sanitizeHallucinatedTerrain(aiResponse.response, text, inferredLocation);
                 addChatMessage(safeResponse, false);
                 speak(safeResponse);
+                await maybeShowReferenceImageForQuery(text);
 
 
                 saveToHistory(text, safeResponse);
