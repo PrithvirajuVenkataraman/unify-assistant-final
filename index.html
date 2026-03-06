@@ -2317,13 +2317,53 @@ function isTamilJokeRequest(text) {
     return /\btamil\b|தமிழ்/.test(t);
 }
 
+function normalizeIntentTypos(text) {
+    const raw = String(text || '');
+    if (!raw.trim()) return '';
+
+    const dictionary = [
+        'what', 'whats', 'who', 'tell', 'about', 'define', 'meaning', 'show',
+        'image', 'picture', 'photo', 'look', 'like', 'weather', 'forecast',
+        'news', 'reminder', 'shopping', 'grocery', 'itinerary', 'hotel',
+        'restaurants', 'transport', 'route', 'translate', 'translator', 'joke',
+        'calendar', 'budget', 'sync'
+    ];
+
+    return raw
+        .split(/(\s+)/)
+        .map(token => {
+            if (!/^[a-zA-Z']+$/.test(token)) return token;
+            const lower = token.toLowerCase();
+            if (dictionary.includes(lower)) return lower;
+            if (lower.length < 3) return lower;
+
+            let best = lower;
+            let min = 99;
+            for (const word of dictionary) {
+                const d = levenshteinDistance(lower, word);
+                if (d < min) {
+                    min = d;
+                    best = word;
+                }
+            }
+
+            const limit = lower.length <= 4 ? 1 : 2;
+            return min <= limit ? best : lower;
+        })
+        .join('');
+}
+
 function extractReferenceSubject(text) {
-    const raw = String(text || '').trim();
+    const raw = normalizeIntentTypos(String(text || '').trim());
     if (!raw) return '';
 
     const patterns = [
         /^\s*(?:what\s+is|what's|define|meaning\s+of)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
-        /^\s*(?:tell\s+me\s+about)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i
+        /^\s*(?:tell\s+me\s+about)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
+        /^\s*(?:who\s+is|who's)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
+        /^\s*(?:show\s+me)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
+        /^\s*(?:image|picture|photo)\s+(?:of)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
+        /^\s*(?:what\s+does)\s+(?:a|an|the)?\s*([^?.!]+?)\s+(?:look\s+like)\s*\??\s*$/i
     ];
 
     for (const p of patterns) {
@@ -2336,35 +2376,113 @@ function extractReferenceSubject(text) {
                 .slice(0, 80);
         }
     }
+
+    const compact = raw
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const blocked = /^(hi|hello|hey|thanks|thank you|weather|news|reminder|shopping|translate|joke|help)$/i;
+    if (compact && !blocked.test(compact)) {
+        const words = compact.split(' ').filter(Boolean);
+        if (words.length >= 1 && words.length <= 4) {
+            return compact.slice(0, 80);
+        }
+    }
+
     return '';
+}
+
+function shouldTryReferenceImage(userText, assistantText = '') {
+    const q = normalizeIntentTypos(String(userText || '')).toLowerCase();
+    const a = String(assistantText || '').toLowerCase();
+    if (!q.trim()) return false;
+
+    const blockedIntent = /\b(weather|forecast|temperature|news|headlines|reminder|shopping|grocery|itinerary|hotel|restaurants?|transport|route|translate|translator|joke|calendar|budget trip|sync)\b/;
+    if (blockedIntent.test(q)) return false;
+
+    const explicitImageAsk = /\b(image|picture|photo|show me|looks like|look like)\b/;
+    if (explicitImageAsk.test(q)) return true;
+
+    const explainerAsk = /\b(what is|what's|who is|who's|tell me about|define|meaning of)\b/;
+    if (explainerAsk.test(q)) return true;
+
+    const shortEntityQuery = q.split(/\s+/).filter(Boolean).length <= 4;
+    const assistantLooksExplanatory = /\b(is a|is an|traditional|dish|animal|city|country|festival|language|object|meaning)\b/.test(a);
+    return shortEntityQuery && assistantLooksExplanatory;
 }
 
 async function fetchWikipediaReferenceImage(subject) {
     const title = String(subject || '').trim();
     if (!title) return null;
 
-    const candidates = [title, title.replace(/\b\w/g, c => c.toUpperCase())];
+    const normalized = title.replace(/\s+/g, ' ').trim();
+    const typoMap = {
+        gujya: 'gujiya',
+        gujhia: 'gujiya',
+        biriyani: 'biryani',
+        hydrabad: 'hyderabad',
+        bengluru: 'bengaluru',
+        tamill: 'tamil'
+    };
+    const normalizedLower = normalized.toLowerCase();
+    const normalizedWithTyposFixed = typoMap[normalizedLower] || normalized;
+    const titleCase = normalizedWithTyposFixed.replace(/\b\w/g, c => c.toUpperCase());
+    const lower = normalizedWithTyposFixed.toLowerCase();
+
+    const candidates = [normalizedWithTyposFixed, titleCase];
+    // Common alternate spellings for well-known foods/entities.
+    if (lower === 'gujiya') {
+        candidates.push('Gujhia', 'Gujia');
+    }
+
+    async function fetchPageImageByTitle(pageTitle) {
+        const url = `https://en.wikipedia.org/w/api.php?action=query&prop=pageimages|info&inprop=url&pithumbsize=900&titles=${encodeURIComponent(pageTitle)}&format=json&origin=*`;
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        const data = await response.json();
+        const pages = data?.query?.pages ? Object.values(data.query.pages) : [];
+        const page = pages.find(p => p && !p.missing);
+        if (!page) return null;
+        const imageUrl = page?.thumbnail?.source || '';
+        if (!imageUrl) return null;
+        return {
+            title: page?.title || pageTitle,
+            imageUrl,
+            sourceUrl: page?.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(page?.title || pageTitle)}`
+        };
+    }
+
+    async function searchFallbackTitle(query) {
+        const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=5&format=json&origin=*`;
+        const response = await fetch(searchUrl);
+        if (!response.ok) return null;
+        const data = await response.json();
+        const hits = Array.isArray(data?.query?.search) ? data.query.search : [];
+        for (const hit of hits) {
+            const card = await fetchPageImageByTitle(hit.title);
+            if (card?.imageUrl) return card;
+        }
+        return null;
+    }
 
     for (const c of candidates) {
         try {
-            const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(c)}`;
-            const response = await fetch(url);
-            if (!response.ok) continue;
-            const data = await response.json();
-            const imageUrl = data?.originalimage?.source || data?.thumbnail?.source || '';
-            if (!imageUrl) continue;
-
-            return {
-                title: data?.title || c,
-                imageUrl,
-                sourceUrl: data?.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(c)}`
-            };
+            const card = await fetchPageImageByTitle(c);
+            if (card?.imageUrl) return card;
         } catch (e) {}
     }
+
+    try {
+        const searched = await searchFallbackTitle(normalizedWithTyposFixed);
+        if (searched?.imageUrl) return searched;
+    } catch (e) {}
+
     return null;
 }
 
-async function maybeShowReferenceImageForQuery(userText) {
+async function maybeShowReferenceImageForQuery(userText, assistantText = '') {
+    if (!shouldTryReferenceImage(userText, assistantText)) return;
     const subject = extractReferenceSubject(userText);
     if (!subject) return;
 
@@ -7528,7 +7646,7 @@ ${sourceLinksBlock}
                 const safeResponse = sanitizeHallucinatedTerrain(aiResponse.response, text, inferredLocation);
                 addChatMessage(safeResponse, false);
                 speak(safeResponse);
-                await maybeShowReferenceImageForQuery(text);
+                await maybeShowReferenceImageForQuery(text, safeResponse);
 
 
                 saveToHistory(text, safeResponse);
