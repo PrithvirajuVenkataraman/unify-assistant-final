@@ -1901,6 +1901,23 @@
             display: none;
         }
 
+        .bug-report-fab {
+            position: fixed;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 65;
+        }
+
+        @media (max-width: 640px) {
+            .bug-report-fab {
+                right: 12px;
+                top: auto;
+                bottom: 140px;
+                transform: none;
+            }
+        }
+
         .vision-inline-attachment {
             display: inline-flex;
             align-items: center;
@@ -2014,6 +2031,14 @@
     <div id="offline-banner" class="offline-banner hidden" role="status" aria-live="polite">
         Offline mode: some features may be unavailable
     </div>
+    <button
+        id="bug-report-btn"
+        onclick="openBugReportModal()"
+        class="bug-report-fab px-3 py-2 rounded-full bg-red-500 hover:bg-red-600 text-white text-xs font-bold shadow-lg transition-all"
+        title="Report a bug"
+        aria-label="Report a bug">
+        Report Bug
+    </button>
 
     <div class="page-shell">
         <div id="bg-effects" class="fixed inset-0 overflow-hidden pointer-events-none">
@@ -3015,12 +3040,22 @@ function isRestaurantListing(text) {
     return matchCount >= 2;
 }
 
+function isStructuredItineraryResponse(text) {
+    const t = String(text || '');
+    const lower = t.toLowerCase();
+    const dayBlocks = (lower.match(/\bday\s*\d+\b/g) || []).length;
+    const timeBlocks = (lower.match(/\b(morning|afternoon|evening|night|breakfast|lunch|dinner)\b/g) || []).length;
+    const hasItineraryWord = /\bitinerary\b/.test(lower);
+    const hasDayOne = /\bday\s*1\b/.test(lower);
+    return (dayBlocks >= 1 && timeBlocks >= 2) || (hasItineraryWord && hasDayOne && timeBlocks >= 1);
+}
+
 function suggestQuickReplies(context) {
     const suggestions = [];
     let lastResponse = context;
 
     // Check for itinerary first (most specific)
-    if (context.includes('itinerary') || context.includes('Day 1') || context.includes('Enjoy exploring')) {
+    if (isStructuredItineraryResponse(context)) {
         const regionalFood = getRegionalFood(context);
         suggestions.push(
             { icon: '\u{1F3E8}', text: 'Hotels nearby' },
@@ -4369,33 +4404,7 @@ async function handleNameCorrection(text) {
 
 
         window.onload = async () => {
-            
             const introScreen = document.getElementById('jarvis-intro');
-            
-            
-            setTimeout(() => {
-                const initText = "Initializing JARVIS";
-                if (typeof responsiveVoice !== 'undefined') {
-                    responsiveVoice.speak(initText, "UK English Male", { 
-                        pitch: 0.9, 
-                        rate: 0.95, 
-                        volume: 1 
-                    });
-                } else {
-                    const synth = window.speechSynthesis;
-                    const utterance = new SpeechSynthesisUtterance(initText);
-                    const voices = synth.getVoices();
-                    const maleVoice = voices.find(v => 
-                        v.name.includes('Daniel') || 
-                        v.name.includes('Alex') ||
-                        (v.lang.includes('en-GB') && !v.name.toLowerCase().includes('female'))
-                    ) || voices.find(v => v.lang.startsWith('en'));
-                    if (maleVoice) utterance.voice = maleVoice;
-                    utterance.rate = 0.95;
-                    utterance.pitch = 0.9;
-                    synth.speak(utterance);
-                }
-            }, 2000);
             
             
             setTimeout(() => {
@@ -5412,6 +5421,97 @@ async function handleNameCorrection(text) {
             window.open(formUrl, '_blank');
         }
 
+        function openBugReportModal() {
+            const existing = document.getElementById('bug-report-modal');
+            if (existing) existing.remove();
+
+            const modal = document.createElement('div');
+            modal.id = 'bug-report-modal';
+            modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
+            modal.onclick = (e) => {
+                if (e.target === modal) closeBugReportModal();
+            };
+
+            const savedName = userName || localStorage.getItem('jarvis_bug_name') || '';
+            const bgClass = darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white text-gray-900 border-gray-200';
+            const inputClass = darkMode
+                ? 'w-full rounded-xl border border-slate-600 bg-slate-800 text-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500'
+                : 'w-full rounded-xl border border-gray-300 bg-white text-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500';
+
+            modal.innerHTML = `
+                <div class="${bgClass} w-full max-w-md rounded-2xl border shadow-2xl p-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-bold">Report a Bug</h3>
+                        <button onclick="closeBugReportModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Your Name</label>
+                            <input id="bug-name-input" type="text" value="${escapeHtml(savedName)}" placeholder="Enter your name" class="${inputClass}">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">Comments</label>
+                            <textarea id="bug-comments-input" rows="5" placeholder="Describe the bug and what you expected..." class="${inputClass} resize-none"></textarea>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex gap-2">
+                        <button onclick="closeBugReportModal()" class="flex-1 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold hover:bg-gray-100 dark:border-slate-600 dark:hover:bg-slate-800">Cancel</button>
+                        <button onclick="submitBugReport()" class="flex-1 px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold">Submit</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            setTimeout(() => {
+                const comments = document.getElementById('bug-comments-input');
+                if (comments) comments.focus();
+            }, 60);
+        }
+
+        function closeBugReportModal() {
+            const modal = document.getElementById('bug-report-modal');
+            if (modal) modal.remove();
+        }
+
+        function submitBugReport() {
+            const nameInput = document.getElementById('bug-name-input');
+            const commentsInput = document.getElementById('bug-comments-input');
+            const name = (nameInput?.value || '').trim();
+            const comments = (commentsInput?.value || '').trim();
+
+            if (!name) {
+                showTemporaryMessage('[Error] Please enter your name.');
+                nameInput?.focus();
+                return;
+            }
+            if (!comments) {
+                showTemporaryMessage('[Error] Please enter bug comments.');
+                commentsInput?.focus();
+                return;
+            }
+
+            const report = {
+                id: Date.now().toString(36),
+                name,
+                comments,
+                createdAt: new Date().toISOString(),
+                page: 'index.full_with_map_preview.html'
+            };
+
+            try {
+                const key = 'jarvis_bug_reports';
+                const existing = JSON.parse(localStorage.getItem(key) || '[]');
+                existing.unshift(report);
+                localStorage.setItem(key, JSON.stringify(existing.slice(0, 100)));
+                localStorage.setItem('jarvis_bug_name', name);
+            } catch (e) {}
+
+            closeBugReportModal();
+            showTemporaryMessage('[OK] Bug report submitted. Thank you!');
+            addChatMessage(`Bug report received from ${name}.`, false);
+        }
+
         
         function addAIMessage(text, trustLevel = TRUST_LEVEL.GENERATED) 
         {
@@ -5448,6 +5548,7 @@ async function handleNameCorrection(text) {
             const chatContainer = document.getElementById('chat-container');
             const messageDiv = document.createElement('div');
             messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-3`;
+            messageDiv.dataset.role = isUser ? 'user' : 'assistant';
 
             if (isUser) {
                 hideInitialSuggestions();
@@ -5456,7 +5557,7 @@ async function handleNameCorrection(text) {
                 messageDiv.innerHTML = `
                     <div class="chat-bubble-user text-white px-4 py-3 max-w-md relative group">
                         <p class="text-sm font-medium">${formattedText}</p>
-                        <button onclick="deleteMessage(this)" class="hidden group-hover:flex absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 text-sm hover:bg-red-600 transition-all shadow-lg items-center justify-center">?-</button>
+                        <button onclick="editMessage(this)" data-message="${encodeURIComponent(text)}" class="hidden group-hover:flex absolute -top-2 -right-2 bg-blue-500 text-white rounded-full w-6 h-6 text-xs hover:bg-blue-600 transition-all shadow-lg items-center justify-center" title="Edit message">Edit</button>
                     </div>
                 `;
             } else {
@@ -7038,6 +7139,84 @@ function isLearningIntent(text) {
     return /\b(what is|what are|explain|teach me|help me understand|how does|difference between|compare|why does|meaning of|overview of)\b/.test(t);
 }
 
+function isArtistSongRequest(text) {
+    const t = String(text || '').toLowerCase();
+    const hasMusicAsk = /\b(song|songs|track|tracks|music|playlist|recommend|suggest|best|top|hit|hits|melody|melodies)\b/.test(t);
+    if (!hasMusicAsk) return false;
+
+    return /\b(songs?\s+(of|by|from)|tracks?\s+(of|by|from)|recommend|suggest|best|top)\b/.test(t) ||
+           /\b[a-z][a-z0-9.'&\-\s]{2,}\s+songs?\b/.test(t);
+}
+
+function extractArtistFromSongRequest(text) {
+    const raw = String(text || '').trim();
+    const patterns = [
+        /(?:suggest|recommend)(?:\s+me)?(?:\s+some)?(?:\s+good|\s+best|\s+top)?\s+([a-z0-9.'&\-\s]{2,80}?)\s+(?:songs|tracks?)\b/i,
+        /(?:songs?|tracks?)\s+(?:of|by|from)\s+([a-z0-9.'&\-\s]{2,80})/i,
+        /\b([a-z0-9.'&\-\s]{2,80})\s+(?:songs|tracks?)\b/i
+    ];
+
+    for (const pattern of patterns) {
+        const match = raw.match(pattern);
+        if (match && match[1]) {
+            return match[1]
+                .replace(/\b(please|pls|list|good|best|top|some)\b/gi, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+    }
+    return '';
+}
+
+async function handleArtistSongRequest(text) {
+    const artist = extractArtistFromSongRequest(text);
+    if (!artist) {
+        const msg = 'Tell me the artist name and I will suggest good songs. Example: "Best songs of AR Rahman".';
+        addChatMessage(msg, false);
+        speak(msg);
+        return;
+    }
+
+    showThinkingIndicator(`[Music] Finding songs for ${artist}...`);
+    try {
+        const prompt = `Suggest 12 well-known songs for artist/composer/singer: "${artist}".
+
+Rules:
+- Include only real songs.
+- Keep output concise.
+- Format exactly like:
+[Music] Top songs for <artist>
+- <Song> - <Film/Album>
+- <Song> - <Film/Album>
+(12 items total)
+
+End with one short line asking if the user wants melody, peppy, or underrated songs.`;
+
+        const response = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: prompt,
+                systemPrompt: 'You are a music recommendation assistant. Be concise and accurate.'
+            })
+        });
+
+        if (!response.ok) throw new Error('music recommendation request failed');
+        const data = await response.json();
+        const msg = data?.response || data?.text || `I could not fetch songs for ${artist} right now.`;
+        addChatMessage(msg, false);
+        speak(`Here are song recommendations for ${artist}.`);
+        saveToHistory(text, msg);
+    } catch (error) {
+        const fallbackMsg = `I could not fetch songs for ${artist} right now.\n\nTry this quick search:\n[Search songs of ${artist}](https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')})`;
+        addChatMessage(fallbackMsg, false);
+        speak(`I could not fetch songs for ${artist} right now.`);
+        saveToHistory(text, fallbackMsg);
+    } finally {
+        hideThinkingIndicator();
+    }
+}
+
         async function processCommand(text) {
             const lower = text.toLowerCase();
 
@@ -7102,6 +7281,11 @@ function isLearningIntent(text) {
 
             if (isTamilJokeRequest(cleanText)) {
                 await handleTamilJokeSearch(cleanText);
+                return;
+            }
+
+            if (isArtistSongRequest(cleanText)) {
+                await handleArtistSongRequest(cleanText);
                 return;
             }
 
@@ -9335,7 +9519,8 @@ ${sourceLinksBlock}
         }
         
         function speak(text, force = false) { 
-            const shouldAutoSpeak = autoSpeak || converseMode;
+            // Speech is allowed only in Converse mode or via explicit user click (force=true).
+            const shouldAutoSpeak = converseMode;
             if (!shouldAutoSpeak && !force) return; 
              
             const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim(); 
@@ -9444,14 +9629,38 @@ function hideTypingIndicator() {
     }
 }
 
-function deleteMessage(button) {
-    if (confirm('Delete this message?')) {
-        const messageDiv = button.closest('.flex');
-        messageDiv.style.transition = 'all 0.2s';
-        messageDiv.style.opacity = '0';
-        messageDiv.style.transform = 'scale(0.8)';
-        setTimeout(() => messageDiv.remove(), 200);
+async function editMessage(button) {
+    const currentRaw = button?.dataset?.message ? decodeURIComponent(button.dataset.message) : '';
+    const currentText = currentRaw || button?.closest('.chat-bubble-user')?.querySelector('p')?.innerText || '';
+    const edited = window.prompt('Edit your message:', currentText);
+    if (edited === null) return;
+
+    const nextText = edited.trim();
+    if (!nextText) {
+        showTemporaryMessage('Message cannot be empty.');
+        return;
     }
+    if (nextText === currentText.trim()) return;
+
+    const userRow = button.closest('[data-role=\"user\"]');
+    const textNode = userRow?.querySelector('.chat-bubble-user p');
+    if (textNode) {
+        textNode.innerHTML = escapeHtml(nextText).replace(/\n/g, '<br>');
+    }
+    button.dataset.message = encodeURIComponent(nextText);
+    window.__lastUserMessage = nextText;
+
+    // ChatGPT-like behavior: regenerate from this edited turn by removing following turns.
+    if (userRow) {
+        let row = userRow.nextElementSibling;
+        while (row) {
+            const next = row.nextElementSibling;
+            row.remove();
+            row = next;
+        }
+    }
+
+    await processCommand(nextText);
 }
 
 let conversationHistory = [];
@@ -9674,3 +9883,4 @@ loadHistory();
 </script>
 </body>
 </html>
+
