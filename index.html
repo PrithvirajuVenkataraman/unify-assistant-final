@@ -5422,94 +5422,8 @@ async function handleNameCorrection(text) {
         }
 
         function openBugReportModal() {
-            const existing = document.getElementById('bug-report-modal');
-            if (existing) existing.remove();
-
-            const modal = document.createElement('div');
-            modal.id = 'bug-report-modal';
-            modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4';
-            modal.onclick = (e) => {
-                if (e.target === modal) closeBugReportModal();
-            };
-
-            const savedName = userName || localStorage.getItem('jarvis_bug_name') || '';
-            const bgClass = darkMode ? 'bg-slate-900 text-white border-slate-700' : 'bg-white text-gray-900 border-gray-200';
-            const inputClass = darkMode
-                ? 'w-full rounded-xl border border-slate-600 bg-slate-800 text-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500'
-                : 'w-full rounded-xl border border-gray-300 bg-white text-gray-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500';
-
-            modal.innerHTML = `
-                <div class="${bgClass} w-full max-w-md rounded-2xl border shadow-2xl p-5">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="text-lg font-bold">Report a Bug</h3>
-                        <button onclick="closeBugReportModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
-                    </div>
-                    <div class="space-y-3">
-                        <div>
-                            <label class="block text-sm font-medium mb-1">Your Name</label>
-                            <input id="bug-name-input" type="text" value="${escapeHtml(savedName)}" placeholder="Enter your name" class="${inputClass}">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium mb-1">Comments</label>
-                            <textarea id="bug-comments-input" rows="5" placeholder="Describe the bug and what you expected..." class="${inputClass} resize-none"></textarea>
-                        </div>
-                    </div>
-                    <div class="mt-4 flex gap-2">
-                        <button onclick="closeBugReportModal()" class="flex-1 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold hover:bg-gray-100 dark:border-slate-600 dark:hover:bg-slate-800">Cancel</button>
-                        <button onclick="submitBugReport()" class="flex-1 px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold">Submit</button>
-                    </div>
-                </div>
-            `;
-
-            document.body.appendChild(modal);
-
-            setTimeout(() => {
-                const comments = document.getElementById('bug-comments-input');
-                if (comments) comments.focus();
-            }, 60);
-        }
-
-        function closeBugReportModal() {
-            const modal = document.getElementById('bug-report-modal');
-            if (modal) modal.remove();
-        }
-
-        function submitBugReport() {
-            const nameInput = document.getElementById('bug-name-input');
-            const commentsInput = document.getElementById('bug-comments-input');
-            const name = (nameInput?.value || '').trim();
-            const comments = (commentsInput?.value || '').trim();
-
-            if (!name) {
-                showTemporaryMessage('[Error] Please enter your name.');
-                nameInput?.focus();
-                return;
-            }
-            if (!comments) {
-                showTemporaryMessage('[Error] Please enter bug comments.');
-                commentsInput?.focus();
-                return;
-            }
-
-            const report = {
-                id: Date.now().toString(36),
-                name,
-                comments,
-                createdAt: new Date().toISOString(),
-                page: 'index.full_with_map_preview.html'
-            };
-
-            try {
-                const key = 'jarvis_bug_reports';
-                const existing = JSON.parse(localStorage.getItem(key) || '[]');
-                existing.unshift(report);
-                localStorage.setItem(key, JSON.stringify(existing.slice(0, 100)));
-                localStorage.setItem('jarvis_bug_name', name);
-            } catch (e) {}
-
-            closeBugReportModal();
-            showTemporaryMessage('[OK] Bug report submitted. Thank you!');
-            addChatMessage(`Bug report received from ${name}.`, false);
+            const formUrl = 'https://forms.gle/bgeSroPoa3dFbP4n6';
+            window.open(formUrl, '_blank', 'noopener,noreferrer');
         }
 
         
@@ -9883,4 +9797,3 @@ loadHistory();
 </script>
 </body>
 </html>
-
