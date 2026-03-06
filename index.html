@@ -6368,130 +6368,27 @@ async function handleNameCorrection(text) {
         
         
         async function getTransportInfo(cityName) {
-            
-            const metroCities = [
-                'chennai', 'bangalore', 'bengaluru', 'delhi', 'mumbai', 'kolkata', 'hyderabad', 'pune', 'ahmedabad',
-                'new york', 'nyc', 'boston', 'los angeles', 'chicago', 'san francisco', 'london', 'paris', 'tokyo', 
-                'singapore', 'dubai', 'hong kong', 'sydney', 'melbourne', 'toronto', 'vancouver', 'coimbatore',
-                'madurai', 'trichy', 'tiruchirappalli', 'salem', 'kochi', 'cochin', 'thiruvananthapuram', 'trivandrum',
-                'mysore', 'mysuru', 'mangalore', 'mangaluru', 'vizag', 'visakhapatnam', 'vijayawada', 'jaipur',
-                'lucknow', 'kanpur', 'nagpur', 'indore', 'bhopal', 'patna', 'ranchi', 'bhubaneswar', 'guwahati',
-                'chandigarh', 'ludhiana', 'amritsar', 'surat', 'vadodara', 'rajkot'
-            ];
-            
-            
-            const tier2Cities = [
-                'pondicherry', 'puducherry', 'ooty', 'kodaikanal', 'munnar', 'alleppey', 'alappuzha',
-                'tirupati', 'thanjavur', 'kumbakonam', 'mahabalipuram', 'kanyakumari', 'rameswaram',
-                'vellore', 'erode', 'tirunelveli', 'dindigul', 'hosur', 'nagercoil', 'karur',
-                'udaipur', 'jodhpur', 'pushkar', 'mount abu', 'ajmer', 'shimla', 'manali', 'dharamshala',
-                'rishikesh', 'haridwar', 'varanasi', 'agra', 'mathura', 'vrindavan', 'khajuraho',
-                'goa', 'panaji', 'margao', 'puri', 'konark', 'darjeeling', 'gangtok', 'shillong'
-            ];
-            
-            const isMetro = metroCities.some(city => cityName.toLowerCase().includes(city));
-            const isTier2 = tier2Cities.some(city => cityName.toLowerCase().includes(city));
-            
             showThinkingIndicator('[Bus] Checking transport options...');
-            
-            if (isMetro) {
-                
-                const transportPrompt = `Provide public transportation information for ${cityName}. 
-
-CRITICAL FORMATTING - READ CAREFULLY:
-- NEVER use asterisks (*) or bold markers (**) 
-- Use bullet points with dash (-)
-- Use simple text only
-- Organize by category with emoji headers
-
-Format (NO ASTERISKS):
-
-[Metro] Metro/Subway:
-- Main lines and routes
-- Operating hours
-- Average frequency
-                
-[Bus] Bus System:
-- Main bus operators
-- Coverage areas
-- Typical timings
-                
-[Taxi] Ride-Sharing & Taxis:
-- Uber and Ola availability
-- Auto-rickshaw availability
-- Typical fare ranges
-                
-Keep it concise and practical. Focus on what tourists need to know.
-
-CRITICAL: Do NOT use ** or * anywhere in your response. Use plain text with dashes for bullets.`;
-                
-                const aiResponse = await askGeminiAI(transportPrompt);
+            try {
+                const resolved = await resolveLocationForTravel(cityName);
                 hideThinkingIndicator();
-                addChatMessage(aiResponse.response, false);
-                speak("Here's the transport information!");
-            } else if (isTier2) {
-                
+                addChatMessage(buildTransportMessage(resolved), false);
+                speak(`Here are precise transport options for ${resolved?.cityName || cityName}.`);
+                setLastResolvedTravelLocation(resolved?.fullLocation || cityName);
+                saveToHistory(`Transport in ${cityName}`, `Provided transport information for ${resolved?.fullLocation || cityName}`);
+            } catch (error) {
                 hideThinkingIndicator();
-                const tier2Msg = `[Bus] Transport in ${cityName}:
-
-${cityName} is a tourist-friendly town with decent transport options.
-
-[Taxi] Ride-Sharing:
-- Uber/Ola may be available but with limited drivers
-- Wait times can be longer (10-20 mins)
-- Better availability during tourist season
-
-[Auto] Local Options:
-- Auto-rickshaws are the most reliable option
-- Negotiate fare before starting (or insist on meter)
-- Available throughout the town
-
-[Bus] Public Transport:
-- Local and intercity buses available at bus stand
-- Check timings at the local bus depot
-- State transport buses connect to major cities
-
-[Tip] Best Advice for ${cityName}:
-- For sightseeing: Hire an auto for half-day/full-day (negotiate beforehand)
-- For short trips: Use auto-rickshaws
-- For intercity: Book bus tickets in advance during peak season
-- Download Ola/Uber apps as backup but don't rely solely on them`;
-                
-                addChatMessage(tier2Msg, false);
-                speak(`${cityName} has auto-rickshaws and some ride-sharing options. Auto-rickshaws are your most reliable choice here.`);
-            } else {
-                
-                hideThinkingIndicator();
-                const smallTownMsg = `[Bus] Transport in ${cityName}:
-
-${cityName} is a smaller town without major ride-sharing services like Uber or Ola.
-
-[Auto] What's Available:
-- Auto-rickshaws (most common and reliable)
-- Cycle rickshaws in some areas
-- Local shared autos/vans for specific routes
-- Town buses (limited schedules)
-
-[Bus] Intercity Travel:
-- State transport buses from the bus stand
-- Private buses to nearby cities
-- Shared taxis/vans to neighboring towns
-
-[Tip] Pro Tips for ${cityName}:
-- Ask your hotel to arrange a trusted auto driver
-- Negotiate auto fare before starting your trip
-- For temple visits, many autos offer package rates
-- Local drivers often double as guides - utilize their knowledge!
-- Keep cash handy as digital payments may not work everywhere
-
-[Car] Best Option:
-If visiting multiple places, consider hiring a local taxi/auto for the full day. Ask your accommodation for recommendations - they usually know trustworthy drivers.`;
-                
-                addChatMessage(smallTownMsg, false);
-                speak(`${cityName} is a smaller town. Uber and Ola are not available here. Auto-rickshaws are your best option, and I'd recommend hiring one for the day through your hotel.`);
+                const fallbackInfo = {
+                    cityName: cityName,
+                    fullLocation: cityName,
+                    countryCode: '',
+                    isMajorCity: false,
+                    isSmallTown: false
+                };
+                addChatMessage(buildTransportMessage(fallbackInfo), false);
+                speak(`Here are transport options for ${cityName}.`);
+                saveToHistory(`Transport in ${cityName}`, 'Provided fallback transport information');
             }
-            
-            saveToHistory(`Transport in ${cityName}`, 'Provided transport information');
         }
         
         
@@ -6691,26 +6588,253 @@ async function resolveLocationForTravel(rawLocation) {
     };
 }
 
-function buildTransportMessage(locationInfo) { 
-    const city = locationInfo?.cityName || 'this place'; 
-    const countryCode = (locationInfo?.countryCode || '').toUpperCase(); 
-    const isMajorCity = !!locationInfo?.isMajorCity; 
-    const isSmallTown = !!locationInfo?.isSmallTown; 
+function getTransportRideApps(countryCode) {
+    const cc = (countryCode || '').toUpperCase();
+    if (cc === 'IN') return 'Uber / Ola / local auto-rickshaw';
+    if (cc === 'US' || cc === 'CA') return 'Uber / Lyft / local taxis';
+    if (cc === 'GB') return 'Uber / Bolt / local black cabs';
+    if (cc === 'AU') return 'Uber / DiDi / local taxis';
+    return 'Uber / local taxis / regional rideshare apps';
+}
+
+function getKnownTransitNote(cityName, fullLocation, countryCode) {
+    const city = String(cityName || '').toLowerCase();
+    const full = String(fullLocation || '').toLowerCase();
+    const cc = (countryCode || '').toUpperCase();
+
+    if (cc === 'US' && city.includes('long beach')) {
+        return {
+            header: '[Pin] Local precision for Long Beach, CA:',
+            lines: [
+                '- Long Beach Transit (LBT) is the main local bus network.',
+                '- Passport shuttle serves key downtown and waterfront areas.',
+                '- Metro A Line (Downtown Long Beach station) connects toward Los Angeles.'
+            ]
+        };
+    }
+
+    if (cc === 'US' && (city.includes('new york') || full.includes('new york, ny'))) {
+        return {
+            header: '[Pin] Local precision for New York City:',
+            lines: [
+                '- MTA subway + buses are the core city network.',
+                '- LIRR / Metro-North / NJ Transit are useful for regional trips.'
+            ]
+        };
+    }
+
+    if (cc === 'US' && (city.includes('los angeles') || city === 'la')) {
+        return {
+            header: '[Pin] Local precision for Los Angeles, CA:',
+            lines: [
+                '- LA Metro (B/D rail + A/E lines + buses) covers key corridors.',
+                '- Metrolink is useful for longer regional commutes beyond central LA.'
+            ]
+        };
+    }
+
+    if (cc === 'US' && city.includes('san francisco')) {
+        return {
+            header: '[Pin] Local precision for San Francisco, CA:',
+            lines: [
+                '- Muni Metro + buses are core in-city options.',
+                '- BART is best for airport/East Bay regional connections.'
+            ]
+        };
+    }
+
+    if (cc === 'US' && city.includes('chicago')) {
+        return {
+            header: '[Pin] Local precision for Chicago, IL:',
+            lines: [
+                '- CTA L trains + buses are primary city transit.',
+                '- Metra serves suburban/regional commuter routes.'
+            ]
+        };
+    }
+
+    if (cc === 'US' && city.includes('seattle')) {
+        return {
+            header: '[Pin] Local precision for Seattle, WA:',
+            lines: [
+                '- Link light rail + King County Metro buses are the main options.',
+                '- Sounder/express buses help with wider regional travel.'
+            ]
+        };
+    }
+
+    if (cc === 'US' && city.includes('boston')) {
+        return {
+            header: '[Pin] Local precision for Boston, MA:',
+            lines: [
+                '- MBTA subway (the T) + buses cover most neighborhoods.',
+                '- Commuter Rail supports outer-city and regional routes.'
+            ]
+        };
+    }
+
+    if (cc === 'US' && city.includes('washington')) {
+        return {
+            header: '[Pin] Local precision for Washington, DC:',
+            lines: [
+                '- Metro rail + Metrobus are the core network.',
+                '- DC Circulator is convenient for common central routes.'
+            ]
+        };
+    }
+
+    if (cc === 'US' && city.includes('philadelphia')) {
+        return {
+            header: '[Pin] Local precision for Philadelphia, PA:',
+            lines: [
+                '- SEPTA subway/trolley/bus covers most city travel.',
+                '- Regional Rail is useful for suburban connections.'
+            ]
+        };
+    }
+
+    if (cc === 'CA' && city.includes('toronto')) {
+        return {
+            header: '[Pin] Local precision for Toronto, ON:',
+            lines: [
+                '- TTC subway/streetcar/bus is the main city network.',
+                '- GO Transit is best for Greater Toronto regional travel.'
+            ]
+        };
+    }
+
+    if (cc === 'CA' && city.includes('vancouver')) {
+        return {
+            header: '[Pin] Local precision for Vancouver, BC:',
+            lines: [
+                '- TransLink SkyTrain + buses + SeaBus provide broad coverage.',
+                '- Compass Card is the common fare method across modes.'
+            ]
+        };
+    }
+
+    if (cc === 'GB' && city.includes('london')) {
+        return {
+            header: '[Pin] Local precision for London:',
+            lines: [
+                '- TfL Tube + buses cover most areas well.',
+                '- Contactless tap-to-pay is usually the easiest fare option.'
+            ]
+        };
+    }
+
+    if (cc === 'FR' && city.includes('paris')) {
+        return {
+            header: '[Pin] Local precision for Paris:',
+            lines: [
+                '- Metro + RER + buses provide dense coverage.',
+                '- RER is typically best for airports and outer zones.'
+            ]
+        };
+    }
+
+    if (cc === 'JP' && city.includes('tokyo')) {
+        return {
+            header: '[Pin] Local precision for Tokyo:',
+            lines: [
+                '- Tokyo Metro + Toei + JR lines form the core network.',
+                '- IC cards (Suica/PASMO) are the easiest way to pay.'
+            ]
+        };
+    }
+
+    if (cc === 'SG' && city.includes('singapore')) {
+        return {
+            header: '[Pin] Local precision for Singapore:',
+            lines: [
+                '- MRT + bus integration is highly reliable citywide.',
+                '- EZ-Link/SimplyGo tap payments are standard for transit.'
+            ]
+        };
+    }
+
+    if (cc === 'AE' && city.includes('dubai')) {
+        return {
+            header: '[Pin] Local precision for Dubai:',
+            lines: [
+                '- Dubai Metro + feeder buses are the main backbone.',
+                '- Taxis are widely available for first/last-mile travel.'
+            ]
+        };
+    }
+
+    if (cc === 'IN' && city.includes('delhi')) {
+        return {
+            header: '[Pin] Local precision for Delhi:',
+            lines: [
+                '- Delhi Metro is the fastest way across most corridors.',
+                '- Auto-rickshaw + app cabs are useful for short last-mile trips.'
+            ]
+        };
+    }
+
+    if (cc === 'IN' && (city.includes('bangalore') || city.includes('bengaluru'))) {
+        return {
+            header: '[Pin] Local precision for Bengaluru:',
+            lines: [
+                '- Namma Metro + BMTC buses are primary public options.',
+                '- Peak-hour road traffic is heavy; metro is often faster.'
+            ]
+        };
+    }
+
+    if (cc === 'IN' && city.includes('mumbai')) {
+        return {
+            header: '[Pin] Local precision for Mumbai:',
+            lines: [
+                '- Suburban rail + Metro + BEST buses are core transport modes.',
+                '- Local trains are fast but crowded during peak hours.'
+            ]
+        };
+    }
+
+    if (cc === 'IN' && city.includes('chennai')) {
+        return {
+            header: '[Pin] Local precision for Chennai:',
+            lines: [
+                '- Chennai Metro + MTC buses + suburban rail provide broad coverage.',
+                '- Autos and app cabs are common for short connectors.'
+            ]
+        };
+    }
+
+    return null;
+}
+
+function buildTransportMessage(locationInfo) {
+    const city = locationInfo?.cityName || 'this place';
+    const fullLocation = locationInfo?.fullLocation || city;
+    const countryCode = (locationInfo?.countryCode || '').toUpperCase();
+    const isMajorCity = !!locationInfo?.isMajorCity;
+    const isSmallTown = !!locationInfo?.isSmallTown;
+    const rideApps = getTransportRideApps(countryCode);
+
+    const transitAgencySearch = `https://www.google.com/search?q=${encodeURIComponent(`${fullLocation} official transit agency`)}`;
+    const busMap = `https://www.google.com/maps/search/${encodeURIComponent(`bus stops in ${fullLocation}`)}`;
+    const railMap = `https://www.google.com/maps/search/${encodeURIComponent(`rail or metro stations in ${fullLocation}`)}`;
+    const transitDirections = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(fullLocation)}&travelmode=transit`;
+    const ridesSearch = `https://www.google.com/search?q=${encodeURIComponent(`${rideApps} ${fullLocation}`)}`;
+    const taxiStandMap = `https://www.google.com/maps/search/${encodeURIComponent(`taxi stand in ${fullLocation}`)}`;
+    const carRentalSearch = `https://www.google.com/search?q=${encodeURIComponent(`car rental in ${fullLocation}`)}`;
+
+    const note = getKnownTransitNote(city, fullLocation, countryCode);
+    const noteBlock = note ? `${note.header}\n${note.lines.join('\n')}\n\n` : '';
+
+    if (isSmallTown) {
+        return `[Bus] **Transport in ${fullLocation}**\n\n${noteBlock}Most practical options for this place:\n- Local bus/minibus routes for low-cost local travel\n- Taxi stand or local cabs for point-to-point trips\n- Rental car for multi-stop plans or nearby attractions\n\n[Map] [Bus routes/stops](${busMap})\n[Taxi] [Taxi stands](${taxiStandMap})\n[Car] [Car rentals](${carRentalSearch})\n[Search] [Official/local transit info](${transitAgencySearch})`;
+    }
 
     if (isMajorCity) {
-        return `[Bus] **Transport in ${city}**\n\n${city} has strong public transport and ride options.\n\n[Metro] [Metro/Subway stations](https://www.google.com/maps/search/metro+station+${encodeURIComponent(city)})\n[Bus] [Bus stops and routes](https://www.google.com/maps/search/bus+stop+${encodeURIComponent(city)})\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Taxi] [Ride options](https://www.google.com/search?q=${countryCode === 'IN' ? 'uber+ola+' : 'uber+lyft+'}${encodeURIComponent(city)})`; 
-    } 
- 
-    if (countryCode === 'IN' && !isMajorCity) { 
-        return `[Bus] **Transport in ${city}**\n\nFor smaller towns, use:\n- Local Bus for low-cost travel\n- Auto-rickshaws for quick local rides\n- Car/taxi if you want comfortable travel\n\n[Map] [Bus stand](https://www.google.com/maps/search/bus+stand+${encodeURIComponent(city)})\n[Search] [Local travel options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(city)})`; 
-    } 
- 
-    if (isSmallTown) { 
-        return `[Bus] **Transport in ${city}**\n\nFor smaller towns, use:\n- Local bus/train where available\n- Local taxi or rideshare\n- Car rental for comfortable travel\n\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Search] [Local travel options](https://www.google.com/search?q=how+to+get+around+${encodeURIComponent(city)})`; 
-    } 
- 
-    return `[Bus] **Transport in ${city}**\n\nRecommended options:\n- Local bus or train where available\n- Uber/Lyft or local taxi apps\n- Car rental for flexible travel\n\n[Map] [Transit directions](https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(city)}&travelmode=transit)\n[Taxi] [Ride options](https://www.google.com/search?q=uber+lyft+${encodeURIComponent(city)})`; 
-} 
+        return `[Bus] **Transport in ${fullLocation}**\n\n${noteBlock}Most practical options for this city:\n- Public transit first (bus/metro/rail) for predictable travel times\n- ${rideApps} for direct late-night or door-to-door rides\n- Rental car only if your plan includes multiple outer areas\n\n[Metro] [Rail/Metro stations](${railMap})\n[Bus] [Bus routes/stops](${busMap})\n[Map] [Transit directions](${transitDirections})\n[Taxi] [Ride options](${ridesSearch})\n[Search] [Official transit agency](${transitAgencySearch})`;
+    }
+
+    return `[Bus] **Transport in ${fullLocation}**\n\n${noteBlock}Most practical options for this area:\n- Bus or local rail where available\n- ${rideApps} for direct trips\n- Rental car for flexibility across neighborhoods\n\n[Map] [Transit directions](${transitDirections})\n[Bus] [Bus routes/stops](${busMap})\n[Metro] [Rail/Metro stations](${railMap})\n[Taxi] [Ride options](${ridesSearch})\n[Search] [Official/local transit info](${transitAgencySearch})`;
+}
 
 function askTransportSuggestionFor(cityName) {
     const city = cityName || 'this place';
@@ -9370,25 +9494,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
-/*
-1. TYPING INDICATOR:
-   - Call showTypingIndicator() before AI response
-   - Call hideTypingIndicator() before showing response
-
-2. DELETE MESSAGES:
-   - Already integrated in addChatMessage() with delete button
-   - Shows on hover over user messages
-
-3. CONVERSATION HISTORY:
-   - Call saveToHistory(userMsg, aiMsg) after each exchange
-   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
-   - Search, export, and clear functions included
-
-4. ERROR FEEDBACK:
-   - Call showError("Error message") instead of addChatMessage for errors
-   - Visual shake animation + auto-dismiss
-*/
 
 </script>
 </body>
