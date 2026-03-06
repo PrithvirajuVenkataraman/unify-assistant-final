@@ -6581,6 +6581,7 @@ async function resolveLocationForTravel(rawLocation) {
     return {
         cityName: best.city || input,
         fullLocation: parts.join(', ') || input,
+        state: best.state || '',
         countryCode: best.countryCode,
         country: best.country,
         isMajorCity,
@@ -6593,7 +6594,27 @@ function getTransportRideApps(countryCode) {
     if (cc === 'IN') return 'Uber / Ola / local auto-rickshaw';
     if (cc === 'US' || cc === 'CA') return 'Uber / Lyft / local taxis';
     if (cc === 'GB') return 'Uber / Bolt / local black cabs';
+    if (cc === 'IE') return 'Free Now / Uber / local taxis';
     if (cc === 'AU') return 'Uber / DiDi / local taxis';
+    if (cc === 'NZ') return 'Uber / Ola (select cities) / local taxis';
+    if (cc === 'SG') return 'Grab / Gojek / taxis';
+    if (cc === 'MY') return 'Grab / local taxis';
+    if (cc === 'ID') return 'Grab / Gojek / taxis';
+    if (cc === 'TH') return 'Grab / Bolt (limited) / local taxis';
+    if (cc === 'PH') return 'Grab / local taxis';
+    if (cc === 'VN') return 'Grab / Xanh SM / taxis';
+    if (cc === 'AE') return 'Careem / Uber / local taxis';
+    if (cc === 'SA') return 'Careem / Uber / local taxis';
+    if (cc === 'QA') return 'Karwa / Uber / Careem';
+    if (cc === 'EG') return 'Uber / Careem / local taxis';
+    if (cc === 'TR') return 'BiTaksi / Uber (limited) / local taxis';
+    if (cc === 'BR') return 'Uber / 99 / local taxis';
+    if (cc === 'MX') return 'Uber / DiDi / local taxis';
+    if (cc === 'AR' || cc === 'CL' || cc === 'CO' || cc === 'PE') return 'Uber / Cabify / local taxis';
+    if (cc === 'ZA' || cc === 'NG' || cc === 'KE') return 'Uber / Bolt / local taxis';
+    if (cc === 'DE' || cc === 'FR' || cc === 'IT' || cc === 'ES' || cc === 'NL' || cc === 'BE') return 'Uber / Bolt / local taxis';
+    if (cc === 'JP') return 'GO Taxi / Uber Taxi / local taxis';
+    if (cc === 'KR') return 'Kakao T / Uber Taxi / local taxis';
     return 'Uber / local taxis / regional rideshare apps';
 }
 
@@ -6806,6 +6827,160 @@ function getKnownTransitNote(cityName, fullLocation, countryCode) {
     return null;
 }
 
+function getSmallTownTransportTemplate(locationInfo) {
+    const city = locationInfo?.cityName || 'this town';
+    const country = (locationInfo?.country || '').trim();
+    const state = (locationInfo?.state || '').trim();
+    const cc = (locationInfo?.countryCode || '').toUpperCase();
+
+    if (cc === 'IN') {
+        const southern = /tamil nadu|karnataka|kerala|andhra pradesh|telangana|puducherry/i.test(state);
+        const northern = /uttar pradesh|uttarakhand|punjab|haryana|delhi|himachal|jammu|rajasthan/i.test(state);
+        return {
+            intro: `${city} is likely served best by buses, autos, and local cabs rather than metro rail.`,
+            bullets: [
+                '- Local/state buses: primary low-cost option for town and nearby-city travel',
+                '- Auto-rickshaw and shared autos: usually fastest for short in-town trips',
+                '- App cabs may exist in pockets, but reliability varies by time and area',
+                '- For multi-stop day plans, pre-book a local cab for fixed hours'
+            ],
+            tip: southern
+                ? 'In South Indian towns, bus stands are usually central; ask for last-bus timing before evening travel.'
+                : (northern
+                    ? 'In North Indian towns, confirm both fare and return transport before late evening trips.'
+                    : 'Ask your hotel/host for the nearest bus stand and a trusted local driver contact.')
+        };
+    }
+
+    if (cc === 'US' || cc === 'CA') {
+        return {
+            intro: `${city} may have limited fixed-route transit; local buses and on-demand rides are usually key.`,
+            bullets: [
+                '- County/municipal buses: check reduced evening/weekend schedules',
+                '- Rideshare/taxi: often the most reliable point-to-point option',
+                '- Regional rail may be available only from a nearby larger city',
+                '- Rental car is often most practical for flexible same-day movement'
+            ],
+            tip: 'Verify first/last bus times before planning return trips.'
+        };
+    }
+
+    if (cc === 'GB' || cc === 'IE') {
+        return {
+            intro: `${city} transport is typically bus-led, with rail access depending on proximity to larger hubs.`,
+            bullets: [
+                '- Local bus network: primary option within and around town',
+                '- Regional rail: check nearest station if not directly in town center',
+                '- Taxis/rideshare: useful for low-frequency routes and late returns',
+                '- Rental car: strong option for nearby villages/attractions'
+            ],
+            tip: 'Sunday and late-evening frequencies are usually lower than weekdays.'
+        };
+    }
+
+    if (cc === 'AU' || cc === 'NZ') {
+        return {
+            intro: `${city} usually depends on regional buses and private vehicle options.`,
+            bullets: [
+                '- Regional buses: good for key corridors but often lower frequency',
+                '- Rideshare/taxi: availability can be uneven outside core areas',
+                '- Intercity coach links may be better than local fixed transit',
+                '- Rental car is commonly the most time-efficient choice'
+            ],
+            tip: 'Check evening service cutoffs; many routes end earlier outside major metros.'
+        };
+    }
+
+    if (cc === 'MY' || cc === 'ID' || cc === 'TH' || cc === 'PH' || cc === 'VN') {
+        return {
+            intro: `${city} is usually a mix of local buses, informal local transport, and ride-hailing.`,
+            bullets: [
+                '- Local buses/minibuses: low-cost but frequency can vary by district',
+                '- Ride-hailing apps are often the most consistent point-to-point option',
+                '- Motorcycle taxi options may exist for short urban hops',
+                '- Intercity coach terminals are often better for longer transfers than local rail'
+            ],
+            tip: 'Save your destination in maps and use that pin for pickup/drop-off accuracy.'
+        };
+    }
+
+    if (cc === 'AE' || cc === 'SA' || cc === 'QA' || cc === 'OM' || cc === 'KW' || cc === 'BH') {
+        return {
+            intro: `${city} transport is usually bus + taxi/ride-hailing, with rail limited to larger metros.`,
+            bullets: [
+                '- Local buses: useful on main corridors, lower frequency in outer zones',
+                '- Taxi/Careem/Uber: typically the most reliable for direct trips',
+                '- Intercity coach services are common for city-to-city movement',
+                '- Rental car is often the most practical option for day plans with multiple stops'
+            ],
+            tip: 'For heat-heavy periods, prioritize air-conditioned transfer options and shorter waits.'
+        };
+    }
+
+    if (cc === 'BR' || cc === 'MX' || cc === 'AR' || cc === 'CL' || cc === 'CO' || cc === 'PE') {
+        return {
+            intro: `${city} usually relies on local buses/colectivos plus taxis or app-based rides.`,
+            bullets: [
+                '- City buses/colectivos: main low-cost local option',
+                '- App cabs/taxis: often better for direct routes and late hours',
+                '- Intercity bus terminals are typically key for regional travel',
+                '- Rental car is useful when visiting multiple outskirts in one day'
+            ],
+            tip: 'Use known pickup points (station, plaza, hotel) to reduce navigation confusion.'
+        };
+    }
+
+    if (cc === 'ZA' || cc === 'NG' || cc === 'KE' || cc === 'GH' || cc === 'TZ' || cc === 'UG') {
+        return {
+            intro: `${city} often uses a mix of bus/minibus systems and taxi app options.`,
+            bullets: [
+                '- Municipal or private buses/minibuses: core local coverage',
+                '- Ride-hailing or metered taxis: practical for direct trips',
+                '- Intercity coaches are usually the most reliable long-distance option',
+                '- Rental car/driver hire is useful for multi-stop day routes'
+            ],
+            tip: 'Check service reliability by time of day and plan return transport before late evening.'
+        };
+    }
+
+    if (cc === 'JP' || cc === 'KR' || cc === 'TW') {
+        return {
+            intro: `${city} generally has orderly local buses, with rail strength depending on station access.`,
+            bullets: [
+                '- Local buses: dependable for in-town movement',
+                '- Regional rail: efficient if your area has station connectivity',
+                '- Taxis and ride-hailing: useful for first/last-mile travel',
+                '- Rental car can be efficient for rural attractions and day loops'
+            ],
+            tip: 'Validate final departure times in the evening; services can taper earlier outside big metros.'
+        };
+    }
+
+    if (cc === 'FR' || cc === 'DE' || cc === 'IT' || cc === 'ES' || cc === 'NL' || cc === 'BE') {
+        return {
+            intro: `${city} is often served by regional bus/rail with moderate frequency.`,
+            bullets: [
+                '- Local/regional buses: core in-town and nearby coverage',
+                '- Regional rail: efficient when the town has station access',
+                '- Taxis/rideshare: best for first/last-mile and low-frequency times',
+                '- Rental car: useful for rural attractions and multi-stop routes'
+            ],
+            tip: 'Transit apps usually show real-time delays; validate platform and final service times.'
+        };
+    }
+
+    return {
+        intro: `${city}${country ? `, ${country}` : ''} likely has limited but workable local transport options.`,
+        bullets: [
+            '- Local buses/minibuses for low-cost routes (verify frequency and last service)',
+            '- Taxi/rideshare for direct point-to-point travel and late returns',
+            '- Regional coach/rail (if nearby) for intercity movement',
+            '- Rental car for highest flexibility'
+        ],
+        tip: `In smaller places${country ? ` in ${country}` : ''}, lock return transport early and save station/stand locations offline.`
+    };
+}
+
 function buildTransportMessage(locationInfo) {
     const city = locationInfo?.cityName || 'this place';
     const fullLocation = locationInfo?.fullLocation || city;
@@ -6826,7 +7001,8 @@ function buildTransportMessage(locationInfo) {
     const noteBlock = note ? `${note.header}\n${note.lines.join('\n')}\n\n` : '';
 
     if (isSmallTown) {
-        return `[Bus] **Transport in ${fullLocation}**\n\n${noteBlock}Most practical options for this place:\n- Local bus/minibus routes for low-cost local travel\n- Taxi stand or local cabs for point-to-point trips\n- Rental car for multi-stop plans or nearby attractions\n\n[Map] [Bus routes/stops](${busMap})\n[Taxi] [Taxi stands](${taxiStandMap})\n[Car] [Car rentals](${carRentalSearch})\n[Search] [Official/local transit info](${transitAgencySearch})`;
+        const template = getSmallTownTransportTemplate(locationInfo);
+        return `[Bus] **Transport in ${fullLocation}**\n\n${noteBlock}${template.intro}\n\nMost practical options:\n${template.bullets.join('\n')}\n\n[Tip] ${template.tip}\n\n[Map] [Bus routes/stops](${busMap})\n[Taxi] [Taxi stands](${taxiStandMap})\n[Car] [Car rentals](${carRentalSearch})\n[Search] [Official/local transit info](${transitAgencySearch})`;
     }
 
     if (isMajorCity) {
@@ -9498,4 +9674,3 @@ loadHistory();
 </script>
 </body>
 </html>
-
