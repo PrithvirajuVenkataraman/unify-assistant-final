@@ -2259,6 +2259,11 @@ const RESPONSE_LENGTH_HINTS = {
     normal: 'Respond with practical detail and clear structure.',
     detailed: 'Respond with more depth, examples, and actionable detail.'
 };
+const RESPONSE_FORMAT_HINTS = {
+    paragraph: 'Prefer short paragraphs with clear flow.',
+    bullet: 'Prefer concise bullet points when possible.',
+    steps: 'Prefer numbered step-by-step structure when possible.'
+};
 
 function detectRequestedResponseLength(text) {
     const lower = (text || '').toLowerCase();
@@ -2283,6 +2288,10 @@ function getSupportModeHint() {
 
 function getResponseLengthHint() {
     return RESPONSE_LENGTH_HINTS[window.responseLength || 'normal'] || RESPONSE_LENGTH_HINTS.normal;
+}
+
+function getResponseFormatHint() {
+    return RESPONSE_FORMAT_HINTS[window.responseFormat || 'paragraph'] || RESPONSE_FORMAT_HINTS.paragraph;
 }
 
 function isVerifiedPlace(obj) {
@@ -2314,7 +2323,7 @@ function isWeatherIntentText(text) {
 function isTamilJokeRequest(text) {
     const t = String(text || '').toLowerCase();
     if (!/\bjoke|funny|laugh\b/.test(t)) return false;
-    return /\btamil\b|தமிழ்/.test(t);
+    return /\btamil\b|à®¤à®®à®¿à®´à¯/.test(t);
 }
 
 function normalizeIntentTypos(text) {
@@ -4112,10 +4121,10 @@ ${snippetBlock}`;
         const ai = await askGeminiAI(jokePrompt);
         let jokeText = (ai && (ai.response || ai.text)) ? (ai.response || ai.text) : '';
         if (!/Tamil:\s*/i.test(jokeText) || !/Pronunciation:\s*/i.test(jokeText) || !/Meaning:\s*/i.test(jokeText)) {
-            jokeText = `Tamil: ஆசிரியர்: 2 + 2 எவ்வளவு? மாணவன்: 5... கொஞ்சம் கான்ஃபிடென்ஸுடன்!
-Pronunciation: Aasiriyar: 2 + 2 evvalavu? Maanavan: 5... konjam confidence-udan!
-Meaning: Teacher asks “What is 2+2?” Student says “5… with confidence!”
-Why funny: The wrong answer is said very confidently.`;
+            jokeText = `Tamil: அம்மா: ஏன் புத்தகம் திறந்துட்டு தூங்குறே? பையன்: கனவில் படிச்சுட்டு இருக்கேன்!
+Pronunciation: Amma: En puthagam thiranduttu thoongure? Paiyan: Kanavil padichuttu irukken!
+Meaning: Mom asks, "Why are you sleeping with the book open?" Son says, "I'm studying in my dream!"
+Why funny: He turns sleeping into a clever study excuse.`;
         }
         const sourceLines = results.slice(0, 3).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
 
@@ -4143,10 +4152,10 @@ Rules:
                 ? (direct.response || direct.text)
                 : '';
             if (!/Tamil:\s*/i.test(directText) || !/Pronunciation:\s*/i.test(directText) || !/Meaning:\s*/i.test(directText)) {
-                directText = `Tamil: டாக்டர்: ஓய்வு எடுங்க. நோயாளர்: ஓய்வு எடுக்க லீவு யாரிடம் கேட்கணும்?
-Pronunciation: Doctor: Oyvu edunga. Noyalar: Oyvu edukka leave yaaridam kekkanum?
-Meaning: Doctor says “Take rest.” Patient asks “Whom should I ask leave from to take rest?”
-Why funny: The patient takes the advice too literally in a work context.`;
+                directText = `Tamil: ஆசிரியர்: உன் ஹோம் வொர்க் எங்கே? மாணவன்: பேனா வேலைநிறுத்தம் போயிட்டது!
+Pronunciation: Aasiriyar: Un homework enge? Maanavan: Pena velainiruththam poittadhu!
+Meaning: Teacher asks, "Where is your homework?" Student says, "My pen went on strike!"
+Why funny: He blames the pen instead of admitting he skipped homework.`;
             }
             hideThinkingIndicator();
             const finalMsg = `Tamil joke:\n\n${directText}`;
@@ -4223,7 +4232,9 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
 
         const responseMode = detectRequestedResponseLength(userMessage);
         const responseHint = RESPONSE_LENGTH_HINTS[responseMode] || RESPONSE_LENGTH_HINTS.normal;
-        const effectiveMessage = `${userMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`;
+        const formatMode = window.responseFormat || responseFormat || 'paragraph';
+        const formatHint = RESPONSE_FORMAT_HINTS[formatMode] || RESPONSE_FORMAT_HINTS.paragraph;
+        const effectiveMessage = `${userMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`;
 
          
         const response = await fetch('/api/chat-groq', { 
@@ -4329,6 +4340,7 @@ async function handleNameCorrection(text) {
         let lastResolvedTravelLocation = null; 
         let supportModeLock = 'balanced';
         let responseLength = 'normal';
+        let responseFormat = 'paragraph';
         let converseMode = false;
         let favorites = [];
         let inputHistory = [];
@@ -4541,7 +4553,7 @@ async function handleNameCorrection(text) {
                 .map(line => line.replace(/^[\W_]+|[\W_]+$/g, '').replace(/\s{2,}/g, ' ').trim())
                 .filter(line => !/^(total|subtotal|tax|receipt|invoice|cash|change|thank you|visa|mastercard|qty|price|amount|date|time|balance)\b/i.test(line))
                 .filter(line => !/^\d+([.,]\d{2})?$/.test(line))
-                .filter(line => !/[\$₹€£]\s*\d/.test(line))
+                .filter(line => !/[\$â‚¹â‚¬Â£]\s*\d/.test(line))
                 .filter(line => line.length >= 2 && line.length <= 60)
                 .slice(0, 20);
         }
@@ -4550,8 +4562,8 @@ async function handleNameCorrection(text) {
             const lines = normalizeOcrLines(ocrText);
             const totals = [];
             const items = [];
-            const totalRx = /\b(sub\s*total|subtotal|tax|cgst|sgst|vat|grand total|total)\b[^0-9]*([\$₹€£]?\s?\d+(?:[.,]\d{2})?)/i;
-            const itemRx = /^([A-Za-z][A-Za-z0-9\s\-\&\.\(\)]{1,50})\s+([\$₹€£]?\s?\d+(?:[.,]\d{2})?)$/;
+            const totalRx = /\b(sub\s*total|subtotal|tax|cgst|sgst|vat|grand total|total)\b[^0-9]*([\$â‚¹â‚¬Â£]?\s?\d+(?:[.,]\d{2})?)/i;
+            const itemRx = /^([A-Za-z][A-Za-z0-9\s\-\&\.\(\)]{1,50})\s+([\$â‚¹â‚¬Â£]?\s?\d+(?:[.,]\d{2})?)$/;
 
             for (const raw of lines) {
                 const line = raw.replace(/\s{2,}/g, ' ').trim();
@@ -4857,6 +4869,7 @@ async function handleNameCorrection(text) {
                         <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">What I Can Do</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                                <p><strong>Explain & Teach Anything:</strong> "What is AI?", "Explain inflation like I'm 12", "Teach me probability basics"</p>
                                 <p><strong>Travel Planning:</strong> "Plan a 3-day trip to Tokyo"</p>
                                 <p><strong>Food Recommendations:</strong> "Best restaurants in Rome"</p>
                                 <p><strong>Transport Info:</strong> "How to get around London?"</p>
@@ -4918,10 +4931,42 @@ async function handleNameCorrection(text) {
                         <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Smart Features</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                                <p><strong>Learning Mode:</strong> I can teach concepts step-by-step across tech and non-tech topics.</p>
                                 <p><strong>Web Search:</strong> I can enrich recommendations with live search context.</p>
                                 <p><strong>Location-Aware:</strong> I adapt transport suggestions by city type.</p>
                                 <p><strong>Regional Food:</strong> I suggest cuisine ideas by destination.</p>
                                 <p><strong>Converse Mode:</strong> Hands-free conversation with auto speaking.</p>
+                            </div>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Behavior</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Reply style</p>
+                                    <div class="flex gap-2 flex-wrap">
+                                        <button onclick="setSupportModeLock('balanced')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${supportModeLock === 'balanced' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Balanced</button>
+                                        <button onclick="setSupportModeLock('supportive')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${supportModeLock === 'supportive' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Supportive</button>
+                                        <button onclick="setSupportModeLock('debate')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${supportModeLock === 'debate' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Debate</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Response length</p>
+                                    <div class="flex gap-2 flex-wrap">
+                                        <button onclick="setResponseLength('short')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseLength === 'short' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Short</button>
+                                        <button onclick="setResponseLength('normal')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseLength === 'normal' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Normal</button>
+                                        <button onclick="setResponseLength('detailed')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseLength === 'detailed' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Detailed</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Response format</p>
+                                    <div class="flex gap-2 flex-wrap">
+                                        <button onclick="setResponseFormat('paragraph')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'paragraph' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Paragraph</button>
+                                        <button onclick="setResponseFormat('bullet')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'bullet' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Bullet points</button>
+                                        <button onclick="setResponseFormat('steps')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'steps' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Step-by-step</button>
+                                    </div>
+                                </div>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Voice commands: "set support mode supportive", "set response length detailed", or "set response format bullet points".</p>
                             </div>
                         </section>
 
@@ -5136,6 +5181,7 @@ async function handleNameCorrection(text) {
                 localStorage.setItem('jarvis_assistant_modes', JSON.stringify({
                     supportModeLock,
                     responseLength,
+                    responseFormat,
                     converseMode
                 }));
             } catch (e) {}
@@ -5155,6 +5201,7 @@ async function handleNameCorrection(text) {
         function loadAssistantModes() {
             supportModeLock = 'balanced';
             responseLength = 'normal';
+            responseFormat = 'paragraph';
             converseMode = false;
             try {
                 const saved = localStorage.getItem('jarvis_assistant_modes');
@@ -5162,11 +5209,13 @@ async function handleNameCorrection(text) {
                     const parsed = JSON.parse(saved);
                     supportModeLock = parsed.supportModeLock || 'balanced';
                     responseLength = parsed.responseLength || 'normal';
+                    responseFormat = ['paragraph', 'bullet', 'steps'].includes(parsed.responseFormat) ? parsed.responseFormat : 'paragraph';
                     converseMode = typeof parsed.converseMode === 'boolean' ? parsed.converseMode : false;
                 }
             } catch (e) {}
             window.supportModeLock = supportModeLock;
             window.responseLength = responseLength;
+            window.responseFormat = responseFormat;
             updateAssistantModeUI();
             if (converseMode) {
                 showConverseToast(true, true);
@@ -5197,6 +5246,16 @@ async function handleNameCorrection(text) {
             updateAssistantModeUI();
             const label = responseLength.charAt(0).toUpperCase() + responseLength.slice(1);
             addChatMessage(`Response length set to ${label}.`, false);
+        }
+
+        function setResponseFormat(mode) {
+            const normalized = mode === 'bullets' ? 'bullet' : mode;
+            responseFormat = ['paragraph', 'bullet', 'steps'].includes(normalized) ? normalized : 'paragraph';
+            window.responseFormat = responseFormat;
+            saveAssistantModes();
+            updateAssistantModeUI();
+            const labelMap = { paragraph: 'Paragraph', bullet: 'Bullet Points', steps: 'Step-by-step' };
+            addChatMessage(`Response format set to ${labelMap[responseFormat] || 'Paragraph'}.`, false);
         }
 
         function toggleConverseMode() {
@@ -5806,6 +5865,115 @@ async function handleNameCorrection(text) {
         
         let isProcessing = false; 
         let speechTimeout = null; 
+        let converseTranscriptBuffer = '';
+        let converseFinalizeTimer = null;
+        let currentSpeechTextLower = '';
+
+        function isLikelyTtsEcho(text) {
+            const t = String(text || '').toLowerCase().trim();
+            if (!t || !currentSpeechTextLower) return false;
+            if (t.length < 5) return false;
+            if (currentSpeechTextLower.includes(t)) return true;
+            const firstChunk = currentSpeechTextLower.slice(0, Math.min(32, currentSpeechTextLower.length));
+            if (t.includes(firstChunk)) return true;
+            return false;
+        }
+
+        function isMeaningfulInterruption(text, isFinal, confidence) {
+            const t = String(text || '').trim();
+            if (!t) return false;
+            const lower = t.toLowerCase();
+            if (/^(uh|um|hmm|ah|eh|mm+)$/.test(lower)) return false;
+            const words = lower.split(/\s+/).filter(Boolean);
+            if (!isFinal && words.length < 2 && lower.length < 8) return false;
+            if (confidence > 0 && confidence < 0.42) return false;
+            if (isLikelyTtsEcho(lower)) return false;
+            return true;
+        }
+
+        async function handleFinalTranscript(finalTranscript) {
+            const finalText = String(finalTranscript || '').trim();
+            if (!finalText) return;
+            const lowerText = finalText.toLowerCase();
+            const wakeOnly = /^hey\s+(jarvis|davis)\s*[.!?]*$/i.test(finalText);
+            const now = Date.now();
+            if (wakeOnly && (now - lastWakeAckTime < 5000)) {
+                return;
+            }
+
+            commandMode = false;
+            wakeWordMode = false;
+
+            if (!converseMode) {
+                stopListening();
+            }
+
+            if (isProcessing) return;
+            isProcessing = true;
+            addChatMessage(finalText, true);
+
+            try {
+                if (waitingForLocation) {
+                    const cleanLocation = lowerText.replace(/[?!]/g, '').trim();
+
+                    if (cleanLocation.length < 2) {
+                        const msg = "I didn't catch that. Please tell me a city or location name.";
+                        addChatMessage(msg, false);
+                        speak(msg);
+                        return;
+                    }
+
+                    const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh', 'weather'];
+                    if (fillerWords.includes(cleanLocation.toLowerCase())) {
+                        const msg = "I didn't quite catch the location. Could you say it again?";
+                        addChatMessage(msg, false);
+                        speak(msg);
+                        return;
+                    }
+
+                    waitingForLocation = false;
+                    await getWeatherByCity(cleanLocation);
+                    return;
+                }
+
+                if (waitingForReminder) {
+                    await handleReminderFollowUp(finalText);
+                    return;
+                }
+
+                if (waitingForName) {
+                    await handleNameInput(finalText);
+                    return;
+                }
+
+                await processCommand(finalText);
+            } finally {
+                isProcessing = false;
+            }
+        }
+
+        function queueConverseFinalTranscript(segment) {
+            const s = String(segment || '').trim();
+            if (!s) return;
+
+            if (converseTranscriptBuffer) {
+                converseTranscriptBuffer += ' ';
+            }
+            converseTranscriptBuffer += s;
+
+            if (converseFinalizeTimer) {
+                clearTimeout(converseFinalizeTimer);
+            }
+
+            // Wait briefly for additional final chunks to capture full sentence.
+            converseFinalizeTimer = setTimeout(async () => {
+                const text = converseTranscriptBuffer.trim();
+                converseTranscriptBuffer = '';
+                converseFinalizeTimer = null;
+                if (!text) return;
+                await handleFinalTranscript(text);
+            }, 750);
+        }
         
         function initializeSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -5822,7 +5990,10 @@ async function handleNameCorrection(text) {
             
             
             continuousRecognition.onstart = () => {
-                stopSpeaking();
+                // In converse mode we allow barge-in handling instead of hard-stopping speech on mic start.
+                if (!converseMode) {
+                    stopSpeaking();
+                }
             };
 
             continuousRecognition.onresult = async (event) => {
@@ -5908,75 +6079,19 @@ async function handleNameCorrection(text) {
                 }
                 
                 
-                if (result.isFinal) {
-                    const finalTranscript = result[0].transcript.trim();
-                    const wakeOnly = /^hey\s+(jarvis|davis)\s*[.!?]*$/i.test(finalTranscript);
-                    const now = Date.now();
-                    if (wakeOnly && (now - lastWakeAckTime < 5000)) {
-                        // Ignore duplicate wake-only transcript immediately after wake ack.
-                        return;
+                if (converseMode) {
+                    if (isAssistantSpeaking && isMeaningfulInterruption(result[0].transcript, result.isFinal, confidence)) {
+                        stopSpeaking();
                     }
-                    
-                    
-                    commandMode = false;
-                    wakeWordMode = false;
-                    
-                    
-                    if (!converseMode) {
-                        stopListening();
+                    if (result.isFinal) {
+                        queueConverseFinalTranscript(result[0].transcript);
                     }
-                    
-                    
-                    if (isProcessing) {
-                        return;
-                    }
-                    
-                    isProcessing = true;
-                    
-                    addChatMessage(result[0].transcript.trim(), true);
-                
-                try {
-                    if (waitingForLocation) {
-                        
-                        const cleanLocation = text.replace(/[?!]/g, '').trim();
-                        
-                        if (cleanLocation.length < 2) {
-                            const msg = "I didn't catch that. Please tell me a city or location name.";
-                            addChatMessage(msg, false);
-                            speak(msg);
-                            return;
-                        }
-                        
-                        const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh', 'weather'];
-                        if (fillerWords.includes(cleanLocation.toLowerCase())) {
-                            const msg = "I didn't quite catch the location. Could you say it again?";
-                            addChatMessage(msg, false);
-                            speak(msg);
-                            return;
-                        }
-                        
-                        waitingForLocation = false;
-                        await getWeatherByCity(cleanLocation);
-                        return;
-                    }
-                    
-                    if (waitingForReminder) {
-                        await handleReminderFollowUp(text);
-                        return;
-                    }
-                    
-                    if (waitingForName) {
-                        await handleNameInput(text);
-                        return;
-                    }
-                    
-                    
-                    await processCommand(text);
-                } finally {
-                    
-                    isProcessing = false;
+                    return;
                 }
-                } 
+
+                if (result.isFinal) {
+                    await handleFinalTranscript(result[0].transcript);
+                }
             };
 
             continuousRecognition.onerror = (event) => { 
@@ -6618,6 +6733,11 @@ function isHighRiskMentalHealth(text) {
     return /\b(suicide|kill myself|end my life|self harm|hurt myself|want to die|can't go on)\b/.test(t);
 }
 
+function isLearningIntent(text) {
+    const t = String(text || '').toLowerCase().trim();
+    return /\b(what is|what are|explain|teach me|help me understand|how does|difference between|compare|why does|meaning of|overview of)\b/.test(t);
+}
+
         async function processCommand(text) {
             const lower = text.toLowerCase();
 
@@ -6741,6 +6861,26 @@ Do not use repetitive filler or generic wording.`;
                 return;
             }
 
+            if (isLearningIntent(cleanText)) {
+                const learningPrompt = `User asked: "${text}"
+
+Teach this clearly for a beginner.
+
+Rules:
+- Cover any domain (tech, science, finance, history, life skills, etc.) based on user question.
+- Start with a plain definition.
+- Explain in simple steps with one real-world example.
+- End with a short "quick recap".
+- If useful, add "next thing to learn" in one line.
+- Avoid jargon unless you define it immediately.
+- Keep it accurate and practical.`;
+                const learningResponse = await callAIWithTyping(learningPrompt, 'Preparing a clear explanation...');
+                addChatMessage(learningResponse.response, false);
+                speak("Here is a clear explanation.");
+                saveToHistory(text, learningResponse.response);
+                return;
+            }
+
             if (/\bconverse mode\b/i.test(cleanText)) {
                 if (/\b(on|enable|start)\b/i.test(cleanText)) {
                     if (!converseMode) toggleConverseMode();
@@ -6755,6 +6895,20 @@ Do not use repetitive filler or generic wording.`;
             const supportModeMatch = cleanText.match(/\b(?:set|change|switch)\s+support\s+mode\s+(balanced|supportive|debate)\b/i);
             if (supportModeMatch) {
                 setSupportModeLock(supportModeMatch[1].toLowerCase());
+                return;
+            }
+
+            const responseLengthMatch = cleanText.match(/\b(?:set|change|switch)\s+(?:response\s+)?length\s+(short|normal|detailed)\b/i);
+            if (responseLengthMatch) {
+                setResponseLength(responseLengthMatch[1].toLowerCase());
+                return;
+            }
+
+            const responseFormatMatch = cleanText.match(/\b(?:set|change|switch)\s+(?:response\s+)?format\s+(paragraph|bullet(?:\s*points?)?|steps?|step[\s-]*by[\s-]*step)\b/i);
+            if (responseFormatMatch) {
+                const rawMode = responseFormatMatch[1].toLowerCase();
+                const mode = rawMode.includes('step') ? 'steps' : (rawMode.includes('bullet') ? 'bullet' : 'paragraph');
+                setResponseFormat(mode);
                 return;
             }
 
@@ -8229,7 +8383,7 @@ ${sourceLinksBlock}
                 notification.className = 'fixed top-4 right-4 z-[9999] w-[360px] max-w-[calc(100vw-1rem)] bg-white rounded-2xl shadow-2xl border border-purple-200 p-4';
                 notification.innerHTML = `
                     <div class="flex items-start gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl">⏰</div>
+                        <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl">â°</div>
                         <div class="flex-1 min-w-0">
                             <p class="text-xs font-semibold text-purple-600 uppercase tracking-wide">Reminder</p>
                             <p class="text-sm text-gray-900 font-semibold mt-1 break-words">${escapeHtml(reminder.text)}</p>
@@ -8885,15 +9039,12 @@ ${sourceLinksBlock}
             if (!shouldAutoSpeak && !force) return; 
              
             const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim(); 
-
-            if (converseMode && isListening && continuousRecognition) {
-                isListening = false;
-                try { continuousRecognition.stop(); } catch (e) {}
-            }
+            currentSpeechTextLower = cleanText.toLowerCase();
             isAssistantSpeaking = true;
              
              
-            if (typeof responsiveVoice !== 'undefined') { 
+            // Prefer browser natural voices for converse mode to get closer to ChatGPT-style TTS.
+            if (typeof responsiveVoice !== 'undefined' && !converseMode) { 
                 responsiveVoice.cancel(); 
                 responsiveVoice.speak(cleanText, "UK English Male", {
                     pitch: 0.9,
@@ -8901,6 +9052,7 @@ ${sourceLinksBlock}
                     volume: 1,
                     onend: () => {
                         isAssistantSpeaking = false;
+                        currentSpeechTextLower = '';
                         if (converseMode && listeningRequested && !isListening && !isProcessing) {
                             setTimeout(() => startListening(), 180);
                         }
@@ -8918,15 +9070,7 @@ ${sourceLinksBlock}
                 
                 
                 const preferredVoice = voices.find(v => 
-                    
-                    v.name.includes('Daniel') ||         
-                    v.name.includes('Alex') ||           
-                    v.name.includes('Oliver') ||         
-                    (v.name.includes('Google') && v.lang.includes('en-GB') && v.name.includes('Male')) ||
-                    
-                    (v.lang.includes('en-GB') && !v.name.toLowerCase().includes('female')) ||
-                    
-                    (v.lang.includes('en-US') && !v.name.toLowerCase().includes('female'))
+                    /Aria|Jenny|Sonia|Samantha|Google US English|Neural|Natural/i.test(v.name)
                 ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
                 
                 if (preferredVoice) {
@@ -8944,6 +9088,7 @@ ${sourceLinksBlock}
                 
                 utterance.onend = () => { 
                     isAssistantSpeaking = false;
+                    currentSpeechTextLower = '';
                     currentUtterance = null; 
                     if (currentSpeakerButton) { 
                         currentSpeakerButton.querySelector('.play-icon')?.classList.remove('hidden');
@@ -8962,6 +9107,7 @@ ${sourceLinksBlock}
         
         function stopSpeaking() { 
             isAssistantSpeaking = false;
+            currentSpeechTextLower = '';
             if (typeof responsiveVoice !== 'undefined') { 
                 responsiveVoice.cancel(); 
             } 
@@ -9225,6 +9371,26 @@ document.head.appendChild(style);
 
 loadHistory();
 
+/*
+1. TYPING INDICATOR:
+   - Call showTypingIndicator() before AI response
+   - Call hideTypingIndicator() before showing response
+
+2. DELETE MESSAGES:
+   - Already integrated in addChatMessage() with delete button
+   - Shows on hover over user messages
+
+3. CONVERSATION HISTORY:
+   - Call saveToHistory(userMsg, aiMsg) after each exchange
+   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
+   - Search, export, and clear functions included
+
+4. ERROR FEEDBACK:
+   - Call showError("Error message") instead of addChatMessage for errors
+   - Visual shake animation + auto-dismiss
+*/
+
 </script>
 </body>
 </html>
+
