@@ -6608,11 +6608,21 @@ function extractArtistFromSongRequest(text) {
         if (match && match[1]) {
             return match[1]
                 .replace(/\b(please|pls|list|good|best|top|some)\b/gi, '')
+                .replace(/^\s*\d+\s+/, '')
                 .replace(/\s+/g, ' ')
                 .trim();
         }
     }
     return '';
+}
+
+function extractRequestedSongCount(text) {
+    const raw = String(text || '').trim();
+    const match = raw.match(/\b(?:top|best|suggest|recommend)\s+(\d{1,2})\b/i);
+    if (!match) return 5;
+    const n = Number(match[1]);
+    if (!Number.isFinite(n)) return 5;
+    return Math.max(1, Math.min(12, n));
 }
 
 function extractJsonObject(text) {
@@ -6631,6 +6641,7 @@ function extractJsonObject(text) {
 
 async function handleArtistSongRequest(text) {
     const artist = extractArtistFromSongRequest(text);
+    const requestedCount = extractRequestedSongCount(text);
     if (!artist) {
         const msg = 'Tell me the artist name and I will suggest good songs. Example: "Best songs of AR Rahman".';
         addChatMessage(msg, false);
@@ -6687,7 +6698,7 @@ Return strict JSON only in this schema:
 }
 
 Rules:
-- Give up to 12 songs.
+- Give up to ${requestedCount} songs.
 - Use ONLY evidence from snippet IDs below.
 - Do not include songs without evidence IDs.
 - Do not invent evidence IDs.
@@ -6715,7 +6726,7 @@ ${snippetsBlock}`;
         }
 
         const formattedLines = [];
-        for (const rawItem of items.slice(0, 12)) {
+        for (const rawItem of items.slice(0, requestedCount)) {
             const song = String(rawItem?.song || '').trim();
             const work = String(rawItem?.work || '').trim() || 'Unknown work';
             const reason = String(rawItem?.reason || '').trim();
@@ -6748,7 +6759,7 @@ ${snippetsBlock}`;
         }
 
         const msg =
-            `[Music] Songs for ${artist} (Web RAG)\n\n` +
+            `[Music] Top ${requestedCount} songs for ${artist} (Web RAG)\n\n` +
             `${formattedLines.join('\n')}\n\n` +
             `Do you want melody, peppy, or underrated songs?`;
 
