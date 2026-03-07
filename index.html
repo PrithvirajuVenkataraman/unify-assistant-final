@@ -6597,33 +6597,66 @@ function isArtistSongRequest(text) {
 
 function extractArtistFromSongRequest(text) {
     const raw = String(text || '').trim();
+    if (!raw) return '';
+
+    const cleanCandidate = (input) => {
+        return String(input || '')
+            .replace(/^[\s"'`]+|[\s"'`]+$/g, '')
+            .replace(/^\s*(?:can|could|would)\s+you\s+/i, '')
+            .replace(/^\s*(?:give|show|tell|list|suggest|recommend|play)\s+me\s+/i, '')
+            .replace(/^\s*(?:i\s+(?:want|need)\s+)\b/i, '')
+            .replace(/^\s*(?:top|best)\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i, '')
+            .replace(/^\s*(?:songs?|tracks?|hits?|music|playlist)\s+(?:of|by|from)\s+/i, '')
+            .replace(/^\s*(?:of|by|from)\s+/i, '')
+            .replace(/\b(?:songs?|tracks?|hits?|music|playlist)\b\s*$/i, '')
+            .replace(/\b(?:please|pls|for me|right now|now)\b\s*$/i, '')
+            .replace(/[?.!,]+$/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    };
+
     const patterns = [
-        /(?:suggest|recommend)(?:\s+me)?(?:\s+some)?(?:\s+good|\s+best|\s+top)?\s+([a-z0-9.'&\-\s]{2,80}?)\s+(?:songs|tracks?)\b/i,
-        /(?:songs?|tracks?)\s+(?:of|by|from)\s+([a-z0-9.'&\-\s]{2,80})/i,
-        /\b([a-z0-9.'&\-\s]{2,80})\s+(?:songs|tracks?)\b/i
+        /(?:songs?|tracks?|hits?|music|playlist)\s+(?:of|by|from)\s+([a-z0-9.'&\-\s]{2,100})/i,
+        /(?:top|best)\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)?\s*(?:songs?|tracks?|hits?)?\s*(?:of|by|from)?\s+([a-z0-9.'&\-\s]{2,100})/i,
+        /(?:suggest|recommend|give|show|tell|list)(?:\s+me)?(?:\s+some)?(?:\s+good|\s+best|\s+top)?(?:\s+\d{1,2}|\s+one|\s+two|\s+three|\s+four|\s+five|\s+six|\s+seven|\s+eight|\s+nine|\s+ten|\s+eleven|\s+twelve)?\s*(?:songs?|tracks?|hits?)?(?:\s+(?:of|by|from))?\s+([a-z0-9.'&\-\s]{2,100})/i,
+        /\b([a-z][a-z0-9.'&\-\s]{1,100})\s+(?:songs?|tracks?|hits?)\b/i
     ];
 
     for (const pattern of patterns) {
         const match = raw.match(pattern);
         if (match && match[1]) {
-            return match[1]
-                .replace(/\b(please|pls|list|good|best|top|some)\b/gi, '')
-                .replace(/^\s*\d+\s+/, '')
-                .replace(/\s+/g, ' ')
-                .trim();
+            const cleaned = cleanCandidate(match[1]);
+            if (cleaned) return cleaned;
         }
     }
-    return '';
+
+    // Final heuristic: remove common song-query words and keep likely artist tokens.
+    const heuristic = raw
+        .toLowerCase()
+        .replace(/[?.!,]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .split(' ')
+        .filter(token => token && !/^(give|show|tell|list|suggest|recommend|play|me|top|best|song|songs|track|tracks|hit|hits|music|playlist|of|by|from|please|pls|now|right|can|could|would|you|i|want|need|some|good|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})$/.test(token))
+        .join(' ');
+
+    return cleanCandidate(heuristic);
 }
 
 function extractRequestedSongCount(text) {
     const raw = String(text || '').trim();
-    const match = raw.match(/\b(?:top|best|suggest|recommend)\s+(\d{1,2})\b/i);
+    const wordToNum = {
+        one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+        seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12
+    };
+    const match = raw.match(/\b(?:top|best|suggest|recommend|give|show|list)\s+(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i);
     if (!match) return 5;
-    const n = Number(match[1]);
+    const rawCount = String(match[1] || '').toLowerCase();
+    const n = /^\d{1,2}$/.test(rawCount) ? Number(rawCount) : (wordToNum[rawCount] || 5);
     if (!Number.isFinite(n)) return 5;
     return Math.max(1, Math.min(12, n));
 }
+
 
 function extractJsonObject(text) {
     const raw = String(text || '').trim();
@@ -6639,9 +6672,88 @@ function extractJsonObject(text) {
     }
 }
 
+function sanitizeArtistName(input) {
+    const cleaned = String(input || '')
+        .replace(/^[\s"'`]+|[\s"'`]+$/g, '')
+        .replace(/^\s*(?:can|could|would)\s+you\s+/i, '')
+        .replace(/^\s*(?:give|show|tell|list|suggest|recommend|play)\s+me\s+/i, '')
+        .replace(/^\s*(?:top|best)\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i, '')
+        .replace(/^\s*(?:songs?|tracks?|hits?|music|playlist)\s+(?:of|by|from)\s+/i, '')
+        .replace(/^\s*(?:of|by|from)\s+/i, '')
+        .replace(/\b(?:songs?|tracks?|hits?|music|playlist)\b\s*$/i, '')
+        .replace(/\b(?:please|pls|for me|right now|now)\b\s*$/i, '')
+        .replace(/[?.!,]+$/g, '')
+        .replace(/[^\w\s.'&\-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!cleaned || cleaned.length < 2 || cleaned.length > 80) return '';
+    if (!/[a-z]/i.test(cleaned)) return '';
+    if (/^(song|songs|track|tracks|music|playlist|top|best|suggest|recommend|give|show|tell|list|me)$/i.test(cleaned)) return '';
+    return cleaned;
+}
+
+function clampSongCount(value, fallback = 5) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return Math.max(1, Math.min(12, fallback));
+    return Math.max(1, Math.min(12, n));
+}
+
+async function parseSongRequestIntent(text) {
+    const fallbackArtist = sanitizeArtistName(extractArtistFromSongRequest(text));
+    const fallbackCount = extractRequestedSongCount(text);
+
+    const parserPrompt = `Extract music request intent from the user text.
+
+Return strict JSON only:
+{
+  "artist": "<artist name only>",
+  "count": <number 1-12 or null>
+}
+
+Rules:
+- artist must be only the singer/composer/band name
+- remove command words like "give me", "show me", "top", "best", "songs", "of/by/from"
+- if count is not explicit, set count to null
+- no markdown, no explanation
+
+User text:
+"${String(text || '').replace(/"/g, '\\"')}"`;
+
+    try {
+        const response = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: parserPrompt,
+                systemPrompt: 'You are a strict intent parser. Output valid JSON only.'
+            })
+        });
+
+        if (!response.ok) throw new Error('intent parse request failed');
+        const data = await response.json();
+        const parsed = extractJsonObject(data?.response || data?.text || '');
+
+        const artist = sanitizeArtistName(parsed?.artist);
+        const requestedCount = clampSongCount(parsed?.count ?? fallbackCount, fallbackCount);
+
+        if (artist) {
+            return { artist, requestedCount };
+        }
+    } catch (e) {
+        // Fall back to deterministic parser below.
+    }
+
+    return {
+        artist: fallbackArtist,
+        requestedCount: clampSongCount(fallbackCount, 5)
+    };
+}
+
 async function handleArtistSongRequest(text) {
-    const artist = extractArtistFromSongRequest(text);
-    const requestedCount = extractRequestedSongCount(text);
+    const parsedIntent = await parseSongRequestIntent(text);
+    const artist = parsedIntent.artist;
+    const requestedCount = parsedIntent.requestedCount;
     if (!artist) {
         const msg = 'Tell me the artist name and I will suggest good songs. Example: "Best songs of AR Rahman".';
         addChatMessage(msg, false);
