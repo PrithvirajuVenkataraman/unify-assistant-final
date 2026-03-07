@@ -13,8 +13,31 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
-    <link rel="stylesheet" href="assets/styles/app-overrides.css">
     <style>
+        :root {
+            --jarvis-radius-md: 12px;
+            --jarvis-radius-lg: 16px;
+            --jarvis-radius-xl: 24px;
+            --jarvis-focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.22);
+        }
+
+        /* Keep map/chat media from forcing horizontal overflow on small screens. */
+        .map-message .map-container {
+            min-width: 0 !important;
+        }
+
+        /* Respect reduced-motion user preference across major animated UI blocks. */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+
         @keyframes waveform {
             0%, 100% { transform: scaleY(0.5); }
             50% { transform: scaleY(1.5); }
@@ -2283,8 +2306,21 @@
         </div>
     </div>
 
-<script src="assets/js/app.bootstrap.js"></script>
 <script>
+(function () {
+    if (window.__jarvisBootstrapLoaded) return;
+    window.__jarvisBootstrapLoaded = true;
+
+    window.JarvisApp = window.JarvisApp || {
+        version: "1.0.0",
+        modules: Object.create(null),
+        register(name, api) {
+            if (!name) return;
+            this.modules[name] = api || {};
+        }
+    };
+})();
+
 window.Tesseract = window.Tesseract || null;
 
 const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'}; 
@@ -6750,6 +6786,57 @@ User text:
     };
 }
 
+async function buildSongListFromAIFallback(artist, requestedCount) {
+    const prompt = `Return top songs for the artist/composer below as strict JSON only.
+
+Schema:
+{
+  "artist": "<artist>",
+  "songs": [
+    {
+      "song": "<song name>",
+      "work": "<film or album>",
+      "reason": "<short reason>"
+    }
+  ]
+}
+
+Rules:
+- Artist: "${artist}"
+- Return up to ${requestedCount} songs
+- No markdown
+- No extra keys
+- Keep reasons short`;
+
+    const response = await fetch('/api/chat-groq', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            message: prompt,
+            systemPrompt: 'You are a strict JSON generator. Output valid JSON only.'
+        })
+    });
+
+    if (!response.ok) throw new Error('ai fallback request failed');
+    const data = await response.json();
+    const parsed = extractJsonObject(data?.response || data?.text || '');
+    const songs = Array.isArray(parsed?.songs) ? parsed.songs : [];
+    if (!songs.length) throw new Error('ai fallback returned empty songs');
+
+    const lines = [];
+    for (const rawItem of songs.slice(0, requestedCount)) {
+        const song = String(rawItem?.song || '').trim();
+        const work = String(rawItem?.work || '').trim() || 'Unknown work';
+        const reason = String(rawItem?.reason || '').trim();
+        if (!song) continue;
+        lines.push(`- ${song} - ${work}`);
+        if (reason) lines.push(`  Note: ${reason}`);
+    }
+
+    if (!lines.length) throw new Error('ai fallback produced invalid songs');
+    return lines;
+}
+
 async function handleArtistSongRequest(text) {
     const parsedIntent = await parseSongRequestIntent(text);
     const artist = parsedIntent.artist;
@@ -6879,10 +6966,21 @@ ${snippetsBlock}`;
         speak(`Here are grounded song suggestions for ${artist}.`);
         saveToHistory(text, msg);
     } catch (error) {
-        const fallbackMsg = `I could not fetch songs for ${artist} right now.\n\nTry this quick search:\n[Search songs of ${artist}](https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')})`;
-        addChatMessage(fallbackMsg, false);
-        speak(`I could not fetch songs for ${artist} right now.`);
-        saveToHistory(text, fallbackMsg);
+        try {
+            const aiFallbackLines = await buildSongListFromAIFallback(artist, requestedCount);
+            const aiFallbackMsg =
+                `[Music] Top ${requestedCount} songs for ${artist}\n\n` +
+                `${aiFallbackLines.join('\n')}\n\n` +
+                `Note: This list is generated from model knowledge because live web retrieval was unavailable.`;
+            addChatMessage(aiFallbackMsg, false);
+            speak(`Here are song suggestions for ${artist}.`);
+            saveToHistory(text, aiFallbackMsg);
+        } catch (fallbackError) {
+            const fallbackMsg = `I could not fetch songs for ${artist} right now.\n\nTry this quick search:\n[Search songs of ${artist}](https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')})`;
+            addChatMessage(fallbackMsg, false);
+            speak(`I could not fetch songs for ${artist} right now.`);
+            saveToHistory(text, fallbackMsg);
+        }
     } finally {
         hideThinkingIndicator();
     }
@@ -9545,26 +9643,6 @@ document.head.appendChild(style);
 
 loadHistory();
 
-/*
-1. TYPING INDICATOR:
-   - Call showTypingIndicator() before AI response
-   - Call hideTypingIndicator() before showing response
-
-2. EDIT MESSAGES:
-   - Integrated in addChatMessage() with edit button on user messages
-   - Editing a message regenerates the response from that turn
-
-3. CONVERSATION HISTORY:
-   - Call saveToHistory(userMsg, aiMsg) after each exchange
-   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
-   - Search, export, and clear functions included
-
-4. ERROR FEEDBACK:
-   - Call showError("Error message") instead of addChatMessage for errors
-   - Visual shake animation + auto-dismiss
-*/
-
 </script>
 </body>
 </html>
-
