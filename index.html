@@ -2815,7 +2815,8 @@ function getRegionalFood(context) {
 function showInitialSuggestions() {
     const suggestions = [
         { icon: '\u2600\uFE0F', text: "What's the weather?", query: "What's the weather like today?" },
-        { icon: '\u{1F6D2}', text: 'Add 2 lbs chicken to list', query: 'Add 2 pounds of chicken to my shopping list' },
+        // Shopping suggestion paused for now; re-enable for mobile/tablet rollout.
+        // { icon: '\u{1F6D2}', text: 'Add 2 lbs chicken to list', query: 'Add 2 pounds of chicken to my shopping list' },
         { icon: '\u23F0', text: 'Remind me', query: 'Remind me' },
         { icon: '\u{1F310}', text: 'Translate to Tamil', query: 'Speak in Tamil' },
         { icon: '\u2708\uFE0F', text: 'Plan a trip to Paris', query: 'Plan a weekend trip to Paris' }
@@ -4109,7 +4110,7 @@ RULES:
 
 Your capabilities:
 - Weather (say "check weather")
-- Shopping lists (say "manage shopping")  
+- Shopping lists are currently paused (mobile/tablet rollout)
 - Reminders (say "set reminder")
 - Memory (remembering where things are)
 - Travel itineraries and recommendations
@@ -4716,7 +4717,8 @@ async function handleNameCorrection(text) {
                                 <p><strong>Food Recommendations:</strong> "Best restaurants in Rome"</p>
                                 <p><strong>Transport Info:</strong> "How to get around London?"</p>
                                 <p><strong>Weather:</strong> "What's the weather in Seattle tomorrow?"</p>
-                                <p><strong>Shopping Lists:</strong> "Add 2 pounds of chicken to my shopping list"</p>
+                                <!-- Shopping list line paused for now; re-enable for mobile/tablet rollout. -->
+                                <!-- <p><strong>Shopping Lists:</strong> "Add 2 pounds of chicken to my shopping list"</p> -->
                                 <p><strong>Reminders:</strong> "Remind me to call mom at 5 PM"</p>
                                 <p><strong>Translator:</strong> "Speak in Tamil" or "Translate this to Hindi"</p>
                                 <p><strong>Budget Planner:</strong> "budget trip to Seattle for 3 days under 900 USD"</p>
@@ -4766,7 +4768,7 @@ async function handleNameCorrection(text) {
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Voice Commands</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                                 <p>Press the <strong>microphone button</strong> and speak naturally.</p>
-                                <p class="text-xs text-gray-500">Examples: "What's the weather?" or "Add milk to my shopping list"</p>
+                                <p class="text-xs text-gray-500">Examples: "What's the weather?" or "Set a reminder for 5 PM"</p>
                             </div>
                         </section>
                         
@@ -6554,6 +6556,20 @@ function extractArtistFromSongRequest(text) {
     return '';
 }
 
+function extractJsonObject(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return null;
+    const first = raw.indexOf('{');
+    const last = raw.lastIndexOf('}');
+    if (first === -1 || last === -1 || last <= first) return null;
+    const slice = raw.slice(first, last + 1);
+    try {
+        return JSON.parse(slice);
+    } catch (e) {
+        return null;
+    }
+}
+
 async function handleArtistSongRequest(text) {
     const artist = extractArtistFromSongRequest(text);
     if (!artist) {
@@ -6565,33 +6581,150 @@ async function handleArtistSongRequest(text) {
 
     showThinkingIndicator(`[Music] Finding songs for ${artist}...`);
     try {
-        const prompt = `Suggest 12 well-known songs for artist/composer/singer: "${artist}".
-
-Rules:
-- Include only real songs.
-- Keep output concise.
-- Format exactly like:
-[Music] Top songs for <artist>
-- <Song> - <Film/Album>
-- <Song> - <Film/Album>
-(12 items total)
-
-End with one short line asking if the user wants melody, peppy, or underrated songs.`;
-
-        const response = await fetch('/api/chat-groq', {
+        const searchResponse = await fetch('/api/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                message: prompt,
-                systemPrompt: 'You are a music recommendation assistant. Be concise and accurate.'
+                query: `${artist} best songs soundtrack composer singer`,
+                maxResults: 10
             })
         });
 
-        if (!response.ok) throw new Error('music recommendation request failed');
-        const data = await response.json();
-        const msg = data?.response || data?.text || `I could not fetch songs for ${artist} right now.`;
+        if (!searchResponse.ok) throw new Error('web search failed');
+        const searchData = await searchResponse.json();
+        const rawSnippets = Array.isArray(searchData?.results) ? searchData.results : [];
+        if (!rawSnippets.length) throw new Error('no web snippets found');
+
+        // Strict source allowlist for music RAG grounding.
+        const isAllowedMusicSource = (url, title, description, artistName) => {
+            let host = '';
+            try {
+                host = new URL(String(url || '')).hostname.toLowerCase();
+            } catch (e) {
+                return false;
+            }
+
+            const text = `${String(title || '')} ${String(description || '')}`.toLowerCase();
+            const artistTokens = String(artistName || '')
+                .toLowerCase()
+                .split(/[^a-z0-9]+/)
+                .filter(Boolean);
+
+            if (host === 'wikipedia.org' || host.endsWith('.wikipedia.org')) return true;
+            if (host === 'spotify.com' || host.endsWith('.spotify.com')) return true;
+            if (host === 'music.apple.com') return true;
+
+            // Allow YouTube only when likely official.
+            if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be') {
+                const officialSignals = ['official', 'topic', 'vevo', 'artist channel'];
+                return officialSignals.some(s => text.includes(s));
+            }
+
+            // Heuristic for official artist pages: hostname contains artist token + common TLD.
+            const likelyArtistDomain = artistTokens.some(t => t.length >= 4 && host.includes(t));
+            const hasCommonTld = /\.(com|org|net|in|co|io)$/i.test(host);
+            return likelyArtistDomain && hasCommonTld;
+        };
+
+        const snippets = rawSnippets.filter(r =>
+            isAllowedMusicSource(r?.url, r?.title, r?.description, artist)
+        );
+        if (!snippets.length) {
+            throw new Error('no allowlisted music sources found');
+        }
+
+        const snippetsBlock = snippets
+            .map((r, idx) => {
+                const i = idx + 1;
+                return `${i}. TITLE: ${r.title}\nURL: ${r.url}\nSNIPPET: ${r.description}`;
+            })
+            .join('\n\n');
+
+        const verifyPrompt = `You are doing Retrieval-Augmented Generation (RAG) for song recommendations.
+
+Artist: "${artist}"
+
+Return strict JSON only in this schema:
+{
+  "artist": "<artist>",
+  "songs": [
+    {
+      "song": "<song name>",
+      "work": "<film or album>",
+      "reason": "<short reason grounded in snippets>",
+      "evidenceIds": [1,2]
+    }
+  ]
+}
+
+Rules:
+- Give up to 12 songs.
+- Use ONLY evidence from snippet IDs below.
+- Do not include songs without evidence IDs.
+- Do not invent evidence IDs.
+- Do not output markdown, only valid JSON.
+
+Snippets:
+${snippetsBlock}`;
+
+        const verifyResponse = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: verifyPrompt,
+                systemPrompt: 'You are a strict fact verifier. Output valid JSON only.'
+            })
+        });
+
+        if (!verifyResponse.ok) throw new Error('song verification request failed');
+        const verifyData = await verifyResponse.json();
+        const parsed = extractJsonObject(verifyData?.response || verifyData?.text || '');
+        const items = Array.isArray(parsed?.songs) ? parsed.songs : [];
+
+        if (!items.length) {
+            throw new Error('verification returned no songs');
+        }
+
+        const formattedLines = [];
+        for (const rawItem of items.slice(0, 12)) {
+            const song = String(rawItem?.song || '').trim();
+            const work = String(rawItem?.work || '').trim() || 'Unknown work';
+            const reason = String(rawItem?.reason || '').trim();
+            const ids = Array.isArray(rawItem?.evidenceIds) ? rawItem.evidenceIds : [];
+
+            if (!song) continue;
+
+            const mapped = ids
+                .map(id => Number(id))
+                .filter(n => Number.isFinite(n) && n >= 1 && n <= snippets.length)
+                .map(n => snippets[n - 1]);
+
+            if (!mapped.length) continue;
+
+            formattedLines.push(`- ${song} - ${work}`);
+            if (mapped.length) {
+                const refs = mapped
+                    .slice(0, 2)
+                    .map(m => `[${m.title}](${m.url})`)
+                    .join(' | ');
+                formattedLines.push(`  Evidence: ${refs}`);
+            }
+            if (reason) {
+                formattedLines.push(`  Note: ${reason}`);
+            }
+        }
+
+        if (!formattedLines.length) {
+            throw new Error('verification returned no grounded songs');
+        }
+
+        const msg =
+            `[Music] Songs for ${artist} (Web RAG)\n\n` +
+            `${formattedLines.join('\n')}\n\n` +
+            `Do you want melody, peppy, or underrated songs?`;
+
         addChatMessage(msg, false);
-        speak(`Here are song recommendations for ${artist}.`);
+        speak(`Here are grounded song suggestions for ${artist}.`);
         saveToHistory(text, msg);
     } catch (error) {
         const fallbackMsg = `I could not fetch songs for ${artist} right now.\n\nTry this quick search:\n[Search songs of ${artist}](https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')})`;
@@ -6621,9 +6754,13 @@ End with one short line asking if the user wants melody, peppy, or underrated so
             }
 
             const isWeatherQuery = isWeatherIntentText(lower);
-            
-            const isShoppingQuery = lower.includes('shopping') || lower.includes('grocery') || 
-                                    (lower.includes('add') && lower.includes('list'));
+
+            /*
+             * Shopping list feature paused for now.
+             * Re-enable for mobile/tablet rollout.
+             */
+            // const isShoppingQuery = lower.includes('shopping') || lower.includes('grocery') ||
+            //                         (lower.includes('add') && lower.includes('list'));
             
             const isReminderQuery = lower.includes('remind') || lower.includes('reminder');
             
@@ -6641,13 +6778,16 @@ End with one short line asking if the user wants melody, peppy, or underrated so
                 }
             }
             
-            
-            if (!isShoppingQuery) {
-                const shoppingReceipt = document.getElementById('shopping-receipt');
-                if (shoppingReceipt && !shoppingReceipt.classList.contains('hidden')) {
-                    shoppingReceipt.classList.add('hidden');
-                }
-            }
+            /*
+             * Shopping list feature paused for now.
+             * Re-enable for mobile/tablet rollout.
+             */
+            // if (!isShoppingQuery) {
+            //     const shoppingReceipt = document.getElementById('shopping-receipt');
+            //     if (shoppingReceipt && !shoppingReceipt.classList.contains('hidden')) {
+            //         shoppingReceipt.classList.add('hidden');
+            //     }
+            // }
             
             
             if (!isReminderQuery) {
@@ -7169,32 +7309,36 @@ Rules:
                 return; 
             }
             
-            if (cleanText.toLowerCase().includes('add') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('shopping') || cleanText.toLowerCase().includes('to my list') || cleanText.toLowerCase().includes('to list'))) {
-                handleAddToShoppingList(cleanText);
-                return;
-            }
-
-            else if (cleanText.toLowerCase().match(/\b(also|and|plus)\s+add\b/i) || cleanText.toLowerCase().match(/\badd\s+(also|too)\b/i)) {
-                handleAddToShoppingList(cleanText);
-                return;
-            }
-
-            else if (cleanText.toLowerCase().startsWith('add ') && shoppingList.length > 0) {
-                handleAddToShoppingList(cleanText);
-                return;
-            }
-            else if (cleanText.toLowerCase().includes('remove') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('from shopping'))) {
-                handleRemoveFromShoppingList(cleanText);
-                return;
-            }
-            else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('what') || cleanText.toLowerCase().includes('read')) && cleanText.toLowerCase().includes('shopping')) {
-                showShoppingList();
-                return;
-            }
-            else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('shopping')) {
-                clearShoppingList();
-                return;
-            }
+            /*
+             * Shopping list voice/text command routing paused for now.
+             * Re-enable for mobile/tablet rollout.
+             */
+            // if (cleanText.toLowerCase().includes('add') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('shopping') || cleanText.toLowerCase().includes('to my list') || cleanText.toLowerCase().includes('to list'))) {
+            //     handleAddToShoppingList(cleanText);
+            //     return;
+            // }
+            //
+            // else if (cleanText.toLowerCase().match(/\b(also|and|plus)\s+add\b/i) || cleanText.toLowerCase().match(/\badd\s+(also|too)\b/i)) {
+            //     handleAddToShoppingList(cleanText);
+            //     return;
+            // }
+            //
+            // else if (cleanText.toLowerCase().startsWith('add ') && shoppingList.length > 0) {
+            //     handleAddToShoppingList(cleanText);
+            //     return;
+            // }
+            // else if (cleanText.toLowerCase().includes('remove') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('from shopping'))) {
+            //     handleRemoveFromShoppingList(cleanText);
+            //     return;
+            // }
+            // else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('what') || cleanText.toLowerCase().includes('read')) && cleanText.toLowerCase().includes('shopping')) {
+            //     showShoppingList();
+            //     return;
+            // }
+            // else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('shopping')) {
+            //     clearShoppingList();
+            //     return;
+            // }
 
             else if (/\b(remind me|set\s+(?:a\s+)?reminder|create reminder)\b/i.test(cleanText) ||
                      cleanText.trim().toLowerCase() === 'reminder') {
@@ -7239,7 +7383,7 @@ Rules:
             // ========== END NEWS HANDLING ==========
 
             else if (cleanText.toLowerCase().match(/\b(who (created|made|built|developed) (you|this|unify)|who (is|are) (your|the) (creator|developer|maker|author)|tell me about (your|the) creator|who owns (you|this))\b/i)) {
-                const creatorMsg = `I was created by Prithviraju Venkataraman, a developer passionate about AI and voice interfaces. I was built to help his family mainly with travel planning, weather updates, shopping lists, reminders, and more but later on thought, why not make this as a Vibe Coded Project! Cool isn't it? If you see any bugs or room for improvement, click on Request feature.`;
+                const creatorMsg = `I was created by Prithviraju Venkataraman, a developer passionate about AI and voice interfaces. I was built to help his family mainly with travel planning, weather updates, reminders, and more but later on thought, why not make this as a Vibe Coded Project! Cool isn't it? If you see any bugs or room for improvement, click on Request feature.`;
                 addChatMessage(creatorMsg, false);
                 speak("I was created by Prithviraju Venkataraman. This started as a family project and became a Vibe Coded Project!");
                 return; 
@@ -7275,10 +7419,7 @@ Rules:
   - "Will it rain in Seattle?"
   - "Temperature in Paris?"
 
-[Cart] Shopping Lists - Add items with quantities!
-  - "Add 2 pounds of chicken to my list"
-  - "Add 1 gallon of milk"
-  - "Show my shopping list"
+[Cart] Shopping Lists - Currently paused (mobile/tablet rollout)
 
 ? Reminders - Never forget again!
   - "Remind me to call mom at 5pm"
