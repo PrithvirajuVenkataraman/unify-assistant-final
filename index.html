@@ -4330,6 +4330,9 @@ async function handleNameCorrection(text) {
 
 
         window.onload = async () => {
+            // Ensure no queued/leftover speech survives a refresh.
+            stopAllSpeechPlayback();
+
             const introScreen = document.getElementById('jarvis-intro');
             
             
@@ -9370,6 +9373,29 @@ ${sourceLinksBlock}
             synth.cancel();
             currentUtterance = null;
         }
+
+        function stopAllSpeechPlayback() {
+            try { stopSpeaking(); } catch (e) {}
+            try {
+                if (window.speechSynthesis) window.speechSynthesis.cancel();
+            } catch (e) {}
+            try {
+                if (typeof responsiveVoice !== 'undefined' && responsiveVoice?.cancel) {
+                    responsiveVoice.cancel();
+                }
+            } catch (e) {}
+        }
+
+        function registerSpeechLifecycleGuards() {
+            if (window.__jarvisSpeechGuardsInstalled) return;
+            window.__jarvisSpeechGuardsInstalled = true;
+
+            // Stop any ongoing TTS when the page is being refreshed or navigated away.
+            window.addEventListener('beforeunload', () => stopAllSpeechPlayback(), { capture: true });
+            window.addEventListener('pagehide', () => stopAllSpeechPlayback(), { capture: true });
+        }
+
+        registerSpeechLifecycleGuards();
 
 function showTypingIndicator() {
     const chatContainer = document.getElementById('chat-container');
