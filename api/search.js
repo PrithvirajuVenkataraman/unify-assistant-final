@@ -1,391 +1,185 @@
-// FREE TIER VERSION - No paid services required
-// Deploy this file to: /api/search.js (Vercel Edge Function)
-// No API keys required - uses free public APIs
+export default async function handler(req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-export const config = {
-  runtime: 'edge',
-};
-
-// Simple in-memory rate limiting (resets on cold starts)
-// For Edge Functions, this is per instance - good enough for free tier
-const rateLimits = new Map();
-const RATE_LIMIT_WINDOW = 60000; // 1 minute
-const MAX_REQUESTS = 30; // 30 requests per minute (free tier conservative)
-
-// Free search APIs (no API keys required)
-const FREE_SEARCH_APIS = {
-  // DuckDuckGo Instant Answer API (free, no key)
-  duckduckgo: (query) => 
-    `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
-  
-  // Wikipedia API (free, no key)
-  wikipedia: (query) =>
-    `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=5`,
-  
-  // OpenStreetMap Nominatim (free, requires user agent)
-  openstreetmap: (query) =>
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`,
-};
-
-function getClientIp(request) {
-  // Simple IP detection for rate limiting
-  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
-         request.headers.get('cf-connecting-ip') || 
-         'anonymous';
-}
-
-function checkRateLimit(ip) {
-  const now = Date.now();
-  const key = `rate:${ip}`;
-  
-  const limit = rateLimits.get(key);
-  
-  // Clean up old entries occasionally
-  if (Math.random() < 0.01) { // 1% chance to cleanup
-    for (const [k, v] of rateLimits.entries()) {
-      if (now - v.timestamp > RATE_LIMIT_WINDOW * 2) {
-        rateLimits.delete(k);
-      }
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
     }
-  }
-  
-  if (!limit || now - limit.timestamp > RATE_LIMIT_WINDOW) {
-    rateLimits.set(key, { count: 1, timestamp: now });
-    return { allowed: true, remaining: MAX_REQUESTS - 1 };
-  }
-  
-  if (limit.count >= MAX_REQUESTS) {
-    return { 
-      allowed: false, 
-      retryAfter: Math.ceil((RATE_LIMIT_WINDOW - (now - limit.timestamp)) / 1000)
-    };
-  }
-  
-  limit.count++;
-  rateLimits.set(key, limit);
-  return { allowed: true, remaining: MAX_REQUESTS - limit.count };
-}
 
-// Smart search detection - FREE version
-function shouldUseSearch(query) {
-  const lower = query.toLowerCase();
-  
-  // Definitely DON'T search for these
-  const noSearch = [
-    'hi', 'hello', 'hey', 'thank', 'please', 'sorry',
-    'how are you', 'what can you do', 'help',
-    'my name is', 'call me', 'who are you',
-    'tell me a joke', 'story', 'poem',
-  ];
-  
-  if (noSearch.some(term => lower.includes(term))) {
-    return false;
-  }
-  
-  // Definitely DO search for these
-  const yesSearch = [
-    // Time-sensitive
-    'today', 'now', 'current', 'latest', '2024', '2025', '2026',
-    // News
-    'news', 'breaking', 'update',
-    // Locations
-    'in ', 'at ', 'near ', 'hotel', 'restaurant', 'cafe',
-    // Questions
-    'who is ', 'what is ', 'where is ', 'when is ', 'how to ',
-    // Specific lookups
-    'weather', 'temperature', 'forecast', 'price', 'hours',
-  ];
-  
-  if (yesSearch.some(term => lower.includes(term))) {
-    return true;
-  }
-  
-  // For short queries, don't search
-  if (query.split(' ').length < 3) {
-    return false;
-  }
-  
-  // Default: don't search (to save API calls)
-  return false;
-}
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method not allowed' });
+    }
 
-// Fetch from FREE APIs
-async function fetchFreeSearch(query) {
-  const results = [];
-  
-  try {
-    // Try DuckDuckGo first (best for instant answers)
-    const ddgResponse = await fetch(FREE_SEARCH_APIS.duckduckgo(query), {
-      headers: {
-        'User-Agent': 'JARVIS-Voice-Assistant/1.0 (https://yourdomain.com)'
-      }
-    });
-    
-    if (ddgResponse.ok) {
-      const ddgData = await ddgResponse.json();
-      
-      if (ddgData.AbstractText) {
-        results.push({
-          title: ddgData.Heading || 'DuckDuckGo',
-          description: ddgData.AbstractText,
-          url: ddgData.AbstractURL || '',
-          source: 'duckduckgo',
-          type: 'instant_answer'
-        });
-      }
-      
-      // Add related topics
-      if (ddgData.RelatedTopics) {
-        ddgData.RelatedTopics.slice(0, 3).forEach(topic => {
-          if (topic.Text && !topic.Text.includes('Category:')) {
-            results.push({
-              title: topic.Text.split(' - ')[0] || 'Related',
-              description: topic.Text,
-              url: topic.FirstURL || '',
-              source: 'duckduckgo',
-              type: 'related_topic'
+    try {
+        const query = String(req.body?.query || '').trim();
+        const maxResults = Math.min(Math.max(Number(req.body?.maxResults || 8), 1), 10);
+        if (!query) {
+            return res.status(400).json({ error: 'query is required' });
+        }
+
+        const serperKey = process.env.SERPER_API_KEY;
+        const braveKey = process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY;
+        const attempts = [];
+
+        if (serperKey) {
+            attempts.push({
+                provider: 'serper-google',
+                run: () => searchWithSerper(query, maxResults, serperKey)
             });
-          }
-        });
-      }
-    }
-  } catch (error) {
-    console.log('DuckDuckGo failed:', error.message);
-  }
-  
-  // If DuckDuckGo didn't give good results, try Wikipedia
-  if (results.length < 2) {
-    try {
-      const wikiResponse = await fetch(FREE_SEARCH_APIS.wikipedia(query), {
-        headers: {
-          'User-Agent': 'JARVIS-Voice-Assistant/1.0 (https://yourdomain.com)'
         }
-      });
-      
-      if (wikiResponse.ok) {
-        const wikiData = await wikiResponse.json();
-        
-        wikiData.query?.search?.slice(0, 3).forEach(item => {
-          results.push({
-            title: item.title,
-            description: item.snippet.replace(/<[^>]*>/g, '') + '...',
-            url: `https://en.wikipedia.org/wiki/${encodeURIComponent(item.title)}`,
-            source: 'wikipedia',
-            type: 'encyclopedia'
-          });
+        if (braveKey) {
+            attempts.push({
+                provider: 'brave',
+                run: () => searchWithBrave(query, maxResults, braveKey)
+            });
+        }
+        attempts.push({
+            provider: 'duckduckgo-instant',
+            run: () => searchWithDuckDuckGo(query, maxResults)
         });
-      }
+        attempts.push({
+            provider: 'duckduckgo-html',
+            run: () => searchWithDuckDuckGoHtml(query, maxResults)
+        });
+
+        let results = [];
+        let provider = 'none';
+        for (const attempt of attempts) {
+            try {
+                const current = await attempt.run();
+                if (Array.isArray(current) && current.length > 0) {
+                    provider = attempt.provider;
+                    results = current;
+                    break;
+                }
+            } catch (e) {
+                // Try next provider.
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            provider,
+            results
+        });
     } catch (error) {
-      console.log('Wikipedia failed:', error.message);
-    }
-  }
-  
-  // For location queries, add OpenStreetMap
-  if (query.match(/\b(in|at|near|to)\s+[A-Za-z]/i)) {
-    try {
-      // Small delay to respect OSM's rate limits
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const osmResponse = await fetch(FREE_SEARCH_APIS.openstreetmap(query), {
-        headers: {
-          'User-Agent': 'JARVIS-Voice-Assistant/1.0 (https://yourdomain.com)',
-          'Accept-Language': 'en'
-        }
-      });
-      
-      if (osmResponse.ok) {
-        const osmData = await osmResponse.json();
-        
-        osmData.slice(0, 2).forEach(place => {
-          results.push({
-            title: place.display_name.split(',')[0],
-            description: `Located in ${place.display_name.split(',').slice(1, 3).join(', ').trim()}`,
-            url: `https://www.openstreetmap.org/#map=15/${place.lat}/${place.lon}`,
-            source: 'openstreetmap',
-            type: 'location',
-            coordinates: { lat: place.lat, lon: place.lon }
-          });
+        return res.status(500).json({
+            success: false,
+            error: 'search failed'
         });
-      }
-    } catch (error) {
-      console.log('OpenStreetMap failed:', error.message);
     }
-  }
-  
-  return results.slice(0, 5); // Return max 5 results
 }
 
-// Cache using Response cache headers (Edge Function built-in)
-async function getCachedSearch(query) {
-  // Create a cache key
-  const cacheKey = new Request(`https://cache/search/${encodeURIComponent(query)}`);
-  
-  try {
-    const cache = caches.default;
-    const cachedResponse = await cache.match(cacheKey);
-    
-    if (cachedResponse) {
-      const data = await cachedResponse.json();
-      // Check if cache is fresh (5 minutes)
-      const cachedAt = new Date(cachedResponse.headers.get('x-cached-at')).getTime();
-      if (Date.now() - cachedAt < 5 * 60 * 1000) {
-        return data;
-      }
-    }
-  } catch (error) {
-    // Cache errors are non-fatal
-    console.log('Cache error:', error.message);
-  }
-  
-  return null;
+async function searchWithSerper(query, maxResults, apiKey) {
+    const response = await fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-API-KEY': apiKey
+        },
+        body: JSON.stringify({
+            q: query,
+            num: maxResults
+        })
+    });
+
+    if (!response.ok) return [];
+    const data = await response.json();
+    const organic = Array.isArray(data?.organic) ? data.organic : [];
+    return organic.slice(0, maxResults).map(item => ({
+        title: item?.title || 'Untitled',
+        url: item?.link || '',
+        description: item?.snippet || ''
+    })).filter(item => item.url);
 }
 
-async function setCache(query, data) {
-  const cacheKey = new Request(`https://cache/search/${encodeURIComponent(query)}`);
-  const response = new Response(JSON.stringify(data), {
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'public, max-age=300', // 5 minutes
-      'x-cached-at': new Date().toISOString(),
-    }
-  });
-  
-  try {
-    const cache = caches.default;
-    await cache.put(cacheKey, response.clone());
-  } catch (error) {
-    // Non-fatal
-  }
-  
-  return response;
-}
-
-export default async function handler(request) {
-  // CORS headers
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Content-Type': 'application/json',
-  };
-
-  // Handle preflight
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers });
-  }
-
-  // Only POST allowed
-  if (request.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ error: 'Method not allowed' }),
-      { status: 405, headers }
-    );
-  }
-
-  try {
-    // Simple rate limiting
-    const clientIp = getClientIp(request);
-    const rateLimit = checkRateLimit(clientIp);
-    
-    if (!rateLimit.allowed) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'Too many requests', 
-          retryAfter: rateLimit.retryAfter,
-          message: 'Please wait a minute before trying again'
-        }),
-        { 
-          status: 429, 
-          headers: { ...headers, 'Retry-After': rateLimit.retryAfter.toString() }
+async function searchWithBrave(query, maxResults, apiKey) {
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults}`;
+    const response = await fetch(url, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Subscription-Token': apiKey
         }
-      );
-    }
+    });
 
-    // Parse request
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return new Response(
-        JSON.stringify({ error: 'Invalid JSON' }),
-        { status: 400, headers }
-      );
-    }
+    if (!response.ok) return [];
+    const data = await response.json();
+    const list = Array.isArray(data?.web?.results) ? data.web.results : [];
+    return list.slice(0, maxResults).map(item => ({
+        title: item?.title || 'Untitled',
+        url: item?.url || '',
+        description: item?.description || ''
+    })).filter(item => item.url);
+}
 
-    const { query } = body;
+async function searchWithDuckDuckGo(query, maxResults) {
+    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
+    const response = await fetch(url);
+    if (!response.ok) return [];
+    const data = await response.json();
+    const out = [];
 
-    if (!query || typeof query !== 'string' || query.trim().length < 2) {
-      return new Response(
-        JSON.stringify({ error: 'Valid query required (min 2 chars)' }),
-        { status: 400, headers }
-      );
-    }
-
-    const cleanQuery = query.trim().slice(0, 200); // Limit length
-
-    // Check if we should even search
-    if (!shouldUseSearch(cleanQuery)) {
-      return new Response(
-        JSON.stringify({
-          results: [],
-          query: cleanQuery,
-          search_performed: false,
-          reason: 'Query type does not require web search',
-          suggestion: 'Try asking about current information, locations, or specific facts'
-        }),
-        { status: 200, headers }
-      );
-    }
-
-    // Check cache first
-    const cached = await getCachedSearch(cleanQuery);
-    if (cached) {
-      return new Response(
-        JSON.stringify({
-          ...cached,
-          cached: true,
-          rate_limit: { remaining: rateLimit.remaining }
-        }),
-        { status: 200, headers }
-      );
-    }
-
-    // Perform free search
-    const results = await fetchFreeSearch(cleanQuery);
-    
-    // Prepare response
-    const responseData = {
-      results: results,
-      query: cleanQuery,
-      count: results.length,
-      search_performed: true,
-      cached: false,
-      sources_used: [...new Set(results.map(r => r.source))],
-      rate_limit: { remaining: rateLimit.remaining, limit: MAX_REQUESTS },
-      timestamp: new Date().toISOString(),
+    const pushTopic = (topic) => {
+        if (!topic || out.length >= maxResults) return;
+        if (topic.FirstURL && topic.Text) {
+            out.push({
+                title: topic.Text.split(' - ')[0] || topic.Text.slice(0, 80),
+                url: topic.FirstURL,
+                description: topic.Text
+            });
+        }
     };
 
-    // Cache and return
-    const response = await setCache(cleanQuery, responseData);
-    const responseBody = await response.json();
-    
-    return new Response(
-      JSON.stringify(responseBody),
-      { status: 200, headers }
-    );
+    const related = Array.isArray(data?.RelatedTopics) ? data.RelatedTopics : [];
+    for (const item of related) {
+        if (item?.Topics && Array.isArray(item.Topics)) {
+            for (const sub of item.Topics) pushTopic(sub);
+        } else {
+            pushTopic(item);
+        }
+        if (out.length >= maxResults) break;
+    }
 
-  } catch (error) {
-    console.error('Search error:', error);
-    
-    // User-friendly error
-    return new Response(
-      JSON.stringify({
-        results: [],
-        error: 'Search service temporarily unavailable',
-        message: 'Search APIs are experiencing issues. Please try again in a moment.',
-        fallback_suggestion: 'You can try asking general questions instead of web searches.'
-      }),
-      { status: 200, headers } 
-    );
-  }
+    return out.slice(0, maxResults);
+}
+
+async function searchWithDuckDuckGoHtml(query, maxResults) {
+    const response = await fetch('https://html.duckduckgo.com/html/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `q=${encodeURIComponent(query)}`
+    });
+    if (!response.ok) return [];
+
+    const html = await response.text();
+    const out = [];
+    const re = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+    let match;
+    while ((match = re.exec(html)) && out.length < maxResults) {
+        const url = decodeHtmlEntities(String(match[1] || '').trim());
+        const title = decodeHtmlEntities(stripTags(String(match[2] || '').trim()));
+        if (!/^https?:\/\//i.test(url) || !title) continue;
+        out.push({
+            title,
+            url,
+            description: title
+        });
+    }
+    return out;
+}
+
+function stripTags(input) {
+    return String(input || '').replace(/<[^>]*>/g, ' ');
+}
+
+function decodeHtmlEntities(input) {
+    return String(input || '')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
