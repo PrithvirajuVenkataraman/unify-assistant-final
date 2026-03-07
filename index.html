@@ -13,6 +13,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
+    <link rel="stylesheet" href="assets/styles/app-overrides.css">
     <style>
         @keyframes waveform {
             0%, 100% { transform: scaleY(0.5); }
@@ -646,13 +647,13 @@
             75% { transform: translate(-50%, -50%) rotate(5deg); }
         }
         
-        @keyframes fadeIn {
+        @keyframes fadeInUp {
             from { opacity: 0; transform: translateY(-20px); }
             to { opacity: 1; transform: translateY(0); }
         }
         
         .fade-in {
-            animation: fadeIn 0.3s ease-out;
+            animation: fadeInUp 0.3s ease-out;
         }
         
         .fade-out {
@@ -1185,7 +1186,8 @@
 
         .map-message .map-container {
             width: 100% !important;
-            min-width: 350px;
+            min-width: 0;
+            overflow: hidden;
         }
 
         .map-message .map-container iframe {
@@ -1843,7 +1845,18 @@
         }
 
         /* Smooth theme transition */
-        * {
+        body,
+        button,
+        input,
+        textarea,
+        select,
+        .glass-card,
+        .modern-input,
+        .chat-bubble-assistant,
+        .chat-bubble-user,
+        .suggestion-chip,
+        .footer-action-btn,
+        .floating-input-bar {
             transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
         }
 
@@ -1995,7 +2008,7 @@
     <!-- Shopping List Receipt -->
     <div id="shopping-receipt" class="shopping-receipt hidden">
         <!-- Close button - absolute positioned -->
-        <button onclick="closeShoppingList()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-3xl leading-none z-10" title="Close" style="background: none; border: none; cursor: pointer;">?-</button>
+        <button onclick="closeShoppingList()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-3xl leading-none z-10" title="Close" style="background: none; border: none; cursor: pointer;">&times;</button>
         
         <div class="receipt-header">
             <div class="receipt-store">[Cart] JARVIS MARKET</div>
@@ -2270,6 +2283,7 @@
         </div>
     </div>
 
+<script src="assets/js/app.bootstrap.js"></script>
 <script>
 window.Tesseract = window.Tesseract || null;
 
@@ -2495,7 +2509,7 @@ async function maybeShowReferenceImageForQuery(userText, assistantText = '') {
     const card = `
 <div class="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white/90 dark:bg-slate-900/60">
   <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2">Reference image: ${escapeHtml(ref.title)}</p>
-  <img src="${ref.imageUrl}" alt="${escapeHtml(ref.title)} reference image" class="w-full max-h-64 object-cover rounded-lg border border-slate-300 dark:border-slate-700" />
+  <img src="${ref.imageUrl}" alt="${escapeHtml(ref.title)} reference image" class="w-full h-auto max-h-[70vh] object-contain rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800" />
   <p class="text-[11px] mt-2 text-slate-500 dark:text-slate-400">Source: <a class="underline text-sky-600 dark:text-sky-300" href="${ref.sourceUrl}" target="_blank">Wikipedia</a></p>
 </div>`;
     addChatMessage(card, false, false);
@@ -2830,10 +2844,12 @@ function updateSuggestionBox(suggestions) {
     if (!grid) return;
 
     grid.innerHTML = suggestions.map(s => `
-        <button onclick="processSuggestion('${s.query.replace(/'/g, "\\'")} ')"
+        <button type="button"
+                data-query="${encodeURIComponent(String(s.query || ''))}"
+                onclick="processSuggestionFromElement(this)"
                 class="suggestion-chip text-left flex items-center gap-2 group">
-            <span class="text-base group-hover:scale-110 transition-transform">${s.icon}</span>
-            <span class="text-xs font-medium text-black dark:text-white">${s.text}</span>
+            <span class="text-base group-hover:scale-110 transition-transform">${escapeHtml(String(s.icon || ''))}</span>
+            <span class="text-xs font-medium text-black dark:text-white">${escapeHtml(String(s.text || ''))}</span>
         </button>
     `).join('');
 }
@@ -3034,6 +3050,7 @@ function suggestQuickReplies(context) {
 
 function addShareButton(content, type) {
     const chatContainer = document.getElementById('chat-container');
+    if (!chatContainer) return;
     const shareBox = document.createElement('div');
     shareBox.className = 'flex justify-center gap-3 my-3 fade-in flex-wrap';
 
@@ -3050,18 +3067,22 @@ function addShareButton(content, type) {
     // Store content globally for email modal
     window.pendingEmailContent = { content: cleanContent, type: type };
 
-    shareBox.innerHTML = `
-        <button onclick="shareContent(\`${cleanContent.replace(/`/g, '\\`').replace(/'/g, "\\'")}\`, '${type}')"
-                class="${bgClass} border-2 ${darkMode ? 'border-blue-600' : 'border-blue-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2">
-            <span class="text-xl">[Map]</span>
-            <span class="text-sm font-medium ${textClass}">Share this ${type}</span>
-        </button>
-        <button onclick="openEmailModal('${type}')"
-                class="${emailBgClass} border-2 ${darkMode ? 'border-purple-600' : 'border-purple-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2">
-            <span class="text-xl">[Map]</span>
-            <span class="text-sm font-medium ${emailTextClass}">Email this ${type}</span>
-        </button>
-    `;
+    const shareBtn = document.createElement('button');
+    shareBtn.type = 'button';
+    shareBtn.className = `${bgClass} border-2 ${darkMode ? 'border-blue-600' : 'border-blue-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2`;
+    shareBtn.innerHTML = `<span class="text-xl">🗺️</span><span class="text-sm font-medium ${textClass}"></span>`;
+    shareBtn.querySelector('span:last-child').textContent = `Share this ${type}`;
+    shareBtn.addEventListener('click', () => shareContent(cleanContent, type));
+
+    const emailBtn = document.createElement('button');
+    emailBtn.type = 'button';
+    emailBtn.className = `${emailBgClass} border-2 ${darkMode ? 'border-purple-600' : 'border-purple-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2`;
+    emailBtn.innerHTML = `<span class="text-xl">📧</span><span class="text-sm font-medium ${emailTextClass}"></span>`;
+    emailBtn.querySelector('span:last-child').textContent = `Email this ${type}`;
+    emailBtn.addEventListener('click', () => openEmailModal(type));
+
+    shareBox.appendChild(shareBtn);
+    shareBox.appendChild(emailBtn);
 
     chatContainer.appendChild(shareBox);
     chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -3172,7 +3193,7 @@ function openEmailModal(type) {
     modal.innerHTML = `
         <div class="${modalBg} rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold ${textColor}">[Map] Email Your ${type.charAt(0).toUpperCase() + type.slice(1)}</h3>
+                <h3 class="text-xl font-bold ${textColor}">📧 Email Your ${type.charAt(0).toUpperCase() + type.slice(1)}</h3>
                 <button onclick="closeEmailModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
             </div>
 
@@ -3288,7 +3309,7 @@ function sendEmail(type) {
 
     // Close modal and show success
     closeEmailModal();
-    showTemporaryMessage('[Map] Opening your email app...');
+    showTemporaryMessage('📧 Opening your email app...');
 }
 
 // Load saved email when opening modal (auto-fill)
@@ -5266,6 +5287,8 @@ async function handleNameCorrection(text) {
 
         function addChatMessage(text, isUser = true, typewriter = null) {
             const chatContainer = document.getElementById('chat-container');
+            if (!chatContainer) return;
+            const displayText = normalizeUiTokens(String(text ?? ''));
             const messageDiv = document.createElement('div');
             messageDiv.className = `flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-3`;
             messageDiv.dataset.role = isUser ? 'user' : 'assistant';
@@ -5273,11 +5296,11 @@ async function handleNameCorrection(text) {
             if (isUser) {
                 hideInitialSuggestions();
 
-                const formattedText = escapeHtml(text).replace(/\n/g, '<br>');
+                const formattedText = escapeHtml(displayText).replace(/\n/g, '<br>');
                 messageDiv.innerHTML = `
                     <div class="chat-bubble-user text-white px-4 py-3 max-w-md relative group">
                         <p class="text-sm font-medium">${formattedText}</p>
-                        <button onclick="editMessage(this)" data-message="${encodeURIComponent(text)}" class="hidden group-hover:flex absolute -top-2 -right-2 bg-blue-500 text-white rounded-full w-6 h-6 text-xs hover:bg-blue-600 transition-all shadow-lg items-center justify-center" title="Edit message">Edit</button>
+                        <button onclick="editMessage(this)" data-message="${encodeURIComponent(displayText)}" class="hidden group-hover:flex absolute -top-2 -right-2 bg-blue-500 text-white rounded-full w-6 h-6 text-xs hover:bg-blue-600 transition-all shadow-lg items-center justify-center" title="Edit message">Edit</button>
                     </div>
                 `;
             } else {
@@ -5287,12 +5310,12 @@ async function handleNameCorrection(text) {
                     : 'text-indigo-700 hover:text-indigo-900 underline font-medium';
 
 
-                const textForSpeech = text.replace(/<[^>]*>/g, '');
+                const textForSpeech = displayText.replace(/<[^>]*>/g, '');
 
                 // Check if message contains HTML elements (like iframes, divs)
-                const hasHtmlContent = /<(iframe|div|img|table)\s/i.test(text);
+                const hasHtmlContent = /<(iframe|div|img|table)\s/i.test(displayText);
 
-                const readableText = formatAssistantTextForReadability(text);
+                const readableText = formatAssistantTextForReadability(displayText);
 
                 // Convert markdown links [text](url) to HTML anchor tags, then newlines to <br>
                 // But preserve HTML tags like <iframe>, <div>, etc.
@@ -5311,9 +5334,10 @@ async function handleNameCorrection(text) {
                         .replace(/(^|\n)-\s+/g, '$1&#8226; ')
                         .replace(/\n/g, '<br>');
                 }
+                formattedText = sanitizeAssistantMarkup(formattedText);
 
                 // Use wider container for messages with maps/iframes - FULL WIDTH for maps
-                const hasMap = text.includes('<iframe') || text.includes('map-container');
+                const hasMap = displayText.includes('<iframe') || displayText.includes('map-container');
                 const containerWidth = hasMap ? 'w-full max-w-4xl' : (hasHtmlContent ? 'w-full max-w-3xl' : 'w-full');
 
                 // Store text safely for speech - use data attribute to avoid escaping issues
@@ -5353,7 +5377,7 @@ async function handleNameCorrection(text) {
                 chatContainer.appendChild(messageDiv);
                 
                 
-                const shouldTypewriter = typewriter === null ? true : !!typewriter;
+                const shouldTypewriter = typewriter === null ? !hasHtmlContent : !!typewriter;
                 if (shouldTypewriter) {
                     const textElement = messageDiv.querySelector('.typewriter-text');
                     let charIndex = 0;
@@ -5375,19 +5399,43 @@ async function handleNameCorrection(text) {
                 }
                 
                 chatContainer.scrollTop = chatContainer.scrollHeight;
-                chatHistory.push({ text, isUser });
+                chatHistory.push({ text: displayText, isUser });
                 return;
             }
             
             chatContainer.appendChild(messageDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
-            chatHistory.push({ text, isUser });
+            chatHistory.push({ text: displayText, isUser });
         }
 
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        function normalizeUiTokens(text) {
+            return String(text || '')
+                .replace(/\[Map\]/g, '🗺️')
+                .replace(/\[Search\]/g, '🔎')
+                .replace(/\[Globe\]/g, '🌐')
+                .replace(/\[Mic\]/g, '🎙️')
+                .replace(/\[OK\]/g, '✅')
+                .replace(/\[Error\]/g, '❌')
+                .replace(/\[Tip\]/g, '💡')
+                .replace(/\[Plan\]/g, '📝')
+                .replace(/\[Bus\]/g, '🚌')
+                .replace(/\[Taxi\]/g, '🚕')
+                .replace(/\[Car\]/g, '🚗')
+                .replace(/\[Metro\]/g, '🚇');
+        }
+
+        function sanitizeAssistantMarkup(html) {
+            return String(html || '')
+                .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+                .replace(/\son\w+="[^"]*"/gi, '')
+                .replace(/\son\w+='[^']*'/gi, '')
+                .replace(/javascript:/gi, '');
         }
 
         function toggleSendButton() {
@@ -5406,8 +5454,9 @@ async function handleNameCorrection(text) {
             }
         }
 
-        function sendTextInput() {
+function sendTextInput() {
             const input = document.getElementById('text-input');
+            if (!input) return;
             const text = input.value.trim();
             if (text || pendingVisionImage) {
                 const outgoingText = text || 'Analyze this image';
@@ -5849,10 +5898,12 @@ async function handleNameCorrection(text) {
 
                 // Update voice button to listening state
                 const voiceBtn = document.getElementById('voice-btn');
-                document.getElementById('mic-icon-bottom').classList.add('hidden');
-                document.getElementById('waveform-bottom').classList.remove('hidden');
-                voiceBtn.classList.add('voice-listening');
-                voiceBtn.classList.remove('voice-pulse', 'gradient-btn');
+                const micIcon = document.getElementById('mic-icon-bottom');
+                const waveform = document.getElementById('waveform-bottom');
+                micIcon?.classList.add('hidden');
+                waveform?.classList.remove('hidden');
+                voiceBtn?.classList.add('voice-listening');
+                voiceBtn?.classList.remove('voice-pulse', 'gradient-btn');
 
             } catch (e) {
                 stopListening();
@@ -5881,8 +5932,16 @@ async function handleNameCorrection(text) {
         
         recognition = continuousRecognition;
 
+function processSuggestionFromElement(buttonEl) {
+    if (!buttonEl) return;
+    const encoded = buttonEl.dataset?.query || '';
+    processSuggestion(decodeURIComponent(encoded));
+}
+
 function processSuggestion(text) {
-    document.getElementById('text-input').value = text;
+    const input = document.getElementById('text-input');
+    if (!input) return;
+    input.value = String(text || '').trim();
     sendTextInput();
 }
 
@@ -6595,43 +6654,13 @@ async function handleArtistSongRequest(text) {
         const rawSnippets = Array.isArray(searchData?.results) ? searchData.results : [];
         if (!rawSnippets.length) throw new Error('no web snippets found');
 
-        // Strict source allowlist for music RAG grounding.
-        const isAllowedMusicSource = (url, title, description, artistName) => {
-            let host = '';
-            try {
-                host = new URL(String(url || '')).hostname.toLowerCase();
-            } catch (e) {
-                return false;
-            }
-
-            const text = `${String(title || '')} ${String(description || '')}`.toLowerCase();
-            const artistTokens = String(artistName || '')
-                .toLowerCase()
-                .split(/[^a-z0-9]+/)
-                .filter(Boolean);
-
-            if (host === 'wikipedia.org' || host.endsWith('.wikipedia.org')) return true;
-            if (host === 'spotify.com' || host.endsWith('.spotify.com')) return true;
-            if (host === 'music.apple.com') return true;
-
-            // Allow YouTube only when likely official.
-            if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be') {
-                const officialSignals = ['official', 'topic', 'vevo', 'artist channel'];
-                return officialSignals.some(s => text.includes(s));
-            }
-
-            // Heuristic for official artist pages: hostname contains artist token + common TLD.
-            const likelyArtistDomain = artistTokens.some(t => t.length >= 4 && host.includes(t));
-            const hasCommonTld = /\.(com|org|net|in|co|io)$/i.test(host);
-            return likelyArtistDomain && hasCommonTld;
-        };
-
-        const snippets = rawSnippets.filter(r =>
-            isAllowedMusicSource(r?.url, r?.title, r?.description, artist)
-        );
-        if (!snippets.length) {
-            throw new Error('no allowlisted music sources found');
-        }
+        // Use all retrieved sources for RAG, while keeping only valid entries.
+        const snippets = rawSnippets.filter(r => {
+            const title = String(r?.title || '').trim();
+            const url = String(r?.url || '').trim();
+            return !!title && /^https?:\/\//i.test(url);
+        });
+        if (!snippets.length) throw new Error('no valid web snippets found');
 
         const snippetsBlock = snippets
             .map((r, idx) => {
@@ -9393,6 +9422,26 @@ document.head.appendChild(style);
 
 loadHistory();
 
+/*
+1. TYPING INDICATOR:
+   - Call showTypingIndicator() before AI response
+   - Call hideTypingIndicator() before showing response
+
+2. EDIT MESSAGES:
+   - Integrated in addChatMessage() with edit button on user messages
+   - Editing a message regenerates the response from that turn
+
+3. CONVERSATION HISTORY:
+   - Call saveToHistory(userMsg, aiMsg) after each exchange
+   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
+   - Search, export, and clear functions included
+
+4. ERROR FEEDBACK:
+   - Call showError("Error message") instead of addChatMessage for errors
+   - Visual shake animation + auto-dismiss
+*/
+
 </script>
 </body>
 </html>
+
