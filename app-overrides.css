@@ -1,0 +1,23 @@
+:root {
+    --jarvis-radius-md: 12px;
+    --jarvis-radius-lg: 16px;
+    --jarvis-radius-xl: 24px;
+    --jarvis-focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.22);
+}
+
+/* Keep map/chat media from forcing horizontal overflow on small screens. */
+.map-message .map-container {
+    min-width: 0 !important;
+}
+
+/* Respect reduced-motion user preference across major animated UI blocks. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
