@@ -1836,6 +1836,104 @@
         .vision-inline-attachment button:hover {
             opacity: 1;
         }
+
+        .chat-scroll-jump {
+            position: absolute;
+            right: 16px;
+            bottom: 12px;
+            z-index: 35;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid rgba(148, 163, 184, 0.45);
+            background: rgba(255, 255, 255, 0.95);
+            color: #0f172a;
+            border-radius: 999px;
+            padding: 7px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.18);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        body.dark .chat-scroll-jump {
+            background: rgba(15, 23, 42, 0.92);
+            color: #e2e8f0;
+            border-color: rgba(100, 116, 139, 0.7);
+            box-shadow: 0 8px 22px rgba(2, 6, 23, 0.45);
+        }
+
+        .chat-scroll-jump.hidden {
+            display: none;
+        }
+
+        .assistant-source-badge {
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            color: #475569;
+            background: rgba(255, 255, 255, 0.72);
+            margin-bottom: 8px;
+        }
+
+        .assistant-source-badge.web {
+            color: #075985;
+            border-color: rgba(14, 116, 144, 0.35);
+            background: rgba(224, 242, 254, 0.8);
+        }
+
+        body.dark .assistant-source-badge {
+            color: #cbd5e1;
+            border-color: rgba(100, 116, 139, 0.55);
+            background: rgba(30, 41, 59, 0.7);
+        }
+
+        body.dark .assistant-source-badge.web {
+            color: #bae6fd;
+            border-color: rgba(14, 165, 233, 0.5);
+            background: rgba(8, 47, 73, 0.6);
+        }
+
+        .response-action-row {
+            display: flex;
+            justify-content: flex-start;
+            margin-top: 8px;
+            margin-left: 4px;
+        }
+
+        .response-action-btn {
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            border-radius: 10px;
+            background: rgba(248, 250, 252, 0.95);
+            color: #334155;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 10px;
+            transition: all 0.18s ease;
+        }
+
+        .response-action-btn:hover {
+            background: rgba(241, 245, 249, 1);
+            border-color: rgba(100, 116, 139, 0.55);
+        }
+
+        body.dark .response-action-btn {
+            background: rgba(30, 41, 59, 0.9);
+            color: #e2e8f0;
+            border-color: rgba(100, 116, 139, 0.7);
+        }
+
+        body.dark .response-action-btn:hover {
+            background: rgba(51, 65, 85, 0.95);
+            border-color: rgba(148, 163, 184, 0.85);
+        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -1979,11 +2077,14 @@
                     </div>
 
                     <!-- Right Column: Chat -->
-                    <div class="w-full order-1">
+                    <div class="w-full order-1 relative">
                         <!-- Chat History - Claude/ChatGPT style compact view -->
                         <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height">
                             <!-- Welcome message -->
                         </div>
+                        <button id="jump-to-latest-btn" class="chat-scroll-jump hidden" onclick="jumpToLatest()" type="button" aria-label="Jump to latest">
+                            <span>Jump to latest</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -4072,6 +4173,11 @@ async function handleNameCorrection(text) {
         let inputHistoryIndex = -1;
         let pendingVisionImage = null;
         let tesseractLoadPromise = null;
+        let autoScrollLocked = false;
+        let lockedScrollTop = 0;
+        let suppressScrollLockHandler = false;
+        let userInitiatedScroll = false;
+        let userScrollIntentTimer = null;
 
         // Noise filter settings for public places
         let noiseFilterEnabled = false;
@@ -4114,6 +4220,8 @@ async function handleNameCorrection(text) {
             loadFavorites();
             setupInputHistoryNavigation();
             updateVoiceToTextButton();
+            initChatScrollLock();
+            initKeyboardShortcuts();
             window.addEventListener('online', updateOnlineStatus);
             window.addEventListener('offline', updateOnlineStatus);
             updateOnlineStatus();
@@ -5097,6 +5205,102 @@ async function handleNameCorrection(text) {
         function closeHelpModal() {
             const modal = document.getElementById('help-modal');
             if (modal) modal.remove();
+        }
+
+        function initKeyboardShortcuts() {
+            if (window.__jarvisKeyboardShortcutsInit) return;
+            window.__jarvisKeyboardShortcutsInit = true;
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape') return;
+                let stopped = false;
+                if (isListening) {
+                    stopListening();
+                    stopped = true;
+                }
+                if (isVoiceTyping) {
+                    stopVoiceToTextInput();
+                    stopped = true;
+                }
+                if (stopped) {
+                    showTemporaryMessage('Listening stopped.');
+                }
+            });
+        }
+
+        function initChatScrollLock() {
+            const chatContainer = document.getElementById('chat-container');
+            if (!chatContainer || chatContainer.dataset.scrollLockBound === '1') return;
+            chatContainer.dataset.scrollLockBound = '1';
+
+            const markUserScrollIntent = () => {
+                userInitiatedScroll = true;
+                if (userScrollIntentTimer) clearTimeout(userScrollIntentTimer);
+                userScrollIntentTimer = setTimeout(() => { userInitiatedScroll = false; }, 180);
+            };
+
+            chatContainer.addEventListener('wheel', markUserScrollIntent, { passive: true });
+            chatContainer.addEventListener('touchstart', markUserScrollIntent, { passive: true });
+            chatContainer.addEventListener('mousedown', markUserScrollIntent);
+            chatContainer.addEventListener('keydown', markUserScrollIntent);
+
+            chatContainer.addEventListener('scroll', () => {
+                if (suppressScrollLockHandler) return;
+                const nearBottom = isChatNearBottom(chatContainer);
+
+                if (userInitiatedScroll) {
+                    autoScrollLocked = !nearBottom;
+                    if (autoScrollLocked) {
+                        lockedScrollTop = chatContainer.scrollTop;
+                    }
+                    updateJumpToLatestButton();
+                    return;
+                }
+
+                if (autoScrollLocked && nearBottom) {
+                    suppressScrollLockHandler = true;
+                    chatContainer.scrollTop = lockedScrollTop;
+                    suppressScrollLockHandler = false;
+                    updateJumpToLatestButton();
+                    return;
+                }
+
+                if (autoScrollLocked) {
+                    lockedScrollTop = chatContainer.scrollTop;
+                    updateJumpToLatestButton();
+                }
+            }, { passive: true });
+
+            updateJumpToLatestButton();
+        }
+
+        function isChatNearBottom(chatContainer) {
+            if (!chatContainer) return true;
+            const remaining = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight;
+            return remaining <= 24;
+        }
+
+        function maybeAutoScroll(chatContainer) {
+            if (!chatContainer) return;
+            if (autoScrollLocked) {
+                updateJumpToLatestButton();
+                return;
+            }
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            updateJumpToLatestButton();
+        }
+
+        function jumpToLatest() {
+            const chatContainer = document.getElementById('chat-container');
+            if (!chatContainer) return;
+            autoScrollLocked = false;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            updateJumpToLatestButton();
+        }
+
+        function updateJumpToLatestButton() {
+            const btn = document.getElementById('jump-to-latest-btn');
+            if (!btn) return;
+            btn.classList.toggle('hidden', !autoScrollLocked);
         }
         
         
@@ -9087,8 +9291,6 @@ ${sourceLinksBlock}
 
         function handleMemoryRecall(text) {
             const lower = text.toLowerCase();
-            
-            
             
             let thing = null;
             
