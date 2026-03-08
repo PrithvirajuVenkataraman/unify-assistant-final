@@ -2360,7 +2360,7 @@ function isWeatherIntentText(text) {
 function isTamilJokeRequest(text) {
     const t = String(text || '').toLowerCase();
     if (!/\bjoke|funny|laugh\b/.test(t)) return false;
-    return /\btamil\b|தமிழ்/.test(t);
+    return /\btamil\b|à®¤à®®à®¿à®´à¯/.test(t);
 }
 
 function normalizeIntentTypos(text) {
@@ -3099,14 +3099,14 @@ function addShareButton(content, type) {
     const shareBtn = document.createElement('button');
     shareBtn.type = 'button';
     shareBtn.className = `${bgClass} border-2 ${darkMode ? 'border-blue-600' : 'border-blue-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2`;
-    shareBtn.innerHTML = `<span class="text-xl">🗺️</span><span class="text-sm font-medium ${textClass}"></span>`;
+    shareBtn.innerHTML = `<span class="text-xl">ðŸ—ºï¸</span><span class="text-sm font-medium ${textClass}"></span>`;
     shareBtn.querySelector('span:last-child').textContent = `Share this ${type}`;
     shareBtn.addEventListener('click', () => shareContent(cleanContent, type));
 
     const emailBtn = document.createElement('button');
     emailBtn.type = 'button';
     emailBtn.className = `${emailBgClass} border-2 ${darkMode ? 'border-purple-600' : 'border-purple-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2`;
-    emailBtn.innerHTML = `<span class="text-xl">📧</span><span class="text-sm font-medium ${emailTextClass}"></span>`;
+    emailBtn.innerHTML = `<span class="text-xl">ðŸ“§</span><span class="text-sm font-medium ${emailTextClass}"></span>`;
     emailBtn.querySelector('span:last-child').textContent = `Email this ${type}`;
     emailBtn.addEventListener('click', () => openEmailModal(type));
 
@@ -3222,7 +3222,7 @@ function openEmailModal(type) {
     modal.innerHTML = `
         <div class="${modalBg} rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold ${textColor}">📧 Email Your ${type.charAt(0).toUpperCase() + type.slice(1)}</h3>
+                <h3 class="text-xl font-bold ${textColor}">ðŸ“§ Email Your ${type.charAt(0).toUpperCase() + type.slice(1)}</h3>
                 <button onclick="closeEmailModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
             </div>
 
@@ -3338,7 +3338,7 @@ function sendEmail(type) {
 
     // Close modal and show success
     closeEmailModal();
-    showTemporaryMessage('📧 Opening your email app...');
+    showTemporaryMessage('ðŸ“§ Opening your email app...');
 }
 
 // Load saved email when opening modal (auto-fill)
@@ -4449,7 +4449,7 @@ async function handleNameCorrection(text) {
                 .map(line => line.replace(/^[\W_]+|[\W_]+$/g, '').replace(/\s{2,}/g, ' ').trim())
                 .filter(line => !/^(total|subtotal|tax|receipt|invoice|cash|change|thank you|visa|mastercard|qty|price|amount|date|time|balance)\b/i.test(line))
                 .filter(line => !/^\d+([.,]\d{2})?$/.test(line))
-                .filter(line => !/[\$₹€£]\s*\d/.test(line))
+                .filter(line => !/[\$â‚¹â‚¬Â£]\s*\d/.test(line))
                 .filter(line => line.length >= 2 && line.length <= 60)
                 .slice(0, 20);
         }
@@ -4458,8 +4458,8 @@ async function handleNameCorrection(text) {
             const lines = normalizeOcrLines(ocrText);
             const totals = [];
             const items = [];
-            const totalRx = /\b(sub\s*total|subtotal|tax|cgst|sgst|vat|grand total|total)\b[^0-9]*([\$₹€£]?\s?\d+(?:[.,]\d{2})?)/i;
-            const itemRx = /^([A-Za-z][A-Za-z0-9\s\-\&\.\(\)]{1,50})\s+([\$₹€£]?\s?\d+(?:[.,]\d{2})?)$/;
+            const totalRx = /\b(sub\s*total|subtotal|tax|cgst|sgst|vat|grand total|total)\b[^0-9]*([\$â‚¹â‚¬Â£]?\s?\d+(?:[.,]\d{2})?)/i;
+            const itemRx = /^([A-Za-z][A-Za-z0-9\s\-\&\.\(\)]{1,50})\s+([\$â‚¹â‚¬Â£]?\s?\d+(?:[.,]\d{2})?)$/;
 
             for (const raw of lines) {
                 const line = raw.replace(/\s{2,}/g, ' ').trim();
@@ -5332,7 +5332,7 @@ async function handleNameCorrection(text) {
                 messageDiv.innerHTML = `
                     <div class="chat-bubble-user text-white px-4 py-3 max-w-md relative group">
                         <p class="text-sm font-medium">${formattedText}</p>
-                        <button onclick="editMessage(this)" data-message="${encodeURIComponent(displayText)}" class="hidden group-hover:flex absolute -top-2 -right-2 bg-blue-500 text-white rounded-full w-6 h-6 text-xs hover:bg-blue-600 transition-all shadow-lg items-center justify-center" title="Edit message">Edit</button>
+                        <button onclick="editMessage(this)" data-message="${encodeURIComponent(displayText)}" class="hidden group-hover:flex absolute -top-2 -right-2 bg-blue-500 text-white rounded-full w-6 h-6 text-xs hover:bg-blue-600 transition-all shadow-lg items-center justify-center" title="Edit message">&#9998;</button>
                     </div>
                 `;
             } else {
@@ -5448,18 +5448,18 @@ async function handleNameCorrection(text) {
 
         function normalizeUiTokens(text) {
             return String(text || '')
-                .replace(/\[Map\]/g, '🗺️')
-                .replace(/\[Search\]/g, '🔎')
-                .replace(/\[Globe\]/g, '🌐')
-                .replace(/\[Mic\]/g, '🎙️')
-                .replace(/\[OK\]/g, '✅')
-                .replace(/\[Error\]/g, '❌')
-                .replace(/\[Tip\]/g, '💡')
-                .replace(/\[Plan\]/g, '📝')
-                .replace(/\[Bus\]/g, '🚌')
-                .replace(/\[Taxi\]/g, '🚕')
-                .replace(/\[Car\]/g, '🚗')
-                .replace(/\[Metro\]/g, '🚇');
+                .replace(/\[Map\]/g, 'ðŸ—ºï¸')
+                .replace(/\[Search\]/g, 'ðŸ”Ž')
+                .replace(/\[Globe\]/g, 'ðŸŒ')
+                .replace(/\[Mic\]/g, 'ðŸŽ™ï¸')
+                .replace(/\[OK\]/g, 'âœ…')
+                .replace(/\[Error\]/g, 'âŒ')
+                .replace(/\[Tip\]/g, 'ðŸ’¡')
+                .replace(/\[Plan\]/g, 'ðŸ“')
+                .replace(/\[Bus\]/g, 'ðŸšŒ')
+                .replace(/\[Taxi\]/g, 'ðŸš•')
+                .replace(/\[Car\]/g, 'ðŸš—')
+                .replace(/\[Metro\]/g, 'ðŸš‡');
         }
 
         function sanitizeAssistantMarkup(html) {
@@ -6871,7 +6871,7 @@ function formatMusicSongReply(artist, requestedCount, items, fallback = false) {
         const workVerified = item?.workVerified !== false && !!work;
         if (!song) return;
         const reason = fixedNotes[index % fixedNotes.length];
-        lines.push(workVerified ? `� ${song} - ${work}` : `� ${song}`);
+        lines.push(workVerified ? `• ${song} - ${work}` : `• ${song}`);
         lines.push(`Note: ${reason}`);
     });
 
@@ -8709,7 +8709,7 @@ ${sourceLinksBlock}
                 notification.className = 'fixed top-4 right-4 z-[9999] w-[360px] max-w-[calc(100vw-1rem)] bg-white rounded-2xl shadow-2xl border border-purple-200 p-4';
                 notification.innerHTML = `
                     <div class="flex items-start gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl">⏰</div>
+                        <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-xl">â°</div>
                         <div class="flex-1 min-w-0">
                             <p class="text-xs font-semibold text-purple-600 uppercase tracking-wide">Reminder</p>
                             <p class="text-sm text-gray-900 font-semibold mt-1 break-words">${escapeHtml(reminder.text)}</p>
