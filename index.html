@@ -504,8 +504,8 @@
         /* Light Switch Styles - Horizontal */
         .light-switch-container {
             position: relative;
-            width: 86px;
-            height: 52px;
+            width: 74px;
+            height: 44px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -516,50 +516,69 @@
         }
 
         .light-switch {
-            width: 82px;
-            height: 46px;
+            width: 70px;
+            height: 38px;
             border-radius: 999px;
             position: relative;
             cursor: pointer;
-            border: 4px solid rgba(226, 232, 240, 0.9);
-            background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.95));
-            transition: all 0.28s ease;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 10px 20px rgba(2, 6, 23, 0.24);
+            border: 1px solid rgba(148, 163, 184, 0.45);
+            background: #d1d5db;
+            transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+            overflow: hidden;
+        }
+
+        .light-switch::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 999px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0));
+            opacity: 1;
+            transition: opacity 0.28s ease;
         }
 
         .switch-toggle {
-            width: 34px;
-            height: 34px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             position: absolute;
-            left: 3px;
+            left: 2px;
             top: 2px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            background: radial-gradient(circle at 28% 28%, #f8fafc 0%, #dbeafe 72%, #bfdbfe 100%);
-            box-shadow: 0 5px 12px rgba(2, 6, 23, 0.42);
+            transition: left 0.26s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s ease;
+            background: #ffffff;
+            box-shadow:
+                0 1px 3px rgba(15, 23, 42, 0.3),
+                0 6px 14px rgba(15, 23, 42, 0.16);
         }
 
         .switch-toggle::before {
             content: '';
             position: absolute;
-            inset: 9px;
+            inset: 0;
             border-radius: 50%;
-            background: #f59e0b;
-            box-shadow: 0 0 12px rgba(245, 158, 11, 0.5);
+            background: transparent;
+            box-shadow: none;
         }
 
         .light-switch.on {
-            border-color: rgba(191, 219, 254, 0.95);
-            background: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(30, 58, 138, 0.8));
+            border-color: rgba(34, 197, 94, 0.7);
+            background: #34c759;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+        }
+
+        .light-switch.on::before {
+            opacity: 0.8;
         }
 
         .light-switch.on .switch-toggle {
-            left: calc(100% - 37px);
+            left: calc(100% - 34px);
+            background: #ffffff;
         }
 
         .light-switch.on .switch-toggle::before {
-            background: #22d3ee;
-            box-shadow: 0 0 12px rgba(34, 211, 238, 0.5);
+            background: transparent;
+            box-shadow: none;
         }
         
         /* Tube Light */
@@ -1090,26 +1109,26 @@
             }
             
             .light-switch-container {
-                width: 74px;
-                height: 44px;
+                width: 68px;
+                height: 40px;
                 padding: 0;
             }
 
             .light-switch {
-                width: 70px;
-                height: 40px;
-                border-width: 3px;
+                width: 64px;
+                height: 34px;
+                border-width: 1px;
             }
 
             .switch-toggle {
                 width: 30px;
                 height: 30px;
-                left: 2px;
+                left: 1px;
                 top: 2px;
             }
 
             .light-switch.on .switch-toggle {
-                left: calc(100% - 33px);
+                left: calc(100% - 31px);
                 top: 2px;
             }
         }
