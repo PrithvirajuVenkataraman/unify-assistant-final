@@ -504,8 +504,8 @@
         /* Light Switch Styles - Horizontal */
         .light-switch-container {
             position: relative;
-            width: 74px;
-            height: 44px;
+            width: 64px;
+            height: 36px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -516,8 +516,8 @@
         }
 
         .light-switch {
-            width: 70px;
-            height: 38px;
+            width: 60px;
+            height: 32px;
             border-radius: 999px;
             position: relative;
             cursor: pointer;
@@ -539,8 +539,8 @@
         }
 
         .switch-toggle {
-            width: 32px;
-            height: 32px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
             position: absolute;
             left: 2px;
@@ -572,7 +572,7 @@
         }
 
         .light-switch.on .switch-toggle {
-            left: calc(100% - 34px);
+            left: calc(100% - 30px);
             background: #ffffff;
         }
 
@@ -924,26 +924,26 @@
             }
             
             .light-switch-container {
-                width: 68px;
-                height: 40px;
+                width: 60px;
+                height: 34px;
                 padding: 0;
             }
 
             .light-switch {
-                width: 64px;
-                height: 34px;
+                width: 56px;
+                height: 30px;
                 border-width: 1px;
             }
 
             .switch-toggle {
-                width: 30px;
-                height: 30px;
+                width: 26px;
+                height: 26px;
                 left: 1px;
                 top: 2px;
             }
 
             .light-switch.on .switch-toggle {
-                left: calc(100% - 31px);
+                left: calc(100% - 27px);
                 top: 2px;
             }
         }
@@ -9527,8 +9527,11 @@ function showThinkingIndicator(message = 'Thinking') {
         chatContainer.appendChild(row);
     }
 
+    const cleanedMessage = String(message || 'Thinking')
+        .replace(/^\s*\[[^\]]+\]\s*/i, '')
+        .trim() || 'Thinking';
     const text = document.getElementById('chat-thinking-text');
-    if (text) text.textContent = message || 'Thinking';
+    if (text) text.textContent = cleanedMessage;
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
