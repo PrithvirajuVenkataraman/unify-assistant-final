@@ -912,193 +912,8 @@
             animation: heatShimmer 3s ease-in-out infinite;
         }
         
-        /* Shopping List Receipt */
-        .shopping-receipt {
-            position: fixed;
-            right: 20px;
-            top: 120px;
-            width: 280px;
-            max-height: calc(100vh - 200px);
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            padding: 20px;
-            font-family: 'Courier New', monospace;
-            z-index: 50;
-            transition: all 0.3s ease;
-            overflow-y: auto;
-        }
-        
-        /* Center on mobile */
-        @media (max-width: 640px) {
-            .shopping-receipt {
-                left: 50%;
-                right: auto;
-                transform: translateX(-50%);
-                width: calc(100% - 40px);
-                max-width: 320px;
-            }
-        }
-        
-        .shopping-receipt.dark-mode {
-            background: #1F2937;
-            color: #F3F4F6;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-        }
-        
-        .receipt-header {
-            text-align: center;
-            border-bottom: 2px dashed #333;
-            padding-bottom: 15px;
-            margin-bottom: 15px;
-        }
-        
-        .receipt-store {
-            font-size: 16px;
-            font-weight: bold;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
-            color: #4F46E5;
-        }
-        
-        .receipt-divider {
-            font-size: 12px;
-            color: #999;
-            letter-spacing: 1px;
-            margin: 10px 0;
-        }
-        
-        .receipt-thank-you {
-            text-align: center;
-            font-size: 11px;
-            font-style: italic;
-            color: #666;
-            margin: 10px 0;
-        }
-        
-        .receipt-count-number {
-            font-size: 18px;
-            font-weight: bold;
-            color: #4F46E5;
-        }
-        
-        .shopping-receipt.dark-mode .receipt-header {
-            border-bottom-color: #4B5563;
-        }
-        
-        .receipt-title {
-            font-size: 20px;
-            font-weight: bold;
-            letter-spacing: 2px;
-            margin-bottom: 5px;
-        }
-        
-        .receipt-subtitle {
-            font-size: 11px;
-            color: #666;
-            text-transform: uppercase;
-        }
-        
-        .shopping-receipt.dark-mode .receipt-subtitle {
-            color: #9CA3AF;
-        }
-        
-        .receipt-items {
-            margin: 15px 0;
-        }
-        
-        .receipt-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px dotted #ddd;
-            font-size: 14px;
-        }
-        
-        .shopping-receipt.dark-mode .receipt-item {
-            border-bottom-color: #374151;
-        }
-        
-        .receipt-item:last-child {
-            border-bottom: none;
-        }
-        
-        .receipt-item-text {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex: 1;
-        }
-        
-        .receipt-bullet {
-            color: #8B5CF6;
-            font-weight: bold;
-        }
-        
-        .receipt-delete {
-            background: #EF4444;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 4px 8px;
-            font-size: 11px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .receipt-delete:hover {
-            background: #DC2626;
-            transform: scale(1.05);
-        }
-        
-        .receipt-footer {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 2px dashed #333;
-            text-align: center;
-            font-size: 12px;
-        }
-        
-        .shopping-receipt.dark-mode .receipt-footer {
-            border-top-color: #4B5563;
-        }
-        
-        .receipt-total {
-            font-weight: bold;
-            font-size: 14px;
-            margin-bottom: 10px;
-        }
-        
-        .receipt-clear-btn {
-            background: #8B5CF6;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            padding: 8px 16px;
-            font-size: 12px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        
-        .receipt-clear-btn:hover {
-            background: #7C3AED;
-            transform: translateY(-2px);
-        }
-        
         /* Mobile optimizations */
         @media (max-width: 768px) {
-            .shopping-receipt {
-                right: 10px;
-                top: 100px;
-                width: calc(100vw - 20px);
-                max-width: 320px;
-                max-height: 50vh;
-            }
-            
             .tube-light-container {
                 top: 10px;
             }
@@ -1751,17 +1566,18 @@
         .footer-action-pill {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            padding: 6px;
+            gap: 6px;
+            padding: 0;
             border-radius: 999px;
-            background: linear-gradient(145deg, rgba(31, 41, 55, 0.92), rgba(51, 65, 85, 0.92));
-            border: 1px solid rgba(100, 116, 139, 0.35);
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.24);
+            background: transparent;
+            border: none;
+            box-shadow: none;
         }
 
         body.dark .footer-action-pill {
-            background: linear-gradient(145deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95));
-            border-color: rgba(100, 116, 139, 0.45);
+            background: transparent;
+            border: none;
+            box-shadow: none;
         }
 
         .footer-action-btn {
@@ -1774,6 +1590,11 @@
             border: none;
             transition: all 0.2s ease;
             cursor: pointer;
+        }
+
+        .footer-action-btn svg {
+            display: block;
+            margin: auto;
         }
 
         .footer-action-btn-mic {
@@ -2035,33 +1856,6 @@
     
     <!-- Weather Effects Container -->
     <div id="weather-effects" class="weather-effect"></div>
-    
-    <!-- Shopping List Receipt -->
-    <div id="shopping-receipt" class="shopping-receipt hidden">
-        <!-- Close button - absolute positioned -->
-        <button onclick="closeShoppingList()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-700 text-3xl leading-none z-10" title="Close" style="background: none; border: none; cursor: pointer;">&times;</button>
-        
-        <div class="receipt-header">
-            <div class="receipt-store">[Cart] JARVIS MARKET</div>
-            <div class="receipt-title">SHOPPING LIST</div>
-            <div class="receipt-subtitle" id="receipt-date">---</div>
-            <div class="receipt-divider">- - - - - - - - - - - - - - - -</div>
-        </div>
-        <div id="receipt-items" class="receipt-items">
-            <div style="text-align: center; color: #999; font-size: 12px; padding: 20px;">
-                No items yet
-            </div>
-        </div>
-        <div class="receipt-footer">
-            <div class="receipt-divider">- - - - - - - - - - - - - - - -</div>
-            <div class="receipt-total">
-                <span>TOTAL ITEMS:</span>
-                <span id="receipt-count" class="receipt-count-number">0</span>
-            </div>
-            <div class="receipt-thank-you">Thank you for shopping!</div>
-            <button onclick="clearShoppingList()" class="receipt-clear-btn">Clear All</button>
-        </div>
-    </div>
     
     <!-- Tube Light -->
     <div class="tube-light-container">
@@ -2589,9 +2383,9 @@ function isInappropriateContent(text) {
 
 function getContentModerationResponse() {
     const responses = [
-        "I'm designed to be a helpful assistant for travel, weather, shopping, and general knowledge. I can't help with that request. Is there something else I can assist you with?",
+        "I'm designed to be a helpful assistant for travel, weather, reminders, and general knowledge. I can't help with that request. Is there something else I can assist you with?",
         "I'm here to help with travel planning, reminders, weather, and useful information. Let me know if you have any questions in those areas!",
-        "I'm not able to help with that kind of request. I'm great at travel planning, weather updates, shopping lists, and general questions though!",
+        "I'm not able to help with that kind of request. I'm great at travel planning, weather updates, reminders, and general questions though!",
         "That's not something I can assist with. I'm happy to help with travel itineraries, weather, reminders, or other helpful tasks!"
     ];
     return responses[Math.floor(Math.random() * responses.length)];
@@ -2841,8 +2635,6 @@ function getRegionalFood(context) {
 function showInitialSuggestions() {
     const suggestions = [
         { icon: '\u2600\uFE0F', text: "What's the weather?", query: "What's the weather like today?" },
-        // Shopping suggestion paused for now; re-enable for mobile/tablet rollout.
-        // { icon: '\u{1F6D2}', text: 'Add 2 lbs chicken to list', query: 'Add 2 pounds of chicken to my shopping list' },
         { icon: '\u23F0', text: 'Remind me', query: 'Remind me' },
         { icon: '\u{1F310}', text: 'Translate to Tamil', query: 'Speak in Tamil' },
         { icon: '\u2708\uFE0F', text: 'Plan a trip to Paris', query: 'Plan a weekend trip to Paris' }
@@ -2917,7 +2709,6 @@ function updateContextualSuggestions(context) {
         suggestions = [
             { icon: '\u2600\uFE0F', text: "What's the weather?", query: "What's the weather?" },
             { icon: '\u2708\uFE0F', text: 'Plan a trip', query: 'Plan a trip to Paris' },
-            { icon: '\u{1F6D2}', text: 'Shopping list', query: 'Add milk to my list' },
             { icon: '\u23F0', text: 'Remind me', query: 'Remind me' },
             { icon: '\u{1F310}', text: 'Translator', query: 'Speak in Tamil' }
         ];
@@ -3049,8 +2840,7 @@ function suggestQuickReplies(context) {
     else {
         suggestions.push(
             { icon: '\u{1F324}\uFE0F', text: 'Weather' },
-            { icon: '\u{1F5FA}\uFE0F', text: 'Plan a trip' },
-            { icon: '\u{1F6D2}', text: 'Shopping list' }
+            { icon: '\u{1F5FA}\uFE0F', text: 'Plan a trip' }
         );
     }
 
@@ -4143,7 +3933,6 @@ RULES:
 
 Your capabilities:
 - Weather (say "check weather")
-- Shopping lists are currently paused (mobile/tablet rollout)
 - Reminders (say "set reminder")
 - Memory (remembering where things are)
 - Travel itineraries and recommendations
@@ -4270,7 +4059,6 @@ async function handleNameCorrection(text) {
         
         let userName = null;
         let waitingForName = false;
-        let shoppingList = [];
         let memoryStore = {};
         let lastBudgetPlan = null;
         let lastVerifiedPlaces = null; 
@@ -4636,7 +4424,6 @@ async function handleNameCorrection(text) {
             const lightSwitch = document.getElementById('light-switch');
             const tubeLight = document.getElementById('tube-light');
             const weatherEffects = document.getElementById('weather-effects');
-            const receipt = document.getElementById('shopping-receipt');
 
             const inputBarContainer = document.getElementById('input-bar-container');
             const inputBarInner = document.getElementById('input-bar-inner');
@@ -4658,7 +4445,6 @@ async function handleNameCorrection(text) {
                 title.className = 'text-4xl font-black jarvis-title';
                 subtitle.className = 'text-sm text-gray-400 font-medium';
                 if (chatContainer) chatContainer.className = 'bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height';
-                if (receipt) receipt.classList.add('dark-mode');
 
                 if (inputBarContainer) {
                     inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
@@ -4695,7 +4481,6 @@ async function handleNameCorrection(text) {
                     title.className = 'text-4xl font-black jarvis-title';
                     subtitle.className = 'text-sm text-gray-500 font-medium';
                     if (chatContainer) chatContainer.className = 'bg-gray-50/80 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height';
-                    if (receipt) receipt.classList.remove('dark-mode');
 
                     if (inputBarContainer) {
                         inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
@@ -4753,8 +4538,6 @@ async function handleNameCorrection(text) {
                                 <p><strong>Food Recommendations:</strong> "Best restaurants in Rome"</p>
                                 <p><strong>Transport Info:</strong> "How to get around London?"</p>
                                 <p><strong>Weather:</strong> "What's the weather in Seattle tomorrow?"</p>
-                                <!-- Shopping list line paused for now; re-enable for mobile/tablet rollout. -->
-                                <!-- <p><strong>Shopping Lists:</strong> "Add 2 pounds of chicken to my shopping list"</p> -->
                                 <p><strong>Reminders:</strong> "Remind me to call mom at 5 PM"</p>
                                 <p><strong>Translator:</strong> "Speak in Tamil" or "Translate this to Hindi"</p>
                                 <p><strong>Budget Planner:</strong> "budget trip to Seattle for 3 days under 900 USD"</p>
@@ -5080,9 +4863,9 @@ async function handleNameCorrection(text) {
 
         function getSendIconSvg() {
             return `
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 3 3 11.5l7 2.5 2.5 7L21 3Z"></path>
+                    <path d="M10 14 21 3"></path>
                 </svg>
             `;
         }
@@ -5250,7 +5033,6 @@ async function handleNameCorrection(text) {
 
             voiceTypingRecognition.onstart = () => {
                 isVoiceTyping = true;
-                voiceTypingFinalText = '';
                 updateVoiceToTextButton();
             };
 
@@ -5291,7 +5073,7 @@ async function handleNameCorrection(text) {
 
             if (isVoiceTyping) {
                 try {
-                    voiceTypingRecognition.stop();
+                    voiceTypingRecognition.abort();
                 } catch (e) {}
                 return;
             }
@@ -6643,6 +6425,86 @@ function isArtistSongRequest(text) {
            /\b[a-z][a-z0-9.'&\-\s]{2,}\s+songs?\b/.test(t);
 }
 
+function isEraLanguageHitsBlendRequest(text) {
+    const t = String(text || '').toLowerCase();
+    const hasMusicAsk = /\b(song|songs|track|tracks|music|playlist|recommend|suggest|best|top|hit|hits|melody|melodies|mix|blend)\b/.test(t);
+    if (!hasMusicAsk) return false;
+    const hasEra = /\b(?:[6-9]0['’]?s|00['’]?s|10['’]?s|20['’]?s|(?:19|20)\d{2}s)\b/.test(t);
+    const hasLanguage = /\b(tamil|hindi|telugu|kannada|malayalam|english|spanish|french|arabic|punjabi|marathi|bengali)\b/.test(t);
+    const hasBlendWord = /\b(blend|mix|era|decade)\b/.test(t);
+    return (hasEra && hasLanguage) || (hasEra && hasBlendWord);
+}
+
+function normalizeEraToken(token) {
+    const raw = String(token || '').toLowerCase().replace(/['’]/g, '').trim();
+    if (!raw) return null;
+    if (/^\d{4}s$/.test(raw)) {
+        const year = Number(raw.slice(0, 4));
+        if (year >= 1960 && year <= 2020) return year;
+    }
+    if (/^(?:[6-9]0|00|10|20)s$/.test(raw)) {
+        const two = raw.slice(0, 2);
+        if (two === '00') return 2000;
+        if (two === '10') return 2010;
+        if (two === '20') return 2020;
+        return Number(`19${two}`);
+    }
+    return null;
+}
+
+function extractRequestedEras(text) {
+    const raw = String(text || '').toLowerCase();
+    const matches = raw.match(/\b(?:[6-9]0['’]?s|00['’]?s|10['’]?s|20['’]?s|(?:19|20)\d{2}s)\b/g) || [];
+    const eras = [];
+    for (const m of matches) {
+        const normalized = normalizeEraToken(m.replace(/['’]/g, ''));
+        if (normalized && !eras.includes(normalized)) eras.push(normalized);
+    }
+    eras.sort((a, b) => a - b);
+    return eras;
+}
+
+function extractRequestedMusicLanguages(text) {
+    const raw = String(text || '').toLowerCase();
+    const aliases = {
+        tamil: ['tamil', 'tamizh'],
+        hindi: ['hindi', 'bollywood'],
+        telugu: ['telugu', 'tollywood'],
+        kannada: ['kannada'],
+        malayalam: ['malayalam'],
+        english: ['english'],
+        spanish: ['spanish'],
+        french: ['french'],
+        arabic: ['arabic'],
+        punjabi: ['punjabi'],
+        marathi: ['marathi'],
+        bengali: ['bengali', 'bangla']
+    };
+    const out = [];
+    for (const [lang, terms] of Object.entries(aliases)) {
+        if (terms.some(term => new RegExp(`\\b${term}\\b`, 'i').test(raw))) out.push(lang);
+    }
+    return out;
+}
+
+function toEraLabel(decadeYear) {
+    const n = Number(decadeYear);
+    if (!Number.isFinite(n)) return '';
+    return `${n}s`;
+}
+
+function extractArtistForEraBlend(text) {
+    const base = sanitizeArtistName(extractArtistFromSongRequest(text));
+    if (!base) return '';
+    const stripped = base
+        .replace(/\b(tamil|hindi|telugu|kannada|malayalam|english|spanish|french|arabic|punjabi|marathi|bengali)\b/gi, ' ')
+        .replace(/\b(?:[6-9]0['’]?s|00['’]?s|10['’]?s|20['’]?s|(?:19|20)\d{2}s)\b/gi, ' ')
+        .replace(/\b(blend|mix|hits?|songs?|tracks?)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return sanitizeArtistName(stripped);
+}
+
 function extractArtistFromSongRequest(text) {
     const raw = String(text || '').trim();
     if (!raw) return '';
@@ -6748,6 +6610,38 @@ function clampSongCount(value, fallback = 5) {
 }
 
 const CURATED_ARTIST_SONGS = {
+    'ilayaraja': [
+        { song: 'Ilaya Nila', work: 'Payanangal Mudivathillai' },
+        { song: 'Janani Janani', work: 'Thai Moogambikai' },
+        { song: 'Thenpaandi Cheemayile', work: 'Nayakan' },
+        { song: 'Sundari Kannal Oru Sethi', work: 'Thalapathi' },
+        { song: 'Anjali Anjali', work: 'Anjali' },
+        { song: 'Raja Raja Chozhan Naan', work: 'Rettai Vaal Kuruvi' }
+    ],
+    'ilaiyaraja': [
+        { song: 'Ilaya Nila', work: 'Payanangal Mudivathillai' },
+        { song: 'Janani Janani', work: 'Thai Moogambikai' },
+        { song: 'Thenpaandi Cheemayile', work: 'Nayakan' },
+        { song: 'Sundari Kannal Oru Sethi', work: 'Thalapathi' },
+        { song: 'Anjali Anjali', work: 'Anjali' },
+        { song: 'Raja Raja Chozhan Naan', work: 'Rettai Vaal Kuruvi' }
+    ],
+    'ilaiyaraaja': [
+        { song: 'Ilaya Nila', work: 'Payanangal Mudivathillai' },
+        { song: 'Janani Janani', work: 'Thai Moogambikai' },
+        { song: 'Thenpaandi Cheemayile', work: 'Nayakan' },
+        { song: 'Sundari Kannal Oru Sethi', work: 'Thalapathi' },
+        { song: 'Anjali Anjali', work: 'Anjali' },
+        { song: 'Raja Raja Chozhan Naan', work: 'Rettai Vaal Kuruvi' }
+    ],
+    'isaignani ilaiyaraja': [
+        { song: 'Ilaya Nila', work: 'Payanangal Mudivathillai' },
+        { song: 'Janani Janani', work: 'Thai Moogambikai' },
+        { song: 'Thenpaandi Cheemayile', work: 'Nayakan' },
+        { song: 'Sundari Kannal Oru Sethi', work: 'Thalapathi' },
+        { song: 'Anjali Anjali', work: 'Anjali' },
+        { song: 'Raja Raja Chozhan Naan', work: 'Rettai Vaal Kuruvi' }
+    ],
     'harris jayaraj': [
         { song: 'Vaseegara', work: 'Minnale' },
         { song: 'Oru Maalai', work: 'Ghajini' },
@@ -6758,10 +6652,275 @@ const CURATED_ARTIST_SONGS = {
     ]
 };
 
+const CURATED_LANGUAGE_ERA_HITS = {
+    tamil: {
+        1990: [
+            { song: 'Mukkala Muqabla', work: 'Kadhalan', artist: 'A. R. Rahman' },
+            { song: 'Thanga Thamarai', work: 'Minsara Kanavu', artist: 'A. R. Rahman' },
+            { song: 'Ennavale Adi Ennavale', work: 'Kadhalan', artist: 'A. R. Rahman' },
+            { song: 'Poovukkul Olinthirukkum', work: 'Jeans', artist: 'A. R. Rahman' }
+        ],
+        2000: [
+            { song: 'Vaseegara', work: 'Minnale', artist: 'Harris Jayaraj' },
+            { song: 'Munbe Vaa', work: 'Sillunu Oru Kadhal', artist: 'A. R. Rahman' },
+            { song: 'Suttrum Vizhi', work: 'Ghajini', artist: 'Harris Jayaraj' },
+            { song: 'Nenjukkul Peidhidum', work: 'Vaaranam Aayiram', artist: 'Harris Jayaraj' }
+        ]
+    },
+    hindi: {
+        1990: [
+            { song: 'Pehla Nasha', work: 'Jo Jeeta Wohi Sikandar', artist: 'Jatin-Lalit' },
+            { song: 'Tujhe Dekha To', work: 'Dilwale Dulhania Le Jayenge', artist: 'Jatin-Lalit' },
+            { song: 'Chaiyya Chaiyya', work: 'Dil Se', artist: 'A. R. Rahman' },
+            { song: 'Humma Humma', work: 'Bombay', artist: 'A. R. Rahman' }
+        ],
+        2000: [
+            { song: 'Kal Ho Naa Ho', work: 'Kal Ho Naa Ho', artist: 'Shankar-Ehsaan-Loy' },
+            { song: 'Mitwa', work: 'Kabhi Alvida Naa Kehna', artist: 'Shankar-Ehsaan-Loy' },
+            { song: 'Kajra Re', work: 'Bunty Aur Babli', artist: 'Shankar-Ehsaan-Loy' },
+            { song: 'Tere Liye', work: 'Veer-Zaara', artist: 'Madan Mohan / Sanjeev Kohli' }
+        ]
+    },
+    telugu: {
+        1990: [
+            { song: 'Priyatama Neevachata Kusalama', work: 'Jagadeka Veerudu Athiloka Sundari', artist: 'Ilaiyaraaja' },
+            { song: 'Andamaina Premarani', work: 'Premikudu', artist: 'A. R. Rahman' },
+            { song: 'Yamaho Nee', work: 'Jagadeka Veerudu Athiloka Sundari', artist: 'Ilaiyaraaja' },
+            { song: 'Abbanee Teeyani Debba', work: 'Jagadeka Veerudu Athiloka Sundari', artist: 'Ilaiyaraaja' }
+        ],
+        2000: [
+            { song: 'Nuvvostanante', work: 'Varsham', artist: 'Devi Sri Prasad' },
+            { song: 'Aadavari Matalaku', work: 'Kushi', artist: 'Mani Sharma' },
+            { song: 'Cheliya Cheliya', work: 'Nuvvu Naaku Nachav', artist: 'Koti' },
+            { song: 'Chilipiga', work: 'Orange', artist: 'Harris Jayaraj' }
+        ]
+    }
+};
+
 function getCuratedSongsForArtist(artist) {
     const key = String(artist || '').toLowerCase().trim();
     if (!key) return [];
     return Array.isArray(CURATED_ARTIST_SONGS[key]) ? CURATED_ARTIST_SONGS[key] : [];
+}
+
+function getCuratedLanguageEraHits(language, era) {
+    const lang = String(language || '').toLowerCase().trim();
+    const decade = Number(era);
+    if (!lang || !Number.isFinite(decade)) return [];
+    return CURATED_LANGUAGE_ERA_HITS?.[lang]?.[decade] || [];
+}
+
+function formatLanguageEraHitsReply(intent, eraBuckets, fallback = false) {
+    const languages = intent.languages.length ? intent.languages.map(l => l[0].toUpperCase() + l.slice(1)).join(', ') : 'Mixed';
+    const eras = intent.eras.length ? intent.eras.map(toEraLabel).join(' + ') : 'Mixed eras';
+    const artistLabel = intent.artist ? ` | Artist: ${intent.artist}` : '';
+    const lines = [`[Music] ${languages} hits blend (${eras})${artistLabel}`, ''];
+
+    for (const bucket of eraBuckets) {
+        lines.push(`${toEraLabel(bucket.era)}:`);
+        for (const item of bucket.items) {
+            const song = String(item.song || '').trim();
+            const work = String(item.work || '').trim();
+            const artist = String(item.artist || '').trim();
+            if (!song) continue;
+            const detail = [work, artist].filter(Boolean).join(' | ');
+            lines.push(detail ? `• ${song} - ${detail}` : `• ${song}`);
+        }
+        lines.push('');
+    }
+
+    if (fallback) {
+        lines.push('Note: This blend is generated from model knowledge because verified retrieval was unavailable.');
+    }
+
+    return lines.join('\n').trim();
+}
+
+function renderLanguageEraHitsCard(intent, eraBuckets, fallback = false) {
+    const languages = intent.languages.length ? intent.languages.map(l => l[0].toUpperCase() + l.slice(1)).join(' + ') : 'Mixed';
+    const eras = intent.eras.length ? intent.eras.map(toEraLabel).join(' + ') : 'Mixed eras';
+    const artistLine = intent.artist ? `<p class="text-xs mt-1 text-slate-600 dark:text-slate-300">Artist filter: ${escapeHtml(intent.artist)}</p>` : '';
+    const fallbackLine = fallback
+        ? `<p class="text-[11px] mt-3 text-amber-700 dark:text-amber-300">Generated from model knowledge (verification unavailable).</p>`
+        : '';
+
+    const sections = eraBuckets.map(bucket => {
+        const rows = bucket.items.map((item, idx) => {
+            const song = escapeHtml(String(item.song || 'Unknown song'));
+            const work = escapeHtml(String(item.work || 'Unknown work'));
+            const artist = escapeHtml(String(item.artist || 'Unknown artist'));
+            return `<li class="text-sm text-slate-800 dark:text-slate-100">${idx + 1}. <span class="font-semibold">${song}</span> <span class="text-slate-500 dark:text-slate-400">- ${work} | ${artist}</span></li>`;
+        }).join('');
+
+        return `
+            <div class="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                <p class="text-sm font-bold text-sky-700 dark:text-sky-300 mb-2">${escapeHtml(toEraLabel(bucket.era))}</p>
+                <ol class="space-y-1">${rows}</ol>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="p-3 rounded-xl border border-sky-200 dark:border-sky-700 bg-white/95 dark:bg-slate-900/80">
+            <p class="text-sm font-bold text-sky-800 dark:text-sky-200">Music blend: ${escapeHtml(languages)} (${escapeHtml(eras)})</p>
+            <p class="text-xs mt-1 text-slate-600 dark:text-slate-300">Exactly ${intent.requestedCount} hits per era</p>
+            ${artistLine}
+            ${sections}
+            ${fallbackLine}
+        </div>
+    `;
+}
+
+function normalizeEraBucketsToExactCount(eraBuckets, intent) {
+    const count = intent.requestedCount;
+    const requestedEras = intent.eras;
+    const normalized = [];
+
+    for (const era of requestedEras) {
+        const bucket = (eraBuckets || []).find(b => Number(b.era) === Number(era));
+        const items = Array.isArray(bucket?.items) ? bucket.items : [];
+        const seen = new Set();
+        const deduped = [];
+        for (const item of items) {
+            const song = String(item?.song || '').trim();
+            const work = String(item?.work || '').trim();
+            const artist = String(item?.artist || '').trim();
+            if (!song) continue;
+            const key = `${song.toLowerCase()}|${work.toLowerCase()}|${artist.toLowerCase()}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            deduped.push({ song, work, artist });
+        }
+        if (deduped.length < count) return null;
+        normalized.push({ era: Number(era), items: deduped.slice(0, count) });
+    }
+    return normalized;
+}
+
+function extractEraLanguageBlendIntent(text) {
+    const eras = extractRequestedEras(text);
+    const languages = extractRequestedMusicLanguages(text);
+    const artist = extractArtistForEraBlend(text);
+    const exactMatch = String(text || '').match(/\b(?:exactly|strictly)\s+(\d{1,2})\b/i);
+    const explicitCount = exactMatch ? Number(exactMatch[1]) : null;
+    const requestedCount = clampSongCount(explicitCount || extractRequestedSongCount(text) || 4, 4);
+    return {
+        eras: eras.length ? eras : [1990, 2000],
+        languages: languages.length ? languages : ['tamil'],
+        artist,
+        requestedCount
+    };
+}
+
+async function buildEraLanguageHitsWithAI(intent) {
+    const primaryLanguage = intent.languages[0] || 'tamil';
+    const prompt = `Create a language-era music hits blend.
+
+Return strict JSON only in this schema:
+{
+  "eras": [
+    {
+      "era": 1990,
+      "items": [
+        { "song": "<song>", "work": "<film/album>", "artist": "<artist>", "language": "<language>" }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Language focus: ${intent.languages.join(', ')}
+- Eras: ${intent.eras.map(toEraLabel).join(', ')}
+- Artist filter: ${intent.artist || 'none (multi-artist allowed)'}
+- Provide exactly ${intent.requestedCount} items per era
+- Keep songs in requested language(s)
+- No markdown, no extra keys, valid JSON only`;
+
+    const response = await fetch('/api/chat-groq', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            message: prompt,
+            systemPrompt: 'You are a strict JSON generator for music metadata. Output valid JSON only.'
+        })
+    });
+    if (!response.ok) throw new Error('language-era ai request failed');
+    const data = await response.json();
+    const parsed = extractJsonObject(data?.response || data?.text || '');
+    const eras = Array.isArray(parsed?.eras) ? parsed.eras : [];
+    const buckets = [];
+    for (const eraBlock of eras) {
+        const era = Number(eraBlock?.era);
+        const items = Array.isArray(eraBlock?.items) ? eraBlock.items : [];
+        if (!Number.isFinite(era)) continue;
+        const mapped = items
+            .slice(0, intent.requestedCount)
+            .map(item => ({
+                song: String(item?.song || '').trim(),
+                work: String(item?.work || '').trim(),
+                artist: String(item?.artist || '').trim(),
+                language: String(item?.language || primaryLanguage).trim()
+            }))
+            .filter(item => item.song);
+        if (!mapped.length) continue;
+        buckets.push({ era, items: mapped });
+    }
+    if (!buckets.length) throw new Error('empty language-era ai response');
+    return buckets.sort((a, b) => a.era - b.era);
+}
+
+async function handleEraLanguageHitsBlendRequest(text) {
+    const intent = extractEraLanguageBlendIntent(text);
+
+    const curatedBuckets = [];
+    for (const era of intent.eras) {
+        const collected = [];
+        for (const lang of intent.languages) {
+            const candidates = getCuratedLanguageEraHits(lang, era);
+            for (const item of candidates) {
+                if (intent.artist) {
+                    const itemArtist = String(item.artist || '').toLowerCase();
+                    const wantedArtist = intent.artist.toLowerCase();
+                    if (!itemArtist.includes(wantedArtist) && !wantedArtist.includes(itemArtist)) continue;
+                }
+                collected.push(item);
+            }
+        }
+        if (collected.length) {
+            curatedBuckets.push({ era, items: collected });
+        }
+    }
+
+    const exactCurated = normalizeEraBucketsToExactCount(curatedBuckets, intent);
+    if (exactCurated) {
+        const msg = formatLanguageEraHitsReply(intent, exactCurated, false);
+        const card = renderLanguageEraHitsCard(intent, exactCurated, false);
+        addChatMessage(card, false, false);
+        speak('Here is your language and era hits blend.');
+        saveToHistory(text, msg);
+        return;
+    }
+
+    showThinkingIndicator('[Music] Building era blend hits...');
+    try {
+        const aiBuckets = await buildEraLanguageHitsWithAI(intent);
+        const exactAi = normalizeEraBucketsToExactCount(aiBuckets, intent);
+        if (!exactAi) throw new Error('could not satisfy exact per-era count');
+        const msg = formatLanguageEraHitsReply(intent, exactAi, true);
+        const card = renderLanguageEraHitsCard(intent, exactAi, true);
+        addChatMessage(card, false, false);
+        speak('Here is your language and era hits blend.');
+        saveToHistory(text, msg);
+    } catch (error) {
+        const q = encodeURIComponent(`${intent.artist ? intent.artist + ' ' : ''}${intent.languages.join(' ')} ${intent.eras.map(toEraLabel).join(' ')} hits`);
+        const fallbackUrl = `https://www.google.com/search?q=${q}`;
+        const fallbackMsg = `I couldn't build exactly ${intent.requestedCount} verified hits for each requested era right now.\n\nTry this quick search:\n[Search blend hits](${fallbackUrl})`;
+        addChatMessage(fallbackMsg, false);
+        speak('I could not fetch the exact blend right now.');
+        saveToHistory(text, fallbackMsg);
+    } finally {
+        hideThinkingIndicator();
+    }
 }
 
 async function parseSongRequestIntent(text) {
@@ -7058,10 +7217,18 @@ ${snippetsBlock}`;
         speak(`Here are grounded song suggestions for ${artist}.`);
         saveToHistory(text, msg);
     } catch (error) {
-        const fallbackMsg = `I couldn't verify reliable song-to-movie matches for ${artist} right now.\n\nTry this quick search:\n[Search songs of ${artist}](https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')})`;
-        addChatMessage(fallbackMsg, false);
-        speak(`I could not fetch verified songs for ${artist} right now.`);
-        saveToHistory(text, fallbackMsg);
+        try {
+            const aiFallbackItems = await buildSongListFromAIFallback(artist, requestedCount);
+            const fallbackReply = formatMusicSongReply(artist, requestedCount, aiFallbackItems, true);
+            addChatMessage(fallbackReply, false);
+            speak(`Here are song suggestions for ${artist}.`);
+            saveToHistory(text, fallbackReply);
+        } catch (fallbackError) {
+            const fallbackMsg = `I couldn't verify reliable song-to-movie matches for ${artist} right now.\n\nTry this quick search:\n[Search songs of ${artist}](https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')})`;
+            addChatMessage(fallbackMsg, false);
+            speak(`I could not fetch verified songs for ${artist} right now.`);
+            saveToHistory(text, fallbackMsg);
+        }
     } finally {
         hideThinkingIndicator();
     }
@@ -7085,13 +7252,6 @@ ${snippetsBlock}`;
             }
 
             const isWeatherQuery = isWeatherIntentText(lower);
-
-            /*
-             * Shopping list feature paused for now.
-             * Re-enable for mobile/tablet rollout.
-             */
-            // const isShoppingQuery = lower.includes('shopping') || lower.includes('grocery') ||
-            //                         (lower.includes('add') && lower.includes('list'));
             
             const isReminderQuery = lower.includes('remind') || lower.includes('reminder');
             
@@ -7108,18 +7268,6 @@ ${snippetsBlock}`;
                     suggestionsPanel.classList.remove('hidden');
                 }
             }
-            
-            /*
-             * Shopping list feature paused for now.
-             * Re-enable for mobile/tablet rollout.
-             */
-            // if (!isShoppingQuery) {
-            //     const shoppingReceipt = document.getElementById('shopping-receipt');
-            //     if (shoppingReceipt && !shoppingReceipt.classList.contains('hidden')) {
-            //         shoppingReceipt.classList.add('hidden');
-            //     }
-            // }
-            
             
             if (!isReminderQuery) {
                 const remindersSection = document.getElementById('reminders-section');
@@ -7138,6 +7286,11 @@ ${snippetsBlock}`;
 
             if (isTamilJokeRequest(cleanText)) {
                 await handleTamilJokeSearch(cleanText);
+                return;
+            }
+
+            if (isEraLanguageHitsBlendRequest(cleanText)) {
+                await handleEraLanguageHitsBlendRequest(cleanText);
                 return;
             }
 
@@ -7312,7 +7465,7 @@ Rules:
             // If translator mode is active, process text as translation
             if (translatorMode && translatorLanguage) {
                 // Don't translate common commands
-                const skipTranslation = ['help', 'stop', 'exit', 'weather', 'climate', 'reminder', 'shopping'];
+                const skipTranslation = ['help', 'stop', 'exit', 'weather', 'climate', 'reminder'];
                 const shouldSkip = skipTranslation.some(cmd => lower.includes(cmd));
 
                 if (!shouldSkip) {
@@ -7640,37 +7793,6 @@ Rules:
                 return; 
             }
             
-            /*
-             * Shopping list voice/text command routing paused for now.
-             * Re-enable for mobile/tablet rollout.
-             */
-            // if (cleanText.toLowerCase().includes('add') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('shopping') || cleanText.toLowerCase().includes('to my list') || cleanText.toLowerCase().includes('to list'))) {
-            //     handleAddToShoppingList(cleanText);
-            //     return;
-            // }
-            //
-            // else if (cleanText.toLowerCase().match(/\b(also|and|plus)\s+add\b/i) || cleanText.toLowerCase().match(/\badd\s+(also|too)\b/i)) {
-            //     handleAddToShoppingList(cleanText);
-            //     return;
-            // }
-            //
-            // else if (cleanText.toLowerCase().startsWith('add ') && shoppingList.length > 0) {
-            //     handleAddToShoppingList(cleanText);
-            //     return;
-            // }
-            // else if (cleanText.toLowerCase().includes('remove') && (cleanText.toLowerCase().includes('shopping list') || cleanText.toLowerCase().includes('from shopping'))) {
-            //     handleRemoveFromShoppingList(cleanText);
-            //     return;
-            // }
-            // else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('what') || cleanText.toLowerCase().includes('read')) && cleanText.toLowerCase().includes('shopping')) {
-            //     showShoppingList();
-            //     return;
-            // }
-            // else if (cleanText.toLowerCase().includes('clear') && cleanText.toLowerCase().includes('shopping')) {
-            //     clearShoppingList();
-            //     return;
-            // }
-
             else if (/\b(remind me|set\s+(?:a\s+)?reminder|create reminder)\b/i.test(cleanText) ||
                      cleanText.trim().toLowerCase() === 'reminder') {
                 createReminderFromText(cleanText);
@@ -7678,8 +7800,7 @@ Rules:
             }
             
             else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('list') || cleanText.toLowerCase().includes('my')) &&
-                     cleanText.toLowerCase().includes('reminder') &&
-                     !cleanText.toLowerCase().includes('shopping')) {
+                     cleanText.toLowerCase().includes('reminder')) {
                 if (reminders.length === 0) {
                     const msg = "You haven't set any reminders yet. For what should I remind you?";
                     addChatMessage(msg, false);
@@ -7750,8 +7871,6 @@ Rules:
   - "Will it rain in Seattle?"
   - "Temperature in Paris?"
 
-[Cart] Shopping Lists - Currently paused (mobile/tablet rollout)
-
 ? Reminders - Never forget again!
   - "Remind me to call mom at 5pm"
   - "Remind me tomorrow to buy groceries"
@@ -7762,9 +7881,9 @@ Rules:
   - Use Translator to talk to rickshaw drivers, shopkeepers!
   - I remember your name and preferences!
 
-Just talk to me naturally!`;
+                Just talk to me naturally!`;
                 addChatMessage(helpMsg, false);
-                speak("I can help with travel planning, translation, transport, weather, shopping lists, reminders, and much more. I can even translate for you when talking to locals!");
+                speak("I can help with travel planning, translation, transport, weather, reminders, and much more. I can even translate for you when talking to locals!");
                 return; 
             }
             
@@ -8870,179 +8989,6 @@ ${sourceLinksBlock}
             speak(response);
         }
 
-        
-        function handleAddToShoppingList(text) {
-            const lower = text.toLowerCase();
-            
-            let items = text;
-            
-            
-            const match1 = text.match(/add\s+(.+?)\s+to\s+(?:my\s+)?shopping/i);
-            if (match1) {
-                items = match1[1];
-            } else {
-                
-                const match2 = text.match(/(?:add|also|and|plus)\s+(.+)/i);
-                if (match2) {
-                    items = match2[1];
-                }
-            }
-            
-            
-            items = items.replace(/to (?:my )?shopping list/gi, '');
-            items = items.replace(/please/gi, '');
-            items = items.replace(/\s+also$/gi, ''); 
-            items = items.replace(/\s+too$/gi, ''); 
-            
-            
-            const itemArray = items.split(/,| and |\n/).map(item => item.trim()).filter(item => item.length > 0);
-            
-            itemArray.forEach(item => {
-                
-                const formattedItem = item.charAt(0).toUpperCase() + item.slice(1);
-                
-                if (!shoppingList.some(existing => existing.toLowerCase() === item.toLowerCase())) {
-                    shoppingList.push(formattedItem);
-                }
-            });
-            
-            saveUserData();
-            updateShoppingListUI(true); 
-            
-            const msg = itemArray.length === 1 
-                ? `Added ${itemArray[0]} to your shopping list!` 
-                : `Added ${itemArray.join(', ')} to your shopping list!`;
-            addChatMessage(msg, false);
-            speak(msg);
-        }
-
-        function handleRemoveFromShoppingList(text) {
-            const lower = text.toLowerCase();
-            let item = text;
-            
-            
-            const match1 = text.match(/remove\s+(.+?)\s+from\s+(?:my\s+)?shopping/i);
-            if (match1) {
-                item = match1[1];
-            } else {
-                const match2 = text.match(/remove\s+(.+)/i);
-                if (match2) {
-                    item = match2[1];
-                }
-            }
-            
-            item = item.replace(/from (?:my )?shopping list/gi, '').trim();
-            
-            const index = shoppingList.findIndex(i => i.toLowerCase().includes(item.toLowerCase()));
-            if (index !== -1) {
-                const removed = shoppingList.splice(index, 1)[0];
-                saveUserData();
-                updateShoppingListUI(shoppingList.length > 0); 
-                const msg = `Removed ${removed} from your shopping list!`;
-                addChatMessage(msg, false);
-                speak(msg);
-            } else {
-                const msg = `I couldn't find "${item}" in your shopping list.`;
-                addChatMessage(msg, false);
-                speak(msg);
-            }
-        }
-
-        function showShoppingList() {
-            if (shoppingList.length === 0) {
-                const msg = "Your shopping list is empty. Would you like to add something?";
-                addChatMessage(msg, false);
-                speak(msg);
-            } else {
-                const items = shoppingList.join(', ');
-                const msg = `You have ${shoppingList.length} item${shoppingList.length > 1 ? 's' : ''} on your shopping list: ${items}`;
-                addChatMessage(msg, false);
-                speak(msg);
-                
-                
-                document.getElementById('shopping-receipt').classList.remove('hidden');
-            }
-        }
-
-        function closeShoppingList() {
-            const receipt = document.getElementById('shopping-receipt');
-            receipt.classList.add('hidden');
-        }
-        
-        function clearShoppingList() {
-            if (shoppingList.length === 0) {
-                const msg = "Your shopping list is already empty.";
-                addChatMessage(msg, false);
-                speak(msg);
-                return;
-            }
-            
-            shoppingList = [];
-            saveUserData();
-            updateShoppingListUI(false); 
-            
-            const msg = "Shopping list cleared!";
-            addChatMessage(msg, false);
-            speak(msg);
-        }
-
-        function updateShoppingListUI(autoShow = false) {
-            const receipt = document.getElementById('shopping-receipt');
-            const itemsContainer = document.getElementById('receipt-items');
-            const countSpan = document.getElementById('receipt-count');
-            const dateSpan = document.getElementById('receipt-date');
-            
-            
-            const now = new Date();
-            const dateStr = now.toLocaleDateString('en-US', { 
-                month: 'short', 
-                day: 'numeric', 
-                year: 'numeric' 
-            });
-            const timeStr = now.toLocaleTimeString('en-US', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            });
-            dateSpan.textContent = `${dateStr} ${timeStr}`;
-            
-            if (shoppingList.length === 0) {
-                itemsContainer.innerHTML = '<div style="text-align: center; color: #999; font-size: 12px; padding: 20px;">No items yet</div>';
-                receipt.classList.add('hidden');
-            } else {
-                
-                if (autoShow) {
-                    receipt.classList.remove('hidden');
-                }
-                itemsContainer.innerHTML = shoppingList.map((item, index) => `
-                    <div class="receipt-item">
-                        <div class="receipt-item-text">
-                            <span class="receipt-bullet">???</span>
-                            <span>${escapeHtml(item)}</span>
-                        </div>
-                        <button onclick="removeShoppingItem(${index})" class="receipt-delete" title="Remove item">[OK]</button>
-                    </div>
-                `).join('');
-            }
-            
-            countSpan.textContent = shoppingList.length;
-            
-            
-            if (darkMode) {
-                receipt.classList.add('dark-mode');
-            } else {
-                receipt.classList.remove('dark-mode');
-            }
-        }
-
-        function removeShoppingItem(index) {
-            const removed = shoppingList.splice(index, 1)[0];
-            saveUserData();
-            updateShoppingListUI(shoppingList.length > 0); 
-            const msg = `Removed ${removed}`;
-            speak(msg);
-        }
-
-        
         function handleMemoryStorage(text) {
             const lower = text.toLowerCase();
             
@@ -9296,7 +9242,6 @@ ${sourceLinksBlock}
             try {
                 const data = {
                     userName: userName,
-                    shoppingList: shoppingList,
                     memoryStore: memoryStore,
                     reminders: reminders
                 };
@@ -9313,7 +9258,6 @@ ${sourceLinksBlock}
                 if (stored) {
                     const data = JSON.parse(stored);
                     userName = data.userName || null;
-                    shoppingList = data.shoppingList || [];
                     memoryStore = data.memoryStore || {};
                     reminders = data.reminders || [];
                     
@@ -9327,7 +9271,6 @@ ${sourceLinksBlock}
                     
                     
                     if (reminders.length > 0) updateRemindersList();
-                    if (shoppingList.length > 0) updateShoppingListUI(false); 
                 }
             } catch (e) {
             }
@@ -9414,15 +9357,11 @@ ${sourceLinksBlock}
                     utterance.voice = preferredVoice;
                 }
                 
-                
                 utterance.rate = 0.95;      
                 utterance.pitch = 0.9;      
                 utterance.volume = 1.0;
                 
-                
                 currentUtterance = utterance;
-                
-                
                 utterance.onend = () => { 
                     isAssistantSpeaking = false;
                     currentSpeechTextLower = '';
