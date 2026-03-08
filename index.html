@@ -6731,6 +6731,23 @@ function clampSongCount(value, fallback = 5) {
     return Math.max(1, Math.min(12, n));
 }
 
+const CURATED_ARTIST_SONGS = {
+    'harris jayaraj': [
+        { song: 'Vaseegara', work: 'Minnale' },
+        { song: 'Oru Maalai', work: 'Ghajini' },
+        { song: 'Uyirin Uyire', work: 'Kaakha Kaakha' },
+        { song: 'Nenjukkul Peidhidum', work: 'Vaaranam Aayiram' },
+        { song: 'Mudhal Mazhai', work: 'Bheema' },
+        { song: 'Ava Enna', work: 'Vaaranam Aayiram' }
+    ]
+};
+
+function getCuratedSongsForArtist(artist) {
+    const key = String(artist || '').toLowerCase().trim();
+    if (!key) return [];
+    return Array.isArray(CURATED_ARTIST_SONGS[key]) ? CURATED_ARTIST_SONGS[key] : [];
+}
+
 async function parseSongRequestIntent(text) {
     const fallbackArtist = sanitizeArtistName(extractArtistFromSongRequest(text));
     const fallbackCount = extractRequestedSongCount(text);
@@ -6850,10 +6867,11 @@ function formatMusicSongReply(artist, requestedCount, items, fallback = false) {
     const lines = [`[Music] Top ${count} songs for ${safeArtist}`, ''];
     items.slice(0, count).forEach((item, index) => {
         const song = String(item?.song || '').trim();
-        const work = String(item?.work || '').trim() || 'Unknown work';
+        const work = String(item?.work || '').trim();
+        const workVerified = item?.workVerified !== false && !!work;
         if (!song) return;
         const reason = fixedNotes[index % fixedNotes.length];
-        lines.push(`• ${song} - ${work}`);
+        lines.push(workVerified ? `� ${song} - ${work}` : `� ${song}`);
         lines.push(`Note: ${reason}`);
     });
 
@@ -6865,6 +6883,24 @@ function formatMusicSongReply(artist, requestedCount, items, fallback = false) {
     return lines.join('\n');
 }
 
+function toCompactLower(input) {
+    return String(input || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function isWorkMentionedInEvidence(work, evidenceItems) {
+    const candidate = toCompactLower(work);
+    if (!candidate) return false;
+    const corpus = (Array.isArray(evidenceItems) ? evidenceItems : [])
+        .map(item => `${item?.title || ''} ${item?.description || ''} ${item?.url || ''}`)
+        .join(' ')
+        .toLowerCase();
+    return corpus.includes(candidate);
+}
+
 async function handleArtistSongRequest(text) {
     const parsedIntent = await parseSongRequestIntent(text);
     const artist = parsedIntent.artist;
@@ -6873,6 +6909,24 @@ async function handleArtistSongRequest(text) {
         const msg = 'Tell me the artist name and I will suggest good songs. Example: "Best songs of AR Rahman".';
         addChatMessage(msg, false);
         speak(msg);
+        return;
+    }
+
+    const curatedSongs = getCuratedSongsForArtist(artist);
+    if (curatedSongs.length) {
+        const curatedMsg = formatMusicSongReply(
+            artist,
+            requestedCount,
+            curatedSongs.slice(0, requestedCount).map(item => ({
+                song: item.song,
+                work: item.work,
+                reason: 'Verified pick'
+            })),
+            false
+        );
+        addChatMessage(curatedMsg, false);
+        speak(`Here are verified song suggestions for ${artist}.`);
+        saveToHistory(text, curatedMsg);
         return;
     }
 
@@ -6968,9 +7022,12 @@ ${snippetsBlock}`;
 
             if (!mapped.length) continue;
 
+            const workVerified = work !== 'Unknown work' && isWorkMentionedInEvidence(work, mapped);
+
             formattedItems.push({
                 song,
-                work,
+                work: workVerified ? work : '',
+                workVerified,
                 reason
             });
         }
@@ -6985,18 +7042,10 @@ ${snippetsBlock}`;
         speak(`Here are grounded song suggestions for ${artist}.`);
         saveToHistory(text, msg);
     } catch (error) {
-        try {
-            const aiFallbackItems = await buildSongListFromAIFallback(artist, requestedCount);
-            const aiFallbackMsg = formatMusicSongReply(artist, requestedCount, aiFallbackItems, true);
-            addChatMessage(aiFallbackMsg, false);
-            speak(`Here are song suggestions for ${artist}.`);
-            saveToHistory(text, aiFallbackMsg);
-        } catch (fallbackError) {
-            const fallbackMsg = `I could not fetch songs for ${artist} right now.\n\nTry this quick search:\n[Search songs of ${artist}](https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')})`;
-            addChatMessage(fallbackMsg, false);
-            speak(`I could not fetch songs for ${artist} right now.`);
-            saveToHistory(text, fallbackMsg);
-        }
+        const fallbackMsg = `I couldn't verify reliable song-to-movie matches for ${artist} right now.\n\nTry this quick search:\n[Search songs of ${artist}](https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')})`;
+        addChatMessage(fallbackMsg, false);
+        speak(`I could not fetch verified songs for ${artist} right now.`);
+        saveToHistory(text, fallbackMsg);
     } finally {
         hideThinkingIndicator();
     }
