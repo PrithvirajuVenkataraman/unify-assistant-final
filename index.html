@@ -2236,19 +2236,24 @@
                 </button>
 
                 <!-- Voice Button (shows when not typing) -->
-                <button onclick="toggleListening()" id="voice-btn" class="flex-shrink-0 p-2.5 rounded-xl gradient-btn shadow-lg">
-                    <svg id="mic-icon-bottom" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
-                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                        <line x1="12" y1="19" x2="12" y2="23"></line>
-                        <line x1="8" y1="23" x2="16" y2="23"></line>
-                    </svg>
-                    <div id="waveform-bottom" class="hidden flex items-center gap-1">
-                        <div class="w-1 h-4 bg-white rounded-full wave-bar" style="animation-delay: 0s;"></div>
-                        <div class="w-1 h-4 bg-white rounded-full wave-bar" style="animation-delay: 0.1s;"></div>
-                        <div class="w-1 h-4 bg-white rounded-full wave-bar" style="animation-delay: 0.2s;"></div>
+                <div class="relative group flex-shrink-0">
+                    <button onclick="toggleListening()" id="voice-btn" class="flex-shrink-0 p-2.5 rounded-xl gradient-btn shadow-lg" title="Voice input">
+                        <svg id="mic-icon-bottom" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
+                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                            <line x1="12" y1="19" x2="12" y2="23"></line>
+                            <line x1="8" y1="23" x2="16" y2="23"></line>
+                        </svg>
+                        <div id="waveform-bottom" class="hidden flex items-center gap-1">
+                            <div class="w-1 h-4 bg-white rounded-full wave-bar" style="animation-delay: 0s;"></div>
+                            <div class="w-1 h-4 bg-white rounded-full wave-bar" style="animation-delay: 0.1s;"></div>
+                            <div class="w-1 h-4 bg-white rounded-full wave-bar" style="animation-delay: 0.2s;"></div>
+                        </div>
+                    </button>
+                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2.5 py-1 bg-gray-900 text-white text-[11px] rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg z-50">
+                        Voice input
                     </div>
-                </button>
+                </div>
             </div>
             </div>
             <p id="footer-disclaimer" class="mt-2 text-xs text-gray-400 font-medium text-center">JARVIS can make mistakes. Check important info.</p>
