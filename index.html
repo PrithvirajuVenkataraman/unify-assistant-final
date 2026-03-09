@@ -3682,7 +3682,8 @@ function speakInLanguage(text, langCode) {
 
 // ============ END TRANSLATOR MODE ============
 
-let conversationContext = [];
+let conversationContext = []; 
+let lastDiscussedEntity = '';
 
 async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
     
@@ -3966,7 +3967,7 @@ Why funny: He blames the pen instead of admitting he skipped homework.`;
     }
 }
 
-function extractKnowledgeSubject(text) {
+function extractKnowledgeSubject(text) { 
     const raw = String(text || '').trim();
     if (!raw) return '';
     const patterns = [
@@ -3982,14 +3983,45 @@ function extractKnowledgeSubject(text) {
                 .trim();
         }
     }
-    return raw.replace(/[?.!,;]+$/g, '').trim();
+    return raw.replace(/[?.!,;]+$/g, '').trim(); 
+} 
+
+function isPronounKnowledgeFollowup(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    if (/^(it|this|that|this company|that company|the company)$/.test(t)) return true;
+    return /\b(tell me more|more about|about it|about this|about that|that company|this company|expand on it)\b/.test(t);
 }
 
-async function buildSearchFallbackAnswer(userMessage) {
-    try {
-        const subject = extractKnowledgeSubject(userMessage);
-        const query = subject || String(userMessage || '').trim();
-        if (!query) return null;
+function normalizeEntityText(value) {
+    return String(value || '')
+        .replace(/[?.!,;]+$/g, '')
+        .replace(/\b(company|organization|org|inc|ltd|llc)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function resolveKnowledgeFollowupQuery(text) {
+    const raw = String(text || '').trim();
+    if (!raw || !lastDiscussedEntity) return raw;
+    if (!isPronounKnowledgeFollowup(raw)) return raw;
+    return raw.replace(/\b(it|this|that)(\s+company)?\b/gi, lastDiscussedEntity).trim();
+}
+
+function maybeCaptureKnowledgeEntity(text) {
+    const candidate = normalizeEntityText(extractKnowledgeSubject(text));
+    if (!candidate) return;
+    if (isPronounKnowledgeFollowup(candidate)) return;
+    if (candidate.split(/\s+/).length > 8) return;
+    lastDiscussedEntity = candidate;
+}
+ 
+async function buildSearchFallbackAnswer(userMessage) { 
+    try { 
+        const resolvedMessage = resolveKnowledgeFollowupQuery(userMessage);
+        const subject = extractKnowledgeSubject(resolvedMessage); 
+        const query = subject || String(resolvedMessage || '').trim(); 
+        if (!query) return null; 
 
         const response = await fetch('/api/search', {
             method: 'POST',
@@ -4024,13 +4056,16 @@ function isLikelyLocationOrTravelQuery(text) {
     return /\b(map|maps|directions?|route|near me|nearby|location|where is|where to|hotel|hotels|restaurant|restaurants|food|trip|travel|itinerary|weather|transport|bus|train|taxi|uber|airport|station)\b/.test(t);
 }
 
-async function askGeminiAI(userMessage) {
-    try {
-        
-        conversationContext.push({ role: 'user', text: userMessage });
-        if (conversationContext.length > 6) {
-            conversationContext = conversationContext.slice(-6);
-        }
+async function askGeminiAI(userMessage) { 
+    let normalizedUserMessage = String(userMessage || '');
+    try { 
+        normalizedUserMessage = resolveKnowledgeFollowupQuery(userMessage);
+        maybeCaptureKnowledgeEntity(normalizedUserMessage);
+
+        conversationContext.push({ role: 'user', text: normalizedUserMessage }); 
+        if (conversationContext.length > 6) { 
+            conversationContext = conversationContext.slice(-6); 
+        } 
         
         const contextMessages = conversationContext.map(msg => 
             `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`
@@ -4070,8 +4105,8 @@ Recent conversation:
 ${contextMessages}
 
 Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
-        const intent = getUserIntent(userMessage);
-        window.__intentContext = {
+        const intent = getUserIntent(normalizedUserMessage); 
+        window.__intentContext = { 
           allowHotels: intent.wantsHotels,
           allowRestaurants: intent.wantsRestaurants,
           itineraryOnly:
@@ -4080,13 +4115,13 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             !intent.wantsRestaurants, 
           __retried: false };
 
-        window.__lastUserMessage = userMessage; 
-
-        const responseMode = detectRequestedResponseLength(userMessage);
-        const responseHint = RESPONSE_LENGTH_HINTS[responseMode] || RESPONSE_LENGTH_HINTS.normal;
-        const formatMode = window.responseFormat || responseFormat || 'paragraph';
-        const formatHint = RESPONSE_FORMAT_HINTS[formatMode] || RESPONSE_FORMAT_HINTS.paragraph;
-        const effectiveMessage = `${userMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`;
+        window.__lastUserMessage = normalizedUserMessage;  
+ 
+        const responseMode = detectRequestedResponseLength(normalizedUserMessage); 
+        const responseHint = RESPONSE_LENGTH_HINTS[responseMode] || RESPONSE_LENGTH_HINTS.normal; 
+        const formatMode = window.responseFormat || responseFormat || 'paragraph'; 
+        const formatHint = RESPONSE_FORMAT_HINTS[formatMode] || RESPONSE_FORMAT_HINTS.paragraph; 
+        const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
 
          
         const response = await fetch('/api/chat-groq', { 
@@ -4100,34 +4135,46 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         }); 
         
         
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`AI request failed: ${response.status}`);
-        }
+        if (!response.ok) { 
+            const rawError = await response.text();
+            let backendMessage = '';
+            try {
+                const parsed = JSON.parse(rawError);
+                const parts = [
+                    parsed?.error ? `error=${parsed.error}` : '',
+                    parsed?.details ? `details=${parsed.details}` : '',
+                    Array.isArray(parsed?.triedModels) ? `tried=${parsed.triedModels.join(',')}` : ''
+                ].filter(Boolean);
+                backendMessage = parts.join(' | ');
+            } catch (e) {
+                backendMessage = rawError || '';
+            }
+            throw new Error(`AI request failed: status=${response.status}${backendMessage ? ` | ${backendMessage}` : ''}`); 
+        } 
         
         const data = await response.json();
         conversationContext.push({ role: 'assistant', text: data.response || data.text });
         
         return data;
     } catch (error) {
-        const searchFallback = await buildSearchFallbackAnswer(userMessage);
-        if (searchFallback) {
-            return {
-                response: searchFallback,
+        const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || userMessage); 
+        if (searchFallback) { 
+            return { 
+                response: searchFallback, 
                 intent: 'search_fallback'
             };
         }
 
         showError(`AI request failed: ${error.message}`);
-        if (isLikelyLocationOrTravelQuery(userMessage)) {
-            showFailureFallbackCard(userMessage);
-        }
-        return {
-            response: "I'm having trouble connecting to my AI. Please try again in a moment!",
-            intent: 'error'
-        };
-    }
-}
+        if (isLikelyLocationOrTravelQuery(normalizedUserMessage || userMessage)) { 
+            showFailureFallbackCard(normalizedUserMessage || userMessage); 
+        } 
+        return { 
+            response: `AI backend issue: ${String(error?.message || 'unknown error')}. Please verify GEMINI_API_KEY and server logs.`, 
+            intent: 'error' 
+        }; 
+    } 
+} 
 
 async function handleNameCorrection(text) {
     const patterns = [
@@ -10107,25 +10154,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
-/*
-1. TYPING INDICATOR:
-   - Call showTypingIndicator() before AI response
-   - Call hideTypingIndicator() before showing response
-
-2. EDIT MESSAGES:
-   - Integrated in addChatMessage() with edit button on user messages
-   - Editing a message regenerates the response from that turn
-
-3. CONVERSATION HISTORY:
-   - Call saveToHistory(userMsg, aiMsg) after each exchange
-   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
-   - Search, export, and clear functions included
-
-4. ERROR FEEDBACK:
-   - Call showError("Error message") instead of addChatMessage for errors
-   - Visual shake animation + auto-dismiss
-*/
 
 </script>
 </body>
