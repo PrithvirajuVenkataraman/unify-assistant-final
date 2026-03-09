@@ -1581,11 +1581,19 @@
 
         .footer-action-btn-mic {
             background: transparent;
-            color: #e2e8f0;
+            color: #000000;
         }
 
         .footer-action-btn-mic:hover {
             background: rgba(148, 163, 184, 0.16);
+            color: #111827;
+        }
+
+        body.dark .footer-action-btn-mic {
+            color: #e2e8f0;
+        }
+
+        body.dark .footer-action-btn-mic:hover {
             color: #f8fafc;
         }
 
@@ -3684,6 +3692,112 @@ function speakInLanguage(text, langCode) {
 
 let conversationContext = []; 
 let lastDiscussedEntity = '';
+let activeConversationTopic = null;
+
+const TOPIC_PROFILES = {
+    dating: {
+        label: 'dating and relationship advice',
+        keywords: [
+            'dating', 'date', 'girl', 'boy', 'crush', 'relationship', 'romance', 'romantic',
+            'approach', 'flirt', 'attract', 'chemistry', 'ask', 'askout', 'social', 'gathering',
+            'conversation', 'confidence', 'partner', 'love'
+        ]
+    }
+};
+
+function tokenizeTopicText(text) {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean);
+}
+
+function detectTopicProfile(text) {
+    const tokens = tokenizeTopicText(text);
+    if (!tokens.length) return null;
+
+    const compactText = tokens.join(' ');
+    if (/\b(ask\s+her\s+out|ask\s+him\s+out|talk\s+to\s+(a|the)\s+girl|talk\s+to\s+(a|the)\s+boy)\b/.test(compactText)) {
+        return 'dating';
+    }
+
+    let bestKey = null;
+    let bestScore = 0;
+    for (const [key, profile] of Object.entries(TOPIC_PROFILES)) {
+        const score = profile.keywords.reduce((acc, kw) => acc + (tokens.includes(kw) ? 1 : 0), 0);
+        if (score > bestScore) {
+            bestScore = score;
+            bestKey = key;
+        }
+    }
+    return bestScore >= 2 ? bestKey : null;
+}
+
+function isShortTopicFollowup(text) {
+    const t = String(text || '').trim().toLowerCase();
+    if (!t) return false;
+    if (t.split(/\s+/).length <= 8) return true;
+    return /\b(what if|how about|and if|in that case|then what|what next|what now|for example)\b/.test(t);
+}
+
+function detectExplicitTopicSteer(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(change|switch|new|different|another)\s+(topic|subject)\b/.test(t) ||
+           /\b(let'?s|lets)\s+(talk|discuss)\s+about\b/.test(t) ||
+           /\b(anyway|moving on|on another note)\b/.test(t);
+}
+
+function clearActiveTopic() {
+    activeConversationTopic = null;
+}
+
+function setActiveTopic(topicKey, sourceText) {
+    const profile = TOPIC_PROFILES[topicKey];
+    if (!profile) return;
+    activeConversationTopic = {
+        key: topicKey,
+        label: profile.label,
+        keywords: profile.keywords.slice(),
+        source: String(sourceText || '').trim(),
+        updatedAt: Date.now()
+    };
+}
+
+function updateTopicMemory(userText) {
+    const text = String(userText || '').trim();
+    if (!text) return;
+
+    if (detectExplicitTopicSteer(text)) {
+        clearActiveTopic();
+        const explicitTopic = detectTopicProfile(text);
+        if (explicitTopic) setActiveTopic(explicitTopic, text);
+        return;
+    }
+
+    const detectedTopic = detectTopicProfile(text);
+    if (detectedTopic) {
+        setActiveTopic(detectedTopic, text);
+        return;
+    }
+
+    // Keep sticky topic memory unless the user explicitly steers to a new topic.
+    if (!activeConversationTopic) return;
+}
+
+function getTopicMemoryHint(userText) {
+    if (!activeConversationTopic) return '';
+    const text = String(userText || '').trim();
+    if (!text) return '';
+
+    const tokens = tokenizeTopicText(text);
+    const overlap = activeConversationTopic.keywords.reduce((acc, kw) => acc + (tokens.includes(kw) ? 1 : 0), 0);
+    const followupSignal = isShortTopicFollowup(text) || /\b(what if|how about|and if|in that case|then)\b/i.test(text);
+    const shouldAnchor = overlap > 0 || followupSignal;
+
+    if (!shouldAnchor) return '';
+    return `Active topic: ${activeConversationTopic.label}. Treat this as a follow-up unless user explicitly changes topic.`;
+}
 
 async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
     
@@ -4126,6 +4240,8 @@ async function askGeminiAI(userMessage) {
     try { 
         normalizedUserMessage = resolveKnowledgeFollowupQuery(userMessage);
         maybeCaptureKnowledgeEntity(normalizedUserMessage);
+        updateTopicMemory(normalizedUserMessage);
+        const topicHint = getTopicMemoryHint(normalizedUserMessage);
 
         conversationContext.push({ role: 'user', text: normalizedUserMessage }); 
         if (conversationContext.length > 6) { 
@@ -4173,6 +4289,9 @@ Recent conversation:
 ${contextMessages}
 
 Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
+        const systemPromptWithTopic = topicHint
+            ? `${systemPrompt}\n\nTOPIC CONTINUITY:\n- ${topicHint}`
+            : systemPrompt;
         const intent = getUserIntent(normalizedUserMessage); 
         window.__intentContext = { 
           allowHotels: intent.wantsHotels,
@@ -4197,7 +4316,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ 
                 message: effectiveMessage, 
-                systemPrompt: systemPrompt,
+                systemPrompt: systemPromptWithTopic,
                 userName: userName 
             }) 
         }); 
@@ -7609,12 +7728,26 @@ function extractComparisonEntities(text) {
 
     if (!left || !right) return null;
     if (left.length < 2 || right.length < 2) return null;
+
+    const genericTerms = new Set([
+        'something', 'anything', 'everything', 'nothing',
+        'someone', 'somebody', 'anyone', 'anybody',
+        'this', 'that', 'these', 'those',
+        'it', 'they', 'them', 'stuff', 'things', 'thing'
+    ]);
+    const leftNorm = left.toLowerCase().trim();
+    const rightNorm = right.toLowerCase().trim();
+    if (genericTerms.has(leftNorm) || genericTerms.has(rightNorm)) return null;
+
     return { left, right };
 }
 
 function isComparisonQuery(text) {
     const t = String(text || '').toLowerCase();
-    if (!/\b(best|better|vs|versus|compare|comparison|or)\b/.test(t)) return false;
+    const hasStrongComparisonSignal = /\b(best|better|vs|versus|compare|comparison)\b/.test(t);
+    const hasOr = /\bor\b/.test(t);
+    if (!hasStrongComparisonSignal && !hasOr) return false;
+    if (hasOr && !hasStrongComparisonSignal && !/\b(which|who|what)\b/.test(t)) return false;
     return !!extractComparisonEntities(text);
 }
 
@@ -7804,6 +7937,7 @@ ${snippets}`
                 const regex = new RegExp(`^${prefix}[,\\s]+`, 'i'); 
                 cleanText = cleanText.replace(regex, ''); 
             } 
+            updateTopicMemory(cleanText);
 
             if (isPoliticalQuery(cleanText)) {
                 const policyMsg = 'Sorry, I am not designed to answer political questions.';
@@ -10260,25 +10394,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
-/*
-1. TYPING INDICATOR:
-   - Call showTypingIndicator() before AI response
-   - Call hideTypingIndicator() before showing response
-
-2. EDIT MESSAGES:
-   - Integrated in addChatMessage() with edit button on user messages
-   - Editing a message regenerates the response from that turn
-
-3. CONVERSATION HISTORY:
-   - Call saveToHistory(userMsg, aiMsg) after each exchange
-   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
-   - Search, export, and clear functions included
-
-4. ERROR FEEDBACK:
-   - Call showError("Error message") instead of addChatMessage for errors
-   - Visual shake animation + auto-dismiss
-*/
 
 </script>
 </body>
