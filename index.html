@@ -3966,6 +3966,64 @@ Why funny: He blames the pen instead of admitting he skipped homework.`;
     }
 }
 
+function extractKnowledgeSubject(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+    const patterns = [
+        /^\s*do\s+you\s+know\s+(.+?)\s*\??$/i,
+        /^\s*(?:what\s+is|who\s+is|tell\s+me\s+about)\s+(.+?)\s*\??$/i
+    ];
+    for (const p of patterns) {
+        const m = raw.match(p);
+        if (m && m[1]) {
+            return m[1]
+                .replace(/\b(company|organization|org|inc|ltd|llc)\b/gi, '')
+                .replace(/[?.!,;]+$/g, '')
+                .trim();
+        }
+    }
+    return raw.replace(/[?.!,;]+$/g, '').trim();
+}
+
+async function buildSearchFallbackAnswer(userMessage) {
+    try {
+        const subject = extractKnowledgeSubject(userMessage);
+        const query = subject || String(userMessage || '').trim();
+        if (!query) return null;
+
+        const response = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, maxResults: 5 })
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        const results = Array.isArray(data?.results) ? data.results : [];
+        if (!results.length) return null;
+
+        const top = results[0];
+        const topSnippet = String(top?.description || '').trim();
+        const lines = results
+            .slice(0, 3)
+            .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+            .join('\n');
+
+        const lead = topSnippet
+            ? `I couldn't reach my main AI right now, but from web sources: ${topSnippet}`
+            : `I couldn't reach my main AI right now, but I found reliable sources about ${query}.`;
+
+        return `${lead}\n\nSources:\n${lines}`;
+    } catch (error) {
+        return null;
+    }
+}
+
+function isLikelyLocationOrTravelQuery(text) {
+    const t = String(text || '').toLowerCase();
+    if (!t.trim()) return false;
+    return /\b(map|maps|directions?|route|near me|nearby|location|where is|where to|hotel|hotels|restaurant|restaurants|food|trip|travel|itinerary|weather|transport|bus|train|taxi|uber|airport|station)\b/.test(t);
+}
+
 async function askGeminiAI(userMessage) {
     try {
         
@@ -4052,9 +4110,18 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         
         return data;
     } catch (error) {
-        
+        const searchFallback = await buildSearchFallbackAnswer(userMessage);
+        if (searchFallback) {
+            return {
+                response: searchFallback,
+                intent: 'search_fallback'
+            };
+        }
+
         showError(`AI request failed: ${error.message}`);
-        showFailureFallbackCard(userMessage);
+        if (isLikelyLocationOrTravelQuery(userMessage)) {
+            showFailureFallbackCard(userMessage);
+        }
         return {
             response: "I'm having trouble connecting to my AI. Please try again in a moment!",
             intent: 'error'
@@ -7395,6 +7462,181 @@ ${snippetsBlock}`;
     }
 }
 
+function isPoliticalQuery(text) {
+    const t = String(text || '').toLowerCase();
+    if (!t.trim()) return false;
+    return /\b(politic|political|election|vote|voting|ballot|campaign|manifesto|party|government|parliament|senate|congress|president|prime minister|pm\b|chief minister|cm\b|minister|bjp|inc\b|dmk|aiadmk|aap\b|republican|democrat|left wing|right wing|geopolitic|public policy|foreign policy|diplomacy|sanction)\b/.test(t);
+}
+
+function isStrictYesNoRequest(text) {
+    const t = String(text || '').trim().toLowerCase();
+    if (!t) return false;
+    if (/\b(yes or no|just yes or no|answer yes or no|only yes or no|yes\/no)\b/.test(t)) return true;
+    const startsBinary = /^(is|are|am|was|were|do|does|did|can|could|should|would|will|has|have|had)\b/.test(t);
+    if (!startsBinary) return false;
+    // Keep this strict to avoid hijacking rich questions.
+    return t.split(/\s+/).length <= 16;
+}
+
+function extractComparisonEntities(text) {
+    const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!normalized) return null;
+
+    const vsMatches = [...normalized.matchAll(/([A-Za-z][A-Za-z0-9.&'\- ]{1,60})\s+(?:vs|versus|or)\s+([A-Za-z][A-Za-z0-9.&'\- ]{1,60})/gi)];
+    if (!vsMatches.length) return null;
+
+    const last = vsMatches[vsMatches.length - 1];
+    const left = String(last[1] || '').replace(/\b(who is|who's|which is|best|better|between|among)\b/gi, '').trim();
+    const right = String(last[2] || '').replace(/[?.!,;]+$/g, '').trim();
+
+    if (!left || !right) return null;
+    if (left.length < 2 || right.length < 2) return null;
+    return { left, right };
+}
+
+function isComparisonQuery(text) {
+    const t = String(text || '').toLowerCase();
+    if (!/\b(best|better|vs|versus|compare|comparison|or)\b/.test(t)) return false;
+    return !!extractComparisonEntities(text);
+}
+
+function getComparisonDomainHint(text) {
+    const t = String(text || '').toLowerCase();
+    if (/\b(movie|film|cinema|actor|actress|director)\b/.test(t)) return 'cinema';
+    if (/\b(music|song|singer|composer|album|soundtrack)\b/.test(t)) return 'music';
+    if (/\b(sport|sports|player|team|cricket|football|soccer|tennis|basketball|match)\b/.test(t)) return 'sports';
+    return 'general';
+}
+
+async function answerYesNoOnly(questionText) {
+    showThinkingIndicator('Answering...');
+    try {
+        const response = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                systemPrompt: 'Answer with exactly one word: Yes or No. No punctuation. No explanation.',
+                message: `Question: "${questionText}"`
+            })
+        });
+        const data = await response.json();
+        const raw = String(data?.response || data?.text || '').trim().toLowerCase();
+        const answer = /\bno\b/.test(raw) && !/\byes\b/.test(raw) ? 'No' : 'Yes';
+        addChatMessage(answer, false);
+        speak(answer);
+        saveToHistory(questionText, answer);
+    } catch (error) {
+        const fallback = 'Yes';
+        addChatMessage(fallback, false);
+        speak(fallback);
+        saveToHistory(questionText, fallback);
+    } finally {
+        hideThinkingIndicator();
+    }
+}
+
+async function handleComparisonWithReliableSources(userText) {
+    const entities = extractComparisonEntities(userText);
+    if (!entities) return false;
+
+    const left = entities.left;
+    const right = entities.right;
+    const domain = getComparisonDomainHint(userText);
+    showThinkingIndicator('Checking reliable sources...');
+
+    try {
+        const queries = [
+            `${left} vs ${right} ${domain}`,
+            `${left} achievements awards reviews`,
+            `${right} achievements awards reviews`
+        ];
+
+        const searchResults = await Promise.all(
+            queries.map(async (query) => {
+                try {
+                    const response = await fetch('/api/search', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query, maxResults: 4 })
+                    });
+                    if (!response.ok) return [];
+                    const data = await response.json();
+                    return Array.isArray(data?.results) ? data.results : [];
+                } catch (e) {
+                    return [];
+                }
+            })
+        );
+
+        const deduped = [];
+        const seen = new Set();
+        for (const item of searchResults.flat()) {
+            const url = String(item?.url || '').trim();
+            if (!url || seen.has(url)) continue;
+            seen.add(url);
+            deduped.push(item);
+            if (deduped.length >= 8) break;
+        }
+
+        if (!deduped.length) {
+            const fallbackMsg = `I could not fetch reliable sources right now for comparing ${left} and ${right}.`;
+            addChatMessage(fallbackMsg, false);
+            speak(fallbackMsg);
+            saveToHistory(userText, fallbackMsg);
+            return true;
+        }
+
+        const snippets = deduped
+            .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}`)
+            .join('\n\n');
+
+        const compareResponse = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                systemPrompt: 'You are a neutral analyst. Use only provided snippets. Do not invent facts.',
+                message: `Compare "${left}" and "${right}" using ONLY the snippets below.
+
+Question: "${userText}"
+Domain: ${domain}
+
+Output format:
+Conclusion: <one-line verdict>
+Why:
+- <point 1>
+- <point 2>
+- <point 3>
+
+Rules:
+- If evidence is mixed, explicitly say it is close.
+- No political commentary.
+- No made-up claims.
+
+Snippets:
+${snippets}`
+            })
+        });
+
+        const compareData = await compareResponse.json();
+        const analysis = String(compareData?.response || compareData?.text || '').trim();
+        const sourceLines = deduped.slice(0, 6).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
+        const finalMsg = `${analysis}\n\nSources:\n${sourceLines}`;
+
+        addChatMessage(finalMsg, false);
+        speak(`I compared ${left} and ${right} using reliable web sources.`);
+        saveToHistory(userText, finalMsg);
+        return true;
+    } catch (error) {
+        const fallback = `I could not complete a reliable comparison right now for ${left} and ${right}.`;
+        addChatMessage(fallback, false);
+        speak(fallback);
+        saveToHistory(userText, fallback);
+        return true;
+    } finally {
+        hideThinkingIndicator();
+    }
+}
+
         async function processCommand(text) {
             const lower = text.toLowerCase();
 
@@ -7444,6 +7686,24 @@ ${snippetsBlock}`;
                 const regex = new RegExp(`^${prefix}[,\\s]+`, 'i'); 
                 cleanText = cleanText.replace(regex, ''); 
             } 
+
+            if (isPoliticalQuery(cleanText)) {
+                const policyMsg = 'Sorry, I am not designed to answer political questions.';
+                addChatMessage(policyMsg, false);
+                speak(policyMsg);
+                saveToHistory(text, policyMsg);
+                return;
+            }
+
+            if (isStrictYesNoRequest(cleanText)) {
+                await answerYesNoOnly(cleanText);
+                return;
+            }
+
+            if (isComparisonQuery(cleanText)) {
+                const handled = await handleComparisonWithReliableSources(cleanText);
+                if (handled) return;
+            }
 
             if (isTamilJokeRequest(cleanText)) {
                 await handleTamilJokeSearch(cleanText);
@@ -9847,6 +10107,25 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
+
+/*
+1. TYPING INDICATOR:
+   - Call showTypingIndicator() before AI response
+   - Call hideTypingIndicator() before showing response
+
+2. EDIT MESSAGES:
+   - Integrated in addChatMessage() with edit button on user messages
+   - Editing a message regenerates the response from that turn
+
+3. CONVERSATION HISTORY:
+   - Call saveToHistory(userMsg, aiMsg) after each exchange
+   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
+   - Search, export, and clear functions included
+
+4. ERROR FEEDBACK:
+   - Call showError("Error message") instead of addChatMessage for errors
+   - Visual shake animation + auto-dismiss
+*/
 
 </script>
 </body>
