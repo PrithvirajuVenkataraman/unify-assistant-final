@@ -3972,7 +3972,9 @@ function extractKnowledgeSubject(text) {
     if (!raw) return '';
     const patterns = [
         /^\s*do\s+you\s+know\s+(.+?)\s*\??$/i,
-        /^\s*(?:what\s+is|who\s+is|tell\s+me\s+about)\s+(.+?)\s*\??$/i
+        /^\s*(?:what\s+is|who\s+is|tell\s+me\s+about)\s+(.+?)\s*\??$/i,
+        /^\s*(?:what\s+do\s+you\s+know\s+about|give\s+me\s+details\s+about|share\s+about)\s+(.+?)\s*\??$/i,
+        /^\s*(?:info(?:rmation)?\s+on|details\s+on|about)\s+(.+?)\s*\??$/i
     ];
     for (const p of patterns) {
         const m = raw.match(p);
@@ -4001,15 +4003,58 @@ function normalizeEntityText(value) {
         .trim();
 }
 
+function isAcknowledgementUtterance(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    return /^(yes|yeah|yep|yup|no|nope|nah|ok|okay|sure|alright|fine|thanks|thank you|got it|cool|hi|hello|hey|hmm|uh huh|huh)$/i.test(t);
+}
+
+function isGenericNonEntity(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return true;
+    return /^(it|this|that|this one|that one|the company|the person|the topic|more|details|explain|tell me more|what about it|about it|about this|about that)$/i.test(t);
+}
+
+function extractEntityCandidate(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+
+    const direct = extractKnowledgeSubject(raw);
+    if (direct && direct !== raw) return direct;
+
+    const patterns = [
+        /^\s*(?:can|could|would)\s+you\s+(?:tell|explain|share)\s+(?:me\s+)?(?:about\s+)?(.+?)\s*\??$/i,
+        /^\s*(?:i\s+want\s+to\s+know\s+about|i\s+need\s+info\s+on)\s+(.+?)\s*\??$/i,
+        /^\s*(.+?)\s+(?:company|stock|founder|history|overview|details)\s*\??$/i
+    ];
+
+    for (const p of patterns) {
+        const m = raw.match(p);
+        if (m && m[1]) return m[1].trim();
+    }
+
+    const cleaned = raw.replace(/[?.!,;]+$/g, '').trim();
+    if (!cleaned) return '';
+
+    // Keep short, non-generic single topic turns as entity candidates.
+    if (cleaned.split(/\s+/).length <= 5 && !isAcknowledgementUtterance(cleaned) && !isGenericNonEntity(cleaned)) {
+        return cleaned;
+    }
+
+    return '';
+}
+
 function resolveKnowledgeFollowupQuery(text) {
     const raw = String(text || '').trim();
     if (!raw || !lastDiscussedEntity) return raw;
     if (!isPronounKnowledgeFollowup(raw)) return raw;
-    return raw.replace(/\b(it|this|that)(\s+company)?\b/gi, lastDiscussedEntity).trim();
+    return raw.replace(/\b(it|this|that|this one|that one|the company|the person|the topic)(\s+company)?\b/gi, lastDiscussedEntity).trim();
 }
 
 function maybeCaptureKnowledgeEntity(text) {
-    const candidate = normalizeEntityText(extractKnowledgeSubject(text));
+    const raw = String(text || '').trim();
+    if (isAcknowledgementUtterance(raw) || isGenericNonEntity(raw)) return;
+    const candidate = normalizeEntityText(extractEntityCandidate(text));
     if (!candidate) return;
     if (isPronounKnowledgeFollowup(candidate)) return;
     if (candidate.split(/\s+/).length > 8) return;
@@ -10154,6 +10199,25 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
+
+/*
+1. TYPING INDICATOR:
+   - Call showTypingIndicator() before AI response
+   - Call hideTypingIndicator() before showing response
+
+2. EDIT MESSAGES:
+   - Integrated in addChatMessage() with edit button on user messages
+   - Editing a message regenerates the response from that turn
+
+3. CONVERSATION HISTORY:
+   - Call saveToHistory(userMsg, aiMsg) after each exchange
+   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
+   - Search, export, and clear functions included
+
+4. ERROR FEEDBACK:
+   - Call showError("Error message") instead of addChatMessage for errors
+   - Visual shake animation + auto-dismiss
+*/
 
 </script>
 </body>
