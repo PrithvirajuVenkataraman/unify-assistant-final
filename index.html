@@ -58,24 +58,6 @@
                 linear-gradient(145deg, #f1f5f9 0%, #e2e8f0 48%, #cbd5e1 100%) !important;
         }
         
-        /* ========== JARVIS INTRO ANIMATION ========== */
-        #jarvis-intro {
-            position: fixed;
-            inset: 0;
-            background: radial-gradient(circle at center, #0a1929 0%, #001529 50%, #000000 100%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            transition: opacity 0.5s ease-out;
-        }
-        
-        #jarvis-intro.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-        
         /* Advanced Arc Reactor Animation - Red/Blue Mix */
         .arc-reactor {
             position: relative;
@@ -1937,21 +1919,6 @@
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
-    <!-- JARVIS Intro Animation -->
-    <div id="jarvis-intro">
-        <div class="arc-reactor">
-            <div class="arc-ring"></div>
-            <div class="arc-ring"></div>
-            <div class="arc-ring"></div>
-            <div class="arc-ring"></div>
-            <div class="arc-ring"></div>
-            <div class="arc-core"></div>
-        </div>
-        <div class="jarvis-text">J.A.R.V.I.S</div>
-        <div class="jarvis-subtitle">Just A Rather Very Intelligent System</div>
-        <div class="init-status">Initializing systems...</div>
-    </div>
-    
     <!-- Weather Effects Container -->
     <div id="weather-effects" class="weather-effect"></div>
     
@@ -4203,16 +4170,6 @@ async function handleNameCorrection(text) {
             // Ensure no queued/leftover speech survives a refresh.
             stopAllSpeechPlayback();
 
-            const introScreen = document.getElementById('jarvis-intro');
-            
-            
-            setTimeout(() => {
-                introScreen.classList.add('hidden');
-                setTimeout(() => {
-                    introScreen.style.display = 'none';
-                }, 500);
-            }, 5000);
-            
             await requestMicrophonePermission(); 
             loadUserData(); 
             loadNoiseFilterSettings(); 
