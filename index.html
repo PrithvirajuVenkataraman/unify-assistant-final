@@ -4101,6 +4101,26 @@ function isLikelyLocationOrTravelQuery(text) {
     return /\b(map|maps|directions?|route|near me|nearby|location|where is|where to|hotel|hotels|restaurant|restaurants|food|trip|travel|itinerary|weather|transport|bus|train|taxi|uber|airport|station)\b/.test(t);
 }
 
+function postProcessAssistantResponse(rawText, userMessage = '') {
+    let text = String(rawText || '').trim();
+    if (!text) return text;
+
+    // Remove common filler/opening boilerplate.
+    text = text
+        .replace(/^hi[!.,\s-]*(i(?:'|’)d be happy to help(?: you)?(?: with (?:this|that|your question))?|i can help(?: you)?(?: with (?:this|that))?)\.?\s*/i, '')
+        .replace(/^i(?:'|’)d be happy to help(?: you)?(?: with (?:this|that|your question))?\.?\s*/i, '')
+        .replace(/^sure[!.,\s-]*/i, '')
+        .trim();
+
+    // Remove generic trailing CTA that wastes tokens.
+    text = text
+        .replace(/\s*(would you like to know more about[^?]*\?)\s*$/i, '')
+        .replace(/\s*(is there (?:anything|something) else i can help you with\??)\s*$/i, '')
+        .trim();
+
+    return text;
+}
+
 async function askGeminiAI(userMessage) { 
     let normalizedUserMessage = String(userMessage || '');
     try { 
@@ -4136,6 +4156,9 @@ RULES:
 - Be supportive in tone
 - Avoid repeating the same phrases across consecutive replies
 - If a user discusses mental health, respond with empathy and practical coping support; if persistent sadness/hopelessness appears, suggest seeing a certified mental health specialist as a final step
+- Start directly with the answer; do not add greeting/preamble like "Hi! I'd be happy to help."
+- Do not add generic closing prompts like "Would you like to know more..." unless the user explicitly asked for follow-ups.
+- For "Who is X?" person/celebrity questions, provide a concise factual bio first, then notable works/achievements.
 
 Your capabilities:
 - Weather (say "check weather")
@@ -4198,6 +4221,9 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         } 
         
         const data = await response.json();
+        if (typeof data.response === 'string') {
+            data.response = postProcessAssistantResponse(data.response, normalizedUserMessage);
+        }
         conversationContext.push({ role: 'assistant', text: data.response || data.text });
         
         return data;
@@ -5541,7 +5567,7 @@ async function handleNameCorrection(text) {
                         if (charIndex < formattedText.length) {
                             textElement.innerHTML = formattedText.substring(0, charIndex + 1);
                             charIndex++;
-                            chatContainer.scrollTop = chatContainer.scrollHeight;
+                            maybeAutoScroll(chatContainer);
                             setTimeout(typeCharacter, speed);
                         }
                     }
@@ -5552,13 +5578,13 @@ async function handleNameCorrection(text) {
                     textElement.innerHTML = formattedText;
                 }
                 
-                chatContainer.scrollTop = chatContainer.scrollHeight;
+                maybeAutoScroll(chatContainer);
                 chatHistory.push({ text: displayText, isUser });
                 return;
             }
             
             chatContainer.appendChild(messageDiv);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            maybeAutoScroll(chatContainer);
             chatHistory.push({ text: displayText, isUser });
         }
 
@@ -8152,7 +8178,14 @@ Rules:
             }
             
             
-            if (lower.match(/^(my name is|i'm|i am|call me|it's)\s+/i)) {
+            if (lower.match(/^(my name is|i'm|call me)\s+/i)) {
+                handleNameInput(cleanText);
+                return;
+            }
+
+            // Allow "I am <name>" only when it clearly looks like a name.
+            const iAmNameMatch = cleanText.match(/^i am\s+(.+)$/i);
+            if (iAmNameMatch && isLikelyPersonalName(iAmNameMatch[1])) {
                 handleNameInput(cleanText);
                 return;
             }
@@ -9484,19 +9517,47 @@ ${sourceLinksBlock}
         }
 
         
+        function isLikelyPersonalName(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return false;
+            if (!/^[A-Za-z][A-Za-z\s'-]*$/.test(raw)) return false;
+
+            const words = raw.split(/\s+/).filter(Boolean);
+            if (words.length < 1 || words.length > 3) return false;
+            if (words.some(w => w.length < 2 || w.length > 24)) return false;
+
+            const lower = raw.toLowerCase();
+            const blockedTokens = [
+                'working', 'work', 'from', 'home', 'shift', 'just', 'ended', 'today',
+                'tomorrow', 'please', 'thanks', 'thank', 'help', 'call', 'name',
+                'am', 'is', 'are', 'at', 'in', 'on', 'and', 'but', 'because'
+            ];
+            if (blockedTokens.some(t => new RegExp(`\\b${t}\\b`, 'i').test(lower))) return false;
+            return true;
+        }
+
         function handleNameInput(text) {
-            waitingForName = false;
-            
-            let name = text.trim();
-            
+            let name = String(text || '').trim();
             name = name.replace(/^(my name is|i'm|i am|it's|call me)\s+/i, '');
-            name = name.replace(/[?.!,]$/g, '');
-            
-            name = name.charAt(0).toUpperCase() + name.slice(1);
-            
+            name = name.replace(/[?.!,]$/g, '').trim();
+
+            if (!isLikelyPersonalName(name)) {
+                waitingForName = true;
+                const msg = 'Please share only your name. Example: "Arun" or "Arun Kumar".';
+                addChatMessage(msg, false);
+                speak(msg);
+                return;
+            }
+
+            waitingForName = false;
+            name = name
+                .split(/\s+/)
+                .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+                .join(' ');
+
             userName = name;
             saveUserData();
-            
+
             const response = `Nice to meet you, ${userName}! How can I help you today?`;
             addChatMessage(response, false);
             speak(response);
@@ -10043,7 +10104,7 @@ function showThinkingIndicator(message = 'Thinking') {
         .trim() || 'Thinking';
     const text = document.getElementById('chat-thinking-text');
     if (text) text.textContent = cleanedMessage;
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    maybeAutoScroll(chatContainer);
 }
 
 function hideThinkingIndicator() {
