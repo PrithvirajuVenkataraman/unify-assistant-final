@@ -37,16 +37,29 @@ export async function searchWeb(query, maxResults = 8) {
     }
     attempts.push(() => searchWithDuckDuckGoHtml(query, normalizedMax));
     attempts.push(() => searchWithDuckDuckGo(query, normalizedMax));
+    if (isLikelyNewsQuery(query)) {
+        attempts.push(() => searchWithGoogleNewsRss(query, normalizedMax));
+    }
 
+    const merged = [];
+    const seen = new Set();
     for (const run of attempts) {
         try {
             const current = await run();
-            if (Array.isArray(current) && current.length) return current;
+            if (!Array.isArray(current) || !current.length) continue;
+            for (const item of current) {
+                const url = String(item?.url || '').trim();
+                if (!url || seen.has(url)) continue;
+                seen.add(url);
+                merged.push(item);
+            }
         } catch (e) {
             // Try next provider.
         }
     }
-    return [];
+
+    if (!merged.length) return [];
+    return rerankResults(merged, query).slice(0, normalizedMax);
 }
 
 export async function runVerifiedWebSearch(queries, options = {}) {
@@ -75,19 +88,25 @@ export async function runVerifiedWebSearch(queries, options = {}) {
 
 export function rerankResults(results, query) {
     const queryTerms = tokenize(query);
-    return [...(Array.isArray(results) ? results : [])]
+    const queryText = String(query || '').toLowerCase();
+    const wantsRecency = /\b(latest|recent|current|today|right now|as of now|breaking|update|news|headlines?)\b/.test(queryText);
+    const scored = [...(Array.isArray(results) ? results : [])]
         .map((item, index) => {
-            const haystack = `${item?.title || ''} ${item?.description || ''}`.toLowerCase();
+            const title = String(item?.title || '');
+            const description = String(item?.description || '');
+            const haystack = `${title} ${description}`.toLowerCase();
             const overlap = queryTerms.reduce((acc, term) => acc + (haystack.includes(term) ? 1 : 0), 0);
             const trustedBoost = isTrustedLiveSource(item?.url) ? 5 : 0;
-            const titleBoost = queryTerms.reduce((acc, term) => acc + (String(item?.title || '').toLowerCase().includes(term) ? 1 : 0), 0);
+            const titleBoost = queryTerms.reduce((acc, term) => acc + (title.toLowerCase().includes(term) ? 1 : 0), 0);
+            const recencyBoost = wantsRecency ? scoreRecency(`${title} ${description} ${item?.url || ''}`) : 0;
             return {
                 ...item,
-                __score: trustedBoost + overlap + titleBoost - (index * 0.01)
+                __score: trustedBoost + overlap + titleBoost + recencyBoost - (index * 0.01)
             };
         })
-        .sort((a, b) => b.__score - a.__score)
-        .map(({ __score, ...item }) => item);
+        .sort((a, b) => b.__score - a.__score);
+
+    return diversifyResults(scored).map(({ __score, ...item }) => item);
 }
 
 export function getDomainFromUrl(url) {
@@ -111,6 +130,47 @@ function tokenize(text) {
         .split(/\s+/)
         .filter(token => token && token.length > 2)
         .slice(0, 12);
+}
+
+function isLikelyNewsQuery(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(news|headlines?|breaking|current events?|latest|recent|current|today|right now|situation|conflict|war|attack|ceasefire|talks|middle[\s-]?east|israel|gaza|iran|ukraine|russia|syria|lebanon|palestine|oil)\b/.test(t);
+}
+
+function scoreRecency(text) {
+    const t = String(text || '').toLowerCase();
+    let score = 0;
+    if (/\b(live|breaking|just in|minutes? ago|hours? ago)\b/.test(t)) score += 3;
+    if (/\b(today|latest|current|recent|updated?)\b/.test(t)) score += 2;
+    if (/\b(yesterday)\b/.test(t)) score += 1;
+    if (/\b(2026)\b/.test(t)) score += 2;
+    if (/\b(2025)\b/.test(t)) score += 1;
+    return score;
+}
+
+function diversifyResults(results) {
+    const out = [];
+    const publisherCounts = new Map();
+    for (const item of results) {
+        const publisher = getPublisherKey(item?.url);
+        const count = publisherCounts.get(publisher) || 0;
+        if (count >= 2) continue;
+        publisherCounts.set(publisher, count + 1);
+        out.push(item);
+    }
+
+    if (out.length >= Math.min(results.length, 3)) {
+        return out;
+    }
+    return results;
+}
+
+function getPublisherKey(url) {
+    const domain = getDomainFromUrl(url);
+    if (!domain) return '';
+    const parts = domain.split('.');
+    if (parts.length <= 2) return domain;
+    return parts.slice(-2).join('.');
 }
 
 async function searchWithSerper(query, maxResults, apiKey) {
@@ -200,8 +260,53 @@ async function searchWithDuckDuckGoHtml(query, maxResults) {
     return out;
 }
 
+async function searchWithGoogleNewsRss(query, maxResults) {
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
+    const response = await fetch(url, {
+        headers: {
+            'Accept': 'application/rss+xml, application/xml, text/xml'
+        }
+    });
+    if (!response.ok) return [];
+
+    const xml = await response.text();
+    const out = [];
+    const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+    let match;
+    while ((match = itemRegex.exec(xml)) && out.length < maxResults) {
+        const block = match[1];
+        const title = cleanGoogleNewsTitle(decodeXml(getTag(block, 'title')));
+        const urlValue = decodeXml(getTag(block, 'link'));
+        const description = decodeXml(stripTags(getTag(block, 'description')));
+        if (!title || !urlValue) continue;
+        out.push({
+            title,
+            url: urlValue,
+            description: description || title
+        });
+    }
+    return out;
+}
+
+function getTag(block, tag) {
+    const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'i');
+    return regex.exec(block)?.[1] || '';
+}
+
 function stripTags(input) {
     return String(input || '').replace(/<[^>]*>/g, ' ');
+}
+
+function decodeXml(input) {
+    return String(input || '')
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function decodeHtmlEntities(input) {
@@ -213,4 +318,8 @@ function decodeHtmlEntities(input) {
         .replace(/&gt;/g, '>')
         .replace(/\s+/g, ' ')
         .trim();
+}
+
+function cleanGoogleNewsTitle(title) {
+    return String(title || '').replace(/\s+-\s+[^-]+$/, '').trim();
 }
