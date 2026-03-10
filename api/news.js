@@ -80,10 +80,12 @@ export default async function handler(req, res) {
             }))
         });
     } catch (error) {
-        return res.status(500).json({
+        return res.status(200).json({
             success: false,
             error: 'news lookup failed',
-            details: String(error?.message || error)
+            details: String(error?.message || error),
+            query: String(req.body?.query || req.body?.category || '').trim(),
+            articles: []
         });
     }
 }
