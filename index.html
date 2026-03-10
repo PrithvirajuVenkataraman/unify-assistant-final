@@ -8148,7 +8148,7 @@ function isLiveRetrievalQuery(text) {
     if (!t) return false;
 
     const liveSignals = [
-        /\bwhat(?:'s| is)? happening\b/,
+        /\bwhat(?:'s| is)?(?:\s+\w+){0,2}\s+happening\b/,
         /\bwhat happened\b/,
         /\blatest\b/,
         /\brecent\b/,
@@ -8168,7 +8168,7 @@ function isLiveRetrievalQuery(text) {
 
     return /\b(what(?:'s| is)|tell me|give me|brief me|update me)\b/.test(t) &&
            /\b(in|about|on)\b/.test(t) &&
-           /\b(middle east|ukraine|russia|israel|gaza|iran|syria|oil market|stock market|economy|inflation|forex|usd|inr|bitcoin|crypto)\b/.test(t);
+           /\b(middle[\s-]?east|ukraine|russia|israel|gaza|iran|syria|oil market|stock market|economy|inflation|forex|usd|inr|bitcoin|crypto)\b/.test(t);
 }
 
 function getDomainFromUrl(url) {
@@ -11566,25 +11566,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
-/*
-1. TYPING INDICATOR:
-   - Call showTypingIndicator() before AI response
-   - Call hideTypingIndicator() before showing response
-
-2. EDIT MESSAGES:
-   - Integrated in addChatMessage() with edit button on user messages
-   - Editing a message regenerates the response from that turn
-
-3. CONVERSATION HISTORY:
-   - Call saveToHistory(userMsg, aiMsg) after each exchange
-   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
-   - Search, export, and clear functions included
-
-4. ERROR FEEDBACK:
-   - Call showError("Error message") instead of addChatMessage for errors
-   - Visual shake animation + auto-dismiss
-*/
 
 </script>
 </body>
