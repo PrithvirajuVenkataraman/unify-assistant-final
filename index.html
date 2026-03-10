@@ -3951,16 +3951,23 @@ async function fetchAndDisplayNews(query) {
             })
         });
 
+        let data = null;
+        try {
+            data = await response.json();
+        } catch (e) {
+            data = null;
+        }
+
         hideThinkingIndicator();
 
         if (!response.ok) {
-            throw new Error('News service unavailable');
+            throw new Error(data?.details || data?.error || 'News service unavailable');
         }
 
-        const data = await response.json();
-
         if (!data.success) {
-            const fallbackMsg = "I couldn't fetch the latest news right now. Please try again in a moment, or check out Google News for current headlines.";
+            const fallbackMsg = data?.details
+                ? `I couldn't fetch the latest news right now. ${data.details}`
+                : "I couldn't fetch the latest news right now. Please try again in a moment, or check out Google News for current headlines.";
             addChatMessage(fallbackMsg, false);
             speak("I couldn't fetch news right now. Please try again.");
             return;
