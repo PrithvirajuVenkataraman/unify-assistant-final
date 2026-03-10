@@ -7964,10 +7964,21 @@ function isStrictYesNoRequest(text) {
     const t = String(text || '').trim().toLowerCase();
     if (!t) return false;
     if (/\b(yes or no|just yes or no|answer yes or no|only yes or no|yes\/no)\b/.test(t)) return true;
+    if (/^(can|could|would|will|do)\s+you\s+\b(help|give|tell|share|offer|provide|explain|advise)\b/.test(t)) return false;
+    if (/\b(advice|help|guidance|suggestion|recommendation)s?\b/.test(t) && /\?$/.test(String(text || '').trim())) return false;
     const startsBinary = /^(is|are|am|was|were|do|does|did|can|could|should|would|will|has|have|had)\b/.test(t);
     if (!startsBinary) return false;
     // Keep this strict to avoid hijacking rich questions.
     return t.split(/\s+/).length <= 16;
+}
+
+function isVagueAdviceRequest(text) {
+    const t = String(text || '').trim().toLowerCase();
+    if (!t) return false;
+    if (!/\b(advice|help|guidance|suggestion|recommendation)s?\b/.test(t)) return false;
+    if (/\b(on|about|for|with)\b\s+\w+/.test(t)) return false;
+    return /^(can|could|would|will|do)\s+you\b/.test(t) ||
+           /\b(i need|give me|some)\s+(advice|help|guidance|suggestions?|recommendations?)\b/.test(t);
 }
 
 function extractComparisonEntities(text) {
@@ -8549,6 +8560,14 @@ ${snippets}`
                 addChatMessage(policyMsg, false);
                 speak(policyMsg);
                 saveToHistory(text, policyMsg);
+                return;
+            }
+
+            if (isVagueAdviceRequest(cleanText)) {
+                const clarifyMsg = 'Sure. What do you want advice about?';
+                addChatMessage(clarifyMsg, false);
+                speak(clarifyMsg);
+                saveToHistory(text, clarifyMsg);
                 return;
             }
 
