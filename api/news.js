@@ -27,13 +27,15 @@ export default async function handler(req, res) {
         if (!query && city) queries.push(`${city} breaking news`);
         if (!query && countryCode && countryCode !== 'DEFAULT') queries.push(`${countryCode} national news`);
 
-        const verified = await runVerifiedWebSearch(queries, {
-            maxResultsPerQuery: 6,
-            limit: 10
-        });
+        const [verified, rssArticles] = await Promise.all([
+            runVerifiedWebSearch(queries, {
+                maxResultsPerQuery: 6,
+                limit: 10
+            }),
+            fetchGoogleNewsRss(topic)
+        ]);
 
-        if (!verified.results.length) {
-            const rssArticles = await fetchGoogleNewsRss(topic);
+        if (rssArticles.length) {
             return res.status(200).json({
                 success: true,
                 verified: true,
@@ -42,6 +44,18 @@ export default async function handler(req, res) {
                 distinctDomainCount: 1,
                 trustedCount: rssArticles.length,
                 articles: rssArticles
+            });
+        }
+
+        if (!verified.results.length) {
+            return res.status(200).json({
+                success: true,
+                verified: false,
+                query: topic,
+                sourceCount: 0,
+                distinctDomainCount: 0,
+                trustedCount: 0,
+                articles: []
             });
         }
 
