@@ -3943,52 +3943,11 @@ async function fetchAndDisplayNews(query) {
     showThinkingIndicator('[Map] Fetching latest news...');
 
     try {
-        // Detect news category from query
-        const lower = query.toLowerCase();
-        let category = null;
-
-        const categoryKeywords = {
-            politics: ['politics', 'political', 'election', 'government', 'parliament'],
-            sports: ['sports', 'sport', 'football', 'cricket', 'basketball', 'tennis', 'nfl', 'nba'],
-            technology: ['tech', 'technology', 'ai', 'software', 'apple', 'google', 'microsoft'],
-            business: ['business', 'economy', 'stock', 'market', 'finance'],
-            entertainment: ['entertainment', 'movie', 'celebrity', 'music', 'hollywood'],
-            health: ['health', 'medical', 'covid', 'vaccine', 'wellness'],
-            science: ['science', 'research', 'space', 'nasa', 'climate']
-        };
-
-        for (const [cat, keywords] of Object.entries(categoryKeywords)) {
-            if (keywords.some(kw => lower.includes(kw))) {
-                category = cat;
-                break;
-            }
-        }
-
-        // Get user's country from stored location or use default
-        let countryCode = 'DEFAULT';
-        if (window.userCountryCode) {
-            countryCode = window.userCountryCode;
-        } else if (localStorage.getItem('userCountryCode')) {
-            countryCode = localStorage.getItem('userCountryCode');
-        }
-
-        // Get user's city
-        let city = null;
-        if (window.userCity) {
-            city = window.userCity;
-        } else if (localStorage.getItem('userCity')) {
-            city = localStorage.getItem('userCity');
-        }
-
-        // Make API call to news endpoint
         const response = await fetch('/api/news', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                countryCode: countryCode,
-                city: city,
-                category: category,
-                query: category ? null : (lower.includes('about') ? query.split('about')[1]?.trim() : null)
+                query
             })
         });
 
@@ -4007,91 +3966,26 @@ async function fetchAndDisplayNews(query) {
             return;
         }
 
-        const news = data.news;
-        let newsMsg = '[Map] **Latest News**\n\n';
-
-        // Handle category-specific news
-        if (news.category && news.category.length > 0) {
-            newsMsg = `[Map] **${news.categoryName} News**\n\n`;
-            news.category.forEach((item, i) => {
-                newsMsg += `**${i + 1}. ${item.title}**\n`;
-                if (item.description) {
-                    newsMsg += `${item.description}\n`;
-                }
-                newsMsg += `Source: ${item.source}\n`;
-                if (item.url) {
-                    newsMsg += `[Read more](${item.url})\n`;
-                }
-                newsMsg += '\n';
-            });
-            speak(`Here are the latest ${news.categoryName} headlines.`);
-        }
-        // Handle search results
-        else if (news.search && news.search.length > 0) {
-            newsMsg = `[Map] **News about "${news.searchQuery}"**\n\n`;
-            news.search.forEach((item, i) => {
-                newsMsg += `**${i + 1}. ${item.title}**\n`;
-                if (item.description) {
-                    newsMsg += `${item.description}\n`;
-                }
-                newsMsg += `Source: ${item.source}\n`;
-                if (item.url) {
-                    newsMsg += `[Read more](${item.url})\n`;
-                }
-                newsMsg += '\n';
-            });
-            speak(`Here's what I found about ${news.searchQuery}.`);
-        }
-        // Handle regular news feed
-        else {
-            let hasNews = false;
-
-            // Local news (2 items)
-            if (news.local && news.local.length > 0) {
-                newsMsg += `[Map] **Local News**${city ? ` (${city})` : ''}\n`;
-                news.local.slice(0, 2).forEach(item => {
-                    newsMsg += `- **${item.title}**\n`;
-                    if (item.url) newsMsg += `  [Read more](${item.url})\n`;
-                });
-                newsMsg += '\n';
-                hasNews = true;
-            }
-
-            // Country news (2 items)
-            if (news.country && news.country.length > 0) {
-                newsMsg += `[Food] **${news.countryName || 'National'} News**\n`;
-                news.country.slice(0, 2).forEach(item => {
-                    newsMsg += `- **${item.title}**\n`;
-                    if (item.url) newsMsg += `  [Read more](${item.url})\n`;
-                });
-                newsMsg += '\n';
-                hasNews = true;
-            }
-
-            // World news (1 item)
-            if (news.world && news.world.length > 0) {
-                newsMsg += `[Globe] **World News**\n`;
-                news.world.slice(0, 1).forEach(item => {
-                    newsMsg += `- **${item.title}**\n`;
-                    if (item.url) newsMsg += `  [Read more](${item.url})\n`;
-                });
-                hasNews = true;
-            }
-
-            if (!hasNews) {
-                newsMsg = "I couldn't find any recent news. Please try again later or check Google News for the latest updates.";
-                speak("No news available right now.");
-            } else {
-                speak("Here are the latest headlines.");
-            }
+        const articles = Array.isArray(data.articles) ? data.articles : [];
+        if (!articles.length) {
+            const fallbackMsg = "I couldn't find enough verified live news sources right now.";
+            addChatMessage(fallbackMsg, false);
+            speak(fallbackMsg);
+            return;
         }
 
-        newsMsg += '\n----------------------\n';
-        newsMsg += 'Tip: Try "sports news", "tech news", "political news"\n';
-        newsMsg += 'Google News: [Google News](https://news.google.com) for more';
+        let newsMsg = `**Verified news summary for "${data.query}"**\nChecked ${data.sourceCount} sources across ${data.distinctDomainCount} domains.\n\n`;
+        articles.slice(0, 5).forEach((item, i) => {
+            newsMsg += `**${i + 1}. ${item.title}**\n`;
+            if (item.description) {
+                newsMsg += `${item.description}\n`;
+            }
+            newsMsg += `[Read more](${item.url})\n\n`;
+        });
 
-        addChatMessage(newsMsg, false);
-        saveToHistory(query, 'Displayed news headlines');
+        addVerifiedAssistantMessage(newsMsg, 'Verified news sources');
+        speak('Here are the latest verified headlines.');
+        saveToHistory(query, newsMsg);
 
     } catch (error) {
         hideThinkingIndicator();
@@ -5912,7 +5806,7 @@ async function handleNameCorrection(text) {
             return div.innerHTML;
         }
 
-        function normalizeUiTokens(text) {
+function normalizeUiTokens(text) {
             return String(text || '')
                 .replace(/\[Map\]/g, 'ðŸ—ºï¸')
                 .replace(/\[Search\]/g, 'ðŸ”Ž')
@@ -5926,6 +5820,15 @@ async function handleNameCorrection(text) {
                 .replace(/\[Taxi\]/g, 'ðŸš•')
                 .replace(/\[Car\]/g, 'ðŸš—')
                 .replace(/\[Metro\]/g, 'ðŸš‡');
+        }
+
+        function formatVerifiedSourceBadge(label = 'Verified live sources') {
+            return `<div class="assistant-source-badge web">${escapeHtml(label)}</div>`;
+        }
+
+        function addVerifiedAssistantMessage(text, label = 'Verified live sources') {
+            const html = `${formatVerifiedSourceBadge(label)}\n${text}`;
+            addChatMessage(html, false, false);
         }
 
         function sanitizeAssistantMarkup(html) {
@@ -5995,6 +5898,129 @@ function sendTextInput() {
                 toggleSendButton(); 
             }
         }
+
+function isExchangeRateQuery(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(exchange rate|currency|convert|conversion|usd|inr|eur|gbp|aed|cad|aud|jpy)\b/.test(t) &&
+           /\b(to|in|from|today|now|current|latest)\b/.test(t);
+}
+
+function parseExchangeQuery(text) {
+    const raw = String(text || '').trim().toUpperCase();
+    const codes = raw.match(/\b[A-Z]{3}\b/g) || [];
+    const amountMatch = raw.match(/(\d+(?:\.\d+)?)/);
+    let from = '';
+    let to = '';
+    if (codes.length >= 2) {
+        [from, to] = codes.slice(0, 2);
+    } else {
+        const currencyMap = {
+            INR: 'INR', RUPEE: 'INR', RUPEES: 'INR',
+            USD: 'USD', DOLLAR: 'USD', DOLLARS: 'USD',
+            EUR: 'EUR', EURO: 'EUR', EUROS: 'EUR',
+            GBP: 'GBP', POUND: 'GBP', POUNDS: 'GBP',
+            AED: 'AED', DIRHAM: 'AED', DIRHAMS: 'AED',
+            JPY: 'JPY', YEN: 'JPY'
+        };
+        const words = raw.split(/\s+/);
+        const found = words.map(w => currencyMap[w]).filter(Boolean);
+        if (found.length >= 2) {
+            [from, to] = found.slice(0, 2);
+        }
+    }
+    return {
+        from,
+        to,
+        amount: amountMatch ? Number(amountMatch[1]) : 1
+    };
+}
+
+function isMarketPriceQuery(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(stock|share|shares|ticker|crypto|bitcoin|ethereum|btc|eth|solana|dogecoin|market cap|price)\b/.test(t) &&
+           /\b(price|today|now|current|latest|quote)\b/.test(t);
+}
+
+function formatVerifiedSourcesList(sources) {
+    return (Array.isArray(sources) ? sources : [])
+        .slice(0, 5)
+        .map((item, i) => `${i + 1}. [${item.title}](${item.url})`)
+        .join('\n');
+}
+
+async function handleExchangeRateLookup(text) {
+    const parsed = parseExchangeQuery(text);
+    if (!parsed.from || !parsed.to) return false;
+
+    showThinkingIndicator('Checking verified exchange sources...');
+    try {
+        const response = await fetch('/api/exchange', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(parsed)
+        });
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+            const msg = data?.error || 'I could not verify the exchange rate right now.';
+            addChatMessage(msg, false);
+            speak(msg);
+            return true;
+        }
+
+        const amountLabel = Number(data.amount || 1);
+        const body = `**${amountLabel} ${data.from} = ${Number(data.convertedAmount).toFixed(4)} ${data.to}**\nRate: 1 ${data.from} = ${Number(data.rate).toFixed(6)} ${data.to}\nDate: ${data.date}\nVerified sources checked: ${data.sourceCount} across ${data.distinctDomainCount} domains\n\nSources:\n${formatVerifiedSourcesList(data.sources)}`;
+        addVerifiedAssistantMessage(body, 'Verified FX sources');
+        speak(`Verified exchange rate found for ${data.from} to ${data.to}.`);
+        saveToHistory(text, body);
+        return true;
+    } catch (error) {
+        const msg = 'I could not verify the exchange rate right now.';
+        addChatMessage(msg, false);
+        speak(msg);
+        return true;
+    } finally {
+        hideThinkingIndicator();
+    }
+}
+
+async function handleMarketLookup(text) {
+    showThinkingIndicator('Checking verified market sources...');
+    try {
+        const response = await fetch('/api/markets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: text })
+        });
+        const data = await response.json();
+        if (!response.ok || !data?.success) {
+            const msg = data?.error || 'I could not verify market data right now.';
+            addChatMessage(msg, false);
+            speak(msg);
+            return true;
+        }
+
+        let body = '';
+        if (data.assetType === 'crypto' && Number.isFinite(data.priceUsd)) {
+            body = `**${data.name} (${data.symbol})**\nPrice: $${Number(data.priceUsd).toFixed(4)} USD\n24h change: ${Number.isFinite(data.change24h) ? Number(data.change24h).toFixed(2) + '%' : 'N/A'}\nVerified sources checked: ${data.sourceCount} across ${data.distinctDomainCount} domains\n\nSources:\n${formatVerifiedSourcesList(data.sources)}`;
+        } else if (data.assetType === 'stock' && Number.isFinite(data.price)) {
+            body = `**${data.symbol}**\nPrice: $${Number(data.price).toFixed(2)}\nChange: ${Number.isFinite(data.change) ? Number(data.change).toFixed(2) : 'N/A'} ${data.changePercent || ''}\nTrading day: ${data.tradingDay || 'N/A'}\nVerified sources checked: ${data.sourceCount} across ${data.distinctDomainCount} domains\n\nSources:\n${formatVerifiedSourcesList(data.sources)}`;
+        } else {
+            body = `I found verified market coverage, but not a clean direct quote.\nVerified sources checked: ${data.sourceCount} across ${data.distinctDomainCount} domains\n\nSources:\n${formatVerifiedSourcesList(data.sources)}`;
+        }
+
+        addVerifiedAssistantMessage(body, 'Verified market sources');
+        speak('I checked verified market sources.');
+        saveToHistory(text, body);
+        return true;
+    } catch (error) {
+        const msg = 'I could not verify market data right now.';
+        addChatMessage(msg, false);
+        speak(msg);
+        return true;
+    } finally {
+        hideThinkingIndicator();
+    }
+}
 
         
         function showFastFoodBox() {
@@ -8117,6 +8143,191 @@ ${snippets}`
     }
 }
 
+function isLiveRetrievalQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+
+    const liveSignals = [
+        /\bwhat(?:'s| is)? happening\b/,
+        /\bwhat happened\b/,
+        /\blatest\b/,
+        /\brecent\b/,
+        /\bcurrent\b/,
+        /\btoday\b/,
+        /\bright now\b/,
+        /\bas of now\b/,
+        /\bupdate(?:s)? on\b/,
+        /\bstatus of\b/,
+        /\bnews about\b/,
+        /\bexchange rate\b/,
+        /\bcurrency\b.*\b(convert|rate|today|now)\b/,
+        /\b(price|cost|value|market)\b.*\b(today|now|current|latest)\b/
+    ];
+
+    if (liveSignals.some(rx => rx.test(t))) return true;
+
+    return /\b(what(?:'s| is)|tell me|give me|brief me|update me)\b/.test(t) &&
+           /\b(in|about|on)\b/.test(t) &&
+           /\b(middle east|ukraine|russia|israel|gaza|iran|syria|oil market|stock market|economy|inflation|forex|usd|inr|bitcoin|crypto)\b/.test(t);
+}
+
+function getDomainFromUrl(url) {
+    try {
+        return new URL(String(url || '')).hostname.replace(/^www\./i, '').toLowerCase();
+    } catch (e) {
+        return '';
+    }
+}
+
+function isTrustedLiveSource(url) {
+    const domain = getDomainFromUrl(url);
+    if (!domain) return false;
+    const trustedDomains = [
+        'reuters.com',
+        'apnews.com',
+        'bbc.com',
+        'bbc.co.uk',
+        'aljazeera.com',
+        'npr.org',
+        'cnbc.com',
+        'bloomberg.com',
+        'wsj.com',
+        'ft.com',
+        'nytimes.com',
+        'theguardian.com',
+        'economist.com',
+        'ecb.europa.eu',
+        'frankfurter.dev',
+        'xe.com',
+        'oanda.com',
+        'x-rates.com',
+        'investing.com',
+        'marketwatch.com',
+        'coindesk.com',
+        'cointelegraph.com'
+    ];
+    return trustedDomains.some(d => domain === d || domain.endsWith(`.${d}`));
+}
+
+function buildLiveSearchQueries(userText) {
+    const raw = String(userText || '').trim();
+    const cleaned = raw
+        .replace(/\b(what(?:'s| is)? happening|latest|recent|current|today|right now|as of now|update(?:s)? on|status of)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const topic = cleaned || raw;
+    return [
+        raw,
+        `latest ${topic}`,
+        `${topic} Reuters OR AP OR BBC OR Al Jazeera`
+    ];
+}
+
+async function handleLiveRetrievalQuery(userText) {
+    showThinkingIndicator('Checking current sources...');
+    try {
+        const query = String(userText || '').trim();
+        const queries = buildLiveSearchQueries(query);
+        const resultSets = await Promise.all(
+            queries.map(async (q) => {
+                try {
+                    const response = await fetch('/api/search', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: q, maxResults: 6 })
+                    });
+                    if (!response.ok) return [];
+                    const data = await response.json();
+                    return Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
+                } catch (e) {
+                    return [];
+                }
+            })
+        );
+
+        const deduped = [];
+        const seen = new Set();
+        for (const item of resultSets.flat()) {
+            const url = String(item?.url || '').trim();
+            if (!url || seen.has(url)) continue;
+            seen.add(url);
+            deduped.push(item);
+            if (deduped.length >= 10) break;
+        }
+
+        if (!deduped.length) {
+            const msg = 'I could not find current sources for that right now.';
+            addChatMessage(msg, false);
+            speak(msg);
+            saveToHistory(userText, msg);
+            return true;
+        }
+
+        const trusted = deduped.filter(r => isTrustedLiveSource(r.url));
+        const sourcePool = trusted.length >= 3 ? trusted : deduped;
+        const distinctDomains = Array.from(new Set(sourcePool.map(r => getDomainFromUrl(r.url)).filter(Boolean)));
+        if (distinctDomains.length < 2) {
+            const msg = 'I do not have enough reliable live sources to answer that accurately right now.';
+            addChatMessage(msg, false);
+            speak(msg);
+            saveToHistory(userText, msg);
+            return true;
+        }
+
+        const snippets = sourcePool
+            .slice(0, 6)
+            .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}`)
+            .join('\n\n');
+
+        const summaryResponse = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly.',
+                message: `Answer the user's question using ONLY the snippets below.
+
+User question: "${query}"
+
+Required format:
+Current picture: <2-4 concise sentences>
+Key points:
+- <point 1>
+- <point 2>
+- <point 3>
+Confidence: <High/Medium/Low based only on source agreement>
+
+Rules:
+- Focus on what is current or recent.
+- Do not make up numbers, dates, actors, or causes.
+- Only state a fact confidently if it appears in multiple snippets or from a clearly reputable source.
+- If evidence is weak, say so instead of guessing.
+- Keep it concise and practical.
+
+Snippets:
+${snippets}`
+            })
+        });
+
+        const summaryData = await summaryResponse.json();
+        const answer = String(summaryData?.response || summaryData?.text || '').trim();
+        const sourceLines = sourcePool.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
+        const finalMsg = `${answer}\nVerified sources checked: ${sourcePool.length} across ${distinctDomains.length} domains\n\nSources:\n${sourceLines}`;
+
+        addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
+        speak('I checked current sources and summarized what I found.');
+        saveToHistory(userText, finalMsg);
+        return true;
+    } catch (error) {
+        const fallback = 'I could not verify current information right now. Please try again in a moment.';
+        addChatMessage(fallback, false);
+        speak(fallback);
+        saveToHistory(userText, fallback);
+        return true;
+    } finally {
+        hideThinkingIndicator();
+    }
+}
+
         async function processCommand(text) {
             const lower = text.toLowerCase();
 
@@ -8326,6 +8537,26 @@ ${snippets}`
 
             if (isComparisonQuery(cleanText)) {
                 const handled = await handleComparisonWithReliableSources(cleanText);
+                if (handled) return;
+            }
+
+            if (/\b(news|headlines?|current events?|breaking news)\b/i.test(cleanText)) {
+                await fetchAndDisplayNews(cleanText);
+                return;
+            }
+
+            if (isExchangeRateQuery(cleanText)) {
+                const handled = await handleExchangeRateLookup(cleanText);
+                if (handled) return;
+            }
+
+            if (isMarketPriceQuery(cleanText)) {
+                const handled = await handleMarketLookup(cleanText);
+                if (handled) return;
+            }
+
+            if (isLiveRetrievalQuery(cleanText)) {
+                const handled = await handleLiveRetrievalQuery(cleanText);
                 if (handled) return;
             }
 
@@ -11335,6 +11566,26 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
+
+/*
+1. TYPING INDICATOR:
+   - Call showTypingIndicator() before AI response
+   - Call hideTypingIndicator() before showing response
+
+2. EDIT MESSAGES:
+   - Integrated in addChatMessage() with edit button on user messages
+   - Editing a message regenerates the response from that turn
+
+3. CONVERSATION HISTORY:
+   - Call saveToHistory(userMsg, aiMsg) after each exchange
+   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
+   - Search, export, and clear functions included
+
+4. ERROR FEEDBACK:
+   - Call showError("Error message") instead of addChatMessage for errors
+   - Visual shake animation + auto-dismiss
+*/
+
 </script>
 </body>
 </html>
