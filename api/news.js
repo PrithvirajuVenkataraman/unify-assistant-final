@@ -32,6 +32,19 @@ export default async function handler(req, res) {
             limit: 10
         });
 
+        if (!verified.results.length) {
+            const rssArticles = await fetchGoogleNewsRss(topic);
+            return res.status(200).json({
+                success: true,
+                verified: true,
+                query: topic,
+                sourceCount: rssArticles.length,
+                distinctDomainCount: 1,
+                trustedCount: rssArticles.length,
+                articles: rssArticles
+            });
+        }
+
         return res.status(200).json({
             success: true,
             verified: true,
@@ -52,4 +65,57 @@ export default async function handler(req, res) {
             details: String(error?.message || error)
         });
     }
+}
+
+async function fetchGoogleNewsRss(topic) {
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(topic)}&hl=en-US&gl=US&ceid=US:en`;
+    const response = await fetch(url, {
+        headers: {
+            'Accept': 'application/rss+xml, application/xml, text/xml'
+        }
+    });
+    if (!response.ok) return [];
+
+    const xml = await response.text();
+    const items = [];
+    const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+    let match;
+    while ((match = itemRegex.exec(xml)) && items.length < 8) {
+        const block = match[1];
+        const title = decodeXml(getTag(block, 'title'));
+        const link = decodeXml(getTag(block, 'link'));
+        const description = decodeXml(stripHtml(getTag(block, 'description')));
+        if (!title || !link) continue;
+        items.push({
+            title: cleanGoogleNewsTitle(title),
+            url: link,
+            description: description || title
+        });
+    }
+    return items;
+}
+
+function getTag(block, tag) {
+    const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'i');
+    return regex.exec(block)?.[1] || '';
+}
+
+function stripHtml(input) {
+    return String(input || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function decodeXml(input) {
+    return String(input || '')
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function cleanGoogleNewsTitle(title) {
+    return String(title || '').replace(/\s+-\s+[^-]+$/, '').trim();
 }
