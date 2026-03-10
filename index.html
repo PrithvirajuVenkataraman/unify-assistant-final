@@ -8171,6 +8171,28 @@ function isLiveRetrievalQuery(text) {
            /\b(middle[\s-]?east|ukraine|russia|israel|gaza|iran|syria|oil market|stock market|economy|inflation|forex|usd|inr|bitcoin|crypto)\b/.test(t);
 }
 
+function isNewsworthyLiveTopic(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+
+    if (isExchangeRateQuery(t) || isMarketPriceQuery(t)) return false;
+
+    const eventSignals = [
+        /\bwhat(?:'s| is)?(?:\s+\w+){0,3}\s+happening\b/,
+        /\bcurrent(?:ly)?\b.*\b(happening|situation|status|update)\b/,
+        /\b(latest|recent|current|today|right now)\b.*\b(news|events|developments|situation|conflict|war|tensions|crisis|attack|ceasefire|talks)\b/,
+        /\b(news|headlines?|breaking news|current events?)\b/,
+        /\b(update me|brief me|tell me)\b.*\b(on|about)\b/
+    ];
+
+    if (eventSignals.some(rx => rx.test(t))) {
+        return /\b(middle[\s-]?east|israel|gaza|iran|ukraine|russia|syria|lebanon|yemen|palestine|oil|economy|inflation|politics?|election|war|conflict|market)\b/.test(t);
+    }
+
+    return /\b(middle[\s-]?east|israel|gaza|iran|ukraine|russia|syria|lebanon|yemen|palestine)\b/.test(t) &&
+           /\b(what(?:'s| is)|tell me|brief me|update me|current|currently|latest|recent|today|right now)\b/.test(t);
+}
+
 function getDomainFromUrl(url) {
     try {
         return new URL(String(url || '')).hostname.replace(/^www\./i, '').toLowerCase();
@@ -8540,7 +8562,7 @@ ${snippets}`
                 if (handled) return;
             }
 
-            if (/\b(news|headlines?|current events?|breaking news)\b/i.test(cleanText)) {
+            if (/\b(news|headlines?|current events?|breaking news)\b/i.test(cleanText) || isNewsworthyLiveTopic(cleanText)) {
                 await fetchAndDisplayNews(cleanText);
                 return;
             }
