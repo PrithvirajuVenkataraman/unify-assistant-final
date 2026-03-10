@@ -27,13 +27,20 @@ export default async function handler(req, res) {
         if (!query && city) queries.push(`${city} breaking news`);
         if (!query && countryCode && countryCode !== 'DEFAULT') queries.push(`${countryCode} national news`);
 
-        const [verified, rssArticles] = await Promise.all([
+        const settled = await Promise.allSettled([
             runVerifiedWebSearch(queries, {
                 maxResultsPerQuery: 6,
                 limit: 10
             }),
             fetchGoogleNewsRss(topic)
         ]);
+
+        const verified = settled[0]?.status === 'fulfilled'
+            ? settled[0].value
+            : { results: [], distinctDomains: [], trustedCount: 0 };
+        const rssArticles = settled[1]?.status === 'fulfilled'
+            ? settled[1].value
+            : [];
 
         if (rssArticles.length) {
             return res.status(200).json({
