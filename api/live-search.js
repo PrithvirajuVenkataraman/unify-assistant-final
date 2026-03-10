@@ -35,8 +35,8 @@ export async function searchWeb(query, maxResults = 8) {
     if (braveKey) {
         attempts.push(() => searchWithBrave(query, normalizedMax, braveKey));
     }
-    attempts.push(() => searchWithDuckDuckGo(query, normalizedMax));
     attempts.push(() => searchWithDuckDuckGoHtml(query, normalizedMax));
+    attempts.push(() => searchWithDuckDuckGo(query, normalizedMax));
 
     for (const run of attempts) {
         try {
