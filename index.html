@@ -4558,6 +4558,7 @@ async function handleNameCorrection(text) {
         let supportModeLock = 'balanced';
         let responseLength = 'normal';
         let responseFormat = 'paragraph';
+        let medicalMode = false;
         let converseMode = false;
         let favorites = [];
         let inputHistory = [];
@@ -5159,7 +5160,14 @@ async function handleNameCorrection(text) {
                                         <button onclick="setResponseFormat('steps')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'steps' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Step-by-step</button>
                                     </div>
                                 </div>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Voice commands: "set support mode supportive", "set response length detailed", or "set response format bullet points".</p>
+                                <div>
+                                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Medical mode</p>
+                                    <div class="flex gap-2 flex-wrap">
+                                        <button onclick="setMedicalMode(true)" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${medicalMode ? 'bg-rose-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">On</button>
+                                        <button onclick="setMedicalMode(false)" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${!medicalMode ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Off</button>
+                                    </div>
+                                </div>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Voice commands: "set support mode supportive", "set response length detailed", "set response format bullet points", or "turn medical mode on".</p>
                             </div>
                         </section>
 
@@ -5383,6 +5391,7 @@ async function handleNameCorrection(text) {
                     supportModeLock,
                     responseLength,
                     responseFormat,
+                    medicalMode,
                     converseMode
                 }));
             } catch (e) {}
@@ -5444,6 +5453,7 @@ async function handleNameCorrection(text) {
             supportModeLock = 'balanced';
             responseLength = 'normal';
             responseFormat = 'paragraph';
+            medicalMode = false;
             converseMode = false;
             try {
                 const saved = localStorage.getItem('jarvis_assistant_modes');
@@ -5452,6 +5462,7 @@ async function handleNameCorrection(text) {
                     supportModeLock = parsed.supportModeLock || 'balanced';
                     responseLength = parsed.responseLength || 'normal';
                     responseFormat = ['paragraph', 'bullet', 'steps'].includes(parsed.responseFormat) ? parsed.responseFormat : 'paragraph';
+                    medicalMode = !!parsed.medicalMode;
                     // Always start with Converse mode OFF unless user explicitly presses it.
                     converseMode = false;
                 }
@@ -5459,6 +5470,7 @@ async function handleNameCorrection(text) {
             window.supportModeLock = supportModeLock;
             window.responseLength = responseLength;
             window.responseFormat = responseFormat;
+            window.medicalMode = medicalMode;
             updateAssistantModeUI();
             // Do not auto-start listening on load.
         }
@@ -5493,6 +5505,17 @@ async function handleNameCorrection(text) {
             updateAssistantModeUI();
             const labelMap = { paragraph: 'Paragraph', bullet: 'Bullet Points', steps: 'Step-by-step' };
             addChatMessage(`Response format set to ${labelMap[responseFormat] || 'Paragraph'}.`, false);
+        }
+
+        function setMedicalMode(enabled) {
+            medicalMode = !!enabled;
+            window.medicalMode = medicalMode;
+            saveAssistantModes();
+            updateAssistantModeUI();
+            const msg = medicalMode
+                ? 'Medical mode is ON. I will use stricter medical safety guidance for health questions.'
+                : 'Medical mode is OFF. General assistant behavior restored.';
+            addChatMessage(msg, false);
         }
 
         function toggleConverseMode() {
@@ -7061,6 +7084,25 @@ function isMedicalAdviceIntent(text) {
 function isMedicalEmergencyIntent(text) {
     const t = String(text || '').toLowerCase();
     return /\b(chest pain|trouble breathing|difficulty breathing|shortness of breath|stroke|face drooping|slurred speech|seizure|passed out|fainted|unconscious|heavy bleeding|severe bleeding|severe burn|poison|overdose|anaphylaxis|allergic reaction.*breath|cannot breathe|can't breathe|heart attack)\b/.test(t);
+}
+
+function buildMedicalGuidancePrompt(text) {
+    return `The user is asking for medical or symptom advice: "${text}".
+
+Respond with these rules:
+1. Clearly state you are not a doctor and this is general guidance only
+2. Do not give a diagnosis or claim certainty
+3. Give safe, practical self-care steps that are commonly appropriate
+4. Mention red-flag symptoms that mean they should seek urgent medical care
+5. If the request is about medicine, dosing, pregnancy, infants, severe symptoms, or multiple conditions, tell them to confirm with a licensed clinician or pharmacist
+6. Keep the tone calm, direct, and concise
+7. Do not invent prescriptions, dosages, or treatment plans
+
+Format:
+- What it might mean: <brief, cautious statement>
+- What you can do now: <2-4 practical steps>
+- Get urgent help if: <red flags>
+- Safer next step: <when to contact a doctor/pharmacist>`;
 }
 
 function isLearningIntent(text) {
