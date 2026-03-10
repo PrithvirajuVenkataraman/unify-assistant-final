@@ -5060,6 +5060,7 @@ async function handleNameCorrection(text) {
                                 <p><strong>Transport Info:</strong> "How to get around London?"</p>
                                 <p><strong>Weather:</strong> "What's the weather in Seattle tomorrow?"</p>
                                 <p><strong>Reminders:</strong> "Remind me to call mom at 5 PM"</p>
+                                <p><strong>General Medical Guidance:</strong> "What should I do for a sore throat?" or "When is a fever serious?"</p>
                                 <p><strong>Live Trip Mode:</strong> "start trip to office" or "start trip to Times Square"</p>
                                 <p><strong>Leave-Time Estimate:</strong> "when should I leave for work?"</p>
                                 <p><strong>Safety Tools:</strong> "share my location", "nearest hospital", or "start safety timer for 30 minutes"</p>
@@ -7052,6 +7053,16 @@ function isHighRiskMentalHealth(text) {
     return /\b(suicide|kill myself|end my life|self harm|hurt myself|want to die|can't go on)\b/.test(t);
 }
 
+function isMedicalAdviceIntent(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(symptom|symptoms|fever|cold|cough|headache|migraine|stomach ache|stomach pain|vomit|vomiting|nausea|diarrhea|constipation|rash|allergy|pain|sore throat|flu|infection|medicine|medication|dose|dosage|tablet|capsule|paracetamol|acetaminophen|ibuprofen|doctor|clinic|urgent care|blood pressure|diabetes|blood sugar|sprain|cut|burn|injury|first aid|medical advice|health advice)\b/.test(t);
+}
+
+function isMedicalEmergencyIntent(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(chest pain|trouble breathing|difficulty breathing|shortness of breath|stroke|face drooping|slurred speech|seizure|passed out|fainted|unconscious|heavy bleeding|severe bleeding|severe burn|poison|overdose|anaphylaxis|allergic reaction.*breath|cannot breathe|can't breathe|heart attack)\b/.test(t);
+}
+
 function isLearningIntent(text) {
     const t = String(text || '').toLowerCase().trim();
     return /\b(what is|what are|explain|teach me|help me understand|how does|difference between|compare|why does|meaning of|overview of)\b/.test(t);
@@ -8307,6 +8318,44 @@ If you want, I can stay with you and help you write a short message to someone y
                 addChatMessage(urgentMsg, false);
                 speak("I'm here with you. Please contact emergency or a crisis line right now. You matter.");
                 saveToHistory(text, urgentMsg);
+                return;
+            }
+
+            if (isMedicalEmergencyIntent(cleanText)) {
+                const urgentMedicalMsg = `This could be a medical emergency.
+
+- Call emergency services right now if the person has chest pain, trouble breathing, severe bleeding, stroke symptoms, or loses consciousness
+- If available, go to the nearest emergency room or urgent emergency care immediately
+- If it is safe, keep the person still and do not give food, drink, or medicine unless a clinician has already instructed it
+
+I can still help you find the nearest hospital or urgent care if you want.`;
+                addChatMessage(urgentMedicalMsg, false);
+                speak("This may be a medical emergency. Please call emergency services right now.");
+                saveToHistory(text, urgentMedicalMsg);
+                return;
+            }
+
+            if (isMedicalAdviceIntent(cleanText)) {
+                const medicalPrompt = `The user is asking for medical or symptom advice: "${text}".
+
+Respond with these rules:
+1. Clearly state you are not a doctor and this is general guidance only
+2. Do not give a diagnosis or claim certainty
+3. Give safe, practical self-care steps that are commonly appropriate
+4. Mention red-flag symptoms that mean they should seek urgent medical care
+5. If the request is about medicine, dosing, pregnancy, infants, severe symptoms, or multiple conditions, tell them to confirm with a licensed clinician or pharmacist
+6. Keep the tone calm, direct, and concise
+7. Do not invent prescriptions, dosages, or treatment plans
+
+Format:
+- What it might mean: <brief, cautious statement>
+- What you can do now: <2-4 practical steps>
+- Get urgent help if: <red flags>
+- Safer next step: <when to contact a doctor/pharmacist>`;
+                const medicalResponse = await callAIWithTyping(medicalPrompt, 'Preparing safe medical guidance...');
+                addChatMessage(medicalResponse.response, false);
+                speak("Here is some general medical guidance.");
+                saveToHistory(text, medicalResponse.response);
                 return;
             }
 
