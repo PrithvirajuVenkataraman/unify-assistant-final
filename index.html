@@ -1925,6 +1925,51 @@
             background: rgba(51, 65, 85, 0.95);
             border-color: rgba(148, 163, 184, 0.85);
         }
+
+        .side-panel-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 52;
+            background: rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            opacity: 1;
+            transition: opacity 0.25s ease;
+        }
+
+        .side-panel-backdrop.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .side-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            z-index: 53;
+            width: min(420px, 92vw);
+            height: 100vh;
+            padding: 24px 18px 120px;
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-left: 1px solid rgba(148, 163, 184, 0.22);
+            box-shadow: -18px 0 50px rgba(15, 23, 42, 0.18);
+            overflow-y: auto;
+            transform: translateX(0);
+            transition: transform 0.28s ease;
+        }
+
+        .side-panel.hidden {
+            transform: translateX(105%);
+            pointer-events: none;
+        }
+
+        body.dark .side-panel {
+            background: rgba(15, 23, 42, 0.97);
+            border-left-color: rgba(100, 116, 139, 0.45);
+            box-shadow: -18px 0 50px rgba(2, 6, 23, 0.45);
+        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -2084,24 +2129,6 @@
                             </div>
                         </div>
 
-                        <div id="safety-section" class="hidden bg-gradient-to-br from-rose-50 to-orange-50 dark:from-slate-800 dark:to-slate-700 p-6 rounded-2xl mt-6 border border-rose-100 dark:border-slate-600">
-                            <div class="flex items-center gap-3 mb-4">
-                                <div class="p-2 bg-rose-100 dark:bg-rose-900/30 rounded-xl">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-rose-600 dark:text-rose-400">
-                                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                                    </svg>
-                                </div>
-                                <h2 class="text-xl font-bold text-gray-800 dark:text-white">Safety</h2>
-                            </div>
-                            <div id="safety-summary" class="space-y-2 text-sm text-gray-700 dark:text-gray-300"></div>
-                            <div class="mt-4 flex flex-wrap gap-2">
-                                <button onclick="shareCurrentLocation()" class="px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all">Share location</button>
-                                <button onclick="openNearbySearch('hospital')" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-slate-900/70 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest hospital</button>
-                                <button onclick="openNearbySearch('police station')" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-slate-900/70 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest police</button>
-                                <button onclick="openNearbySearch('pharmacy')" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-slate-900/70 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest pharmacy</button>
-                                <button onclick="startSafetyCheckIn()" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-slate-900/70 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Start safety timer</button>
-                            </div>
-                        </div>
                     </div>
 
                     <!-- Right Column: Chat -->
@@ -2145,6 +2172,14 @@
                     <!-- Tooltip -->
                     <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
                         Help & Tips
+                    </div>
+                </button>
+                <button onclick="showSafetyPanel()" id="safety-btn" class="flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all" title="Safety">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-rose-600 transition-all">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
+                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
+                        Safety
                     </div>
                 </button>
                 <input
@@ -2204,6 +2239,38 @@
             </div>
         </div>
     </div>
+
+    <div id="safety-panel-backdrop" class="side-panel-backdrop hidden" onclick="closeSafetyPanel()"></div>
+    <aside id="safety-panel" class="side-panel hidden" aria-hidden="true" aria-label="Safety panel">
+        <div class="flex items-start justify-between gap-4 mb-6">
+            <div>
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200 text-xs font-semibold mb-3">
+                    <span>Safety</span>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Safety Shortcuts</h2>
+                <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">Quick access to location sharing, nearby emergency places, and check-in tools.</p>
+            </div>
+            <button onclick="closeSafetyPanel()" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500 dark:text-gray-300 transition-all" aria-label="Close safety panel">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+
+        <div class="bg-gradient-to-br from-rose-50 to-orange-50 dark:from-slate-800 dark:to-slate-900 p-5 rounded-2xl border border-rose-100 dark:border-slate-700 mb-5">
+            <div id="safety-summary" class="space-y-2 text-sm text-gray-700 dark:text-gray-300"></div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button onclick="shareCurrentLocation()" class="px-4 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all">Share location</button>
+            <button onclick="startSafetyCheckIn()" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Start safety timer</button>
+            <button onclick="openNearbySearch('hospital')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest hospital</button>
+            <button onclick="openNearbySearch('police station')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest police</button>
+            <button onclick="openNearbySearch('pharmacy')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest pharmacy</button>
+            <button onclick="openNearbySearch('atm')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest ATM</button>
+        </div>
+    </aside>
 
 <script>
 (function () {
@@ -8105,6 +8172,7 @@ ${snippets}`
             if (/\b(enable|turn on|start)\s+(women'?s?\s+)?safety\s+mode\b/i.test(lower)) {
                 safetyProfile.womenSafetyMode = true;
                 saveSafetyProfile();
+                showSafetyPanel();
                 const msg = 'Safety mode is on. I added fast actions for sharing location, safety check-ins, and nearby help.';
                 addChatMessage(msg, false);
                 speak(msg);
@@ -8114,6 +8182,7 @@ ${snippets}`
             if (/\b(disable|turn off|stop)\s+(women'?s?\s+)?safety\s+mode\b/i.test(lower)) {
                 safetyProfile.womenSafetyMode = false;
                 saveSafetyProfile();
+                showSafetyPanel();
                 const msg = 'Safety mode is off. Emergency shortcuts still stay available.';
                 addChatMessage(msg, false);
                 speak(msg);
@@ -8124,6 +8193,7 @@ ${snippets}`
             if (trustedContactMatch) {
                 safetyProfile.trustedContact = trustedContactMatch[1].replace(/[?.!,]$/g, '').trim();
                 saveSafetyProfile();
+                showSafetyPanel();
                 const msg = `Trusted contact saved as ${safetyProfile.trustedContact}.`;
                 addChatMessage(msg, false);
                 speak(msg);
@@ -8151,7 +8221,7 @@ ${snippets}`
             }
 
             if (/\b(emergency|help me stay safe|safety help)\b/i.test(lower)) {
-                renderSafetyCard();
+                showSafetyPanel();
                 const msg = 'Safety shortcuts are ready. You can say "share my location", "nearest hospital", "nearest police", or "start safety timer for 30 minutes".';
                 addChatMessage(msg, false);
                 speak(msg);
@@ -10007,12 +10077,30 @@ ${sourceLinksBlock}
             renderSafetyCard();
         }
 
-        function renderSafetyCard() {
-            const section = document.getElementById('safety-section');
-            const summary = document.getElementById('safety-summary');
-            if (!section || !summary) return;
+        function showSafetyPanel() {
+            const panel = document.getElementById('safety-panel');
+            const backdrop = document.getElementById('safety-panel-backdrop');
+            if (!panel || !backdrop) return;
+            renderSafetyCard();
+            panel.classList.remove('hidden');
+            backdrop.classList.remove('hidden');
+            panel.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+        }
 
-            section.classList.remove('hidden');
+        function closeSafetyPanel() {
+            const panel = document.getElementById('safety-panel');
+            const backdrop = document.getElementById('safety-panel-backdrop');
+            if (!panel || !backdrop) return;
+            panel.classList.add('hidden');
+            backdrop.classList.add('hidden');
+            panel.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = '';
+        }
+
+        function renderSafetyCard() {
+            const summary = document.getElementById('safety-summary');
+            if (!summary) return;
             const rows = [];
             rows.push(`<p><strong>Safety mode:</strong> ${safetyProfile.womenSafetyMode ? 'Women-focused safety shortcuts on' : 'Standard safety shortcuts'}</p>`);
             rows.push(`<p><strong>Trusted contact:</strong> ${escapeHtml(safetyProfile.trustedContact || 'Not set')}</p>`);
