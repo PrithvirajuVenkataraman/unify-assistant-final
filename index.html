@@ -4993,6 +4993,9 @@ async function handleNameCorrection(text) {
                                 <p><strong>Transport Info:</strong> "How to get around London?"</p>
                                 <p><strong>Weather:</strong> "What's the weather in Seattle tomorrow?"</p>
                                 <p><strong>Reminders:</strong> "Remind me to call mom at 5 PM"</p>
+                                <p><strong>Live Trip Mode:</strong> "start trip to office" or "start trip to Times Square"</p>
+                                <p><strong>Leave-Time Estimate:</strong> "when should I leave for work?"</p>
+                                <p><strong>Safety Tools:</strong> "share my location", "nearest hospital", or "start safety timer for 30 minutes"</p>
                                 <p><strong>Translator:</strong> "Speak in Tamil" or "Translate this to Hindi"</p>
                                 <p><strong>Budget Planner:</strong> "budget trip to Seattle for 3 days under 900 USD"</p>
                                 <p><strong>Calendar Sync:</strong> "sync to calendar" after a budget trip plan</p>
@@ -5007,6 +5010,8 @@ async function handleNameCorrection(text) {
                                 <p><strong>Weak example:</strong> "Plan Boston trip."</p>
                                 <p><strong>For reminders:</strong> Include task and time in one line when possible.</p>
                                 <p><strong>Example:</strong> "Remind me to take medicine tomorrow at 9 PM."</p>
+                                <p><strong>For commute:</strong> Set context first. Example: "my office is 1 Apple Park Way", "my home is Sunnyvale", "arrive by 9 AM".</p>
+                                <p><strong>For live trip tracking:</strong> Use a direct destination. Example: "start trip to office" or "start trip to JFK Airport".</p>
                             </div>
                         </section>
                         
@@ -5041,7 +5046,7 @@ async function handleNameCorrection(text) {
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Voice Commands</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                                 <p>Press the <strong>microphone button</strong> and speak naturally.</p>
-                                <p class="text-xs text-gray-500">Examples: "What's the weather?" or "Set a reminder for 5 PM"</p>
+                                <p class="text-xs text-gray-500">Examples: "What's the weather?", "set a reminder for 5 PM", "start trip to office", or "when should I leave?"</p>
                             </div>
                         </section>
                         
@@ -5053,6 +5058,9 @@ async function handleNameCorrection(text) {
                                 <p><strong>Location-Aware:</strong> I adapt transport suggestions by city type.</p>
                                 <p><strong>Regional Food:</strong> I suggest cuisine ideas by destination.</p>
                                 <p><strong>Converse Mode:</strong> Hands-free conversation with auto speaking.</p>
+                                <p><strong>Foreground Live Trip:</strong> I can track your trip, ETA drift, "you are close", and possible off-route movement while this website stays open.</p>
+                                <p><strong>Traffic-Aware Leave Estimate:</strong> I can use a route API for live leave-time estimates when configured, with a fallback estimate if not.</p>
+                                <p><strong>Safety Mode:</strong> Women-focused safety shortcuts, trusted contact storage, location sharing, and safety check-in timers.</p>
                             </div>
                         </section>
 
@@ -5090,6 +5098,14 @@ async function handleNameCorrection(text) {
                         <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Settings</h3>
                             <div class="space-y-4">
+                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                    <p class="font-semibold text-gray-900 dark:text-white">Commute Setup</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Use chat commands: "my home is ...", "my office is ...", "arrive by 9 AM", and "commute mode is drive/transit/walk".</p>
+                                </div>
+                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                    <p class="font-semibold text-gray-900 dark:text-white">Safety Setup</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Use "enable women's safety mode" and "trusted contact is ..." to personalize fast safety actions.</p>
+                                </div>
                                 <div class="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                     <div>
                                         <p class="font-semibold text-gray-900 dark:text-white">Noise Filter</p>
@@ -5124,7 +5140,7 @@ async function handleNameCorrection(text) {
                         </section>
 
                         <div class="text-center pt-4 border-t border-gray-200 dark:border-gray-700">
-                            <p class="text-sm text-gray-600 dark:text-gray-400">Need more help? You can submit a feature request from the Settings section above.</p>
+                            <p class="text-sm text-gray-600 dark:text-gray-400">Need more help? You can submit a feature request from Settings or ask directly: "show trip commands" or "how do I set up commute?"</p>
                         </div>
                     </div>
                 </div>
