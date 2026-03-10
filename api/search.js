@@ -1,4 +1,4 @@
-import { searchWeb } from './_lib/live-search.js';
+import { runVerifiedWebSearch, searchWeb } from './_lib/live-search.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -20,11 +20,19 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'query is required' });
         }
 
-        const results = await searchWeb(query, maxResults);
+        const liveQueries = buildSearchQueries(query);
+        const verified = await runVerifiedWebSearch(liveQueries, {
+            maxResultsPerQuery: Math.min(maxResults, 6),
+            limit: maxResults
+        });
+        const results = verified.results.length ? verified.results : await searchWeb(query, maxResults);
 
         return res.status(200).json({
             success: true,
             provider: results.length ? 'aggregated-search' : 'none',
+            queryVariants: liveQueries,
+            distinctDomainCount: verified.distinctDomains?.length || 0,
+            trustedCount: verified.trustedCount || 0,
             results
         });
     } catch (error) {
@@ -33,4 +41,28 @@ export default async function handler(req, res) {
             error: 'search failed'
         });
     }
+}
+
+function buildSearchQueries(query) {
+    const raw = String(query || '').trim();
+    if (!raw) return [];
+    const out = [raw];
+
+    if (isTimeSensitiveQuery(raw)) {
+        const topic = raw
+            .replace(/\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update(?:s)? on|status of)\b/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (topic && topic.toLowerCase() !== raw.toLowerCase()) {
+            out.push(`latest ${topic}`);
+        }
+        out.push(`${topic || raw} Reuters OR AP OR BBC OR Al Jazeera`);
+    }
+
+    return Array.from(new Set(out.filter(Boolean)));
+}
+
+function isTimeSensitiveQuery(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update|status|price now|rate today)\b/.test(t);
 }
