@@ -8963,6 +8963,7 @@ function buildLiveSearchQueries(userText, intent = null) {
         .replace(/\s+/g, ' ')
         .trim();
     const topic = liveIntent.topic || cleaned || raw;
+    const expandedTopic = expandSportsSearchAliases(topic);
 
     if (liveIntent.domain === 'sports' && liveIntent.directFact) {
         const sportSources = 'ESPN Cricbuzz ESPNcricinfo ICC FIFA UEFA NBA NFL ATP WTA Formula 1 Olympics';
@@ -8980,7 +8981,9 @@ function buildLiveSearchQueries(userText, intent = null) {
             `${topic} ${seasonHint} ${factHints}`.replace(/\s+/g, ' ').trim(),
             `${topic} ${factHints}`.replace(/\s+/g, ' ').trim(),
             `${topic} ${seasonHint} ${sportSources}`.replace(/\s+/g, ' ').trim(),
-            `${topic} official ${factHints}`.replace(/\s+/g, ' ').trim()
+            `${topic} official ${factHints}`.replace(/\s+/g, ' ').trim(),
+            expandedTopic && expandedTopic.toLowerCase() !== topic.toLowerCase() ? `${expandedTopic} ${seasonHint} ${factHints}`.replace(/\s+/g, ' ').trim() : '',
+            expandedTopic && expandedTopic.toLowerCase() !== topic.toLowerCase() ? `${expandedTopic} official ${factHints}`.replace(/\s+/g, ' ').trim() : ''
         ].filter(Boolean)));
     }
 
@@ -8989,6 +8992,33 @@ function buildLiveSearchQueries(userText, intent = null) {
         `latest ${topic}`,
         `${topic} Reuters OR AP OR BBC OR Al Jazeera`
     ];
+}
+
+function expandSportsSearchAliases(text) {
+    const aliasMap = {
+        ipl: 'indian premier league',
+        psl: 'pakistan super league',
+        bbl: 'big bash league',
+        cpl: 'caribbean premier league',
+        isl: 'indian super league',
+        pkl: 'pro kabaddi league',
+        ucl: 'uefa champions league',
+        uel: 'uefa europa league',
+        epl: 'english premier league',
+        nba: 'national basketball association',
+        nfl: 'national football league',
+        mlb: 'major league baseball',
+        nhl: 'national hockey league',
+        atp: 'association of tennis professionals',
+        wta: 'women s tennis association',
+        f1: 'formula 1'
+    };
+
+    return String(text || '')
+        .split(/\s+/)
+        .map(token => aliasMap[token.toLowerCase()] || token)
+        .join(' ')
+        .trim();
 }
 
 function rankSportsSources(results) {
