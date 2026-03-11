@@ -4022,6 +4022,7 @@ Rules:
 - Only state a fact confidently if it appears in multiple snippets or from a clearly reputable source.
 - If evidence is weak, say so instead of guessing.
 - If the question asks for a winner, score, player stat, or latest status, answer that specific fact first before anything else.
+- If the user asks for stats, give the key stats directly instead of a generic summary.
 - Keep it concise and practical.
 
 Snippets:
@@ -4395,6 +4396,8 @@ RULES:
 - Start directly with the answer; do not add greeting/preamble like "Hi! I'd be happy to help."
 - Do not add generic closing prompts like "Would you like to know more..." unless the user explicitly asked for follow-ups.
 - For "Who is X?" person/celebrity questions, provide a concise factual bio first, then notable works/achievements.
+- If the user asks a "do/can/could/would" question, do not reply with only yes or no unless they explicitly demand a yes/no-only answer; explain the answer.
+- If the user asks to explain more, explain further, elaborate, or give more detail, expand the previous answer instead of repeating the short version.
 
 Your capabilities:
 - Weather (say "check weather")
@@ -4573,6 +4576,7 @@ async function handleNameCorrection(text) {
         let favorites = [];
         let inputHistory = [];
         let inputHistoryIndex = -1;
+        let songMoodGameState = null;
         let pendingVisionImage = null;
         let tesseractLoadPromise = null;
         let autoScrollLocked = false;
@@ -7499,6 +7503,368 @@ function extractJsonObject(text) {
     }
 }
 
+const SONG_MOOD_GAME_QUESTIONS = [
+    {
+        key: 'mood',
+        prompt: 'Question 1 of 5: What is your current mood?',
+        options: [
+            { id: 'heavy', label: 'Heavy / low', vibe: 'emotional and low' },
+            { id: 'calm', label: 'Calm / peaceful', vibe: 'calm and peaceful' },
+            { id: 'romantic', label: 'Romantic / dreamy', vibe: 'romantic and dreamy' },
+            { id: 'hype', label: 'Hyped / energetic', vibe: 'high-energy and pumped up' }
+        ]
+    },
+    {
+        key: 'scene',
+        prompt: 'Question 2 of 5: Which situation fits best right now?',
+        options: [
+            { id: 'alone', label: 'Alone time', vibe: 'solo listening' },
+            { id: 'friends', label: 'With friends', vibe: 'group vibe' },
+            { id: 'travel', label: 'Travel / drive', vibe: 'travel or drive moment' },
+            { id: 'love', label: 'Thinking of someone', vibe: 'love or crush moment' }
+        ]
+    },
+    {
+        key: 'goal',
+        prompt: 'Question 3 of 5: What do you want the song to do?',
+        options: [
+            { id: 'heal', label: 'Comfort me', vibe: 'comfort and healing' },
+            { id: 'focus', label: 'Help me focus', vibe: 'focus and clarity' },
+            { id: 'lift', label: 'Lift my mood', vibe: 'uplifting energy' },
+            { id: 'express', label: 'Say what I feel', vibe: 'deep emotional expression' }
+        ]
+    },
+    {
+        key: 'language',
+        prompt: 'Question 4 of 5: Which language do you want?',
+        options: [
+            { id: 'tamil', label: 'Tamil', vibe: 'Tamil song' },
+            { id: 'hindi', label: 'Hindi', vibe: 'Hindi song' },
+            { id: 'telugu', label: 'Telugu', vibe: 'Telugu song' },
+            { id: 'english', label: 'English / any', vibe: 'English or any language song' }
+        ]
+    },
+    {
+        key: 'style',
+        prompt: 'Question 5 of 5: Pick the style.',
+        options: [
+            { id: 'popular', label: 'Popular hit', vibe: 'popular and accessible' },
+            { id: 'underrated', label: 'Underrated gem', vibe: 'underrated gem' },
+            { id: 'classic', label: 'Classic', vibe: 'classic timeless feel' },
+            { id: 'surprise', label: 'Surprise me', vibe: 'surprising but fitting' }
+        ]
+    }
+];
+
+const SONG_MOOD_GAME_FALLBACKS = {
+    tamil: {
+        heavy: [
+            { song: 'Nenjukkul Peidhidum', artist: 'Harris Jayaraj', work: 'Vaaranam Aayiram' },
+            { song: 'Uyirin Uyire', artist: 'Harris Jayaraj', work: 'Kaakha Kaakha' },
+            { song: 'Munbe Vaa', artist: 'A. R. Rahman', work: 'Sillunu Oru Kadhal' }
+        ],
+        calm: [
+            { song: 'Ilaya Nila', artist: 'Ilaiyaraaja', work: 'Payanangal Mudivathillai' },
+            { song: 'Vaseegara', artist: 'Harris Jayaraj', work: 'Minnale' },
+            { song: 'Oru Maalai', artist: 'Harris Jayaraj', work: 'Ghajini' }
+        ],
+        romantic: [
+            { song: 'Vaseegara', artist: 'Harris Jayaraj', work: 'Minnale' },
+            { song: 'Munbe Vaa', artist: 'A. R. Rahman', work: 'Sillunu Oru Kadhal' },
+            { song: 'Anjali Anjali', artist: 'Ilaiyaraaja', work: 'Anjali' }
+        ],
+        hype: [
+            { song: 'Mukkala Muqabla', artist: 'A. R. Rahman', work: 'Kadhalan' },
+            { song: 'Aalaporan Tamizhan', artist: 'A. R. Rahman', work: 'Mersal' },
+            { song: 'Vaathi Coming', artist: 'Anirudh Ravichander', work: 'Master' }
+        ]
+    },
+    hindi: {
+        heavy: [
+            { song: 'Kal Ho Naa Ho', artist: 'Shankar-Ehsaan-Loy', work: 'Kal Ho Naa Ho' },
+            { song: 'Tere Liye', artist: 'Madan Mohan / Sanjeev Kohli', work: 'Veer-Zaara' },
+            { song: 'Agar Tum Saath Ho', artist: 'A. R. Rahman', work: 'Tamasha' }
+        ],
+        calm: [
+            { song: 'Pehla Nasha', artist: 'Jatin-Lalit', work: 'Jo Jeeta Wohi Sikandar' },
+            { song: 'Iktara', artist: 'Amit Trivedi', work: 'Wake Up Sid' },
+            { song: 'Kho Gaye Hum Kahan', artist: 'Jasleen Royal / Prateek Kuhad', work: 'Baar Baar Dekho' }
+        ],
+        romantic: [
+            { song: 'Tujhe Dekha To', artist: 'Jatin-Lalit', work: 'Dilwale Dulhania Le Jayenge' },
+            { song: 'Tum Se Hi', artist: 'Pritam', work: 'Jab We Met' },
+            { song: 'Raabta', artist: 'Pritam', work: 'Agent Vinod' }
+        ],
+        hype: [
+            { song: 'Chaiyya Chaiyya', artist: 'A. R. Rahman', work: 'Dil Se' },
+            { song: 'Kajra Re', artist: 'Shankar-Ehsaan-Loy', work: 'Bunty Aur Babli' },
+            { song: 'Malhari', artist: 'Sanjay Leela Bhansali', work: 'Bajirao Mastani' }
+        ]
+    },
+    telugu: {
+        heavy: [
+            { song: 'Priyatama Neevachata Kusalama', artist: 'Ilaiyaraaja', work: 'Jagadeka Veerudu Athiloka Sundari' },
+            { song: 'Adiga Adiga', artist: 'Gopi Sundar', work: 'Ninnu Kori' },
+            { song: 'Inthandham', artist: 'Vishal Chandrashekhar', work: 'Sita Ramam' }
+        ],
+        calm: [
+            { song: 'Nuvvostanante', artist: 'Devi Sri Prasad', work: 'Varsham' },
+            { song: 'Chilipiga', artist: 'Harris Jayaraj', work: 'Orange' },
+            { song: 'Yamaho Nee', artist: 'Ilaiyaraaja', work: 'Jagadeka Veerudu Athiloka Sundari' }
+        ],
+        romantic: [
+            { song: 'Cheliya Cheliya', artist: 'Koti', work: 'Nuvvu Naaku Nachav' },
+            { song: 'Inthandham', artist: 'Vishal Chandrashekhar', work: 'Sita Ramam' },
+            { song: 'Nuvvostanante', artist: 'Devi Sri Prasad', work: 'Varsham' }
+        ],
+        hype: [
+            { song: 'Butta Bomma', artist: 'S. Thaman', work: 'Ala Vaikunthapurramuloo' },
+            { song: 'Ramuloo Ramulaa', artist: 'S. Thaman', work: 'Ala Vaikunthapurramuloo' },
+            { song: 'Saami Saami', artist: 'Devi Sri Prasad', work: 'Pushpa' }
+        ]
+    },
+    english: {
+        heavy: [
+            { song: 'Fix You', artist: 'Coldplay', work: 'X&Y' },
+            { song: 'Someone Like You', artist: 'Adele', work: '21' },
+            { song: 'The Night We Met', artist: 'Lord Huron', work: 'Strange Trails' }
+        ],
+        calm: [
+            { song: 'Yellow', artist: 'Coldplay', work: 'Parachutes' },
+            { song: 'Ocean Eyes', artist: 'Billie Eilish', work: 'Ocean Eyes' },
+            { song: 'Until I Found You', artist: 'Stephen Sanchez', work: 'Easy On My Eyes' }
+        ],
+        romantic: [
+            { song: 'Perfect', artist: 'Ed Sheeran', work: 'Divide' },
+            { song: 'Lover', artist: 'Taylor Swift', work: 'Lover' },
+            { song: 'Can’t Help Falling in Love', artist: 'Elvis Presley', work: 'Blue Hawaii' }
+        ],
+        hype: [
+            { song: 'Blinding Lights', artist: 'The Weeknd', work: 'After Hours' },
+            { song: 'Levitating', artist: 'Dua Lipa', work: 'Future Nostalgia' },
+            { song: 'Uptown Funk', artist: 'Mark Ronson ft. Bruno Mars', work: 'Uptown Special' }
+        ]
+    }
+};
+
+function isSongMoodGameRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    return /\b(song game|music game|song quiz|music quiz|situation song|mood song|pick a song for me|recommend a song based on mood|quiz me for a song)\b/.test(t);
+}
+
+function formatSongMoodGameQuestion(questionIndex) {
+    const question = SONG_MOOD_GAME_QUESTIONS[questionIndex];
+    if (!question) return '';
+    const lines = [question.prompt];
+    question.options.forEach((option, index) => {
+        lines.push(`${index + 1}. ${option.label}`);
+    });
+    lines.push('');
+    lines.push('Reply with the number.');
+    return lines.join('\n');
+}
+
+function startSongMoodGame() {
+    songMoodGameState = {
+        startedAt: new Date().toISOString(),
+        questionIndex: 0,
+        answers: {}
+    };
+
+    const intro = `Let's play the situation-song game.\n\nI will ask 5 quick questions and then suggest a song that fits the moment.\n\n${formatSongMoodGameQuestion(0)}`;
+    addChatMessage(intro, false);
+    speak('Let us play the situation song game. Reply with the number.');
+}
+
+function resetSongMoodGame() {
+    songMoodGameState = null;
+}
+
+function getSongMoodGameProfileSummary(state) {
+    const answers = state?.answers || {};
+    const parts = [];
+    for (const question of SONG_MOOD_GAME_QUESTIONS) {
+        const choiceId = answers[question.key];
+        const option = question.options.find(item => item.id === choiceId);
+        if (option) parts.push(`${question.key}: ${option.label}`);
+    }
+    return parts.join(', ');
+}
+
+function buildSongMoodGameFallbackRecommendation(state) {
+    const answers = state?.answers || {};
+    const language = answers.language || 'english';
+    const mood = answers.mood || 'calm';
+    const library = SONG_MOOD_GAME_FALLBACKS[language] || SONG_MOOD_GAME_FALLBACKS.english;
+    const picks = Array.isArray(library[mood]) && library[mood].length ? library[mood] : library.calm;
+    const [primary, ...rest] = picks;
+    return {
+        song: primary?.song || 'Yellow',
+        artist: primary?.artist || 'Coldplay',
+        work: primary?.work || 'Parachutes',
+        why: `Based on your vibe, this feels like the best fit: ${getSongMoodGameProfileSummary(state)}.`,
+        backups: rest.slice(0, 2).map(item => ({
+            song: item.song,
+            artist: item.artist,
+            work: item.work
+        }))
+    };
+}
+
+function formatSongMoodGameResult(result) {
+    const backups = Array.isArray(result?.backups) ? result.backups.filter(Boolean) : [];
+    const lines = [
+        `Situation song: **${result?.song || 'Unknown song'}**`,
+        `${result?.artist ? `Artist: ${result.artist}` : ''}${result?.work ? `${result?.artist ? ' | ' : ''}From: ${result.work}` : ''}`,
+        result?.why ? `Why it fits: ${result.why}` : ''
+    ].filter(Boolean);
+
+    if (backups.length) {
+        lines.push('');
+        lines.push('Backup picks:');
+        backups.forEach((item, index) => {
+            const meta = [item.artist, item.work].filter(Boolean).join(' | ');
+            lines.push(`${index + 1}. ${item.song}${meta ? ` - ${meta}` : ''}`);
+        });
+    }
+
+    lines.push('');
+    lines.push('Say "play song game" anytime to try again.');
+    return lines.join('\n');
+}
+
+async function finishSongMoodGame(triggerText) {
+    const state = songMoodGameState;
+    resetSongMoodGame();
+    if (!state) return true;
+
+    showThinkingIndicator('[Music] Picking your situation song...');
+    try {
+        const summary = getSongMoodGameProfileSummary(state);
+        const response = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                systemPrompt: 'You are a strict JSON generator for song recommendations. Output valid JSON only.',
+                message: `Suggest one situation song and up to 3 backup songs based on this quiz profile.
+
+Quiz profile: ${summary}
+Original user trigger: "${triggerText}"
+
+Return strict JSON in this schema:
+{
+  "song": "<best song>",
+  "artist": "<artist>",
+  "work": "<film/album/single>",
+  "why": "<one short explanation tied to the profile>",
+  "backups": [
+    { "song": "<song>", "artist": "<artist>", "work": "<film/album/single>" }
+  ]
+}
+
+Rules:
+- Pick songs that are real and recognizable.
+- Match the language preference if possible.
+- Keep "why" to one sentence.
+- Output JSON only.`
+            })
+        });
+
+        if (!response.ok) throw new Error('song game recommendation failed');
+        const data = await response.json();
+        const parsed = extractJsonObject(data?.response || data?.text || '');
+        if (!parsed?.song) throw new Error('song game recommendation empty');
+
+        const result = {
+            song: String(parsed.song || '').trim(),
+            artist: String(parsed.artist || '').trim(),
+            work: String(parsed.work || '').trim(),
+            why: String(parsed.why || '').trim(),
+            backups: (Array.isArray(parsed.backups) ? parsed.backups : [])
+                .slice(0, 3)
+                .map(item => ({
+                    song: String(item?.song || '').trim(),
+                    artist: String(item?.artist || '').trim(),
+                    work: String(item?.work || '').trim()
+                }))
+                .filter(item => item.song)
+        };
+
+        if (!result.song) throw new Error('song game result invalid');
+
+        const finalMsg = formatSongMoodGameResult(result);
+        addChatMessage(finalMsg, false);
+        speak(`Your situation song is ${result.song}.`);
+        saveToHistory(triggerText, finalMsg);
+        return true;
+    } catch (error) {
+        const fallback = buildSongMoodGameFallbackRecommendation(state);
+        const finalMsg = formatSongMoodGameResult(fallback);
+        addChatMessage(finalMsg, false);
+        speak(`Your situation song is ${fallback.song}.`);
+        saveToHistory(triggerText, finalMsg);
+        return true;
+    } finally {
+        hideThinkingIndicator();
+    }
+}
+
+async function handleSongMoodGameAnswer(text) {
+    if (!songMoodGameState) return false;
+    const clean = String(text || '').trim().toLowerCase();
+    if (!clean) return true;
+
+    if (isSongMoodGameRequest(clean) || /^(restart|start over|again)$/i.test(clean)) {
+        startSongMoodGame();
+        return true;
+    }
+
+    if (/^(cancel|stop|exit|quit|end game|stop game)$/i.test(clean)) {
+        resetSongMoodGame();
+        const msg = 'Song game cancelled.';
+        addChatMessage(msg, false);
+        speak(msg);
+        return true;
+    }
+
+    const question = SONG_MOOD_GAME_QUESTIONS[songMoodGameState.questionIndex];
+    if (!question) {
+        resetSongMoodGame();
+        return false;
+    }
+
+    const match = clean.match(/^[1-4]$/);
+    if (!match) {
+        const msg = `Reply with 1, 2, 3, or 4 for this game.\n\n${formatSongMoodGameQuestion(songMoodGameState.questionIndex)}`;
+        addChatMessage(msg, false);
+        speak('Reply with a number from one to four.');
+        return true;
+    }
+
+    const selectedIndex = Number(match[0]) - 1;
+    const option = question.options[selectedIndex];
+    if (!option) {
+        const msg = `That option is not valid.\n\n${formatSongMoodGameQuestion(songMoodGameState.questionIndex)}`;
+        addChatMessage(msg, false);
+        speak('That option is not valid. Reply with a number from one to four.');
+        return true;
+    }
+
+    songMoodGameState.answers[question.key] = option.id;
+    songMoodGameState.questionIndex += 1;
+
+    if (songMoodGameState.questionIndex >= SONG_MOOD_GAME_QUESTIONS.length) {
+        await finishSongMoodGame('song mood game');
+        return true;
+    }
+
+    const nextQuestion = formatSongMoodGameQuestion(songMoodGameState.questionIndex);
+    addChatMessage(nextQuestion, false);
+    speak('Next question. Reply with the number.');
+    return true;
+}
+
 function sanitizeArtistName(input) {
     const cleaned = String(input || '')
         .replace(/^[\s"'`]+|[\s"'`]+$/g, '')
@@ -8401,9 +8767,11 @@ function isCurrentInfoQuery(text) {
     const freshnessTerms = /\b(latest|recent|current|today|right now|as of now|live|just now|this year|2025|2026|2027)\b/;
     const resultTerms = /\b(who won|winner|won|result|results|score|scores|what happened|what's happening|status|update|updates|headline|headlines|breaking)\b/;
     const unstableEntityTerms = /\b(president|prime minister|ceo|chairman|captain|coach|champion|title holder|world cup|tournament|final|match|war|conflict|ceasefire|attack|election)\b/;
+    const businessEventTerms = /\b(layoff|layoffs|firing|firings|job cuts|cuts|restructuring|reorganization|earnings|results|merger|acquisition|recall|bankruptcy|probe|investigation|antitrust|strike|walkout)\b/;
 
     if (freshnessTerms.test(t) && unstableEntityTerms.test(t)) return true;
     if (resultTerms.test(t) && unstableEntityTerms.test(t)) return true;
+    if (businessEventTerms.test(t) && freshnessTerms.test(t)) return true;
 
     return false;
 }
@@ -8413,10 +8781,12 @@ function shouldUseNewsEndpointForCurrentQuery(text) {
     if (!t) return false;
 
     const directQuestionSignals = /\b(who won|winner|won|score|scores|stat|stats|how many|what happened|what's happening|status|update me|brief me|tell me about)\b/;
+    const businessEventTerms = /\b(layoff|layoffs|firing|firings|job cuts|restructuring|reorganization|earnings|merger|acquisition|recall|bankruptcy|probe|investigation|antitrust|strike|walkout)\b/;
     if (directQuestionSignals.test(t)) return false;
 
     if (/\b(news|headline|headlines|breaking|current events?)\b/.test(t)) return true;
     if (/\b(latest|recent|today|current)\b.*\b(news|headlines?|current events?)\b/.test(t)) return true;
+    if (businessEventTerms.test(t) && /\b(latest|recent|today|current|2025|2026|2027|this year)\b/.test(t)) return true;
 
     return false;
 }
@@ -8571,6 +8941,7 @@ Rules:
 - Only state a fact confidently if it appears in multiple snippets or from a clearly reputable source.
 - If evidence is weak, say so instead of guessing.
 - If the question asks for a winner, score, or player stat, answer that specific fact first before anything else.
+- If the user asks for stats, give the key stats directly instead of a generic summary.
 - Keep it concise and practical.
 
 Snippets:
@@ -8791,6 +9162,12 @@ ${snippets}`
                 const regex = new RegExp(`^${prefix}[,\\s]+`, 'i'); 
                 cleanText = cleanText.replace(regex, ''); 
             } 
+
+            if (songMoodGameState) {
+                const handled = await handleSongMoodGameAnswer(cleanText);
+                if (handled) return;
+            }
+
             updateTopicMemory(cleanText);
 
             if (isCurrentInfoQuery(cleanText)) {
@@ -8829,8 +9206,8 @@ ${snippets}`
                 return;
             }
 
-            if (isStrictYesNoRequest(cleanText)) {
-                await answerYesNoOnly(cleanText);
+            if (isSongMoodGameRequest(cleanText)) {
+                startSongMoodGame();
                 return;
             }
 
