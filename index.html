@@ -8760,12 +8760,37 @@ function isSportsLiveResultQuery(text) {
 }
 
 function normalizeLiveTopic(text) {
-    return String(text || '')
+    const stopWords = new Set([
+        'in', 'the', 'a', 'an', 'of', 'for', 'to', 'on', 'at', 'by', 'from',
+        'who', 'what', 'is', 'was', 'are', 'were', 'won', 'winner', 'winners',
+        'champion', 'champions', 'score', 'scores', 'scored', 'stat', 'stats',
+        'standing', 'standings', 'points', 'table', 'rank', 'ranking', 'rankings',
+        'medal', 'medals', 'title', 'titles', 'result', 'results', 'qualified',
+        'eliminated', 'record', 'records', 'how', 'many', 'latest', 'recent',
+        'current', 'today', 'tonight', 'live', 'now', 'status', 'update', 'updates',
+        'brief', 'me', 'tell', 'about', 'give', 'show'
+    ]);
+
+    const tokens = String(text || '')
         .toLowerCase()
-        .replace(/[?!]/g, ' ')
-        .replace(/\b(who won|winner|won|champion|champions|score|scores|scored|stat|stats|standing|standings|points table|table|rank|ranking|rankings|medal|medals|title|titles|final result|result|results|qualified|eliminated|record|records|how many|latest|recent|current|today|tonight|live|now|this year|this season|status|update(?:s)?|brief me|tell me about|give me|show me|what(?:'s| is)|who is)\b/gi, ' ')
+        .replace(/[?!,]/g, ' ')
+        .replace(/\b(this year|this season|final result|points table|tell me about|give me|show me|what(?:'s| is)|who is)\b/gi, ' ')
         .replace(/\s+/g, ' ')
-        .trim();
+        .trim()
+        .split(' ')
+        .filter(Boolean)
+        .filter(token => !stopWords.has(token));
+
+    const deduped = [];
+    const seen = new Set();
+    for (const token of tokens) {
+        const key = /^\d{4}$/.test(token) ? `year:${token}` : token;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(token);
+    }
+
+    return deduped.join(' ').trim();
 }
 
 function extractLiveQueryIntent(text) {
@@ -8951,9 +8976,11 @@ function buildLiveSearchQueries(userText, intent = null) {
         const factHints = factHintMap[liveIntent.factType] || 'result latest';
         const seasonHint = liveIntent.year || '';
         return Array.from(new Set([
+            raw,
             `${topic} ${seasonHint} ${factHints}`.replace(/\s+/g, ' ').trim(),
             `${topic} ${factHints}`.replace(/\s+/g, ' ').trim(),
-            `${topic} ${seasonHint} ${sportSources}`.replace(/\s+/g, ' ').trim()
+            `${topic} ${seasonHint} ${sportSources}`.replace(/\s+/g, ' ').trim(),
+            `${topic} official ${factHints}`.replace(/\s+/g, ' ').trim()
         ].filter(Boolean)));
     }
 
@@ -9027,7 +9054,12 @@ async function handleSportsFactQuery(userText, intent) {
         }
 
         if (!deduped.length) {
-            return false;
+            const fallbackSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${intent.topic || userText} ${intent.factType || 'result'}`)}`;
+            const fallbackMsg = `I couldn't verify a sports result from live sources right now.\n\nTry this direct search:\n[Search sports result](${fallbackSearchUrl})`;
+            addChatMessage(fallbackMsg, false);
+            speak('I could not verify the sports result right now.');
+            saveToHistory(userText, fallbackMsg);
+            return true;
         }
 
         const snippets = deduped
