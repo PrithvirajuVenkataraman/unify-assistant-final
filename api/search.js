@@ -1,5 +1,24 @@
 import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './_lib/live-search.js';
 
+const SPORTS_QUERY_ALIASES = {
+    ipl: 'indian premier league',
+    psl: 'pakistan super league',
+    bbl: 'big bash league',
+    cpl: 'caribbean premier league',
+    isl: 'indian super league',
+    pkl: 'pro kabaddi league',
+    ucl: 'uefa champions league',
+    uel: 'uefa europa league',
+    epl: 'english premier league',
+    nba: 'national basketball association',
+    nfl: 'national football league',
+    mlb: 'major league baseball',
+    nhl: 'national hockey league',
+    atp: 'association of tennis professionals',
+    wta: 'women s tennis association',
+    f1: 'formula 1'
+};
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -48,10 +67,11 @@ function buildSearchQueries(query) {
     if (!raw) return [];
     const topic = extractSearchTopic(raw) || raw;
     const out = [topic];
+    const expandedTopic = expandSportsAliases(topic);
 
     if (isTimeSensitiveQuery(raw)) {
         const timeAwareTopic = raw
-            .replace(/\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update(?:s)? on|status of)\b/gi, ' ')
+            .replace(/\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update(?:s)? on|status of|winner|won|champion|score|scores|stats|standings|points table|ranking|rankings|record|qualified|eliminated)\b/gi, ' ')
             .replace(/\s+/g, ' ')
             .trim();
         const cleanedTimeAwareTopic = extractSearchTopic(timeAwareTopic) || topic;
@@ -62,10 +82,26 @@ function buildSearchQueries(query) {
         out.push(`${cleanedTimeAwareTopic || topic} Reuters OR AP OR BBC OR Al Jazeera`);
     }
 
+    if (expandedTopic && expandedTopic.toLowerCase() !== topic.toLowerCase()) {
+        out.push(expandedTopic);
+        if (isTimeSensitiveQuery(raw)) {
+            out.push(`latest ${expandedTopic}`);
+            out.push(`${expandedTopic} official result`);
+        }
+    }
+
     return Array.from(new Set(out.filter(Boolean)));
 }
 
 function isTimeSensitiveQuery(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update|status|price now|rate today)\b/.test(t);
+    return /\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update|status|price now|rate today|winner|won|champion|score|scores|live score|stats|standings|points table|ranking|rankings|record|qualified|eliminated|ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup)\b/.test(t);
+}
+
+function expandSportsAliases(text) {
+    return String(text || '')
+        .split(/\s+/)
+        .map(token => SPORTS_QUERY_ALIASES[token.toLowerCase()] || token)
+        .join(' ')
+        .trim();
 }
