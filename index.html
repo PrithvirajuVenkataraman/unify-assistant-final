@@ -8531,10 +8531,7 @@ async function handleLiveRetrievalQuery(userText) {
         }
 
         if (!deduped.length) {
-            const msg = 'I could not find current sources for that right now.';
-            addChatMessage(msg, false);
-            speak(msg);
-            saveToHistory(userText, msg);
+            await fetchAndDisplayNews(userText);
             return true;
         }
 
@@ -8542,10 +8539,7 @@ async function handleLiveRetrievalQuery(userText) {
         const sourcePool = trusted.length >= 3 ? trusted : deduped;
         const distinctDomains = Array.from(new Set(sourcePool.map(r => getDomainFromUrl(r.url)).filter(Boolean)));
         if (distinctDomains.length < 2) {
-            const msg = 'I do not have enough reliable live sources to answer that accurately right now.';
-            addChatMessage(msg, false);
-            speak(msg);
-            saveToHistory(userText, msg);
+            await fetchAndDisplayNews(userText);
             return true;
         }
 
@@ -8598,10 +8592,7 @@ ${snippets}`
         if (isAbortError(error)) {
             return true;
         }
-        const fallback = 'I could not verify current information right now. Please try again in a moment.';
-        addChatMessage(fallback, false);
-        speak(fallback);
-        saveToHistory(userText, fallback);
+        await fetchAndDisplayNews(userText);
         return true;
     } finally {
         clearActiveRequest(controller);
