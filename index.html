@@ -4332,7 +4332,6 @@ async function buildSearchFallbackAnswer(userMessage) {
 function buildLocalAssistantFallback(userMessage, error) {
     const text = String(userMessage || '').trim();
     const normalized = text.toLowerCase();
-    const backendDown = /api key not configured|temporarily unavailable|internal server error|failed/i.test(String(error?.message || ''));
 
     if (supportConversationMode || isSupportConversationRequest(text)) {
         return buildOfflineSupportReply(text);
@@ -4345,15 +4344,32 @@ function buildLocalAssistantFallback(userMessage, error) {
         return "I'm sorry you're dealing with that. Try to make the next 10 minutes very simple: drink some water, take a few slow breaths, and do one small grounding step like walking, stretching, or messaging someone you trust. If these feelings keep hitting hard, speaking with a certified mental health professional would be a good next step.";
     }
 
-    if (/^(hi|hello|hey)\b/.test(normalized)) {
-        return "Hi. I'm here. My AI backend is unavailable right now, but I can still help with simple guidance and fallback answers.";
+    if (/\bwhat would you do if you were (?:a )?(?:person|human)\b/.test(normalized)) {
+        return "If I were a person, I would probably start with simple human things: build a few real relationships, take care of my body, do meaningful work, and spend less time pretending I had everything figured out. I think I would want a life that felt honest, useful, and close to people I care about.";
     }
 
-    if (backendDown) {
-        return "My AI backend is unavailable right now, but I can still help with basic fallback answers, live-source lookups, weather, reminders, and safety tools.";
+    if (/\bwhat do you think\b|\byour honest take\b|\bwhat would you do\b|\bif you were me\b/.test(normalized) && !isFunctionalTaskQuery(text)) {
+        return "My honest take is to choose the option that gives you a little more peace, clarity, and self-respect, not just short-term relief. If you want, tell me the exact situation and I will answer it like a real conversation, not like a bot.";
+    }
+
+    if (/^(hi|hello|hey)\b/.test(normalized)) {
+        return "Hi. I'm here. What's on your mind?";
     }
 
     return '';
+}
+
+function buildUniversalSoftFallback(userMessage) {
+    const text = String(userMessage || '').trim();
+    const normalized = text.toLowerCase();
+
+    if (!text) return "I'm here. Say whatever you want to talk about.";
+
+    if (/\?$/.test(text) || /^(what|why|how|who|when|where|which|can|could|would|do|does|did|is|are|should)\b/.test(normalized)) {
+        return "Let me answer this in the most useful simple way I can: give me one more line of context, and I will respond directly instead of guessing.";
+    }
+
+    return "I hear you. Keep going a little more, and I will respond to the actual point you care about.";
 }
 
 function isLikelyLocationOrTravelQuery(text) {
@@ -4524,13 +4540,13 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             };
         }
 
-        showError('AI backend is unavailable right now.');
+        const softFallback = buildUniversalSoftFallback(normalizedUserMessage || userMessage);
         if (isLikelyLocationOrTravelQuery(normalizedUserMessage || userMessage)) { 
             showFailureFallbackCard(normalizedUserMessage || userMessage); 
         } 
         return { 
-            response: 'My AI backend is unavailable right now. Please try again shortly.', 
-            intent: 'error' 
+            response: softFallback,
+            intent: 'soft_fallback'
         }; 
     } finally {
         clearActiveRequest(controller);
