@@ -8750,11 +8750,12 @@ function isSportsLiveResultQuery(text) {
     if (!t) return false;
 
     const sportsContextTerms = /\b(sport|sports|game|games|match|matches|fixture|fixtures|playoff|playoffs|knockout|qualifier|qualifiers|semi[- ]final|quarter[- ]final|final|tournament|league|cup|series|season|championship|grand prix|gp|race|racing|lap|laps|sprint|marathon|relay|boxing|mma|ufc|wwe|wrestling|golf|cycling|f1|formula 1|motogp|nascar|indycar|cricket|football|soccer|basketball|baseball|hockey|tennis|badminton|table tennis|volleyball|rugby|kabaddi|snooker|pool|darts|esports|chess|olympics|paralympics)\b/;
+    const competitionCodeTerms = /\b(ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|mls|nba|wnba|nfl|mlb|nhl|ufc|wwe|atp|wta|icc|fifa|uefa|afc|fiba|pga|bwf|f1|motogp|nascar|indycar)\b/;
     const sportsEntityTerms = /\b(team|teams|player|players|club|clubs|driver|drivers|rider|riders|fighter|fighters|athlete|athletes|captain|coach)\b/;
     const resultTerms = /\b(who won|winner|won|champion|champions|result|results|score|scores|scored|stat|stats|standing|standings|table|points table|rank|ranking|rankings|medal|medals|title|titles|lifted|beat|defeated|lost to|qualified|eliminated|record|records|how many)\b/;
     const timeTerms = /\b(latest|recent|current|today|tonight|live|now|this year|this season|2025|2026|2027)\b/;
 
-    const hasSportsContext = sportsContextTerms.test(t) || (sportsEntityTerms.test(t) && resultTerms.test(t));
+    const hasSportsContext = sportsContextTerms.test(t) || competitionCodeTerms.test(t) || (sportsEntityTerms.test(t) && resultTerms.test(t));
     return hasSportsContext && (resultTerms.test(t) || timeTerms.test(t));
 }
 
