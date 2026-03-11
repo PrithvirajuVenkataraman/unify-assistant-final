@@ -4329,6 +4329,29 @@ async function buildSearchFallbackAnswer(userMessage) {
     }
 }
 
+function buildLocalAssistantFallback(userMessage, error) {
+    const text = String(userMessage || '').trim();
+    const normalized = text.toLowerCase();
+    const backendDown = /api key not configured|temporarily unavailable|internal server error|failed/i.test(String(error?.message || ''));
+
+    if (isMentalHealthConversation(text)) {
+        if (/\blonely\b/.test(normalized)) {
+            return "I'm here with you. Loneliness can feel heavy, so try one small step right now: message one person you trust, step outside for a 10-minute walk, or sit somewhere around other people instead of being alone. If this has been sticking with you for a while, talking to a certified mental health professional would be a strong next step.";
+        }
+        return "I'm sorry you're dealing with that. Try to make the next 10 minutes very simple: drink some water, take a few slow breaths, and do one small grounding step like walking, stretching, or messaging someone you trust. If these feelings keep hitting hard, speaking with a certified mental health professional would be a good next step.";
+    }
+
+    if (/^(hi|hello|hey)\b/.test(normalized)) {
+        return "Hi. I'm here. My AI backend is unavailable right now, but I can still help with simple guidance and fallback answers.";
+    }
+
+    if (backendDown) {
+        return "My AI backend is unavailable right now, but I can still help with basic fallback answers, live-source lookups, weather, reminders, and safety tools.";
+    }
+
+    return '';
+}
+
 function isLikelyLocationOrTravelQuery(text) {
     const t = String(text || '').toLowerCase();
     if (!t.trim()) return false;
@@ -4482,6 +4505,13 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
                 aborted: true
             };
         }
+        const localFallback = buildLocalAssistantFallback(normalizedUserMessage || userMessage, error);
+        if (localFallback) {
+            return {
+                response: localFallback,
+                intent: 'local_fallback'
+            };
+        }
         const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || userMessage); 
         if (searchFallback) { 
             return { 
@@ -4490,12 +4520,12 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             };
         }
 
-        showError(`AI request failed: ${error.message}`);
+        showError('AI backend is unavailable right now.');
         if (isLikelyLocationOrTravelQuery(normalizedUserMessage || userMessage)) { 
             showFailureFallbackCard(normalizedUserMessage || userMessage); 
         } 
         return { 
-            response: `AI backend issue: ${String(error?.message || 'unknown error')}. Please verify GEMINI_API_KEY and server logs.`, 
+            response: 'My AI backend is unavailable right now. Please try again shortly.', 
             intent: 'error' 
         }; 
     } finally {
