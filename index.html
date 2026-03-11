@@ -1880,6 +1880,12 @@
             background: rgba(224, 242, 254, 0.8);
         }
 
+        .assistant-source-badge.model {
+            color: #6d28d9;
+            border-color: rgba(124, 58, 237, 0.28);
+            background: rgba(245, 243, 255, 0.92);
+        }
+
         body.dark .assistant-source-badge {
             color: #cbd5e1;
             border-color: rgba(100, 116, 139, 0.55);
@@ -1890,6 +1896,12 @@
             color: #bae6fd;
             border-color: rgba(14, 165, 233, 0.5);
             background: rgba(8, 47, 73, 0.6);
+        }
+
+        body.dark .assistant-source-badge.model {
+            color: #ddd6fe;
+            border-color: rgba(167, 139, 250, 0.4);
+            background: rgba(76, 29, 149, 0.28);
         }
 
         .response-action-row {
@@ -3929,10 +3941,17 @@ async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
             new Promise(resolve => setTimeout(resolve, 2000))
         ]);
         const response = await responsePromise;
+        if (response?.aborted) {
+            hideThinkingIndicator();
+            return response;
+        }
         hideThinkingIndicator();
         return response;
     } catch (error) {
         hideThinkingIndicator();
+        if (isAbortError(error)) {
+            return { response: '', intent: 'aborted', aborted: true };
+        }
         showError('AI request failed. Please try again.');
         throw error;
     }
@@ -3941,11 +3960,13 @@ async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
 // ========== NEWS FETCHING FUNCTION ==========
 async function fetchAndDisplayNews(query) {
     showThinkingIndicator('[Map] Fetching latest news...');
+    const controller = beginAbortableRequest();
 
     try {
         const response = await fetch('/api/news', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
             body: JSON.stringify({
                 query
             })
@@ -3995,10 +4016,15 @@ async function fetchAndDisplayNews(query) {
         saveToHistory(query, newsMsg);
 
     } catch (error) {
+        if (isAbortError(error)) {
+            return;
+        }
         hideThinkingIndicator();
         const errorMsg = "I'm having trouble fetching news right now. You can check [Google News](https://news.google.com) for the latest headlines.";
         addChatMessage(errorMsg, false);
         speak("I couldn't fetch news right now. Try Google News for updates.");
+    } finally {
+        clearActiveRequest(controller);
     }
 }
 // ========== END NEWS FETCHING FUNCTION ==========
@@ -4258,6 +4284,7 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
 
 async function askGeminiAI(userMessage) { 
     let normalizedUserMessage = String(userMessage || '');
+    const controller = beginAbortableRequest();
     try { 
         normalizedUserMessage = resolveKnowledgeFollowupQuery(userMessage);
         maybeCaptureKnowledgeEntity(normalizedUserMessage);
@@ -4335,6 +4362,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         const response = await fetch('/api/chat-groq', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
+            signal: controller.signal,
             body: JSON.stringify({ 
                 message: effectiveMessage, 
                 systemPrompt: systemPromptWithTopic,
@@ -4368,6 +4396,13 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         
         return data;
     } catch (error) {
+        if (isAbortError(error)) {
+            return {
+                response: '',
+                intent: 'aborted',
+                aborted: true
+            };
+        }
         const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || userMessage); 
         if (searchFallback) { 
             return { 
@@ -4384,7 +4419,9 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             response: `AI backend issue: ${String(error?.message || 'unknown error')}. Please verify GEMINI_API_KEY and server logs.`, 
             intent: 'error' 
         }; 
-    } 
+    } finally {
+        clearActiveRequest(controller);
+    }
 } 
 
 async function handleNameCorrection(text) {
@@ -5318,6 +5355,14 @@ async function handleNameCorrection(text) {
             `;
         }
 
+        function getStopIconSvg() {
+            return `
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+                </svg>
+            `;
+        }
+
         function setPrimaryActionButtonToConverse() {
             const btn = document.getElementById('converse-mode-btn');
             if (!btn) return;
@@ -5343,6 +5388,50 @@ async function handleNameCorrection(text) {
             btn.setAttribute('aria-pressed', 'false');
             btn.setAttribute('aria-label', 'Send message');
             btn.title = 'Send message';
+        }
+
+        function setPrimaryActionButtonToStop() {
+            const btn = document.getElementById('converse-mode-btn');
+            if (!btn) return;
+            btn.dataset.mode = 'stop';
+            btn.onclick = stopActiveGeneration;
+            btn.innerHTML = getStopIconSvg();
+            btn.classList.remove('is-active');
+            btn.classList.add('is-send-ready');
+            btn.setAttribute('aria-pressed', 'false');
+            btn.setAttribute('aria-label', 'Stop generating');
+            btn.title = 'Stop generating';
+        }
+
+        function isAbortError(error) {
+            const message = String(error?.message || error || '').toLowerCase();
+            return error?.name === 'AbortError' || message.includes('aborted');
+        }
+
+        let activeRequestController = null;
+
+        function beginAbortableRequest() {
+            const controller = new AbortController();
+            activeRequestController = controller;
+            setPrimaryActionButtonToStop();
+            return controller;
+        }
+
+        function clearActiveRequest(controller) {
+            if (controller && activeRequestController !== controller) return;
+            activeRequestController = null;
+            toggleSendButton();
+        }
+
+        function stopActiveGeneration() {
+            if (!activeRequestController) return;
+            try {
+                activeRequestController.abort();
+            } catch (e) {}
+            activeRequestController = null;
+            hideThinkingIndicator();
+            toggleSendButton();
+            showTemporaryMessage('Response stopped.');
         }
 
         function updateAssistantModeUI() {
@@ -5835,6 +5924,15 @@ function normalizeUiTokens(text) {
 
         function addVerifiedAssistantMessage(text, label = 'Verified live sources') {
             const html = `${formatVerifiedSourceBadge(label)}\n${text}`;
+            addChatMessage(html, false, false);
+        }
+
+        function formatModelSourceBadge(label = 'Model answer') {
+            return `<div class="assistant-source-badge model">${escapeHtml(label)}</div>`;
+        }
+
+        function addModelAssistantMessage(text, label = 'Model answer') {
+            const html = `${formatModelSourceBadge(label)}\n${text}`;
             addChatMessage(html, false, false);
         }
 
@@ -8189,6 +8287,47 @@ function isLiveRetrievalQuery(text) {
            /\b(middle[\s-]?east|ukraine|russia|israel|gaza|iran|syria|oil market|stock market|economy|inflation|forex|usd|inr|bitcoin|crypto)\b/.test(t);
 }
 
+function isSportsLiveResultQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+
+    const sportsTerms = /\b(cricket|t20|odi|ipl|world cup|match|final|semi[- ]final|tournament|league|cup|football|soccer|nba|nfl|epl|wimbledon|tennis)\b/;
+    const resultTerms = /\b(who won|winner|won|champion|result|score|scores|final result|title|lifted|beat|defeated)\b/;
+    const timeTerms = /\b(latest|recent|current|today|this year|2025|2026|2027)\b/;
+
+    return sportsTerms.test(t) && (resultTerms.test(t) || timeTerms.test(t));
+}
+
+function isCurrentInfoQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+
+    if (isExchangeRateQuery(t) || isMarketPriceQuery(t) || isLiveRetrievalQuery(t) || isNewsworthyLiveTopic(t) || isSportsLiveResultQuery(t)) {
+        return true;
+    }
+
+    const freshnessTerms = /\b(latest|recent|current|today|right now|as of now|live|just now|this year|2025|2026|2027)\b/;
+    const resultTerms = /\b(who won|winner|won|result|results|score|scores|what happened|what's happening|status|update|updates|headline|headlines|breaking)\b/;
+    const unstableEntityTerms = /\b(president|prime minister|ceo|chairman|captain|coach|champion|title holder|world cup|tournament|final|match|war|conflict|ceasefire|attack|election)\b/;
+
+    if (freshnessTerms.test(t) && unstableEntityTerms.test(t)) return true;
+    if (resultTerms.test(t) && unstableEntityTerms.test(t)) return true;
+
+    return false;
+}
+
+function shouldUseNewsEndpointForCurrentQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+
+    if (/\b(news|headline|headlines|breaking|current events?)\b/.test(t)) return true;
+    if (isNewsworthyLiveTopic(t)) return true;
+    if (isSportsLiveResultQuery(t)) return true;
+    if (/\b(what happened|what's happening|war|conflict|ceasefire|attack|election|protest|middle[\s-]?east|israel|gaza|iran|ukraine|russia|syria|lebanon|palestine)\b/.test(t)) return true;
+
+    return false;
+}
+
 function isNewsworthyLiveTopic(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -8265,6 +8404,7 @@ function buildLiveSearchQueries(userText) {
 
 async function handleLiveRetrievalQuery(userText) {
     showThinkingIndicator('Checking current sources...');
+    const controller = beginAbortableRequest();
     try {
         const query = String(userText || '').trim();
         const queries = buildLiveSearchQueries(query);
@@ -8274,6 +8414,7 @@ async function handleLiveRetrievalQuery(userText) {
                     const response = await fetch('/api/search', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
+                        signal: controller.signal,
                         body: JSON.stringify({ query: q, maxResults: 6 })
                     });
                     if (!response.ok) return [];
@@ -8322,6 +8463,7 @@ async function handleLiveRetrievalQuery(userText) {
         const summaryResponse = await fetch('/api/chat-groq', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
             body: JSON.stringify({
                 systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly.',
                 message: `Answer the user's question using ONLY the snippets below.
@@ -8358,12 +8500,16 @@ ${snippets}`
         saveToHistory(userText, finalMsg);
         return true;
     } catch (error) {
+        if (isAbortError(error)) {
+            return true;
+        }
         const fallback = 'I could not verify current information right now. Please try again in a moment.';
         addChatMessage(fallback, false);
         speak(fallback);
         saveToHistory(userText, fallback);
         return true;
     } finally {
+        clearActiveRequest(controller);
         hideThinkingIndicator();
     }
 }
@@ -8562,6 +8708,26 @@ ${snippets}`
             } 
             updateTopicMemory(cleanText);
 
+            if (isCurrentInfoQuery(cleanText)) {
+                if (isExchangeRateQuery(cleanText)) {
+                    const handled = await handleExchangeRateLookup(cleanText);
+                    if (handled) return;
+                }
+
+                if (isMarketPriceQuery(cleanText)) {
+                    const handled = await handleMarketLookup(cleanText);
+                    if (handled) return;
+                }
+
+                if (shouldUseNewsEndpointForCurrentQuery(cleanText)) {
+                    await fetchAndDisplayNews(cleanText);
+                    return;
+                }
+
+                const handled = await handleLiveRetrievalQuery(cleanText);
+                if (handled) return;
+            }
+
             if (isPoliticalQuery(cleanText)) {
                 const policyMsg = 'Sorry, I am not designed to answer political questions.';
                 addChatMessage(policyMsg, false);
@@ -8674,7 +8840,8 @@ Format:
 - Get urgent help if: <red flags>
 - Safer next step: <when to contact a doctor/pharmacist>`;
                 const medicalResponse = await callAIWithTyping(medicalPrompt, 'Preparing safe medical guidance...');
-                addChatMessage(medicalResponse.response, false);
+                if (medicalResponse?.aborted) return;
+                addModelAssistantMessage(medicalResponse.response, 'Model answer');
                 speak("Here is some general medical guidance.");
                 saveToHistory(text, medicalResponse.response);
                 return;
@@ -8694,7 +8861,8 @@ Important:
 - Avoid repeating stock phrases used in prior messages
 - Keep it concise and human`;
                 const mhResponse = await callAIWithTyping(mhPrompt, 'I am here with you...');
-                addChatMessage(mhResponse.response, false);
+                if (mhResponse?.aborted) return;
+                addModelAssistantMessage(mhResponse.response, 'Model answer');
                 speak("I'm here for you.");
                 saveToHistory(text, mhResponse.response);
                 return;
@@ -8711,7 +8879,8 @@ Respond in a debate style that is:
 
 Do not use repetitive filler or generic wording.`;
                 const debateResponse = await callAIWithTyping(debatePrompt, 'Preparing a focused response...');
-                addChatMessage(debateResponse.response, false);
+                if (debateResponse?.aborted) return;
+                addModelAssistantMessage(debateResponse.response, 'Model answer');
                 speak("Here is a focused response.");
                 saveToHistory(text, debateResponse.response);
                 return;
@@ -8731,7 +8900,8 @@ Rules:
 - Avoid jargon unless you define it immediately.
 - Keep it accurate and practical.`;
                 const learningResponse = await callAIWithTyping(learningPrompt, 'Preparing a clear explanation...');
-                addChatMessage(learningResponse.response, false);
+                if (learningResponse?.aborted) return;
+                addModelAssistantMessage(learningResponse.response, 'Model answer');
                 speak("Here is a clear explanation.");
                 saveToHistory(text, learningResponse.response);
                 return;
@@ -9356,7 +9526,8 @@ If the user asks for 1 day, return only Day 1.
 If user asks for 2 days, provide both days with balanced pacing.`;
                 
                 const aiResponse = await callAIWithTyping(itineraryPrompt, '[Plan] Planning your itinerary...');
-                addChatMessage(aiResponse.response, false);
+                if (aiResponse?.aborted) return;
+                addModelAssistantMessage(aiResponse.response, 'Model answer');
                 speak("I've created an itinerary for you. Check the chat for details!");
                 
                 
@@ -9414,7 +9585,8 @@ Example for Tamil Nadu region:
 DO NOT make up dish names! Only include dishes you're 100% sure exist in that region.`;
                 
                 const aiResponse = await callAIWithTyping(specialtyPrompt);
-                addChatMessage(aiResponse.response, false);
+                if (aiResponse?.aborted) return;
+                addModelAssistantMessage(aiResponse.response, 'Model answer');
                 speak("Let me tell you about the local food specialties!");
                 
                 
@@ -9626,9 +9798,10 @@ ${sourceLinksBlock}
             else {
 
                 const aiResponse = await callAIWithTyping(text);
+                if (aiResponse?.aborted) return;
                 const inferredLocation = detectPrimaryLocationFromText(text);
                 const safeResponse = sanitizeHallucinatedTerrain(aiResponse.response, text, inferredLocation);
-                addChatMessage(safeResponse, false);
+                addModelAssistantMessage(safeResponse, 'Model answer');
                 speak(safeResponse);
                 await maybeShowReferenceImageForQuery(text, safeResponse);
 
