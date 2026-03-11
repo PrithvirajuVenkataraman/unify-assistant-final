@@ -1,5 +1,3 @@
-import { runVerifiedWebSearch } from './_lib/live-search.js';
-
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -12,11 +10,18 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    let stage = 'init';
+    const debug = {};
+
     try {
         const query = String(req.body?.query || '').trim();
         const category = String(req.body?.category || '').trim();
         const city = String(req.body?.city || '').trim();
         const countryCode = String(req.body?.countryCode || '').trim();
+        let runVerifiedWebSearch;
+
+        stage = 'import';
+        ({ runVerifiedWebSearch } = await import('./_lib/live-search.js'));
 
         const topic = query || category || (city ? `${city} news` : 'latest news');
         const queries = [
@@ -27,13 +32,29 @@ export default async function handler(req, res) {
         if (!query && city) queries.push(`${city} breaking news`);
         if (!query && countryCode && countryCode !== 'DEFAULT') queries.push(`${countryCode} national news`);
 
+        stage = 'parallel_fetch';
         const settled = await Promise.allSettled([
-            runVerifiedWebSearch(queries, {
-                maxResultsPerQuery: 6,
-                limit: 10
-            }),
-            fetchGoogleNewsRss(topic)
+            (async () => {
+                stage = 'verified_search';
+                return runVerifiedWebSearch(queries, {
+                    maxResultsPerQuery: 6,
+                    limit: 10
+                });
+            })(),
+            (async () => {
+                stage = 'rss_fetch';
+                return fetchGoogleNewsRss(topic);
+            })()
         ]);
+
+        debug.verified_search = settled[0]?.status;
+        debug.rss_fetch = settled[1]?.status;
+        if (settled[0]?.status === 'rejected') {
+            debug.verified_search_error = String(settled[0].reason?.message || settled[0].reason || '');
+        }
+        if (settled[1]?.status === 'rejected') {
+            debug.rss_fetch_error = String(settled[1].reason?.message || settled[1].reason || '');
+        }
 
         const verified = settled[0]?.status === 'fulfilled'
             ? settled[0].value
@@ -62,7 +83,8 @@ export default async function handler(req, res) {
                 sourceCount: 0,
                 distinctDomainCount: 0,
                 trustedCount: 0,
-                articles: []
+                articles: [],
+                debug
             });
         }
 
@@ -77,15 +99,18 @@ export default async function handler(req, res) {
                 title: item.title,
                 url: item.url,
                 description: item.description
-            }))
+            })),
+            debug
         });
     } catch (error) {
         return res.status(200).json({
             success: false,
             error: 'news lookup failed',
+            stage,
             details: String(error?.message || error),
             query: String(req.body?.query || req.body?.category || '').trim(),
-            articles: []
+            articles: [],
+            debug
         });
     }
 }
