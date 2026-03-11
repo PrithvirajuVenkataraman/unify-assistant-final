@@ -8749,11 +8749,67 @@ function isSportsLiveResultQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
 
-    const sportsTerms = /\b(cricket|t20|odi|ipl|world cup|match|final|semi[- ]final|tournament|league|cup|football|soccer|nba|nfl|epl|wimbledon|tennis)\b/;
-    const resultTerms = /\b(who won|winner|won|champion|result|score|scores|final result|title|lifted|beat|defeated)\b/;
-    const timeTerms = /\b(latest|recent|current|today|this year|2025|2026|2027)\b/;
+    const sportsContextTerms = /\b(sport|sports|game|games|match|matches|fixture|fixtures|playoff|playoffs|knockout|qualifier|qualifiers|semi[- ]final|quarter[- ]final|final|tournament|league|cup|series|season|championship|grand prix|gp|race|racing|lap|laps|sprint|marathon|relay|boxing|mma|ufc|wwe|wrestling|golf|cycling|f1|formula 1|motogp|nascar|indycar|cricket|football|soccer|basketball|baseball|hockey|tennis|badminton|table tennis|volleyball|rugby|kabaddi|snooker|pool|darts|esports|chess|olympics|paralympics)\b/;
+    const sportsEntityTerms = /\b(team|teams|player|players|club|clubs|driver|drivers|rider|riders|fighter|fighters|athlete|athletes|captain|coach)\b/;
+    const resultTerms = /\b(who won|winner|won|champion|champions|result|results|score|scores|scored|stat|stats|standing|standings|table|points table|rank|ranking|rankings|medal|medals|title|titles|lifted|beat|defeated|lost to|qualified|eliminated|record|records|how many)\b/;
+    const timeTerms = /\b(latest|recent|current|today|tonight|live|now|this year|this season|2025|2026|2027)\b/;
 
-    return sportsTerms.test(t) && (resultTerms.test(t) || timeTerms.test(t));
+    const hasSportsContext = sportsContextTerms.test(t) || (sportsEntityTerms.test(t) && resultTerms.test(t));
+    return hasSportsContext && (resultTerms.test(t) || timeTerms.test(t));
+}
+
+function normalizeLiveTopic(text) {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/[?!]/g, ' ')
+        .replace(/\b(who won|winner|won|champion|champions|score|scores|scored|stat|stats|standing|standings|points table|table|rank|ranking|rankings|medal|medals|title|titles|final result|result|results|qualified|eliminated|record|records|how many|latest|recent|current|today|tonight|live|now|this year|this season|status|update(?:s)?|brief me|tell me about|give me|show me|what(?:'s| is)|who is)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function extractLiveQueryIntent(text) {
+    const raw = String(text || '').trim();
+    const t = raw.toLowerCase();
+    const yearMatch = raw.match(/\b(19|20)\d{2}\b/);
+
+    let domain = 'general';
+    if (isExchangeRateQuery(t) || isMarketPriceQuery(t)) {
+        domain = 'finance';
+    } else if (isSportsLiveResultQuery(t)) {
+        domain = 'sports';
+    } else if (shouldUseNewsEndpointForCurrentQuery(t) || isNewsworthyLiveTopic(t)) {
+        domain = 'news';
+    }
+
+    let factType = 'general';
+    if (/\b(who won|winner|won|champion|champions|title|titles|lifted)\b/.test(t)) {
+        factType = 'winner';
+    } else if (/\b(score|scores|scored|final result|result|results)\b/.test(t)) {
+        factType = 'score';
+    } else if (/\b(stat|stats|record|records|how many)\b/.test(t)) {
+        factType = 'stats';
+    } else if (/\b(standing|standings|points table|table|rank|ranking|rankings)\b/.test(t)) {
+        factType = 'standings';
+    } else if (/\b(qualified|qualification|eliminated)\b/.test(t)) {
+        factType = 'qualification';
+    } else if (/\b(status|update|updates|what happened|what's happening)\b/.test(t)) {
+        factType = 'status';
+    } else if (/\b(news|headlines?|breaking)\b/.test(t)) {
+        factType = 'news';
+    }
+
+    const normalizedTopic = normalizeLiveTopic(raw);
+    const topic = normalizedTopic || raw;
+    const directFact = ['winner', 'score', 'stats', 'standings', 'qualification'].includes(factType) || isDirectFactLiveQuery(raw);
+
+    return {
+        raw,
+        domain,
+        factType,
+        year: yearMatch ? yearMatch[0] : '',
+        topic,
+        directFact
+    };
 }
 
 function isCurrentInfoQuery(text) {
@@ -8789,6 +8845,12 @@ function shouldUseNewsEndpointForCurrentQuery(text) {
     if (businessEventTerms.test(t) && /\b(latest|recent|today|current|2025|2026|2027|this year)\b/.test(t)) return true;
 
     return false;
+}
+
+function isDirectFactLiveQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    return /\b(who won|winner|won|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated)\b/.test(t);
 }
 
 function isNewsworthyLiveTopic(text) {
@@ -8846,18 +8908,54 @@ function isTrustedLiveSource(url) {
         'investing.com',
         'marketwatch.com',
         'coindesk.com',
-        'cointelegraph.com'
+        'cointelegraph.com',
+        'espn.com',
+        'espncricinfo.com',
+        'cricbuzz.com',
+        'icc-cricket.com',
+        'fifa.com',
+        'uefa.com',
+        'nba.com',
+        'nfl.com',
+        'mlb.com',
+        'nhl.com',
+        'atptour.com',
+        'wtatennis.com',
+        'formula1.com',
+        'motogp.com',
+        'ufc.com',
+        'olympics.com'
     ];
     return trustedDomains.some(d => domain === d || domain.endsWith(`.${d}`));
 }
 
-function buildLiveSearchQueries(userText) {
+function buildLiveSearchQueries(userText, intent = null) {
     const raw = String(userText || '').trim();
+    const liveIntent = intent || extractLiveQueryIntent(raw);
     const cleaned = raw
         .replace(/\b(what(?:'s| is)? happening|latest|recent|current|today|right now|as of now|update(?:s)? on|status of)\b/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-    const topic = cleaned || raw;
+    const topic = liveIntent.topic || cleaned || raw;
+
+    if (liveIntent.domain === 'sports' && liveIntent.directFact) {
+        const sportSources = 'ESPN Cricbuzz ESPNcricinfo ICC FIFA UEFA NBA NFL ATP WTA Formula 1 Olympics';
+        const factHintMap = {
+            winner: 'winner champion final result',
+            score: 'score result live score',
+            stats: 'stats record numbers',
+            standings: 'standings points table rankings table',
+            qualification: 'qualified eliminated standings'
+        };
+        const factHints = factHintMap[liveIntent.factType] || 'result latest';
+        const seasonHint = liveIntent.year || '';
+        return Array.from(new Set([
+            `${topic} ${seasonHint} ${factHints}`.replace(/\s+/g, ' ').trim(),
+            `${topic} ${factHints}`.replace(/\s+/g, ' ').trim(),
+            `${topic} ${seasonHint} ${sportSources}`.replace(/\s+/g, ' ').trim()
+        ].filter(Boolean)));
+    }
+
     return [
         raw,
         `latest ${topic}`,
@@ -8865,12 +8963,136 @@ function buildLiveSearchQueries(userText) {
     ];
 }
 
+function rankSportsSources(results) {
+    const sportsDomains = [
+        'espncricinfo.com',
+        'cricbuzz.com',
+        'icc-cricket.com',
+        'fifa.com',
+        'uefa.com',
+        'nba.com',
+        'nfl.com',
+        'mlb.com',
+        'nhl.com',
+        'atptour.com',
+        'wtatennis.com',
+        'formula1.com',
+        'motogp.com',
+        'ufc.com',
+        'olympics.com',
+        'espn.com'
+    ];
+
+    return [...(Array.isArray(results) ? results : [])].sort((a, b) => {
+        const aDomain = getDomainFromUrl(a?.url);
+        const bDomain = getDomainFromUrl(b?.url);
+        const aSports = sportsDomains.some(d => aDomain === d || aDomain.endsWith(`.${d}`)) ? 1 : 0;
+        const bSports = sportsDomains.some(d => bDomain === d || bDomain.endsWith(`.${d}`)) ? 1 : 0;
+        return bSports - aSports;
+    });
+}
+
+async function handleSportsFactQuery(userText, intent) {
+    showThinkingIndicator('Checking sports sources...');
+    const controller = beginAbortableRequest();
+    try {
+        const queries = buildLiveSearchQueries(userText, intent);
+        const resultSets = await Promise.all(
+            queries.map(async (q) => {
+                try {
+                    const response = await fetch('/api/search', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        signal: controller.signal,
+                        body: JSON.stringify({ query: q, maxResults: 6 })
+                    });
+                    if (!response.ok) return [];
+                    const data = await response.json();
+                    return Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
+                } catch (e) {
+                    return [];
+                }
+            })
+        );
+
+        const deduped = [];
+        const seen = new Set();
+        for (const item of rankSportsSources(resultSets.flat())) {
+            const url = String(item?.url || '').trim();
+            if (!url || seen.has(url)) continue;
+            seen.add(url);
+            deduped.push(item);
+            if (deduped.length >= 8) break;
+        }
+
+        if (!deduped.length) {
+            return false;
+        }
+
+        const snippets = deduped
+            .slice(0, 6)
+            .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}`)
+            .join('\n\n');
+
+        const summaryResponse = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+                systemPrompt: 'You summarize sports facts only from supplied snippets. Do not invent facts. If evidence conflicts, say so plainly.',
+                message: `Answer the sports question using ONLY the snippets below.
+
+User question: "${userText}"
+Detected topic: "${intent.topic}"
+Detected fact type: "${intent.factType}"
+Detected year: "${intent.year || 'not specified'}"
+
+Required format:
+Direct answer: <answer the specific sports fact immediately>
+Key points:
+- <point 1>
+- <point 2>
+- <point 3>
+Confidence: <High/Medium/Low based only on source agreement>
+
+Rules:
+- Answer the exact sports fact first.
+- Prefer winners, scores, standings, rankings, records, or qualification status based on the question.
+- Do not make up numbers, teams, players, dates, or competitions.
+- If snippets disagree, say the evidence is mixed.
+- Keep it concise.
+
+Snippets:
+${snippets}`
+            })
+        });
+
+        const summaryData = await summaryResponse.json();
+        const answer = cleanLiveAnswerText(String(summaryData?.response || summaryData?.text || '').trim());
+        const sourceLines = deduped.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
+        const finalAnswer = answer || cleanLiveAnswerText(`Direct answer: ${deduped[0].title}${deduped[0].description ? `\n\nKey points:\n- ${deduped[0].description}` : ''}`);
+        const finalMsg = `${finalAnswer}\n\nSources:\n${sourceLines}`;
+        addVerifiedAssistantMessage(finalMsg, 'Verified sports sources');
+        speak('I checked sports sources and found the answer.');
+        saveToHistory(userText, finalMsg);
+        return true;
+    } catch (error) {
+        if (isAbortError(error)) return true;
+        return false;
+    } finally {
+        clearActiveRequest(controller);
+        hideThinkingIndicator();
+    }
+}
+
 async function handleLiveRetrievalQuery(userText) {
     showThinkingIndicator('Checking current sources...');
     const controller = beginAbortableRequest();
     try {
         const query = String(userText || '').trim();
-        const queries = buildLiveSearchQueries(query);
+        const intent = extractLiveQueryIntent(query);
+        const directFactQuery = intent.directFact || isSportsLiveResultQuery(query);
+        const queries = buildLiveSearchQueries(query, intent);
         const resultSets = await Promise.all(
             queries.map(async (q) => {
                 try {
@@ -8907,7 +9129,7 @@ async function handleLiveRetrievalQuery(userText) {
         const trusted = deduped.filter(r => isTrustedLiveSource(r.url));
         const sourcePool = trusted.length >= 3 ? trusted : deduped;
         const distinctDomains = Array.from(new Set(sourcePool.map(r => getDomainFromUrl(r.url)).filter(Boolean)));
-        if (distinctDomains.length < 2) {
+        if (!directFactQuery && distinctDomains.length < 2) {
             await fetchAndDisplayNews(userText);
             return true;
         }
@@ -8951,6 +9173,20 @@ ${snippets}`
 
         const summaryData = await summaryResponse.json();
         const answer = cleanLiveAnswerText(String(summaryData?.response || summaryData?.text || '').trim());
+        if (!answer) {
+            const top = sourcePool[0];
+            if (!top) {
+                await fetchAndDisplayNews(userText);
+                return true;
+            }
+            const fallbackAnswer = `Direct answer: ${top.title}${top.description ? `\n\nKey points:\n- ${top.description}` : ''}`;
+            const sourceLines = sourcePool.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
+            const finalMsg = `${cleanLiveAnswerText(fallbackAnswer)}\n\nSources:\n${sourceLines}`;
+            addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
+            speak('I checked current sources and found a direct result.');
+            saveToHistory(userText, finalMsg);
+            return true;
+        }
         const sourceLines = sourcePool.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
         const finalMsg = `${answer}\n\nSources:\n${sourceLines}`;
 
@@ -9171,6 +9407,8 @@ ${snippets}`
             updateTopicMemory(cleanText);
 
             if (isCurrentInfoQuery(cleanText)) {
+                const liveIntent = extractLiveQueryIntent(cleanText);
+
                 if (isExchangeRateQuery(cleanText)) {
                     const handled = await handleExchangeRateLookup(cleanText);
                     if (handled) return;
@@ -9178,6 +9416,11 @@ ${snippets}`
 
                 if (isMarketPriceQuery(cleanText)) {
                     const handled = await handleMarketLookup(cleanText);
+                    if (handled) return;
+                }
+
+                if (liveIntent.domain === 'sports' && liveIntent.directFact) {
+                    const handled = await handleSportsFactQuery(cleanText, liveIntent);
                     if (handled) return;
                 }
 
