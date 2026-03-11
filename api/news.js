@@ -1,3 +1,5 @@
+import { extractSearchTopic } from './_lib/live-search.js';
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -19,7 +21,7 @@ export default async function handler(req, res) {
         const city = String(req.body?.city || '').trim();
         const countryCode = String(req.body?.countryCode || '').trim();
 
-        const topic = query || category || (city ? `${city} news` : 'latest news');
+        const topic = normalizeTopic(query || category || (city ? `${city} news` : 'latest news'));
         const queries = [
             topic,
             `latest ${topic}`,
@@ -109,6 +111,12 @@ export default async function handler(req, res) {
             debug
         });
     }
+}
+
+function normalizeTopic(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+    return extractSearchTopic(raw) || raw;
 }
 
 async function fetchGoogleNewsRss(topic) {
@@ -205,21 +213,22 @@ async function runVerifiedWebSearch(queries, options = {}) {
 }
 
 async function searchWeb(query, maxResults = 8) {
+    const searchQuery = normalizeTopic(query) || String(query || '').trim();
     const normalizedMax = Math.min(Math.max(Number(maxResults || 8), 1), 10);
     const serperKey = process.env.SERPER_API_KEY;
     const braveKey = process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY;
     const attempts = [];
 
     if (serperKey) {
-        attempts.push(() => searchWithSerper(query, normalizedMax, serperKey));
+        attempts.push(() => searchWithSerper(searchQuery, normalizedMax, serperKey));
     }
     if (braveKey) {
-        attempts.push(() => searchWithBrave(query, normalizedMax, braveKey));
+        attempts.push(() => searchWithBrave(searchQuery, normalizedMax, braveKey));
     }
-    attempts.push(() => searchWithDuckDuckGoHtml(query, normalizedMax));
-    attempts.push(() => searchWithDuckDuckGo(query, normalizedMax));
+    attempts.push(() => searchWithDuckDuckGoHtml(searchQuery, normalizedMax));
+    attempts.push(() => searchWithDuckDuckGo(searchQuery, normalizedMax));
     if (isLikelyNewsQuery(query)) {
-        attempts.push(() => searchWithGoogleNewsRss(query, normalizedMax));
+        attempts.push(() => searchWithGoogleNewsRss(searchQuery, normalizedMax));
     }
 
     const merged = [];
@@ -281,11 +290,11 @@ function isTrustedLiveSource(url) {
 }
 
 function tokenize(text) {
-    return String(text || '')
+    return normalizeTopic(text)
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, ' ')
         .split(/\s+/)
-        .filter(token => token && token.length > 2)
+        .filter(token => token && token.length > 1)
         .slice(0, 12);
 }
 
