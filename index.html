@@ -4395,6 +4395,7 @@ RULES:
 - If a user discusses mental health, respond with empathy and practical coping support; if persistent sadness/hopelessness appears, suggest seeing a certified mental health specialist as a final step
 - Start directly with the answer; do not add greeting/preamble like "Hi! I'd be happy to help."
 - Do not add generic closing prompts like "Would you like to know more..." unless the user explicitly asked for follow-ups.
+- For direct fact questions across any domain, answer with the fact immediately in 1-2 sentences. Do not pad with extra commentary, suggestions, or follow-up offers unless the user asked for detail.
 - For "Who is X?" person/celebrity questions, provide a concise factual bio first, then notable works/achievements.
 - If the user asks a "do/can/could/would" question, do not reply with only yes or no unless they explicitly demand a yes/no-only answer; explain the answer.
 - If the user asks to explain more, explain further, elaborate, or give more detail, expand the previous answer instead of repeating the short version.
@@ -4431,7 +4432,10 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         const responseHint = RESPONSE_LENGTH_HINTS[responseMode] || RESPONSE_LENGTH_HINTS.normal; 
         const formatMode = window.responseFormat || responseFormat || 'paragraph'; 
         const formatHint = RESPONSE_FORMAT_HINTS[formatMode] || RESPONSE_FORMAT_HINTS.paragraph; 
-        const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
+        const conciseFactHint = isConciseDirectFactQuery(normalizedUserMessage)
+            ? 'This is a direct fact query. Answer in 1-2 sentences max. Give the fact immediately. Do not add generic extra explanation or follow-up offers unless the user asks.'
+            : '';
+        const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\n${conciseFactHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
 
          
         const response = await fetch('/api/chat-groq', { 
@@ -8809,12 +8813,12 @@ function extractLiveQueryIntent(text) {
     }
 
     let factType = 'general';
-    if (/\b(who won|winner|won|champion|champions|title|titles|lifted)\b/.test(t)) {
-        factType = 'winner';
+    if (/\b(stat|stats|record|records|how many|total titles?|total cups?|how many cups?|how many titles?)\b/.test(t)) {
+        factType = 'stats';
     } else if (/\b(score|scores|scored|final result|result|results)\b/.test(t)) {
         factType = 'score';
-    } else if (/\b(stat|stats|record|records|how many)\b/.test(t)) {
-        factType = 'stats';
+    } else if (/\b(who won|winner|won|champion|champions|title|titles|lifted)\b/.test(t)) {
+        factType = 'winner';
     } else if (/\b(standing|standings|points table|table|rank|ranking|rankings)\b/.test(t)) {
         factType = 'standings';
     } else if (/\b(qualified|qualification|eliminated)\b/.test(t)) {
@@ -8876,7 +8880,7 @@ function shouldUseNewsEndpointForCurrentQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
 
-    const directQuestionSignals = /\b(who won|winner|won|score|scores|stat|stats|how many|what happened|what's happening|status|update me|brief me|tell me about)\b/;
+    const directQuestionSignals = /\b(who won|who lost|winner|won|lost|score|scores|stat|stats|how many|what happened|what's happening|status|update me|brief me|tell me about|ceo|president|prime minister|captain|coach|price|rate)\b/;
     const businessEventTerms = /\b(layoff|layoffs|firing|firings|job cuts|restructuring|reorganization|earnings|merger|acquisition|recall|bankruptcy|probe|investigation|antitrust|strike|walkout)\b/;
     if (directQuestionSignals.test(t)) return false;
 
@@ -8890,7 +8894,17 @@ function shouldUseNewsEndpointForCurrentQuery(text) {
 function isDirectFactLiveQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    return /\b(who won|winner|won|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated)\b/.test(t);
+    return /\b(who won|who lost|winner|won|lost|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated|ceo|president|prime minister|captain|coach|price|rate)\b/.test(t);
+}
+
+function isConciseDirectFactQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    const directFactSignals = /\b(how many|who is|who was|who won|who lost|winner|won|lost|what is the current|what is the latest|latest|current|ceo|president|prime minister|captain|coach|price|rate|score|scores|stats?|record|ranking|standings|titles?|cups?|won in total|total titles?|total cups?|qualified|eliminated|result|results)\b/;
+    const strictBinarySignal = isStrictYesNoRequest(t);
+    const binaryQuestionStarter = /^(is|are|am|was|were|do|does|did|can|could|should|would|will|has|have|had)\b/.test(t) &&
+        !/\b(explain|help|advise|suggest|recommend|walk me through|how to)\b/.test(t);
+    return directFactSignals.test(t) || strictBinarySignal || binaryQuestionStarter;
 }
 
 function isNewsworthyLiveTopic(text) {
@@ -9160,6 +9174,17 @@ async function handleSportsFactQuery(userText, intent) {
     showThinkingIndicator('Checking sports sources...');
     const controller = beginAbortableRequest();
     try {
+        const knownFact = lookupKnownSportsFact(intent, userText);
+        const conciseStatQuery = intent?.factType === 'stats' && /\b(how many|total|titles?|cups?)\b/i.test(String(userText || ''));
+        if (knownFact && conciseStatQuery) {
+            const sourceLines = knownFact.sources.map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
+            const finalMsg = `${knownFact.answer}\n\nSources:\n${sourceLines}`;
+            addVerifiedAssistantMessage(finalMsg, 'Verified sports sources');
+            speak('I answered from a verified sports record.');
+            saveToHistory(userText, finalMsg);
+            return true;
+        }
+
         const queries = buildLiveSearchQueries(userText, intent);
         const resultSets = await Promise.all(
             queries.map(async (q) => {
@@ -9190,10 +9215,8 @@ async function handleSportsFactQuery(userText, intent) {
         }
 
         if (!deduped.length) {
-            const knownFact = lookupKnownSportsFact(intent, userText);
             if (knownFact) {
                 const sourceLines = knownFact.sources.map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
-                const conciseStatQuery = intent?.factType === 'stats' && /\b(how many|total|titles?|cups?)\b/i.test(String(userText || ''));
                 const finalMsg = conciseStatQuery
                     ? `${knownFact.answer}\n\nSources:\n${sourceLines}`
                     : `${knownFact.answer}\n\nKey points:\n- ${knownFact.keyPoints.join('\n- ')}\n\nSources:\n${sourceLines}`;
@@ -9273,6 +9296,7 @@ async function handleLiveRetrievalQuery(userText) {
         const query = String(userText || '').trim();
         const intent = extractLiveQueryIntent(query);
         const directFactQuery = intent.directFact || isSportsLiveResultQuery(query);
+        const conciseFactQuery = isConciseDirectFactQuery(query);
         const queries = buildLiveSearchQueries(query, intent);
         const resultSets = await Promise.all(
             queries.map(async (q) => {
@@ -9362,14 +9386,27 @@ ${snippets}`
             }
             const fallbackAnswer = `Direct answer: ${top.title}${top.description ? `\n\nKey points:\n- ${top.description}` : ''}`;
             const sourceLines = sourcePool.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
-            const finalMsg = `${cleanLiveAnswerText(fallbackAnswer)}\n\nSources:\n${sourceLines}`;
+            const cleanedFallbackAnswer = cleanLiveAnswerText(fallbackAnswer);
+            const conciseFallbackAnswer = cleanedFallbackAnswer
+                .split(/\n\s*Key points:\s*/i)[0]
+                .split(/\n\s*Confidence:\s*/i)[0]
+                .trim();
+            const finalMsg = conciseFactQuery
+                ? `${conciseFallbackAnswer}\n\nSources:\n${sourceLines}`
+                : `${cleanedFallbackAnswer}\n\nSources:\n${sourceLines}`;
             addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
             speak('I checked current sources and found a direct result.');
             saveToHistory(userText, finalMsg);
             return true;
         }
         const sourceLines = sourcePool.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
-        const finalMsg = `${answer}\n\nSources:\n${sourceLines}`;
+        const conciseAnswer = answer
+            .split(/\n\s*Key points:\s*/i)[0]
+            .split(/\n\s*Confidence:\s*/i)[0]
+            .trim();
+        const finalMsg = conciseFactQuery
+            ? `${conciseAnswer}\n\nSources:\n${sourceLines}`
+            : `${answer}\n\nSources:\n${sourceLines}`;
 
         addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
         speak('I checked current sources and summarized what I found.');
@@ -9620,14 +9657,6 @@ ${snippets}`
 
                 const handled = await handleLiveRetrievalQuery(cleanText);
                 if (handled) return;
-            }
-
-            if (isPoliticalQuery(cleanText)) {
-                const policyMsg = 'Sorry, I am not designed to answer political questions.';
-                addChatMessage(policyMsg, false);
-                speak(policyMsg);
-                saveToHistory(text, policyMsg);
-                return;
             }
 
             if (isVagueAdviceRequest(cleanText)) {
