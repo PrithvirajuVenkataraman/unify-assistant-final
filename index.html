@@ -4334,6 +4334,10 @@ function buildLocalAssistantFallback(userMessage, error) {
     const normalized = text.toLowerCase();
     const backendDown = /api key not configured|temporarily unavailable|internal server error|failed/i.test(String(error?.message || ''));
 
+    if (supportConversationMode || isSupportConversationRequest(text)) {
+        return buildOfflineSupportReply(text);
+    }
+
     if (isMentalHealthConversation(text)) {
         if (/\blonely\b/.test(normalized)) {
             return "I'm here with you. Loneliness can feel heavy, so try one small step right now: message one person you trust, step outside for a 10-minute walk, or sit somewhere around other people instead of being alone. If this has been sticking with you for a while, talking to a certified mental health professional would be a strong next step.";
@@ -4603,6 +4607,7 @@ async function handleNameCorrection(text) {
         let lastVerifiedPlaces = null; 
         let lastResolvedTravelLocation = null; 
         let supportModeLock = 'balanced';
+        let supportConversationMode = false;
         let responseLength = 'normal';
         let responseFormat = 'paragraph';
         let medicalMode = false;
@@ -5575,6 +5580,7 @@ async function handleNameCorrection(text) {
             responseFormat = 'paragraph';
             medicalMode = false;
             converseMode = false;
+            supportConversationMode = false;
             try {
                 const saved = localStorage.getItem('jarvis_assistant_modes');
                 if (saved) {
@@ -7331,6 +7337,65 @@ function isDebateIntent(text) {
 function isMentalHealthConversation(text) {
     const t = String(text || '').toLowerCase();
     return /\b(sad|depress|depressed|anxious|anxiety|panic|lonely|hopeless|overwhelmed|stressed|burnout|mental health|not okay|feeling low|empty|worthless)\b/.test(t);
+}
+
+function isSupportConversationRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    return /\b(i need someone to talk to|can you talk to me|talk to me|stay with me|sit with me|be with me|keep me company|just listen to me|listen to me|i need company|i need to talk|can we just talk|i just want to talk)\b/.test(t);
+}
+
+function isSupportConversationExit(text) {
+    const t = String(text || '').toLowerCase().trim();
+    return /\b(stop support mode|exit support mode|leave support mode|end support mode|stop talking mode|exit talking mode|i'?m okay now|i am okay now|you can stop now)\b/.test(t);
+}
+
+function isFunctionalTaskQuery(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(weather|forecast|temperature|news|headlines|score|scores|winner|who won|price|rate|ceo|president|prime minister|remind|reminder|alarm|trip|travel|itinerary|hotel|restaurant|translate|translator|recipe|calendar|budget|map|directions|route|hospital|police|pharmacy|atm|shopping|grocery|vision|image|photo|ocr)\b/.test(t);
+}
+
+function shouldUseSupportConversationMode(text) {
+    const t = String(text || '').trim();
+    if (!t) return false;
+    if (isFunctionalTaskQuery(t)) return false;
+    if (isHighRiskMentalHealth(t) || isMedicalEmergencyIntent(t) || isMedicalAdviceIntent(t)) return false;
+    if (isSupportConversationRequest(t)) return true;
+    return supportConversationMode;
+}
+
+function buildSupportConversationPrompt(text) {
+    return `The user wants someone to talk to, not a task bot. Their latest message is: "${text}".
+
+Respond like a calm, emotionally present companion.
+
+Rules:
+1. Sound human, warm, and grounded, not clinical
+2. Do not over-structure the reply
+3. Do not jump straight into advice unless clearly useful
+4. Reflect what they said in a natural way
+5. Offer one small comforting thought or one gentle practical step at most
+6. End with at most one soft follow-up question, only if it helps the conversation continue naturally
+7. Avoid repetitive crisis-style wording unless the message is actually high risk
+8. Keep it concise, like a real supportive chat message
+
+If the user sounds lonely, respond in a way that feels like staying with them, not dismissing them.`;
+}
+
+function buildOfflineSupportReply(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (/\blonely\b/.test(t)) {
+        return "I'm here with you. You do not have to carry the whole moment by yourself right now. We can keep this simple and just talk for a bit if you want. What has today felt like for you?";
+    }
+    if (/\boverwhelmed|stressed|burnout\b/.test(t)) {
+        return "That sounds like a lot to hold at once. You do not need to solve everything right now. We can slow it down and take one piece at a time. What feels heaviest at the moment?";
+    }
+    if (/\bsad|empty|feeling low|not okay|hopeless|worthless\b/.test(t)) {
+        return "I'm sorry it feels this heavy. I'm here, and I can stay with you in the conversation for a while. You can tell me what happened, or just tell me what the last few hours have been like.";
+    }
+    if (/^(nothing|idk|i don'?t know|dont know|not sure|meh)\b/.test(t)) {
+        return "That's okay. You do not need to have the perfect words. We can start small. What kind of day has it been, quiet, stressful, or just lonely?";
+    }
+    return "I'm here with you. You can talk normally, vent, or just say whatever is on your mind. What feels most present for you right now?";
 }
 
 function isHighRiskMentalHealth(text) {
@@ -10335,6 +10400,7 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
             }
 
             if (isHighRiskMentalHealth(cleanText)) {
+                supportConversationMode = false;
                 const urgentMsg = `I'm really glad you told me. You deserve immediate support right now.
 
 Please contact a certified mental health professional or emergency support immediately.
@@ -10345,6 +10411,28 @@ If you want, I can stay with you and help you write a short message to someone y
                 addChatMessage(urgentMsg, false);
                 speak("I'm here with you. Please contact emergency or a crisis line right now. You matter.");
                 saveToHistory(text, urgentMsg);
+                return;
+            }
+
+            if (isSupportConversationExit(cleanText)) {
+                supportConversationMode = false;
+                const exitMsg = "Support conversation mode is off. I can still help normally whenever you want.";
+                addChatMessage(exitMsg, false);
+                speak("Support conversation mode is off.");
+                saveToHistory(text, exitMsg);
+                return;
+            }
+
+            if (isSupportConversationRequest(cleanText)) {
+                supportConversationMode = true;
+                const introPrompt = buildSupportConversationPrompt(text);
+                const supportIntro = await callAIWithTyping(introPrompt, 'I am here with you...');
+                if (supportIntro?.aborted) return;
+                const introText = supportIntro?.response || buildOfflineSupportReply(text);
+                const finalIntro = `${introText}\n\nYou can stay in this mode and talk naturally. Say "stop support mode" whenever you want to leave it.`;
+                addModelAssistantMessage(finalIntro, 'Support conversation');
+                speak("I'm here with you.");
+                saveToHistory(text, finalIntro);
                 return;
             }
 
@@ -10359,6 +10447,18 @@ I can still help you find the nearest hospital or urgent care if you want.`;
                 addChatMessage(urgentMedicalMsg, false);
                 speak("This may be a medical emergency. Please call emergency services right now.");
                 saveToHistory(text, urgentMedicalMsg);
+                return;
+            }
+
+            if (shouldUseSupportConversationMode(cleanText)) {
+                supportConversationMode = true;
+                const supportPrompt = buildSupportConversationPrompt(text);
+                const supportReply = await callAIWithTyping(supportPrompt, 'I am here with you...');
+                if (supportReply?.aborted) return;
+                const supportText = supportReply?.response || buildOfflineSupportReply(text);
+                addModelAssistantMessage(supportText, 'Support conversation');
+                speak("I'm here with you.");
+                saveToHistory(text, supportText);
                 return;
             }
 
