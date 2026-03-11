@@ -202,7 +202,7 @@ function tokenize(text) {
 
 function isLikelyNewsQuery(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(news|headlines?|breaking|current events?|latest|recent|current|today|right now|situation|conflict|war|attack|ceasefire|talks|middle[\s-]?east|israel|gaza|iran|ukraine|russia|syria|lebanon|palestine|oil)\b/.test(t);
+    return /\b(news|headlines?|breaking|current events?|latest|recent|current|today|right now|situation|conflict|war|attack|ceasefire|talks|middle[\s-]?east|israel|gaza|iran|ukraine|russia|syria|lebanon|palestine|oil|winner|won|champion|final result|score|scores|live score|stats|standings|points table|rankings?|record|qualified|eliminated|ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup)\b/.test(t);
 }
 
 function scoreRecency(text) {
