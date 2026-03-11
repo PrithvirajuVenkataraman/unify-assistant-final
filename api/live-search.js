@@ -20,7 +20,23 @@ const TRUSTED_DOMAINS = [
     'investing.com',
     'marketwatch.com',
     'coindesk.com',
-    'cointelegraph.com'
+    'cointelegraph.com',
+    'espn.com',
+    'espncricinfo.com',
+    'cricbuzz.com',
+    'icc-cricket.com',
+    'fifa.com',
+    'uefa.com',
+    'nba.com',
+    'nfl.com',
+    'mlb.com',
+    'nhl.com',
+    'atptour.com',
+    'wtatennis.com',
+    'formula1.com',
+    'motogp.com',
+    'ufc.com',
+    'olympics.com'
 ];
 
 const SEARCH_STOP_WORDS = new Set([
