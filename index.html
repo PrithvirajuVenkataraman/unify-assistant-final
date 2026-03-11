@@ -2348,6 +2348,13 @@ function isTamilJokeRequest(text) {
     return /\btamil\b|à®¤à®®à®¿à®´à¯/.test(t);
 }
 
+function isRecipeRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    return /\b(recipe|how to make|how do i make|how can i make|ingredients|steps|cook|prepare)\b/.test(t) &&
+           /\b(biryani|chicken|mutton|rice|curry|masala|pasta|pizza|noodles|soup|cake|bread|dessert|dish|food)\b/.test(t);
+}
+
 function normalizeIntentTypos(text) {
     const raw = String(text || '');
     if (!raw.trim()) return '';
@@ -3957,6 +3964,65 @@ async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
     }
 }
 
+function isHeadlineListQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    if (/\bwho won|winner|won|score|scores|stat|stats|what happened|what's happening|status|why|how\b/.test(t)) {
+        return false;
+    }
+    return /\b(news|headline|headlines|breaking news|current events?)\b/.test(t);
+}
+
+function formatLiveSourceLinks(items, limit = 5) {
+    return (Array.isArray(items) ? items : [])
+        .slice(0, limit)
+        .map((item, i) => `${i + 1}. [${item.title}](${item.url})`)
+        .join('\n');
+}
+
+async function buildDirectLiveAnswer(question, items, signal) {
+    const sourcePool = Array.isArray(items) ? items.filter(Boolean).slice(0, 6) : [];
+    if (!sourcePool.length) return '';
+
+    const snippets = sourcePool
+        .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}`)
+        .join('\n\n');
+
+    const response = await fetch('/api/chat-groq', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal,
+        body: JSON.stringify({
+            systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly.',
+            message: `Answer the user's question using ONLY the snippets below.
+
+User question: "${question}"
+
+Required format:
+Direct answer: <answer the question in 1-3 sentences first; if the user asked who won/score/stat, say that immediately>
+Key points:
+- <point 1>
+- <point 2>
+- <point 3>
+Confidence: <High/Medium/Low based only on source agreement>
+
+Rules:
+- Focus on what is current or recent.
+- Do not make up numbers, dates, actors, causes, or outcomes.
+- Only state a fact confidently if it appears in multiple snippets or from a clearly reputable source.
+- If evidence is weak, say so instead of guessing.
+- If the question asks for a winner, score, player stat, or latest status, answer that specific fact first before anything else.
+- Keep it concise and practical.
+
+Snippets:
+${snippets}`
+        })
+    });
+
+    const data = await response.json();
+    return String(data?.response || data?.text || '').trim();
+}
+
 // ========== NEWS FETCHING FUNCTION ==========
 async function fetchAndDisplayNews(query) {
     showThinkingIndicator('[Map] Fetching latest news...');
@@ -4002,17 +4068,24 @@ async function fetchAndDisplayNews(query) {
             return;
         }
 
-        let newsMsg = `**Verified news summary for "${data.query}"**\nChecked ${data.sourceCount} sources across ${data.distinctDomainCount} domains.\n\n`;
-        articles.slice(0, 5).forEach((item, i) => {
-            newsMsg += `**${i + 1}. ${item.title}**\n`;
-            if (item.description) {
-                newsMsg += `${item.description}\n`;
-            }
-            newsMsg += `[Read more](${item.url})\n\n`;
-        });
+        let newsMsg = '';
+        if (isHeadlineListQuery(query)) {
+            newsMsg = `**Verified news summary for "${data.query}"**\nChecked ${data.sourceCount} sources across ${data.distinctDomainCount} domains.\n\n`;
+            articles.slice(0, 5).forEach((item, i) => {
+                newsMsg += `**${i + 1}. ${item.title}**\n`;
+                if (item.description) {
+                    newsMsg += `${item.description}\n`;
+                }
+                newsMsg += `[Read more](${item.url})\n\n`;
+            });
+        } else {
+            const directAnswer = await buildDirectLiveAnswer(query, articles, controller.signal);
+            const sourceLines = formatLiveSourceLinks(articles, 5);
+            newsMsg = `${directAnswer}\nVerified sources checked: ${data.sourceCount} across ${data.distinctDomainCount} domains\n\nSources:\n${sourceLines}`;
+        }
 
         addVerifiedAssistantMessage(newsMsg, 'Verified news sources');
-        speak('Here are the latest verified headlines.');
+        speak(isHeadlineListQuery(query) ? 'Here are the latest verified headlines.' : 'I checked verified live sources and found the current answer.');
         saveToHistory(query, newsMsg);
 
     } catch (error) {
@@ -4994,8 +5067,11 @@ async function handleNameCorrection(text) {
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">What I Can Do</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                                 <p><strong>Explain & Teach Anything:</strong> "What is AI?", "Explain inflation like I'm 12", "Teach me probability basics"</p>
+                                <p><strong>Current Answers with Sources:</strong> "Who won the T20 World Cup 2026?", "What happened in the Middle East?", "What is the latest on Ukraine?"</p>
+                                <p><strong>Scores, Stats, and Results:</strong> "What was India's score?", "What are Virat Kohli's latest stats?", "Who is the current CEO of X?"</p>
                                 <p><strong>Travel Planning:</strong> "Plan a 3-day trip to Tokyo"</p>
                                 <p><strong>Food Recommendations:</strong> "Best restaurants in Rome"</p>
+                                <p><strong>Recipes:</strong> "How to prepare Andhra style chicken biryani", "Recipe for pasta", "How do I make tomato soup?"</p>
                                 <p><strong>Transport Info:</strong> "How to get around London?"</p>
                                 <p><strong>Weather:</strong> "What's the weather in Seattle tomorrow?"</p>
                                 <p><strong>Reminders:</strong> "Remind me to call mom at 5 PM"</p>
@@ -5015,6 +5091,9 @@ async function handleNameCorrection(text) {
                                 <p><strong>Use place + goal + constraints:</strong> City, dates, budget, food preference, mobility needs.</p>
                                 <p><strong>Strong example:</strong> "Plan 2 days in Boston under $500, kid-friendly, near public transport."</p>
                                 <p><strong>Weak example:</strong> "Plan Boston trip."</p>
+                                <p><strong>For current info:</strong> Ask directly. Example: "Who won the T20 World Cup 2026?" or "What happened in the Middle East today?"</p>
+                                <p><strong>For news lists:</strong> Ask for "latest headlines" or "breaking news" if you want a headline-style response.</p>
+                                <p><strong>For recipes:</strong> Include the dish and style. Example: "How to make Andhra chicken biryani" or "Recipe for veg fried rice".</p>
                                 <p><strong>For reminders:</strong> Include task and time in one line when possible.</p>
                                 <p><strong>Example:</strong> "Remind me to take medicine tomorrow at 9 PM."</p>
                                 <p><strong>For commute:</strong> Set context first. Example: "my office is 1 Apple Park Way", "my home is Sunnyvale", "arrive by 9 AM".</p>
@@ -5036,7 +5115,17 @@ async function handleNameCorrection(text) {
                                     <p class="text-green-600 dark:text-green-400">"Biryani places in Hyderabad" or "Pizza spots in NYC"</p>
                                     <p class="text-xs text-gray-500 mt-1">I'll suggest region-specific dishes based on location!</p>
                                 </div>
-                                
+
+                                <div>
+                                    <p class="font-semibold text-gray-900 dark:text-white">Use the Right Query Style:</p>
+                                    <p class="text-gray-600 dark:text-gray-400">Ask "Who won?", "What happened?", "What is the latest score?", or "What are the latest stats?" when you want a direct live answer with sources.</p>
+                                </div>
+
+                                <div>
+                                    <p class="font-semibold text-gray-900 dark:text-white">Read the Source Badge:</p>
+                                    <p class="text-gray-600 dark:text-gray-400"><strong>Verified live sources</strong> means the answer used current external sources. <strong>Model answer</strong> means it came from the AI model.</p>
+                                </div>
+
                                 <div>
                                     <p class="font-semibold text-gray-900 dark:text-white">Use the Share Button:</p>
                                     <p class="text-gray-600 dark:text-gray-400">After getting recommendations, click "Share" to send via SMS, WhatsApp, or email.</p>
@@ -5053,7 +5142,8 @@ async function handleNameCorrection(text) {
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Voice Commands</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                                 <p>Press the <strong>microphone button</strong> and speak naturally.</p>
-                                <p class="text-xs text-gray-500">Examples: "What's the weather?", "set a reminder for 5 PM", "start trip to office", or "when should I leave?"</p>
+                                <p class="text-xs text-gray-500">Examples: "What's the weather?", "Who won the T20 World Cup 2026?", "What happened in the Middle East today?", "How to make Andhra chicken biryani?", "set a reminder for 5 PM", or "when should I leave?"</p>
+                                <p class="text-xs text-gray-500">While a reply is generating, the main action button turns into a <strong>Stop</strong> button so you can cancel the request.</p>
                             </div>
                         </section>
                         
@@ -5061,9 +5151,12 @@ async function handleNameCorrection(text) {
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Smart Features</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                                 <p><strong>Learning Mode:</strong> I can teach concepts step-by-step across tech and non-tech topics.</p>
+                                <p><strong>Live Retrieval:</strong> I can answer current-result questions using live sources instead of only model memory.</p>
+                                <p><strong>Direct Live Answers:</strong> For many current questions, I answer first, then show key points, confidence, and sources.</p>
                                 <p><strong>Web Search:</strong> I can enrich recommendations with live search context.</p>
                                 <p><strong>Location-Aware:</strong> I adapt transport suggestions by city type.</p>
                                 <p><strong>Regional Food:</strong> I suggest cuisine ideas by destination.</p>
+                                <p><strong>Recipe Help:</strong> I can generate ingredients and step-by-step cooking instructions for many dishes and styles.</p>
                                 <p><strong>Converse Mode:</strong> Hands-free conversation with auto speaking.</p>
                                 <p><strong>Foreground Live Trip:</strong> I can track your trip, ETA drift, "you are close", and possible off-route movement while this website stays open.</p>
                                 <p><strong>Traffic-Aware Leave Estimate:</strong> I can use a route API for live leave-time estimates when configured, with a fallback estimate if not.</p>
@@ -8320,10 +8413,11 @@ function shouldUseNewsEndpointForCurrentQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
 
+    const directQuestionSignals = /\b(who won|winner|won|score|scores|stat|stats|how many|what happened|what's happening|status|update me|brief me|tell me about)\b/;
+    if (directQuestionSignals.test(t)) return false;
+
     if (/\b(news|headline|headlines|breaking|current events?)\b/.test(t)) return true;
-    if (isNewsworthyLiveTopic(t)) return true;
-    if (isSportsLiveResultQuery(t)) return true;
-    if (/\b(what happened|what's happening|war|conflict|ceasefire|attack|election|protest|middle[\s-]?east|israel|gaza|iran|ukraine|russia|syria|lebanon|palestine)\b/.test(t)) return true;
+    if (/\b(latest|recent|today|current)\b.*\b(news|headlines?|current events?)\b/.test(t)) return true;
 
     return false;
 }
@@ -8471,7 +8565,7 @@ async function handleLiveRetrievalQuery(userText) {
 User question: "${query}"
 
 Required format:
-Current picture: <2-4 concise sentences>
+Direct answer: <answer the question in 1-3 sentences first; if the user asked who won/score/stat, say that immediately>
 Key points:
 - <point 1>
 - <point 2>
@@ -8483,6 +8577,7 @@ Rules:
 - Do not make up numbers, dates, actors, or causes.
 - Only state a fact confidently if it appears in multiple snippets or from a clearly reputable source.
 - If evidence is weak, say so instead of guessing.
+- If the question asks for a winner, score, or player stat, answer that specific fact first before anything else.
 - Keep it concise and practical.
 
 Snippets:
@@ -8776,6 +8871,45 @@ ${snippets}`
 
             if (isTamilJokeRequest(cleanText)) {
                 await handleTamilJokeSearch(cleanText);
+                return;
+            }
+
+            if (isRecipeRequest(cleanText)) {
+                const recipePrompt = `${userName ? `The user's name is ${userName}.` : ''} Answer this cooking request: "${text}"
+
+Rules:
+- Give a practical recipe for the dish the user asked for.
+- If the dish has regional variants, follow the requested style if specified.
+- Keep ingredients realistic and common.
+- Do not invent unusual ingredients or fake steps.
+- If exact authenticity varies by household/region, say that briefly.
+
+Format:
+Recipe: <dish name>
+Serves: <number>
+Prep time: <time>
+Cook time: <time>
+
+Ingredients:
+- <ingredient 1>
+- <ingredient 2>
+
+Steps:
+1. <step 1>
+2. <step 2>
+3. <step 3>
+
+Tips:
+- <tip 1>
+- <tip 2>
+
+If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`;
+
+                const recipeResponse = await callAIWithTyping(recipePrompt, 'Preparing recipe...');
+                if (recipeResponse?.aborted) return;
+                addModelAssistantMessage(recipeResponse.response, 'Model answer');
+                speak("Here is the recipe.");
+                saveToHistory(text, recipeResponse.response);
                 return;
             }
 
