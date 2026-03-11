@@ -1,4 +1,4 @@
-import { runVerifiedWebSearch, searchWeb } from './_lib/live-search.js';
+import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './_lib/live-search.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -46,17 +46,20 @@ export default async function handler(req, res) {
 function buildSearchQueries(query) {
     const raw = String(query || '').trim();
     if (!raw) return [];
-    const out = [raw];
+    const topic = extractSearchTopic(raw) || raw;
+    const out = [topic];
 
     if (isTimeSensitiveQuery(raw)) {
-        const topic = raw
+        const timeAwareTopic = raw
             .replace(/\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update(?:s)? on|status of)\b/gi, ' ')
             .replace(/\s+/g, ' ')
             .trim();
-        if (topic && topic.toLowerCase() !== raw.toLowerCase()) {
-            out.push(`latest ${topic}`);
+        const cleanedTimeAwareTopic = extractSearchTopic(timeAwareTopic) || topic;
+        if (cleanedTimeAwareTopic && cleanedTimeAwareTopic.toLowerCase() !== topic.toLowerCase()) {
+            out.push(cleanedTimeAwareTopic);
         }
-        out.push(`${topic || raw} Reuters OR AP OR BBC OR Al Jazeera`);
+        out.push(`latest ${cleanedTimeAwareTopic || topic}`);
+        out.push(`${cleanedTimeAwareTopic || topic} Reuters OR AP OR BBC OR Al Jazeera`);
     }
 
     return Array.from(new Set(out.filter(Boolean)));
