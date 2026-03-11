@@ -4008,7 +4008,7 @@ async function buildDirectLiveAnswer(question, items, signal) {
 User question: "${question}"
 
 Required format:
-Direct answer: <answer the question in 1-3 sentences first; if the user asked who won/score/stat, say that immediately>
+Direct answer: <give a short summary first in 1-3 sentences; if the user asked who won/score/stat, say that immediately>
 Key points:
 - <point 1>
 - <point 2>
@@ -4017,6 +4017,7 @@ Confidence: <High/Medium/Low based only on source agreement>
 
 Rules:
 - Focus on what is current or recent.
+- If the user asked for latest news or headlines, start with a compact summary of the latest development, then give 3 short bullet points.
 - Do not make up numbers, dates, actors, causes, or outcomes.
 - Only state a fact confidently if it appears in multiple snippets or from a clearly reputable source.
 - If evidence is weak, say so instead of guessing.
@@ -4077,24 +4078,13 @@ async function fetchAndDisplayNews(query) {
             return;
         }
 
-        let newsMsg = '';
-        if (isHeadlineListQuery(query)) {
-            newsMsg = `**Verified news summary for "${data.query}"**\nChecked ${data.sourceCount} sources across ${data.distinctDomainCount} domains.\n\n`;
-            articles.slice(0, 5).forEach((item, i) => {
-                newsMsg += `**${i + 1}. ${item.title}**\n`;
-                if (item.description) {
-                    newsMsg += `${item.description}\n`;
-                }
-                newsMsg += `[Read more](${item.url})\n\n`;
-            });
-        } else {
-            const directAnswer = await buildDirectLiveAnswer(query, articles, controller.signal);
-            const sourceLines = formatLiveSourceLinks(articles, 5);
-            newsMsg = `${directAnswer}\n\nSources:\n${sourceLines}`;
-        }
+        const directAnswer = await buildDirectLiveAnswer(query, articles, controller.signal);
+        const sourceLines = formatLiveSourceLinks(articles, 5);
+        const summaryBlock = directAnswer || 'I found recent coverage, but I could not generate a clean short summary from the current snippets.';
+        const newsMsg = `${summaryBlock}\n\nSources:\n${sourceLines}`;
 
         addVerifiedAssistantMessage(newsMsg, 'Verified news sources');
-        speak(isHeadlineListQuery(query) ? 'Here are the latest verified headlines.' : 'I checked verified live sources and found the current answer.');
+        speak('I checked verified live sources and summarized the latest update.');
         saveToHistory(query, newsMsg);
 
     } catch (error) {
@@ -11921,25 +11911,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
-/*
-1. TYPING INDICATOR:
-   - Call showTypingIndicator() before AI response
-   - Call hideTypingIndicator() before showing response
-
-2. EDIT MESSAGES:
-   - Integrated in addChatMessage() with edit button on user messages
-   - Editing a message regenerates the response from that turn
-
-3. CONVERSATION HISTORY:
-   - Call saveToHistory(userMsg, aiMsg) after each exchange
-   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
-   - Search, export, and clear functions included
-
-4. ERROR FEEDBACK:
-   - Call showError("Error message") instead of addChatMessage for errors
-   - Visual shake animation + auto-dismiss
-*/
 
 </script>
 </body>
