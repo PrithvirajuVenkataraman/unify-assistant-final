@@ -1,43 +1,125 @@
-const TRUSTED_DOMAINS = [
-    'reuters.com',
-    'apnews.com',
-    'bbc.com',
-    'bbc.co.uk',
-    'aljazeera.com',
-    'npr.org',
-    'cnbc.com',
-    'bloomberg.com',
-    'wsj.com',
-    'ft.com',
-    'nytimes.com',
-    'theguardian.com',
-    'economist.com',
-    'ecb.europa.eu',
-    'frankfurter.dev',
-    'xe.com',
-    'oanda.com',
-    'x-rates.com',
-    'investing.com',
-    'marketwatch.com',
-    'coindesk.com',
-    'cointelegraph.com',
-    'espn.com',
-    'espncricinfo.com',
-    'cricbuzz.com',
-    'icc-cricket.com',
-    'fifa.com',
-    'uefa.com',
-    'nba.com',
-    'nfl.com',
-    'mlb.com',
-    'nhl.com',
-    'atptour.com',
-    'wtatennis.com',
-    'formula1.com',
-    'motogp.com',
-    'ufc.com',
-    'olympics.com'
-];
+const SOURCE_POLICIES = {
+    general: {
+        trustedDomains: [
+            'reuters.com',
+            'apnews.com',
+            'bbc.com',
+            'bbc.co.uk',
+            'aljazeera.com',
+            'npr.org',
+            'cnbc.com',
+            'bloomberg.com',
+            'wsj.com',
+            'ft.com',
+            'nytimes.com',
+            'theguardian.com',
+            'economist.com'
+        ],
+        preferredDomains: []
+    },
+    sports: {
+        trustedDomains: [
+            'espn.com',
+            'espncricinfo.com',
+            'cricbuzz.com',
+            'icc-cricket.com',
+            'fifa.com',
+            'uefa.com',
+            'nba.com',
+            'nfl.com',
+            'mlb.com',
+            'nhl.com',
+            'atptour.com',
+            'wtatennis.com',
+            'formula1.com',
+            'motogp.com',
+            'ufc.com',
+            'olympics.com',
+            'reuters.com',
+            'apnews.com',
+            'bbc.com'
+        ],
+        preferredDomains: [
+            'icc-cricket.com',
+            'espncricinfo.com',
+            'cricbuzz.com',
+            'fifa.com',
+            'uefa.com',
+            'nba.com',
+            'nfl.com',
+            'atptour.com',
+            'wtatennis.com',
+            'formula1.com',
+            'ufc.com',
+            'olympics.com'
+        ]
+    },
+    politics: {
+        trustedDomains: [
+            'gov.in',
+            'parliament.uk',
+            'congress.gov',
+            'eci.gov.in',
+            'reuters.com',
+            'apnews.com',
+            'bbc.com',
+            'bbc.co.uk',
+            'aljazeera.com',
+            'npr.org'
+        ],
+        preferredDomains: [
+            'gov.in',
+            'eci.gov.in',
+            'parliament.uk',
+            'congress.gov'
+        ]
+    },
+    finance: {
+        trustedDomains: [
+            'ecb.europa.eu',
+            'frankfurter.dev',
+            'xe.com',
+            'oanda.com',
+            'x-rates.com',
+            'investing.com',
+            'marketwatch.com',
+            'bloomberg.com',
+            'wsj.com',
+            'ft.com',
+            'cnbc.com',
+            'reuters.com'
+        ],
+        preferredDomains: [
+            'ecb.europa.eu',
+            'frankfurter.dev',
+            'xe.com',
+            'oanda.com',
+            'x-rates.com'
+        ]
+    },
+    tech: {
+        trustedDomains: [
+            'openai.com',
+            'microsoft.com',
+            'google.com',
+            'nvidia.com',
+            'amd.com',
+            'ibm.com',
+            'reuters.com',
+            'apnews.com',
+            'bloomberg.com',
+            'cnbc.com'
+        ],
+        preferredDomains: [
+            'openai.com',
+            'microsoft.com',
+            'google.com',
+            'nvidia.com',
+            'amd.com',
+            'ibm.com'
+        ]
+    }
+};
 
 const SEARCH_STOP_WORDS = new Set([
     'a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'than',
@@ -133,13 +215,14 @@ export function rerankResults(results, query) {
     const queryTerms = tokenize(query);
     const queryText = String(query || '').toLowerCase();
     const wantsRecency = /\b(latest|recent|current|today|right now|as of now|breaking|update|news|headlines?)\b/.test(queryText);
+    const queryDomain = detectQueryDomain(queryText);
     const scored = [...(Array.isArray(results) ? results : [])]
         .map((item, index) => {
             const title = String(item?.title || '');
             const description = String(item?.description || '');
             const haystack = `${title} ${description}`.toLowerCase();
             const overlap = queryTerms.reduce((acc, term) => acc + (haystack.includes(term) ? 1 : 0), 0);
-            const trustedBoost = isTrustedLiveSource(item?.url) ? 5 : 0;
+            const trustedBoost = scoreSourcePolicy(item?.url, queryDomain);
             const titleBoost = queryTerms.reduce((acc, term) => acc + (title.toLowerCase().includes(term) ? 1 : 0), 0);
             const recencyBoost = wantsRecency ? scoreRecency(`${title} ${description} ${item?.url || ''}`) : 0;
             return {
@@ -163,7 +246,7 @@ export function getDomainFromUrl(url) {
 export function isTrustedLiveSource(url) {
     const domain = getDomainFromUrl(url);
     if (!domain) return false;
-    return TRUSTED_DOMAINS.some(d => domain === d || domain.endsWith(`.${d}`));
+    return Object.values(SOURCE_POLICIES).some(policy => domainMatches(domain, policy.trustedDomains));
 }
 
 export function extractSearchTopic(text) {
@@ -214,6 +297,37 @@ function scoreRecency(text) {
     if (/\b(2026)\b/.test(t)) score += 2;
     if (/\b(2025)\b/.test(t)) score += 1;
     return score;
+}
+
+function detectQueryDomain(queryText) {
+    const text = String(queryText || '').toLowerCase();
+    if (/\b(ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup|score|winner|standings|rankings|player|team|coach|captain)\b/.test(text)) {
+        return 'sports';
+    }
+    if (/\b(president|prime minister|minister|senator|mp|mla|election|party|government|parliament|chief minister|mayor)\b/.test(text)) {
+        return 'politics';
+    }
+    if (/\b(stock|shares|price|market cap|repo rate|interest rate|inflation|bank|rbi|sebi|nasdaq|dow)\b/.test(text)) {
+        return 'finance';
+    }
+    if (/\b(ceo|founder|company|startup|ai|llm|gpu|cpu|software|chip|nvidia|microsoft|openai|google)\b/.test(text)) {
+        return 'tech';
+    }
+    return 'general';
+}
+
+function domainMatches(domain, list) {
+    return Array.isArray(list) && list.some(d => domain === d || domain.endsWith(`.${d}`));
+}
+
+function scoreSourcePolicy(url, domain) {
+    const host = getDomainFromUrl(url);
+    const policy = SOURCE_POLICIES[domain] || SOURCE_POLICIES.general;
+    if (!host) return 0;
+    if (domainMatches(host, policy.preferredDomains)) return 7;
+    if (domainMatches(host, policy.trustedDomains)) return 4;
+    if (domainMatches(host, SOURCE_POLICIES.general.trustedDomains)) return 2;
+    return 0;
 }
 
 function diversifyResults(results) {
