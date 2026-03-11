@@ -3980,6 +3980,15 @@ function formatLiveSourceLinks(items, limit = 5) {
         .join('\n');
 }
 
+function cleanLiveAnswerText(text) {
+    return String(text || '')
+        .replace(/^\s*(?:\*\*)?Direct answer:(?:\*\*)?\s*/i, '')
+        .replace(/\n\s*Confidence:\s*[^\n]*/gi, '')
+        .replace(/\n\s*Verified sources checked:\s*[^\n]*/gi, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 async function buildDirectLiveAnswer(question, items, signal) {
     const sourcePool = Array.isArray(items) ? items.filter(Boolean).slice(0, 6) : [];
     if (!sourcePool.length) return '';
@@ -4020,7 +4029,7 @@ ${snippets}`
     });
 
     const data = await response.json();
-    return String(data?.response || data?.text || '').trim();
+    return cleanLiveAnswerText(String(data?.response || data?.text || ''));
 }
 
 // ========== NEWS FETCHING FUNCTION ==========
@@ -4081,7 +4090,7 @@ async function fetchAndDisplayNews(query) {
         } else {
             const directAnswer = await buildDirectLiveAnswer(query, articles, controller.signal);
             const sourceLines = formatLiveSourceLinks(articles, 5);
-            newsMsg = `${directAnswer}\nVerified sources checked: ${data.sourceCount} across ${data.distinctDomainCount} domains\n\nSources:\n${sourceLines}`;
+            newsMsg = `${directAnswer}\n\nSources:\n${sourceLines}`;
         }
 
         addVerifiedAssistantMessage(newsMsg, 'Verified news sources');
@@ -8580,9 +8589,9 @@ ${snippets}`
         });
 
         const summaryData = await summaryResponse.json();
-        const answer = String(summaryData?.response || summaryData?.text || '').trim();
+        const answer = cleanLiveAnswerText(String(summaryData?.response || summaryData?.text || '').trim());
         const sourceLines = sourcePool.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
-        const finalMsg = `${answer}\nVerified sources checked: ${sourcePool.length} across ${distinctDomains.length} domains\n\nSources:\n${sourceLines}`;
+        const finalMsg = `${answer}\n\nSources:\n${sourceLines}`;
 
         addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
         speak('I checked current sources and summarized what I found.');
@@ -11912,6 +11921,25 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
+
+/*
+1. TYPING INDICATOR:
+   - Call showTypingIndicator() before AI response
+   - Call hideTypingIndicator() before showing response
+
+2. EDIT MESSAGES:
+   - Integrated in addChatMessage() with edit button on user messages
+   - Editing a message regenerates the response from that turn
+
+3. CONVERSATION HISTORY:
+   - Call saveToHistory(userMsg, aiMsg) after each exchange
+   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
+   - Search, export, and clear functions included
+
+4. ERROR FEEDBACK:
+   - Call showError("Error message") instead of addChatMessage for errors
+   - Visual shake animation + auto-dismiss
+*/
 
 </script>
 </body>
