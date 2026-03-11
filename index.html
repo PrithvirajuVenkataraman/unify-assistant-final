@@ -6062,6 +6062,7 @@ function sendTextInput() {
             const text = input.value.trim();
             if (text || pendingVisionImage) {
                 const outgoingText = text || 'Analyze this image';
+                const normalizedOutgoingText = text ? normalizeIntentTypos(outgoingText) : outgoingText;
                 window.__lastUserMessage = outgoingText;
                 if (text && (!inputHistory.length || inputHistory[inputHistory.length - 1] !== text)) {
                     inputHistory.push(text);
@@ -6096,7 +6097,7 @@ function sendTextInput() {
                 } else if (waitingForReminder) {
                     handleReminderFollowUp(outgoingText);
                 } else {
-                    processCommand(outgoingText);
+                    processCommand(normalizedOutgoingText);
                 }
                 
                 input.value = '';
@@ -9112,6 +9113,79 @@ function normalizeSportsFactKey(value) {
         .trim();
 }
 
+function extractUniversalEntityIntent(text, liveIntent = null) {
+    const raw = String(text || '').trim();
+    const lower = raw.toLowerCase();
+    const intent = liveIntent || extractLiveQueryIntent(raw);
+    const relationType =
+        /\b(how many|total|titles?|cups?|troph(?:y|ies)|championships?)\b/.test(lower) ? 'title_count' :
+        /\b(current team|plays for|play for|belongs to which team|team now)\b/.test(lower) ? 'team_membership' :
+        /\b(current party|belongs to which party|party affiliation|party)\b/.test(lower) ? 'party_membership' :
+        /\b(role|position|office|designation|profession|job|what does .* do)\b/.test(lower) ? 'role' :
+        /\b(stats?|record|records|average|goals|runs|wickets|points)\b/.test(lower) ? 'stats' :
+        intent.factType || 'general';
+
+    const entityType =
+        /\b(party|alliance)\b/.test(lower) ? 'party' :
+        /\b(politician|minister|president|prime minister|governor|senator|mp|mla|mayor|leader)\b/.test(lower) ? 'politician' :
+        /\b(player|batsman|bowler|footballer|striker|goalkeeper|quarterback|driver|fighter|boxer|tennis player|captain|coach)\b/.test(lower) ? 'player' :
+        /\b(team|club|franchise|squad|side|xi|fc|united|city|kings|super kings|knight riders|indians)\b/.test(lower) || intent.domain === 'sports' ? 'team' :
+        /\b(actor|actress|singer|director|scientist|engineer|doctor|lawyer|ceo|founder|author|writer|cricketer|footballer|athlete)\b/.test(lower) ? 'profession_person' :
+        'entity';
+
+    const subject = raw
+        .replace(/\b(who|what|which|how many|tell me|show me|give me|do you know|can you tell me|could you tell me|would you tell me)\b/gi, ' ')
+        .replace(/\b(current|latest|total|how many|won|win|wins|won in total|titles?|cups?|troph(?:y|ies)|championships?|stats?|record|records|score|scores|party|team|role|position|office|profession|player|players|politician|politicians|for|in|of|the|a|an)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    return {
+        raw,
+        domain: intent.domain || 'general',
+        entityType,
+        relationType,
+        subject: subject || intent.topic || raw,
+        year: intent.year || '',
+        factType: intent.factType || 'general'
+    };
+}
+
+function buildUniversalEntityQueries(userText, liveIntent = null) {
+    const entityIntent = extractUniversalEntityIntent(userText, liveIntent);
+    const subject = entityIntent.subject || userText;
+    const expandedSubject = expandKnownQueryAliases(subject);
+    const relationHints = {
+        title_count: 'total titles total cups total trophies championships all time record',
+        team_membership: 'current team club franchise belongs to plays for',
+        party_membership: 'current party political party affiliation belongs to party',
+        role: 'current role position office profession designation',
+        stats: 'latest stats record numbers official profile',
+        winner: 'winner champion final result official',
+        score: 'score result official live score',
+        standings: 'standings rankings table points table official',
+        qualification: 'qualified eliminated standings official',
+        general: 'official profile current information'
+    };
+    const relationHint = relationHints[entityIntent.relationType] || relationHints.general;
+    const sourceBias = entityIntent.domain === 'sports'
+        ? 'ESPN Cricbuzz ESPNcricinfo ICC FIFA UEFA NBA NFL ATP WTA Formula 1 Olympics official'
+        : entityIntent.domain === 'politics'
+            ? 'official government parliament election commission party website Reuters AP BBC'
+            : 'official Reuters AP BBC';
+
+    return Array.from(new Set([
+        userText,
+        `${subject} ${entityIntent.year} ${relationHint}`.replace(/\s+/g, ' ').trim(),
+        `${subject} ${relationHint} ${sourceBias}`.replace(/\s+/g, ' ').trim(),
+        expandedSubject && expandedSubject.toLowerCase() !== subject.toLowerCase()
+            ? `${expandedSubject} ${entityIntent.year} ${relationHint}`.replace(/\s+/g, ' ').trim()
+            : '',
+        expandedSubject && expandedSubject.toLowerCase() !== subject.toLowerCase()
+            ? `${expandedSubject} ${relationHint} ${sourceBias}`.replace(/\s+/g, ' ').trim()
+            : ''
+    ].filter(Boolean)));
+}
+
 function lookupKnownSportsFact(intent, userText) {
     const factType = String(intent?.factType || '').toLowerCase();
     const year = String(intent?.year || '').trim();
@@ -9137,6 +9211,146 @@ function lookupKnownSportsFact(intent, userText) {
                 {
                     title: 'Britannica: Chennai Super Kings',
                     url: 'https://www.britannica.com/topic/Chennai-Super-Kings'
+                }
+            ]
+        },
+        {
+            matches: ['rcb', 'royal challengers bengaluru', 'royal challengers bangalore'],
+            year: '',
+            factType: 'stats',
+            answer: 'Royal Challengers Bengaluru have won 1 IPL title in total.',
+            keyPoints: [
+                'They won their first IPL title in 2025.',
+                'Before that, they had reached multiple finals without winning the trophy.',
+                'The 2025 title was their breakthrough IPL championship.'
+            ],
+            sources: [
+                {
+                    title: 'IPL: Champions list',
+                    url: 'https://www.iplt20.com/'
+                },
+                {
+                    title: 'AP: Royal Challengers Bengaluru crowned IPL 2025 champions',
+                    url: 'https://apnews.com/article/403e4c82a5b423cf8161ef1191237078'
+                }
+            ]
+        },
+        {
+            matches: ['mi', 'mumbai indians'],
+            year: '',
+            factType: 'stats',
+            answer: 'Mumbai Indians have won 5 IPL titles in total.',
+            keyPoints: [
+                'They won in 2013, 2015, 2017, 2019, and 2020.',
+                'Mumbai Indians are tied among the most successful IPL teams.',
+                'Their peak run came under Rohit Sharma\'s captaincy.'
+            ],
+            sources: [
+                {
+                    title: 'IPL: Champions list',
+                    url: 'https://www.iplt20.com/'
+                }
+            ]
+        },
+        {
+            matches: ['kkr', 'kolkata knight riders'],
+            year: '',
+            factType: 'stats',
+            answer: 'Kolkata Knight Riders have won 3 IPL titles in total.',
+            keyPoints: [
+                'They won in 2012, 2014, and 2024.',
+                'Their third title came a decade after their second.',
+                'KKR are among the most successful IPL franchises.'
+            ],
+            sources: [
+                {
+                    title: 'IPL: Champions list',
+                    url: 'https://www.iplt20.com/'
+                }
+            ]
+        },
+        {
+            matches: ['srh', 'sunrisers hyderabad'],
+            year: '',
+            factType: 'stats',
+            answer: 'Sunrisers Hyderabad have won 1 IPL title in total.',
+            keyPoints: [
+                'They won the IPL in 2016.',
+                'That title came after defeating Royal Challengers Bangalore in the final.',
+                'They have remained competitive in multiple later seasons as well.'
+            ],
+            sources: [
+                {
+                    title: 'IPL: Champions list',
+                    url: 'https://www.iplt20.com/'
+                }
+            ]
+        },
+        {
+            matches: ['rr', 'rajasthan royals'],
+            year: '',
+            factType: 'stats',
+            answer: 'Rajasthan Royals have won 1 IPL title in total.',
+            keyPoints: [
+                'They won the inaugural IPL season in 2008.',
+                'That remains their only IPL title so far.',
+                'Shane Warne captained Rajasthan Royals to that championship.'
+            ],
+            sources: [
+                {
+                    title: 'IPL: Champions list',
+                    url: 'https://www.iplt20.com/'
+                }
+            ]
+        },
+        {
+            matches: ['gt', 'gujarat titans'],
+            year: '',
+            factType: 'stats',
+            answer: 'Gujarat Titans have won 1 IPL title in total.',
+            keyPoints: [
+                'They won the IPL in their debut season in 2022.',
+                'They also reached the final again in 2023.',
+                'Their first title came under Hardik Pandya\'s captaincy.'
+            ],
+            sources: [
+                {
+                    title: 'IPL: Champions list',
+                    url: 'https://www.iplt20.com/'
+                }
+            ]
+        },
+        {
+            matches: ['dc', 'delhi capitals', 'daredevils', 'delhi daredevils'],
+            year: '',
+            factType: 'stats',
+            answer: 'Delhi Capitals have won 0 IPL titles so far.',
+            keyPoints: [
+                'They have reached the IPL final once, in 2020.',
+                'They were previously known as Delhi Daredevils.',
+                'They are still chasing their first IPL title.'
+            ],
+            sources: [
+                {
+                    title: 'IPL: Champions list',
+                    url: 'https://www.iplt20.com/'
+                }
+            ]
+        },
+        {
+            matches: ['pbks', 'punjab kings', 'kxip', 'kings xi punjab'],
+            year: '',
+            factType: 'stats',
+            answer: 'Punjab Kings have won 0 IPL titles so far.',
+            keyPoints: [
+                'They reached the final in 2014 and 2025 but did not win the trophy.',
+                'They were previously known as Kings XI Punjab.',
+                'Punjab Kings are still seeking their first IPL title.'
+            ],
+            sources: [
+                {
+                    title: 'IPL: Champions list',
+                    url: 'https://www.iplt20.com/'
                 }
             ]
         },
@@ -9170,13 +9384,15 @@ function lookupKnownSportsFact(intent, userText) {
     }) || null;
 }
 
-async function handleSportsFactQuery(userText, intent) {
-    showThinkingIndicator('Checking sports sources...');
+async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
+    const intent = liveIntent || extractLiveQueryIntent(userText);
+    const entityIntent = extractUniversalEntityIntent(userText, intent);
+    showThinkingIndicator('Checking verified sources...');
     const controller = beginAbortableRequest();
     try {
         const knownFact = lookupKnownSportsFact(intent, userText);
-        const conciseStatQuery = intent?.factType === 'stats' && /\b(how many|total|titles?|cups?)\b/i.test(String(userText || ''));
-        if (knownFact && conciseStatQuery) {
+        const conciseFactQuery = isConciseDirectFactQuery(userText);
+        if (knownFact && conciseFactQuery) {
             const sourceLines = knownFact.sources.map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
             const finalMsg = `${knownFact.answer}\n\nSources:\n${sourceLines}`;
             addVerifiedAssistantMessage(finalMsg, 'Verified sports sources');
@@ -9185,7 +9401,7 @@ async function handleSportsFactQuery(userText, intent) {
             return true;
         }
 
-        const queries = buildLiveSearchQueries(userText, intent);
+        const queries = buildUniversalEntityQueries(userText, intent);
         const resultSets = await Promise.all(
             queries.map(async (q) => {
                 try {
@@ -9206,7 +9422,8 @@ async function handleSportsFactQuery(userText, intent) {
 
         const deduped = [];
         const seen = new Set();
-        for (const item of rankSportsSources(resultSets.flat())) {
+        const rankedResults = intent.domain === 'sports' ? rankSportsSources(resultSets.flat()) : resultSets.flat();
+        for (const item of rankedResults) {
             const url = String(item?.url || '').trim();
             if (!url || seen.has(url)) continue;
             seen.add(url);
@@ -9217,7 +9434,7 @@ async function handleSportsFactQuery(userText, intent) {
         if (!deduped.length) {
             if (knownFact) {
                 const sourceLines = knownFact.sources.map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
-                const finalMsg = conciseStatQuery
+                const finalMsg = conciseFactQuery
                     ? `${knownFact.answer}\n\nSources:\n${sourceLines}`
                     : `${knownFact.answer}\n\nKey points:\n- ${knownFact.keyPoints.join('\n- ')}\n\nSources:\n${sourceLines}`;
                 addVerifiedAssistantMessage(finalMsg, 'Verified sports sources');
@@ -9225,10 +9442,10 @@ async function handleSportsFactQuery(userText, intent) {
                 saveToHistory(userText, finalMsg);
                 return true;
             }
-            const fallbackSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${intent.topic || userText} ${intent.factType || 'result'}`)}`;
-            const fallbackMsg = `I couldn't verify a sports result from live sources right now.\n\nTry this direct search:\n[Search sports result](${fallbackSearchUrl})`;
+            const fallbackSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${entityIntent.subject || intent.topic || userText} ${entityIntent.relationType || intent.factType || 'result'}`)}`;
+            const fallbackMsg = `I couldn't verify that fact from live sources right now.\n\nTry this direct search:\n[Search verified result](${fallbackSearchUrl})`;
             addChatMessage(fallbackMsg, false);
-            speak('I could not verify the sports result right now.');
+            speak('I could not verify that result right now.');
             saveToHistory(userText, fallbackMsg);
             return true;
         }
@@ -9243,16 +9460,19 @@ async function handleSportsFactQuery(userText, intent) {
             headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,
             body: JSON.stringify({
-                systemPrompt: 'You summarize sports facts only from supplied snippets. Do not invent facts. If evidence conflicts, say so plainly.',
-                message: `Answer the sports question using ONLY the snippets below.
+                systemPrompt: 'You summarize direct factual answers only from supplied snippets. Do not invent facts. If evidence conflicts or is weak, say so plainly.',
+                message: `Answer the entity question using ONLY the snippets below.
 
 User question: "${userText}"
-Detected topic: "${intent.topic}"
+Detected domain: "${entityIntent.domain}"
+Detected entity type: "${entityIntent.entityType}"
+Detected relation type: "${entityIntent.relationType}"
+Detected subject: "${entityIntent.subject}"
 Detected fact type: "${intent.factType}"
 Detected year: "${intent.year || 'not specified'}"
 
 Required format:
-Direct answer: <answer the specific sports fact immediately>
+Direct answer: <answer the specific fact immediately in 1-2 sentences>
 Key points:
 - <point 1>
 - <point 2>
@@ -9260,9 +9480,9 @@ Key points:
 Confidence: <High/Medium/Low based only on source agreement>
 
 Rules:
-- Answer the exact sports fact first.
-- Prefer winners, scores, standings, rankings, records, or qualification status based on the question.
-- Do not make up numbers, teams, players, dates, or competitions.
+- Answer the exact fact first.
+- Prefer current membership, party, role, office, title count, stats, standings, rankings, or winners depending on the question.
+- Do not make up numbers, teams, players, parties, offices, dates, or organizations.
 - If snippets disagree, say the evidence is mixed.
 - Keep it concise.
 
@@ -9276,8 +9496,8 @@ ${snippets}`
         const sourceLines = deduped.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
         const finalAnswer = answer || cleanLiveAnswerText(`Direct answer: ${deduped[0].title}${deduped[0].description ? `\n\nKey points:\n- ${deduped[0].description}` : ''}`);
         const finalMsg = `${finalAnswer}\n\nSources:\n${sourceLines}`;
-        addVerifiedAssistantMessage(finalMsg, 'Verified sports sources');
-        speak('I checked sports sources and found the answer.');
+        addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
+        speak('I checked verified sources and found the answer.');
         saveToHistory(userText, finalMsg);
         return true;
     } catch (error) {
@@ -9287,6 +9507,10 @@ ${snippets}`
         clearActiveRequest(controller);
         hideThinkingIndicator();
     }
+}
+
+async function handleSportsFactQuery(userText, intent) {
+    return handleUniversalEntityFactQuery(userText, intent);
 }
 
 async function handleLiveRetrievalQuery(userText) {
@@ -9645,8 +9869,8 @@ ${snippets}`
                     if (handled) return;
                 }
 
-                if (liveIntent.domain === 'sports' && liveIntent.directFact) {
-                    const handled = await handleSportsFactQuery(cleanText, liveIntent);
+                if (liveIntent.directFact) {
+                    const handled = await handleUniversalEntityFactQuery(cleanText, liveIntent);
                     if (handled) return;
                 }
 
