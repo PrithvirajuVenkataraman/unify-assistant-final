@@ -8751,11 +8751,12 @@ function isSportsLiveResultQuery(text) {
 
     const sportsContextTerms = /\b(sport|sports|game|games|match|matches|fixture|fixtures|playoff|playoffs|knockout|qualifier|qualifiers|semi[- ]final|quarter[- ]final|final|tournament|league|cup|series|season|championship|grand prix|gp|race|racing|lap|laps|sprint|marathon|relay|boxing|mma|ufc|wwe|wrestling|golf|cycling|f1|formula 1|motogp|nascar|indycar|cricket|football|soccer|basketball|baseball|hockey|tennis|badminton|table tennis|volleyball|rugby|kabaddi|snooker|pool|darts|esports|chess|olympics|paralympics)\b/;
     const competitionCodeTerms = /\b(ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|mls|nba|wnba|nfl|mlb|nhl|ufc|wwe|atp|wta|icc|fifa|uefa|afc|fiba|pga|bwf|f1|motogp|nascar|indycar)\b/;
+    const teamCodeTerms = /\b(csk|mi|rcb|kkr|srh|dc|pbks|gt|rr|lsg|pk|bcci|ict|ind|aus|eng|pak|nz|sa)\b/;
     const sportsEntityTerms = /\b(team|teams|player|players|club|clubs|driver|drivers|rider|riders|fighter|fighters|athlete|athletes|captain|coach)\b/;
     const resultTerms = /\b(who won|winner|won|champion|champions|result|results|score|scores|scored|stat|stats|standing|standings|table|points table|rank|ranking|rankings|medal|medals|title|titles|lifted|beat|defeated|lost to|qualified|eliminated|record|records|how many)\b/;
     const timeTerms = /\b(latest|recent|current|today|tonight|live|now|this year|this season|2025|2026|2027)\b/;
 
-    const hasSportsContext = sportsContextTerms.test(t) || competitionCodeTerms.test(t) || (sportsEntityTerms.test(t) && resultTerms.test(t));
+    const hasSportsContext = sportsContextTerms.test(t) || competitionCodeTerms.test(t) || teamCodeTerms.test(t) || (sportsEntityTerms.test(t) && resultTerms.test(t));
     return hasSportsContext && (resultTerms.test(t) || timeTerms.test(t));
 }
 
@@ -8976,7 +8977,7 @@ function buildLiveSearchQueries(userText, intent = null) {
         .replace(/\s+/g, ' ')
         .trim();
     const topic = liveIntent.topic || cleaned || raw;
-    const expandedTopic = expandSportsSearchAliases(topic);
+    const expandedTopic = expandKnownQueryAliases(topic);
 
     if (liveIntent.domain === 'sports' && liveIntent.directFact) {
         const sportSources = 'ESPN Cricbuzz ESPNcricinfo ICC FIFA UEFA NBA NFL ATP WTA Formula 1 Olympics';
@@ -9007,7 +9008,7 @@ function buildLiveSearchQueries(userText, intent = null) {
     ];
 }
 
-function expandSportsSearchAliases(text) {
+function expandKnownQueryAliases(text) {
     const aliasMap = {
         ipl: 'indian premier league',
         psl: 'pakistan super league',
@@ -9024,7 +9025,33 @@ function expandSportsSearchAliases(text) {
         nhl: 'national hockey league',
         atp: 'association of tennis professionals',
         wta: 'women s tennis association',
-        f1: 'formula 1'
+        f1: 'formula 1',
+        nasa: 'national aeronautics and space administration',
+        isro: 'indian space research organisation',
+        esa: 'european space agency',
+        jaxa: 'japan aerospace exploration agency',
+        cern: 'european organization for nuclear research',
+        bjp: 'bharatiya janata party',
+        aap: 'aam aadmi party',
+        dmk: 'dravida munnetra kazhagam',
+        aiadmk: 'all india anna dravida munnetra kazhagam',
+        tdp: 'telugu desam party',
+        ysrcp: 'ysr congress party',
+        bjd: 'biju janata dal',
+        rbi: 'reserve bank of india',
+        sebi: 'securities and exchange board of india',
+        imf: 'international monetary fund',
+        nato: 'north atlantic treaty organization',
+        eu: 'european union',
+        tcs: 'tata consultancy services',
+        ibm: 'international business machines',
+        amd: 'advanced micro devices',
+        ai: 'artificial intelligence',
+        ml: 'machine learning',
+        llm: 'large language model',
+        agi: 'artificial general intelligence',
+        gpu: 'graphics processing unit',
+        cpu: 'central processing unit'
     };
 
     return String(text || '')
@@ -9075,9 +9102,30 @@ function lookupKnownSportsFact(intent, userText) {
     const factType = String(intent?.factType || '').toLowerCase();
     const year = String(intent?.year || '').trim();
     const topic = normalizeSportsFactKey(intent?.topic || userText);
-    if (!factType || !year || !topic) return null;
+    if (!factType || !topic) return null;
 
     const knownFacts = [
+        {
+            matches: ['csk', 'chennai super kings'],
+            year: '',
+            factType: 'stats',
+            answer: 'CSK have won 5 IPL titles in total.',
+            keyPoints: [
+                'They won in 2010, 2011, 2018, 2021, and 2023.',
+                'That puts Chennai Super Kings among the most successful IPL teams.',
+                'If you want, I can also list the finals they won.'
+            ],
+            sources: [
+                {
+                    title: 'IPL: Champions list',
+                    url: 'https://www.iplt20.com/'
+                },
+                {
+                    title: 'Britannica: Chennai Super Kings',
+                    url: 'https://www.britannica.com/topic/Chennai-Super-Kings'
+                }
+            ]
+        },
         {
             matches: ['ipl', 'indian premier league'],
             year: '2025',
@@ -9102,7 +9150,8 @@ function lookupKnownSportsFact(intent, userText) {
     ];
 
     return knownFacts.find((item) => {
-        if (item.factType !== factType || item.year !== year) return false;
+        if (item.factType !== factType) return false;
+        if (item.year && item.year !== year) return false;
         return item.matches.some(match => topic.includes(match));
     }) || null;
 }
@@ -9144,7 +9193,10 @@ async function handleSportsFactQuery(userText, intent) {
             const knownFact = lookupKnownSportsFact(intent, userText);
             if (knownFact) {
                 const sourceLines = knownFact.sources.map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
-                const finalMsg = `${knownFact.answer}\n\nKey points:\n- ${knownFact.keyPoints.join('\n- ')}\n\nSources:\n${sourceLines}`;
+                const conciseStatQuery = intent?.factType === 'stats' && /\b(how many|total|titles?|cups?)\b/i.test(String(userText || ''));
+                const finalMsg = conciseStatQuery
+                    ? `${knownFact.answer}\n\nSources:\n${sourceLines}`
+                    : `${knownFact.answer}\n\nKey points:\n- ${knownFact.keyPoints.join('\n- ')}\n\nSources:\n${sourceLines}`;
                 addVerifiedAssistantMessage(finalMsg, 'Verified sports sources');
                 speak('I answered from a verified fallback sports record.');
                 saveToHistory(userText, finalMsg);
