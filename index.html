@@ -8908,6 +8908,16 @@ function isConciseDirectFactQuery(text) {
     return directFactSignals.test(t) || strictBinarySignal || binaryQuestionStarter;
 }
 
+function isUniversalEntityFactQuestion(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+
+    const relationSignals = /\b(how many|who is|who was|who won|who lost|winner|won|lost|titles?|cups?|troph(?:y|ies)|championships?|stats?|record|records|standing|standings|points table|ranking|rankings|qualified|eliminated|ceo|president|prime minister|captain|coach|party|plays for|play for|belongs to|current team|current party|role|position|office|profession|job|price|rate|score|scores|result|results)\b/;
+    const entitySignals = /\b(ipl|bpl|psl|cpl|bbl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|ufc|atp|wta|f1|formula 1|cricket|football|soccer|basketball|tennis|team|club|franchise|player|coach|captain|minister|president|prime minister|governor|senator|mp|mla|mayor|party|company|ceo|founder|actor|actress|singer|director|scientist|doctor|engineer|lawyer|royal challengers bengaluru|royal challengers bangalore|chennai super kings|mumbai indians|kolkata knight riders|sunrisers hyderabad|rajasthan royals|delhi capitals|punjab kings|gujarat titans|lucknow super giants|csk|rcb|mi|kkr|srh|rr|dc|pbks|gt|lsg)\b/;
+
+    return relationSignals.test(t) && entitySignals.test(t);
+}
+
 function isNewsworthyLiveTopic(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -8938,50 +8948,174 @@ function getDomainFromUrl(url) {
     }
 }
 
+const DOMAIN_SOURCE_POLICIES = {
+    general: {
+        trustedDomains: [
+            'reuters.com',
+            'apnews.com',
+            'bbc.com',
+            'bbc.co.uk',
+            'aljazeera.com',
+            'npr.org',
+            'cnbc.com',
+            'bloomberg.com',
+            'wsj.com',
+            'ft.com',
+            'nytimes.com',
+            'theguardian.com',
+            'economist.com'
+        ],
+        preferredDomains: []
+    },
+    sports: {
+        trustedDomains: [
+            'espn.com',
+            'espncricinfo.com',
+            'cricbuzz.com',
+            'icc-cricket.com',
+            'fifa.com',
+            'uefa.com',
+            'nba.com',
+            'nfl.com',
+            'mlb.com',
+            'nhl.com',
+            'atptour.com',
+            'wtatennis.com',
+            'formula1.com',
+            'motogp.com',
+            'ufc.com',
+            'olympics.com',
+            'reuters.com',
+            'apnews.com',
+            'bbc.com'
+        ],
+        preferredDomains: [
+            'icc-cricket.com',
+            'espncricinfo.com',
+            'cricbuzz.com',
+            'fifa.com',
+            'uefa.com',
+            'nba.com',
+            'nfl.com',
+            'atptour.com',
+            'wtatennis.com',
+            'formula1.com',
+            'ufc.com',
+            'olympics.com'
+        ]
+    },
+    politics: {
+        trustedDomains: [
+            'gov.in',
+            'parliament.uk',
+            'congress.gov',
+            'eci.gov.in',
+            'reuters.com',
+            'apnews.com',
+            'bbc.com',
+            'bbc.co.uk',
+            'aljazeera.com',
+            'npr.org'
+        ],
+        preferredDomains: [
+            'gov.in',
+            'eci.gov.in',
+            'parliament.uk',
+            'congress.gov'
+        ]
+    },
+    finance: {
+        trustedDomains: [
+            'ecb.europa.eu',
+            'frankfurter.dev',
+            'xe.com',
+            'oanda.com',
+            'x-rates.com',
+            'investing.com',
+            'marketwatch.com',
+            'bloomberg.com',
+            'wsj.com',
+            'ft.com',
+            'cnbc.com',
+            'reuters.com'
+        ],
+        preferredDomains: [
+            'ecb.europa.eu',
+            'frankfurter.dev',
+            'xe.com',
+            'oanda.com',
+            'x-rates.com'
+        ]
+    },
+    tech: {
+        trustedDomains: [
+            'openai.com',
+            'microsoft.com',
+            'google.com',
+            'nvidia.com',
+            'amd.com',
+            'ibm.com',
+            'reuters.com',
+            'apnews.com',
+            'bloomberg.com',
+            'cnbc.com'
+        ],
+        preferredDomains: [
+            'openai.com',
+            'microsoft.com',
+            'google.com',
+            'nvidia.com',
+            'amd.com',
+            'ibm.com'
+        ]
+    }
+};
+
+function getDomainSourcePolicy(domain) {
+    const key = String(domain || 'general').toLowerCase();
+    return DOMAIN_SOURCE_POLICIES[key] || DOMAIN_SOURCE_POLICIES.general;
+}
+
+function domainMatchesPolicy(domain, list) {
+    return Array.isArray(list) && list.some(d => domain === d || domain.endsWith(`.${d}`));
+}
+
 function isTrustedLiveSource(url) {
     const domain = getDomainFromUrl(url);
     if (!domain) return false;
-    const trustedDomains = [
-        'reuters.com',
-        'apnews.com',
-        'bbc.com',
-        'bbc.co.uk',
-        'aljazeera.com',
-        'npr.org',
-        'cnbc.com',
-        'bloomberg.com',
-        'wsj.com',
-        'ft.com',
-        'nytimes.com',
-        'theguardian.com',
-        'economist.com',
-        'ecb.europa.eu',
-        'frankfurter.dev',
-        'xe.com',
-        'oanda.com',
-        'x-rates.com',
-        'investing.com',
-        'marketwatch.com',
-        'coindesk.com',
-        'cointelegraph.com',
-        'espn.com',
-        'espncricinfo.com',
-        'cricbuzz.com',
-        'icc-cricket.com',
-        'fifa.com',
-        'uefa.com',
-        'nba.com',
-        'nfl.com',
-        'mlb.com',
-        'nhl.com',
-        'atptour.com',
-        'wtatennis.com',
-        'formula1.com',
-        'motogp.com',
-        'ufc.com',
-        'olympics.com'
-    ];
-    return trustedDomains.some(d => domain === d || domain.endsWith(`.${d}`));
+    return Object.values(DOMAIN_SOURCE_POLICIES).some(policy => domainMatchesPolicy(domain, policy.trustedDomains));
+}
+
+function scoreSourcePolicy(url, domain) {
+    const host = getDomainFromUrl(url);
+    const policy = getDomainSourcePolicy(domain);
+    if (!host) return 0;
+    if (domainMatchesPolicy(host, policy.preferredDomains)) return 7;
+    if (domainMatchesPolicy(host, policy.trustedDomains)) return 4;
+    if (domainMatchesPolicy(host, DOMAIN_SOURCE_POLICIES.general.trustedDomains)) return 2;
+    return 0;
+}
+
+function rankSourcesByPolicy(results, domain, queryText = '') {
+    const tokens = String(queryText || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 12);
+
+    return [...(Array.isArray(results) ? results : [])]
+        .map((item, index) => {
+            const title = String(item?.title || '').toLowerCase();
+            const description = String(item?.description || '').toLowerCase();
+            const overlap = tokens.reduce((acc, token) => acc + (title.includes(token) || description.includes(token) ? 1 : 0), 0);
+            return {
+                ...item,
+                __policyScore: scoreSourcePolicy(item?.url, domain) + overlap - (index * 0.01)
+            };
+        })
+        .sort((a, b) => b.__policyScore - a.__policyScore)
+        .map(({ __policyScore, ...item }) => item);
 }
 
 function buildLiveSearchQueries(userText, intent = null) {
@@ -9077,32 +9211,7 @@ function expandKnownQueryAliases(text) {
 }
 
 function rankSportsSources(results) {
-    const sportsDomains = [
-        'espncricinfo.com',
-        'cricbuzz.com',
-        'icc-cricket.com',
-        'fifa.com',
-        'uefa.com',
-        'nba.com',
-        'nfl.com',
-        'mlb.com',
-        'nhl.com',
-        'atptour.com',
-        'wtatennis.com',
-        'formula1.com',
-        'motogp.com',
-        'ufc.com',
-        'olympics.com',
-        'espn.com'
-    ];
-
-    return [...(Array.isArray(results) ? results : [])].sort((a, b) => {
-        const aDomain = getDomainFromUrl(a?.url);
-        const bDomain = getDomainFromUrl(b?.url);
-        const aSports = sportsDomains.some(d => aDomain === d || aDomain.endsWith(`.${d}`)) ? 1 : 0;
-        const bSports = sportsDomains.some(d => bDomain === d || bDomain.endsWith(`.${d}`)) ? 1 : 0;
-        return bSports - aSports;
-    });
+    return rankSourcesByPolicy(results, 'sports', 'sports result score standings winner official');
 }
 
 function normalizeSportsFactKey(value) {
@@ -9113,41 +9222,97 @@ function normalizeSportsFactKey(value) {
         .trim();
 }
 
-function extractUniversalEntityIntent(text, liveIntent = null) {
-    const raw = String(text || '').trim();
-    const lower = raw.toLowerCase();
-    const intent = liveIntent || extractLiveQueryIntent(raw);
-    const relationType =
-        /\b(how many|total|titles?|cups?|troph(?:y|ies)|championships?)\b/.test(lower) ? 'title_count' :
-        /\b(current team|plays for|play for|belongs to which team|team now)\b/.test(lower) ? 'team_membership' :
-        /\b(current party|belongs to which party|party affiliation|party)\b/.test(lower) ? 'party_membership' :
-        /\b(role|position|office|designation|profession|job|what does .* do)\b/.test(lower) ? 'role' :
-        /\b(stats?|record|records|average|goals|runs|wickets|points)\b/.test(lower) ? 'stats' :
-        intent.factType || 'general';
+function normalizeEntitySearchText(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
 
-    const entityType =
-        /\b(party|alliance)\b/.test(lower) ? 'party' :
-        /\b(politician|minister|president|prime minister|governor|senator|mp|mla|mayor|leader)\b/.test(lower) ? 'politician' :
-        /\b(player|batsman|bowler|footballer|striker|goalkeeper|quarterback|driver|fighter|boxer|tennis player|captain|coach)\b/.test(lower) ? 'player' :
-        /\b(team|club|franchise|squad|side|xi|fc|united|city|kings|super kings|knight riders|indians)\b/.test(lower) || intent.domain === 'sports' ? 'team' :
-        /\b(actor|actress|singer|director|scientist|engineer|doctor|lawyer|ceo|founder|author|writer|cricketer|footballer|athlete)\b/.test(lower) ? 'profession_person' :
-        'entity';
+function detectEntityDomain(text, liveIntent = null) {
+    const lower = normalizeEntitySearchText(text);
+    if (liveIntent?.domain) return liveIntent.domain;
+    if (/\b(team|club|franchise|league|cup|trophy|score|standings|match|player|coach|captain|ipl|nba|nfl|fifa|uefa|olympics)\b/.test(lower)) {
+        return 'sports';
+    }
+    if (/\b(president|prime minister|minister|senator|mp|mla|election|party|government|parliament|chief minister|mayor)\b/.test(lower)) {
+        return 'politics';
+    }
+    if (/\b(stock|shares|price|market cap|repo rate|interest rate|inflation|bank|rbi|sebi|nasdaq|dow)\b/.test(lower)) {
+        return 'finance';
+    }
+    if (/\b(ceo|founder|company|startup|ai|llm|gpu|cpu|software|chip|nvidia|microsoft|openai|google)\b/.test(lower)) {
+        return 'tech';
+    }
+    return 'general';
+}
 
-    const subject = raw
+function detectEntityRelationType(text, liveIntent = null) {
+    const lower = normalizeEntitySearchText(text);
+    if (/\b(how many|number of|total)\b.*\b(titles|cups|trophies|championships|wins)\b/.test(lower)) return 'title_count';
+    if (/\b(who won|winner|champion)\b/.test(lower) || liveIntent?.factType === 'winner') return 'winner';
+    if (/\b(score|scored|result)\b/.test(lower) || liveIntent?.factType === 'score') return 'score';
+    if (/\b(stats|record|records|average|goals|runs|wickets|points)\b/.test(lower) || liveIntent?.factType === 'stats') return 'stats';
+    if (/\b(standings|ranking|rankings|points table|table)\b/.test(lower) || liveIntent?.factType === 'standings') return 'standings';
+    if (/\b(qualified|eliminated)\b/.test(lower) || liveIntent?.factType === 'qualification') return 'qualification';
+    if (/\b(plays for|play for|current team|which team|belongs to which team)\b/.test(lower)) return 'team_membership';
+    if (/\b(belongs to which party|party affiliation|which party|current party)\b/.test(lower)) return 'party_membership';
+    if (/\b(role|position|office|designation|profession|job|what does)\b/.test(lower)) return 'role';
+    return liveIntent?.factType || 'general';
+}
+
+function detectEntityType(text, relationType, domain) {
+    const lower = normalizeEntitySearchText(text);
+    if (relationType === 'party_membership' || /\b(party|alliance)\b/.test(lower)) return 'party';
+    if (/\b(president|prime minister|minister|senator|mp|mla|governor|mayor|leader)\b/.test(lower)) return 'politician';
+    if (/\b(player|batsman|bowler|footballer|striker|goalkeeper|quarterback|driver|fighter|boxer|captain|coach)\b/.test(lower)) return 'player';
+    if (domain === 'sports' || relationType === 'title_count' || relationType === 'winner' || /\b(team|club|franchise|fc|united|city|kings|super kings|knight riders|indians)\b/.test(lower)) return 'team';
+    if (/\b(company|startup|firm|corporation)\b/.test(lower)) return 'company';
+    if (/\b(ceo|founder|actor|actress|singer|director|scientist|engineer|doctor|lawyer|author|writer)\b/.test(lower)) return 'profession_person';
+    return 'entity';
+}
+
+function extractEntitySubject(text, relationType, liveIntent = null) {
+    const lower = String(text || '');
+    let subject = lower
         .replace(/\b(who|what|which|how many|tell me|show me|give me|do you know|can you tell me|could you tell me|would you tell me)\b/gi, ' ')
-        .replace(/\b(current|latest|total|how many|won|win|wins|won in total|titles?|cups?|troph(?:y|ies)|championships?|stats?|record|records|score|scores|party|team|role|position|office|profession|player|players|politician|politicians|for|in|of|the|a|an)\b/gi, ' ')
+        .replace(/\b(current|latest|total|number of|how many|won|win|wins|titles?|cups?|troph(?:y|ies)|championships?|stats?|record|records|score|scores|standings|rankings?|table|points|party|affiliation|team|role|position|office|profession|player|players|politician|politicians|for|in|of|the|a|an|which)\b/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
+    if (!subject && liveIntent?.topic) {
+        subject = liveIntent.topic;
+    }
+
+    if (relationType === 'winner' && liveIntent?.topic) {
+        subject = liveIntent.topic;
+    }
+
+    return subject || String(text || '').trim();
+}
+
+function buildStructuredEntityRecord(text, liveIntent = null) {
+    const raw = String(text || '').trim();
+    const domain = detectEntityDomain(raw, liveIntent);
+    const relationType = detectEntityRelationType(raw, liveIntent);
+    const entityType = detectEntityType(raw, relationType, domain);
+    const subject = extractEntitySubject(raw, relationType, liveIntent);
     return {
         raw,
-        domain: intent.domain || 'general',
-        entityType,
+        domain,
         relationType,
-        subject: subject || intent.topic || raw,
-        year: intent.year || '',
-        factType: intent.factType || 'general'
+        entityType,
+        subject,
+        year: liveIntent?.year || '',
+        factType: liveIntent?.factType || relationType,
+        competition: liveIntent?.topic || '',
+        directFact: Boolean(liveIntent?.directFact || relationType !== 'general')
     };
+}
+
+function extractUniversalEntityIntent(text, liveIntent = null) {
+    return buildStructuredEntityRecord(text, liveIntent || extractLiveQueryIntent(text));
 }
 
 function buildUniversalEntityQueries(userText, liveIntent = null) {
@@ -9167,11 +9332,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         general: 'official profile current information'
     };
     const relationHint = relationHints[entityIntent.relationType] || relationHints.general;
-    const sourceBias = entityIntent.domain === 'sports'
-        ? 'ESPN Cricbuzz ESPNcricinfo ICC FIFA UEFA NBA NFL ATP WTA Formula 1 Olympics official'
-        : entityIntent.domain === 'politics'
-            ? 'official government parliament election commission party website Reuters AP BBC'
-            : 'official Reuters AP BBC';
+    const sourceBias = getDomainSourcePolicy(entityIntent.domain).preferredDomains.join(' ') || 'official Reuters AP BBC';
 
     return Array.from(new Set([
         userText,
@@ -9184,6 +9345,92 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
             ? `${expandedSubject} ${relationHint} ${sourceBias}`.replace(/\s+/g, ' ').trim()
             : ''
     ].filter(Boolean)));
+}
+
+function normalizeAgreementValue(value) {
+    return normalizeEntitySearchText(value).replace(/\b(the|a|an)\b/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function extractFactCandidate(result, entityIntent) {
+    const combined = `${result?.title || ''} ${result?.description || ''}`.replace(/\s+/g, ' ').trim();
+    if (!combined) return '';
+
+    if (entityIntent.relationType === 'title_count') {
+        const countMatch = combined.match(/\b(\d+)\b[^\n.]{0,35}\b(titles?|cups?|troph(?:y|ies)|championships?)\b/i);
+        return countMatch ? countMatch[1] : '';
+    }
+
+    if (entityIntent.relationType === 'winner') {
+        const winnerMatch = combined.match(/\b([A-Z][A-Za-z0-9&.\-\s]{2,60})\b\s+(?:won|wins|beat|beats|defeated|defeats|are champions|is champion|clinched|lifted)/);
+        if (winnerMatch) return winnerMatch[1].trim();
+        const championMatch = combined.match(/\bchampions?:?\s*([A-Z][A-Za-z0-9&.\-\s]{2,60})/i);
+        return championMatch ? championMatch[1].trim() : '';
+    }
+
+    if (entityIntent.relationType === 'team_membership') {
+        const match = combined.match(/\b(?:plays for|play for|joined|signs? with|signed with|current team is)\s+([A-Z][A-Za-z0-9&.\-\s]{2,60})/i);
+        return match ? match[1].trim() : '';
+    }
+
+    if (entityIntent.relationType === 'party_membership') {
+        const match = combined.match(/\b(?:belongs to|member of|party(?: affiliation)?(?: is)?|from)\s+([A-Z][A-Za-z0-9&.\-\s]{2,60})/i);
+        return match ? match[1].trim() : '';
+    }
+
+    if (entityIntent.relationType === 'role') {
+        const match = combined.match(/\b(?:is|serves as|appointed as|works as)\s+(?:the\s+)?([A-Za-z][A-Za-z0-9&.\-\s]{2,80})/i);
+        return match ? match[1].trim() : '';
+    }
+
+    return '';
+}
+
+function buildSourceAgreement(results, entityIntent) {
+    const votes = new Map();
+    for (const item of Array.isArray(results) ? results : []) {
+        const candidate = normalizeAgreementValue(extractFactCandidate(item, entityIntent));
+        if (!candidate) continue;
+        const current = votes.get(candidate) || { value: extractFactCandidate(item, entityIntent).trim(), count: 0, sources: [] };
+        current.count += 1;
+        current.sources.push(item);
+        votes.set(candidate, current);
+    }
+
+    const rankedVotes = Array.from(votes.values()).sort((a, b) => {
+        const aTrusted = a.sources.reduce((acc, item) => acc + scoreSourcePolicy(item?.url, entityIntent.domain), 0);
+        const bTrusted = b.sources.reduce((acc, item) => acc + scoreSourcePolicy(item?.url, entityIntent.domain), 0);
+        if (b.count !== a.count) return b.count - a.count;
+        return bTrusted - aTrusted;
+    });
+
+    const top = rankedVotes[0] || null;
+    return {
+        top,
+        mixed: rankedVotes.length > 1 && top && rankedVotes[1].count === top.count,
+        agreed: Boolean(top && top.count >= 2 && !(rankedVotes[1] && rankedVotes[1].count === top.count))
+    };
+}
+
+function formatConsensusAnswer(entityIntent, agreement) {
+    const value = agreement?.top?.value || '';
+    if (!value) return '';
+    if (entityIntent.relationType === 'title_count') {
+        const noun = entityIntent.entityType === 'team' ? 'titles' : 'major titles';
+        return `${entityIntent.subject} have won ${value} ${noun} in total.`;
+    }
+    if (entityIntent.relationType === 'winner') {
+        return `${value} won ${entityIntent.subject || entityIntent.competition || 'the event'}.`;
+    }
+    if (entityIntent.relationType === 'team_membership') {
+        return `${entityIntent.subject} currently plays for ${value}.`;
+    }
+    if (entityIntent.relationType === 'party_membership') {
+        return `${entityIntent.subject} is associated with ${value}.`;
+    }
+    if (entityIntent.relationType === 'role') {
+        return `${entityIntent.subject} is ${value}.`;
+    }
+    return value;
 }
 
 function lookupKnownSportsFact(intent, userText) {
@@ -9387,11 +9634,11 @@ function lookupKnownSportsFact(intent, userText) {
 async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
     const intent = liveIntent || extractLiveQueryIntent(userText);
     const entityIntent = extractUniversalEntityIntent(userText, intent);
+    const knownFact = lookupKnownSportsFact(intent, userText);
+    const conciseFactQuery = isConciseDirectFactQuery(userText);
     showThinkingIndicator('Checking verified sources...');
     const controller = beginAbortableRequest();
     try {
-        const knownFact = lookupKnownSportsFact(intent, userText);
-        const conciseFactQuery = isConciseDirectFactQuery(userText);
         if (knownFact && conciseFactQuery) {
             const sourceLines = knownFact.sources.map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
             const finalMsg = `${knownFact.answer}\n\nSources:\n${sourceLines}`;
@@ -9422,7 +9669,7 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
 
         const deduped = [];
         const seen = new Set();
-        const rankedResults = intent.domain === 'sports' ? rankSportsSources(resultSets.flat()) : resultSets.flat();
+        const rankedResults = rankSourcesByPolicy(resultSets.flat(), entityIntent.domain, `${userText} ${entityIntent.subject} ${entityIntent.relationType}`);
         for (const item of rankedResults) {
             const url = String(item?.url || '').trim();
             if (!url || seen.has(url)) continue;
@@ -9447,6 +9694,32 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
             addChatMessage(fallbackMsg, false);
             speak('I could not verify that result right now.');
             saveToHistory(userText, fallbackMsg);
+            return true;
+        }
+
+        const agreement = buildSourceAgreement(deduped.slice(0, 6), entityIntent);
+        if (agreement.agreed && agreement.top) {
+            const directAnswer = formatConsensusAnswer(entityIntent, agreement);
+            const sourceLines = agreement.top.sources
+                .slice(0, 4)
+                .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+                .join('\n');
+            const finalMsg = `${directAnswer}\n\nSources:\n${sourceLines}`;
+            addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
+            speak('I checked multiple sources and confirmed the answer.');
+            saveToHistory(userText, finalMsg);
+            return true;
+        }
+
+        if (entityIntent.directFact && agreement.mixed) {
+            const sourceLines = deduped
+                .slice(0, 5)
+                .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+                .join('\n');
+            const mixedMsg = `I found sources for that, but they do not agree enough for a clean direct answer yet.\n\nSources:\n${sourceLines}`;
+            addVerifiedAssistantMessage(mixedMsg, 'Mixed live sources');
+            speak('I found mixed source evidence, so I did not guess.');
+            saveToHistory(userText, mixedMsg);
             return true;
         }
 
@@ -9502,7 +9775,22 @@ ${snippets}`
         return true;
     } catch (error) {
         if (isAbortError(error)) return true;
-        return false;
+        if (knownFact) {
+            const sourceLines = knownFact.sources.map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
+            const finalMsg = conciseFactQuery
+                ? `${knownFact.answer}\n\nSources:\n${sourceLines}`
+                : `${knownFact.answer}\n\nKey points:\n- ${knownFact.keyPoints.join('\n- ')}\n\nSources:\n${sourceLines}`;
+            addVerifiedAssistantMessage(finalMsg, 'Verified sports sources');
+            speak('I answered from a verified fallback sports record.');
+            saveToHistory(userText, finalMsg);
+            return true;
+        }
+        const fallbackSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(`${entityIntent.subject || intent.topic || userText} ${entityIntent.relationType || intent.factType || 'result'}`)}`;
+        const fallbackMsg = `I couldn't verify that fact from live sources right now.\n\nTry this direct search:\n[Search verified result](${fallbackSearchUrl})`;
+        addChatMessage(fallbackMsg, false);
+        speak('I could not verify that fact right now.');
+        saveToHistory(userText, fallbackMsg);
+        return true;
     } finally {
         clearActiveRequest(controller);
         hideThinkingIndicator();
@@ -9542,7 +9830,8 @@ async function handleLiveRetrievalQuery(userText) {
 
         const deduped = [];
         const seen = new Set();
-        for (const item of resultSets.flat()) {
+        const rankedLiveResults = rankSourcesByPolicy(resultSets.flat(), intent.domain || 'general', query);
+        for (const item of rankedLiveResults) {
             const url = String(item?.url || '').trim();
             if (!url || seen.has(url)) continue;
             seen.add(url);
@@ -9555,12 +9844,32 @@ async function handleLiveRetrievalQuery(userText) {
             return true;
         }
 
-        const trusted = deduped.filter(r => isTrustedLiveSource(r.url));
+        const trusted = deduped.filter(r => scoreSourcePolicy(r.url, intent.domain || 'general') > 0);
         const sourcePool = trusted.length >= 3 ? trusted : deduped;
         const distinctDomains = Array.from(new Set(sourcePool.map(r => getDomainFromUrl(r.url)).filter(Boolean)));
         if (!directFactQuery && distinctDomains.length < 2) {
             await fetchAndDisplayNews(userText);
             return true;
+        }
+
+        if (directFactQuery) {
+            const agreement = buildSourceAgreement(sourcePool.slice(0, 6), extractUniversalEntityIntent(query, intent));
+            if (agreement.agreed && agreement.top) {
+                const entityIntent = extractUniversalEntityIntent(query, intent);
+                const directAnswer = formatConsensusAnswer(entityIntent, agreement);
+                if (directAnswer) {
+                    const sourceLines = agreement.top.sources
+                        .slice(0, 4)
+                        .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+                        .join('\n');
+                    const finalMsg = `${directAnswer}\n\nSources:\n${sourceLines}`;
+                    addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
+                    speak('I checked multiple sources and confirmed the answer.');
+                    saveToHistory(userText, finalMsg);
+                    hideThinkingIndicator();
+                    return true;
+                }
+            }
         }
 
         const snippets = sourcePool
@@ -9847,6 +10156,21 @@ ${snippets}`
             }
 
             updateTopicMemory(cleanText);
+
+            if (isUniversalEntityFactQuestion(cleanText)) {
+                const entityFactIntent = extractLiveQueryIntent(cleanText);
+
+                if (isFutureYearLiveQuery(entityFactIntent)) {
+                    const futureMsg = buildFutureYearResponse(entityFactIntent);
+                    addChatMessage(futureMsg, false);
+                    speak("I can't time travel, buddy.");
+                    saveToHistory(text, futureMsg);
+                    return;
+                }
+
+                const handled = await handleUniversalEntityFactQuery(cleanText, entityFactIntent);
+                if (handled) return;
+            }
 
             if (isCurrentInfoQuery(cleanText)) {
                 const liveIntent = extractLiveQueryIntent(cleanText);
