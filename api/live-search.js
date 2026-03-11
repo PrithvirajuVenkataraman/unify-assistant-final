@@ -23,22 +23,49 @@ const TRUSTED_DOMAINS = [
     'cointelegraph.com'
 ];
 
+const SEARCH_STOP_WORDS = new Set([
+    'a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'than',
+    'do', 'does', 'did', 'can', 'could', 'would', 'will', 'should',
+    'what', 'which', 'who', 'whom', 'whose', 'when', 'where', 'why', 'how',
+    'is', 'are', 'am', 'was', 'were', 'be', 'been', 'being',
+    'have', 'has', 'had', 'i', 'me', 'my', 'mine', 'you', 'your', 'yours',
+    'we', 'our', 'ours', 'they', 'their', 'theirs', 'he', 'she', 'it',
+    'please', 'kindly', 'just', 'about', 'on', 'for', 'to', 'of', 'in',
+    'at', 'by', 'with', 'from', 'into', 'as', 'per', 'tell', 'show',
+    'give', 'find', 'search', 'look', 'lookup', 'check', 'know', 'explain',
+    'describe', 'summarize', 'summary', 'information', 'info'
+]);
+
+const LEADING_QUERY_PATTERNS = [
+    /^(?:can|could|would|will|do|does|did)\s+you\s+/i,
+    /^(?:what|which|who|when|where|why|how)\s+(?:is|are|was|were|do|does|did|can|could|would|will|should|has|have|had)\s+/i,
+    /^(?:what|which|who|when|where|why|how)\s+/i,
+    /^(?:tell|show|give|find|search|look\s+up|check)\s+me\s+/i,
+    /^(?:tell|show|give|find|search|look\s+up|check)\s+/i,
+    /^(?:please|kindly)\s+/i
+];
+
+const TRAILING_QUERY_PATTERNS = [
+    /\b(?:please|for me|per se)\b/gi
+];
+
 export async function searchWeb(query, maxResults = 8) {
+    const searchQuery = extractSearchTopic(query) || String(query || '').trim();
     const normalizedMax = Math.min(Math.max(Number(maxResults || 8), 1), 10);
     const serperKey = process.env.SERPER_API_KEY;
     const braveKey = process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY;
     const attempts = [];
 
     if (serperKey) {
-        attempts.push(() => searchWithSerper(query, normalizedMax, serperKey));
+        attempts.push(() => searchWithSerper(searchQuery, normalizedMax, serperKey));
     }
     if (braveKey) {
-        attempts.push(() => searchWithBrave(query, normalizedMax, braveKey));
+        attempts.push(() => searchWithBrave(searchQuery, normalizedMax, braveKey));
     }
-    attempts.push(() => searchWithDuckDuckGoHtml(query, normalizedMax));
-    attempts.push(() => searchWithDuckDuckGo(query, normalizedMax));
+    attempts.push(() => searchWithDuckDuckGoHtml(searchQuery, normalizedMax));
+    attempts.push(() => searchWithDuckDuckGo(searchQuery, normalizedMax));
     if (isLikelyNewsQuery(query)) {
-        attempts.push(() => searchWithGoogleNewsRss(query, normalizedMax));
+        attempts.push(() => searchWithGoogleNewsRss(searchQuery, normalizedMax));
     }
 
     const merged = [];
@@ -123,12 +150,37 @@ export function isTrustedLiveSource(url) {
     return TRUSTED_DOMAINS.some(d => domain === d || domain.endsWith(`.${d}`));
 }
 
+export function extractSearchTopic(text) {
+    let cleaned = String(text || '').trim();
+    if (!cleaned) return '';
+
+    for (const pattern of LEADING_QUERY_PATTERNS) {
+        cleaned = cleaned.replace(pattern, '');
+    }
+    for (const pattern of TRAILING_QUERY_PATTERNS) {
+        cleaned = cleaned.replace(pattern, ' ');
+    }
+
+    cleaned = cleaned
+        .replace(/[?!]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const meaningfulTokens = cleaned
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, ' ')
+        .split(/\s+/)
+        .filter(token => token && !SEARCH_STOP_WORDS.has(token));
+
+    return meaningfulTokens.join(' ').trim() || cleaned;
+}
+
 function tokenize(text) {
-    return String(text || '')
+    return extractSearchTopic(text)
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, ' ')
         .split(/\s+/)
-        .filter(token => token && token.length > 2)
+        .filter(token => token && token.length > 1 && !SEARCH_STOP_WORDS.has(token))
         .slice(0, 12);
 }
 
