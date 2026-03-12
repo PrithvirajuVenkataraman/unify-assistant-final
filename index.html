@@ -4535,10 +4535,7 @@ function buildLocalAssistantFallback(userMessage, error) {
     return '';
 }
 
-const LOCAL_KNOWLEDGE_FALLBACKS = {
-    jalebi: 'Jalebi is a popular South Asian sweet made by deep-frying flour batter into spiral shapes and soaking them in sugar syrup. It is usually crisp on the outside, juicy inside, and often served warm.',
-    jilebi: 'Jalebi is a popular South Asian sweet made by deep-frying flour batter into spiral shapes and soaking them in sugar syrup. It is usually crisp on the outside, juicy inside, and often served warm.'
-};
+const LOCAL_KNOWLEDGE_FALLBACKS = {};
 
 function buildDirectKnowledgeFallback(userMessage) {
     if (!isDirectExplainerQuery(userMessage) && !isConciseDirectFactQuery(userMessage)) {
@@ -4550,10 +4547,6 @@ function buildDirectKnowledgeFallback(userMessage) {
 
     if (LOCAL_KNOWLEDGE_FALLBACKS[subject]) {
         return LOCAL_KNOWLEDGE_FALLBACKS[subject];
-    }
-
-    if (/^what\s+is\b|^what's\b|^define\b|^meaning\s+of\b/i.test(String(userMessage || '').trim())) {
-        return `I could not verify a clean reference right now, but ${subject} is a general knowledge topic and I should answer it directly instead of asking for more context. Try again and I should route it through the stronger explainer fallback.`;
     }
 
     return '';
@@ -4622,11 +4615,11 @@ async function resolveFinalAssistantAnswer(userMessage, answerText) {
     const safeAnswer = sanitizeWeakModelAnswer(answerText, userMessage);
     if (safeAnswer) return safeAnswer;
 
-    const directKnowledgeFallback = buildDirectKnowledgeFallback(userMessage);
-    if (directKnowledgeFallback) return directKnowledgeFallback;
-
     const searchFallback = await buildSearchFallbackAnswer(userMessage);
     if (searchFallback) return searchFallback;
+
+    const directKnowledgeFallback = buildDirectKnowledgeFallback(userMessage);
+    if (directKnowledgeFallback) return directKnowledgeFallback;
 
     return buildUniversalSoftFallback(userMessage);
 }
