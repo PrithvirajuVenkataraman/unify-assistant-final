@@ -2351,8 +2351,11 @@ function isTamilJokeRequest(text) {
 function isRecipeRequest(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    return /\b(recipe|how to make|how do i make|how can i make|ingredients|steps|cook|prepare)\b/.test(t) &&
-           /\b(biryani|chicken|mutton|rice|curry|masala|pasta|pizza|noodles|soup|cake|bread|dessert|dish|food)\b/.test(t);
+    const recipeSignals = /\b(recipe|how to make|how do i make|how can i make|ingredients|steps|cook|prepare)\b/;
+    const dishSignals = /\b(biryani|chicken|mutton|rice|curry|masala|pasta|pizza|noodles|soup|cake|bread|dessert|dish|food|aloo|potato|fry|sabzi|poriyal|bhaji|stir fry)\b/;
+    const directRecipePattern = /\brecipe\s+for\s+.+/;
+    const makeDishPattern = /\b(?:how to make|how do i make|how can i make|prepare|cook)\s+.+/;
+    return (recipeSignals.test(t) && dishSignals.test(t)) || directRecipePattern.test(t) || makeDishPattern.test(t);
 }
 
 function normalizeIntentTypos(text) {
@@ -2461,17 +2464,44 @@ async function fetchWikipediaReferenceImage(subject) {
         biriyani: 'biryani',
         hydrabad: 'hyderabad',
         bengluru: 'bengaluru',
-        tamill: 'tamil'
+        tamill: 'tamil',
+        jilebi: 'jalebi',
+        jilabi: 'jalebi',
+        jelabi: 'jalebi'
     };
     const normalizedLower = normalized.toLowerCase();
     const normalizedWithTyposFixed = typoMap[normalizedLower] || normalized;
     const titleCase = normalizedWithTyposFixed.replace(/\b\w/g, c => c.toUpperCase());
     const lower = normalizedWithTyposFixed.toLowerCase();
 
+    function normalizeReferenceTitle(value) {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/\([^)]*\)/g, ' ')
+            .replace(/[^\w\s-]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function looksLikeMatchingReference(pageTitle) {
+        const normalizedSubject = normalizeReferenceTitle(normalizedWithTyposFixed);
+        const normalizedTitle = normalizeReferenceTitle(pageTitle);
+        if (!normalizedSubject || !normalizedTitle) return false;
+        if (normalizedTitle === normalizedSubject) return true;
+        if (normalizedTitle.includes(normalizedSubject) || normalizedSubject.includes(normalizedTitle)) return true;
+
+        const subjectTokens = normalizedSubject.split(' ').filter(Boolean);
+        const titleTokens = new Set(normalizedTitle.split(' ').filter(Boolean));
+        const overlap = subjectTokens.filter(token => titleTokens.has(token));
+        return overlap.length >= Math.min(subjectTokens.length, 2);
+    }
+
     const candidates = [normalizedWithTyposFixed, titleCase];
     // Common alternate spellings for well-known foods/entities.
     if (lower === 'gujiya') {
         candidates.push('Gujhia', 'Gujia');
+    } else if (lower === 'jalebi') {
+        candidates.push('Jalebi', 'Jilebi', 'Zalabia');
     }
 
     async function fetchPageImageByTitle(pageTitle) {
@@ -2484,6 +2514,7 @@ async function fetchWikipediaReferenceImage(subject) {
         if (!page) return null;
         const imageUrl = page?.thumbnail?.source || '';
         if (!imageUrl) return null;
+        if (!looksLikeMatchingReference(page?.title || pageTitle)) return null;
         return {
             title: page?.title || pageTitle,
             imageUrl,
@@ -4553,6 +4584,12 @@ function buildUniversalSoftFallback(userMessage) {
 function isDirectExplainerQuery(text) {
     const t = String(text || '').trim().toLowerCase();
     if (!t) return false;
+    if (/\b(what\s+is\s+happening|what'?s\s+happening|what\s+is\s+going\s+on|what'?s\s+going\s+on)\b/.test(t)) {
+        return false;
+    }
+    if (/\b(current|latest|recent|today|right now|live|news|headline|headlines|update|updates|status)\b/.test(t)) {
+        return false;
+    }
     return /^(what\s+is|what's|who\s+is|who's|tell\s+me\s+about|define|meaning\s+of|do\s+you\s+know|what\s+do\s+you\s+know\s+about)\b/.test(t);
 }
 
@@ -11176,6 +11213,9 @@ ${snippets}`
     } catch (error) {
         if (isAbortError(error)) {
             return true;
+        }
+        if (!strictLiveRequired) {
+            return await publishUniversalModelFallback({ userText }, 'Model fallback');
         }
         await fetchAndDisplayNews(userText);
         return true;
