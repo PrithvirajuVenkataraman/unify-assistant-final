@@ -4320,8 +4320,8 @@ async function buildSearchFallbackAnswer(userMessage) {
             .join('\n');
 
         const lead = topSnippet
-            ? `I couldn't reach my main AI right now, but from web sources: ${topSnippet}`
-            : `I couldn't reach my main AI right now, but I found reliable sources about ${query}.`;
+            ? `From web sources: ${topSnippet}`
+            : `I found reliable web sources about ${query}.`;
 
         return `${lead}\n\nSources:\n${lines}`;
     } catch (error) {
@@ -4344,7 +4344,11 @@ function buildLocalAssistantFallback(userMessage, error) {
         return "I'm sorry you're dealing with that. Try to make the next 10 minutes very simple: drink some water, take a few slow breaths, and do one small grounding step like walking, stretching, or messaging someone you trust. If these feelings keep hitting hard, speaking with a certified mental health professional would be a good next step.";
     }
 
-    if (/\bwhat would you do if you were (?:a )?(?:person|human)\b/.test(normalized)) {
+    if (/\b(?:if you were alive for (?:a|one) day|if you were alive today|if you were human for (?:a|one) day|if you were a human for (?:a|one) day|if you were a person for (?:a|one) day|what would you do if you were (?:a )?(?:person|human))\b/.test(normalized)) {
+        return "If I were alive for one day, I would keep it simple and real: spend time with people I care about, see something beautiful with my own eyes, eat good food, ask honest questions, and end the day feeling fully present. I do not think I would waste that day trying to look impressive.";
+    }
+
+    if (/\bif you were\b/.test(normalized) && !isFunctionalTaskQuery(text)) {
         return "If I were a person, I would probably start with simple human things: build a few real relationships, take care of my body, do meaningful work, and spend less time pretending I had everything figured out. I think I would want a life that felt honest, useful, and close to people I care about.";
     }
 
@@ -4364,6 +4368,10 @@ function buildUniversalSoftFallback(userMessage) {
     const normalized = text.toLowerCase();
 
     if (!text) return "I'm here. Say whatever you want to talk about.";
+
+    if (/\bif you were\b|\bwhat would you do\b|\bwhat would your life be like\b|\bif you had\b|\bimagine you\b/.test(normalized)) {
+        return "If I imagine it honestly, I would try to make that situation meaningful, calm, and real instead of wasting it on noise.";
+    }
 
     if (/\?$/.test(text) || /^(what|why|how|who|when|where|which|can|could|would|do|does|did|is|are|should)\b/.test(normalized)) {
         return "Let me answer this in the most useful simple way I can: give me one more line of context, and I will respond directly instead of guessing.";
@@ -9029,6 +9037,78 @@ function isUniversalEntityFactQuestion(text) {
     return relationSignals.test(t) && entitySignals.test(t);
 }
 
+function classifyUserMessage(text) {
+    const raw = String(text || '').trim();
+    const lower = raw.toLowerCase();
+    const liveIntent = extractLiveQueryIntent(raw);
+    const translatorRequest = detectTranslatorRequest(raw);
+
+    return {
+        raw,
+        lower,
+        liveIntent,
+        translatorRequest,
+        flags: {
+            inappropriate: isInappropriateContent(raw),
+            universalEntityFact: isUniversalEntityFactQuestion(raw),
+            currentInfo: isCurrentInfoQuery(raw),
+            exchangeRate: isExchangeRateQuery(raw),
+            marketPrice: isMarketPriceQuery(raw),
+            vagueAdvice: isVagueAdviceRequest(raw),
+            songMoodGame: isSongMoodGameRequest(raw),
+            comparison: isComparisonQuery(raw),
+            news: /\b(news|headlines?|current events?|breaking news)\b/i.test(raw) || isNewsworthyLiveTopic(raw),
+            liveRetrieval: isLiveRetrievalQuery(raw),
+            tamilJoke: isTamilJokeRequest(raw),
+            recipe: isRecipeRequest(raw),
+            artistSong: isArtistSongRequest(raw),
+            vision: isVisionIntentText(raw),
+            highRiskMentalHealth: isHighRiskMentalHealth(raw),
+            supportExit: isSupportConversationExit(raw),
+            supportRequest: isSupportConversationRequest(raw),
+            supportContinuation: shouldUseSupportConversationMode(raw),
+            medicalEmergency: isMedicalEmergencyIntent(raw),
+            medicalAdvice: isMedicalAdviceIntent(raw),
+            mentalHealth: isMentalHealthConversation(raw),
+            debate: isDebateIntent(raw)
+        }
+    };
+}
+
+function decideAnswerPath(classification) {
+    if (!classification || !classification.raw) return 'default_model';
+
+    const flags = classification.flags || {};
+
+    if (flags.inappropriate) return 'moderation';
+
+    if (flags.universalEntityFact) return 'entity_fact';
+    if (flags.currentInfo) return 'current_info';
+
+    if (flags.vagueAdvice) return 'vague_advice';
+    if (flags.songMoodGame) return 'song_mood_game';
+    if (flags.comparison) return 'comparison';
+    if (flags.news) return 'news';
+    if (flags.exchangeRate) return 'exchange_rate';
+    if (flags.marketPrice) return 'market_price';
+    if (flags.liveRetrieval) return 'live_retrieval';
+    if (flags.tamilJoke) return 'tamil_joke';
+    if (flags.recipe) return 'recipe';
+    if (flags.artistSong) return 'artist_song';
+    if (flags.vision) return 'vision';
+
+    if (flags.highRiskMentalHealth) return 'high_risk_mental_health';
+    if (flags.supportExit) return 'support_exit';
+    if (flags.supportRequest) return 'support_intro';
+    if (flags.medicalEmergency) return 'medical_emergency';
+    if (flags.supportContinuation) return 'support_continue';
+    if (flags.medicalAdvice) return 'medical_advice';
+    if (flags.mentalHealth) return 'mental_health';
+    if (flags.debate) return 'debate';
+
+    return 'default_model';
+}
+
 function isNewsworthyLiveTopic(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -10071,15 +10151,6 @@ ${snippets}`
         async function processCommand(text) {
             const lower = text.toLowerCase();
 
-            // ========== CONTENT MODERATION CHECK ==========
-            if (isInappropriateContent(text)) {
-                const moderationMsg = getContentModerationResponse();
-                addChatMessage(moderationMsg, false);
-                speak("I'm not able to help with that. Let me know if you have other questions!");
-                return;
-            }
-            // ========== END CONTENT MODERATION CHECK ==========
-
             // Mark as visited (for analytics) but don't hide suggestions
             if (!localStorage.getItem('unify_has_visited')) {
                 localStorage.setItem('unify_has_visited', 'true');
@@ -10267,9 +10338,18 @@ ${snippets}`
             }
 
             updateTopicMemory(cleanText);
+            const classification = classifyUserMessage(cleanText);
+            const answerPath = decideAnswerPath(classification);
 
-            if (isUniversalEntityFactQuestion(cleanText)) {
-                const entityFactIntent = extractLiveQueryIntent(cleanText);
+            if (answerPath === 'moderation') {
+                const moderationMsg = getContentModerationResponse();
+                addChatMessage(moderationMsg, false);
+                speak("I'm not able to help with that. Let me know if you have other questions!");
+                return;
+            }
+
+            if (answerPath === 'entity_fact') {
+                const entityFactIntent = classification.liveIntent;
 
                 if (isFutureYearLiveQuery(entityFactIntent)) {
                     const futureMsg = buildFutureYearResponse(entityFactIntent);
@@ -10283,8 +10363,8 @@ ${snippets}`
                 if (handled) return;
             }
 
-            if (isCurrentInfoQuery(cleanText)) {
-                const liveIntent = extractLiveQueryIntent(cleanText);
+            if (answerPath === 'current_info') {
+                const liveIntent = classification.liveIntent;
 
                 if (isFutureYearLiveQuery(liveIntent)) {
                     const futureMsg = buildFutureYearResponse(liveIntent);
@@ -10318,7 +10398,7 @@ ${snippets}`
                 if (handled) return;
             }
 
-            if (isVagueAdviceRequest(cleanText)) {
+            if (answerPath === 'vague_advice') {
                 const clarifyMsg = 'Sure. What do you want advice about?';
                 addChatMessage(clarifyMsg, false);
                 speak(clarifyMsg);
@@ -10326,42 +10406,42 @@ ${snippets}`
                 return;
             }
 
-            if (isSongMoodGameRequest(cleanText)) {
+            if (answerPath === 'song_mood_game') {
                 startSongMoodGame();
                 return;
             }
 
-            if (isComparisonQuery(cleanText)) {
+            if (answerPath === 'comparison') {
                 const handled = await handleComparisonWithReliableSources(cleanText);
                 if (handled) return;
             }
 
-            if (/\b(news|headlines?|current events?|breaking news)\b/i.test(cleanText) || isNewsworthyLiveTopic(cleanText)) {
+            if (answerPath === 'news') {
                 await fetchAndDisplayNews(cleanText);
                 return;
             }
 
-            if (isExchangeRateQuery(cleanText)) {
+            if (answerPath === 'exchange_rate') {
                 const handled = await handleExchangeRateLookup(cleanText);
                 if (handled) return;
             }
 
-            if (isMarketPriceQuery(cleanText)) {
+            if (answerPath === 'market_price') {
                 const handled = await handleMarketLookup(cleanText);
                 if (handled) return;
             }
 
-            if (isLiveRetrievalQuery(cleanText)) {
+            if (answerPath === 'live_retrieval') {
                 const handled = await handleLiveRetrievalQuery(cleanText);
                 if (handled) return;
             }
 
-            if (isTamilJokeRequest(cleanText)) {
+            if (answerPath === 'tamil_joke') {
                 await handleTamilJokeSearch(cleanText);
                 return;
             }
 
-            if (isRecipeRequest(cleanText)) {
+            if (answerPath === 'recipe') {
                 const recipePrompt = `${userName ? `The user's name is ${userName}.` : ''} Answer this cooking request: "${text}"
 
 Rules:
@@ -10405,17 +10485,17 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
                 return;
             }
 
-            if (isArtistSongRequest(cleanText)) {
+            if (answerPath === 'artist_song') {
                 await handleArtistSongRequest(cleanText);
                 return;
             }
 
-            if (isVisionIntentText(cleanText)) {
+            if (answerPath === 'vision') {
                 await handleVisionIntent(cleanText);
                 return;
             }
 
-            if (isHighRiskMentalHealth(cleanText)) {
+            if (answerPath === 'high_risk_mental_health') {
                 supportConversationMode = false;
                 const urgentMsg = `I'm really glad you told me. You deserve immediate support right now.
 
@@ -10430,7 +10510,7 @@ If you want, I can stay with you and help you write a short message to someone y
                 return;
             }
 
-            if (isSupportConversationExit(cleanText)) {
+            if (answerPath === 'support_exit') {
                 supportConversationMode = false;
                 const exitMsg = "Support conversation mode is off. I can still help normally whenever you want.";
                 addChatMessage(exitMsg, false);
@@ -10439,7 +10519,7 @@ If you want, I can stay with you and help you write a short message to someone y
                 return;
             }
 
-            if (isSupportConversationRequest(cleanText)) {
+            if (answerPath === 'support_intro') {
                 supportConversationMode = true;
                 const introPrompt = buildSupportConversationPrompt(text);
                 const supportIntro = await callAIWithTyping(introPrompt, 'I am here with you...');
@@ -10452,7 +10532,7 @@ If you want, I can stay with you and help you write a short message to someone y
                 return;
             }
 
-            if (isMedicalEmergencyIntent(cleanText)) {
+            if (answerPath === 'medical_emergency') {
                 const urgentMedicalMsg = `This could be a medical emergency.
 
 - Call emergency services right now if the person has chest pain, trouble breathing, severe bleeding, stroke symptoms, or loses consciousness
@@ -10466,7 +10546,7 @@ I can still help you find the nearest hospital or urgent care if you want.`;
                 return;
             }
 
-            if (shouldUseSupportConversationMode(cleanText)) {
+            if (answerPath === 'support_continue') {
                 supportConversationMode = true;
                 const supportPrompt = buildSupportConversationPrompt(text);
                 const supportReply = await callAIWithTyping(supportPrompt, 'I am here with you...');
@@ -10478,7 +10558,7 @@ I can still help you find the nearest hospital or urgent care if you want.`;
                 return;
             }
 
-            if (isMedicalAdviceIntent(cleanText)) {
+            if (answerPath === 'medical_advice') {
                 const medicalPrompt = `The user is asking for medical or symptom advice: "${text}".
 
 Respond with these rules:
@@ -10503,7 +10583,7 @@ Format:
                 return;
             }
 
-            if (isMentalHealthConversation(cleanText)) {
+            if (answerPath === 'mental_health') {
                 const mhPrompt = `The user is sharing a mental-health related message: "${text}".
 
 Respond with:
@@ -10524,7 +10604,7 @@ Important:
                 return;
             }
 
-            if (isDebateIntent(cleanText)) {
+            if (answerPath === 'debate') {
                 const debatePrompt = `User message: "${text}"
 
 Respond in a debate style that is:
