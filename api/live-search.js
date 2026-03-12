@@ -355,6 +355,16 @@ function getPublisherKey(url) {
     return parts.slice(-2).join('.');
 }
 
+function sanitizeExternalUrl(url) {
+    try {
+        const parsed = new URL(String(url || '').trim());
+        if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+        return parsed.toString();
+    } catch (error) {
+        return '';
+    }
+}
+
 async function searchWithSerper(query, maxResults, apiKey) {
     const response = await fetch('https://google.serper.dev/search', {
         method: 'POST',
@@ -369,7 +379,7 @@ async function searchWithSerper(query, maxResults, apiKey) {
     const organic = Array.isArray(data?.organic) ? data.organic : [];
     return organic.slice(0, maxResults).map(item => ({
         title: item?.title || 'Untitled',
-        url: item?.link || '',
+        url: sanitizeExternalUrl(item?.link || ''),
         description: item?.snippet || ''
     })).filter(item => item.url);
 }
@@ -387,7 +397,7 @@ async function searchWithBrave(query, maxResults, apiKey) {
     const list = Array.isArray(data?.web?.results) ? data.web.results : [];
     return list.slice(0, maxResults).map(item => ({
         title: item?.title || 'Untitled',
-        url: item?.url || '',
+        url: sanitizeExternalUrl(item?.url || ''),
         description: item?.description || ''
     })).filter(item => item.url);
 }
@@ -401,10 +411,11 @@ async function searchWithDuckDuckGo(query, maxResults) {
 
     const pushTopic = (topic) => {
         if (!topic || out.length >= maxResults) return;
-        if (topic.FirstURL && topic.Text) {
+        const safeUrl = sanitizeExternalUrl(topic.FirstURL);
+        if (safeUrl && topic.Text) {
             out.push({
                 title: topic.Text.split(' - ')[0] || topic.Text.slice(0, 80),
-                url: topic.FirstURL,
+                url: safeUrl,
                 description: topic.Text
             });
         }
@@ -434,9 +445,9 @@ async function searchWithDuckDuckGoHtml(query, maxResults) {
     const re = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
     let match;
     while ((match = re.exec(html)) && out.length < maxResults) {
-        const url = decodeHtmlEntities(String(match[1] || '').trim());
+        const url = sanitizeExternalUrl(decodeHtmlEntities(String(match[1] || '').trim()));
         const title = decodeHtmlEntities(stripTags(String(match[2] || '').trim()));
-        if (!/^https?:\/\//i.test(url) || !title) continue;
+        if (!url || !title) continue;
         out.push({ title, url, description: title });
     }
     return out;
@@ -458,7 +469,7 @@ async function searchWithGoogleNewsRss(query, maxResults) {
     while ((match = itemRegex.exec(xml)) && out.length < maxResults) {
         const block = match[1];
         const title = cleanGoogleNewsTitle(decodeXml(getTag(block, 'title')));
-        const urlValue = decodeXml(getTag(block, 'link'));
+        const urlValue = sanitizeExternalUrl(decodeXml(getTag(block, 'link')));
         const description = decodeXml(stripTags(getTag(block, 'description')));
         if (!title || !urlValue) continue;
         out.push({
