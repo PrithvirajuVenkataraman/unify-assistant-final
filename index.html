@@ -4501,6 +4501,35 @@ async function buildSearchFallbackAnswer(userMessage) {
     }
 }
 
+async function buildStrictApiKnowledgeFallback(userMessage) {
+    const text = String(userMessage || '').trim();
+    if (!text) return '';
+    if (!isDirectExplainerQuery(text) && !isConciseDirectFactQuery(text)) return '';
+
+    const resolvedMessage = resolveKnowledgeFollowupQuery(text);
+    const subject = normalizeKnowledgeSubject(extractKnowledgeSubject(resolvedMessage));
+    const promptTarget = subject || resolvedMessage;
+    if (!promptTarget) return '';
+
+    try {
+        const response = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                systemPrompt: 'You answer stable knowledge questions directly and clearly. Do not ask for more context unless the subject is genuinely ambiguous. Do not use filler. If a term looks like a common misspelling, answer using the intended term.',
+                message: `Answer this direct knowledge question in 2-4 sentences max.\n\nUser question: "${resolvedMessage}"\n\nNormalized subject: "${promptTarget}"\n\nRules:\n- Start with the answer immediately.\n- Do not ask for more context.\n- Do not use filler.\n- If the user misspelled a known term, answer the intended term directly.\n- If the term is still ambiguous, say what the most likely meaning is and answer that.`
+            })
+        });
+        if (!response.ok) return '';
+        const data = await response.json();
+        const raw = postProcessAssistantResponse(data?.response || data?.text || '', resolvedMessage);
+        const cleaned = sanitizeWeakModelAnswer(raw, resolvedMessage);
+        return cleaned || '';
+    } catch (error) {
+        return '';
+    }
+}
+
 function buildLocalAssistantFallback(userMessage, error) {
     const text = String(userMessage || '').trim();
     const normalized = text.toLowerCase();
@@ -4617,6 +4646,9 @@ async function resolveFinalAssistantAnswer(userMessage, answerText) {
 
     const searchFallback = await buildSearchFallbackAnswer(userMessage);
     if (searchFallback) return searchFallback;
+
+    const strictApiFallback = await buildStrictApiKnowledgeFallback(userMessage);
+    if (strictApiFallback) return strictApiFallback;
 
     const directKnowledgeFallback = buildDirectKnowledgeFallback(userMessage);
     if (directKnowledgeFallback) return directKnowledgeFallback;
@@ -14661,7 +14693,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
 </script>
 </body>
 </html>
