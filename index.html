@@ -9027,6 +9027,30 @@ function isConciseDirectFactQuery(text) {
     return directFactSignals.test(t) || strictBinarySignal || binaryQuestionStarter;
 }
 
+function isStableBiographyQuestion(text) {
+    const raw = String(text || '').trim();
+    const lower = raw.toLowerCase();
+    if (!raw) return false;
+
+    if (!/^(who is|who was|tell me about)\b/i.test(raw)) return false;
+    if (/\b(current|currently|latest|recent|today|right now|as of now|live|news|headline|headlines|update|updates|status|what happened|what's happening)\b/.test(lower)) {
+        return false;
+    }
+    if (/\b(president|prime minister|ceo|captain|coach|governor|mayor|senator|minister|chairman|chairperson|chief minister)\b/.test(lower)) {
+        return false;
+    }
+
+    const subject = raw
+        .replace(/^(who is|who was|tell me about)\s+/i, '')
+        .replace(/[?.!,;]+$/g, '')
+        .trim();
+
+    if (!subject) return false;
+    if (/\b(of|for|in|at)\b/i.test(subject)) return false;
+
+    return /^[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,4}$/.test(subject);
+}
+
 function isUniversalEntityFactQuestion(text) {
     return classifyUniversalEntityIntent(text).isEntityFact;
 }
@@ -9046,6 +9070,7 @@ function classifyUserMessage(text) {
         translatorRequest,
         flags: {
             inappropriate: isInappropriateContent(raw),
+            stableBiography: isStableBiographyQuestion(raw),
             universalEntityFact: entityIntent.isEntityFact,
             currentInfo: isCurrentInfoQuery(raw),
             exchangeRate: isExchangeRateQuery(raw),
@@ -9077,6 +9102,7 @@ function decideAnswerPath(classification) {
     const flags = classification.flags || {};
 
     if (flags.inappropriate) return 'moderation';
+    if (flags.stableBiography) return 'default_model';
 
     if (flags.universalEntityFact) return 'entity_fact';
     if (flags.currentInfo) return 'current_info';
@@ -10583,6 +10609,7 @@ ${snippets}`
             updateTopicMemory(cleanText);
             const classification = classifyUserMessage(cleanText);
             const answerPath = decideAnswerPath(classification);
+            const fallbackEntityIntent = classification.entityIntent || classifyUniversalEntityIntent(cleanText, classification.liveIntent);
 
             if (answerPath === 'moderation') {
                 const moderationMsg = getContentModerationResponse();
@@ -10603,6 +10630,11 @@ ${snippets}`
                 }
 
                 const handled = await handleUniversalEntityFactQuery(cleanText, entityFactIntent);
+                if (handled) return;
+            }
+
+            if (answerPath !== 'entity_fact' && !isStableBiographyQuestion(cleanText) && fallbackEntityIntent?.isEntityFact && isConciseDirectFactQuery(cleanText)) {
+                const handled = await handleUniversalEntityFactQuery(cleanText, classification.liveIntent);
                 if (handled) return;
             }
 
@@ -13766,6 +13798,25 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
+
+/*
+1. TYPING INDICATOR:
+   - Call showTypingIndicator() before AI response
+   - Call hideTypingIndicator() before showing response
+
+2. EDIT MESSAGES:
+   - Integrated in addChatMessage() with edit button on user messages
+   - Editing a message regenerates the response from that turn
+
+3. CONVERSATION HISTORY:
+   - Call saveToHistory(userMsg, aiMsg) after each exchange
+   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
+   - Search, export, and clear functions included
+
+4. ERROR FEEDBACK:
+   - Call showError("Error message") instead of addChatMessage for errors
+   - Visual shake animation + auto-dismiss
+*/
 
 </script>
 </body>
