@@ -4367,12 +4367,12 @@ function maybeCaptureKnowledgeEntity(text) {
 }
  
 async function buildSearchFallbackAnswer(userMessage) { 
-    try { 
-        const resolvedMessage = resolveKnowledgeFollowupQuery(userMessage);
-        const subject = normalizeKnowledgeSubject(extractKnowledgeSubject(resolvedMessage)); 
-        const query = subject || String(resolvedMessage || '').trim(); 
-        if (!query) return null; 
+    const resolvedMessage = resolveKnowledgeFollowupQuery(userMessage);
+    const subject = normalizeKnowledgeSubject(extractKnowledgeSubject(resolvedMessage));
+    const query = subject || String(resolvedMessage || '').trim();
+    if (!query) return null;
 
+    try { 
         const response = await fetch('/api/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -4381,30 +4381,29 @@ async function buildSearchFallbackAnswer(userMessage) {
         if (!response.ok) return null;
         const data = await response.json();
         const results = Array.isArray(data?.results) ? data.results : [];
-        if (!results.length) return null;
+        if (results.length) {
+            const top = results[0];
+            const topSnippet = String(top?.description || '').trim();
+            const lines = results
+                .slice(0, 3)
+                .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+                .join('\n');
 
-        const top = results[0];
-        const topSnippet = String(top?.description || '').trim();
-        const lines = results
-            .slice(0, 3)
-            .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
-            .join('\n');
+            const lead = topSnippet
+                ? `From web sources: ${topSnippet}`
+                : `I found reliable web sources about ${query}.`;
 
-        const lead = topSnippet
-            ? `From web sources: ${topSnippet}`
-            : `I found reliable web sources about ${query}.`;
-
-        return `${lead}\n\nSources:\n${lines}`;
-    } catch (error) {
-        try {
-            const resolvedMessage = resolveKnowledgeFollowupQuery(userMessage);
-            const subject = normalizeKnowledgeSubject(extractKnowledgeSubject(resolvedMessage));
-            const summary = await fetchWikipediaSummaryFallback(subject || resolvedMessage);
-            if (!summary?.extract) return null;
-            return `${summary.extract}\n\nSource:\n1. [${summary.title}](${summary.sourceUrl})`;
-        } catch (fallbackError) {
-            return null;
+            return `${lead}\n\nSources:\n${lines}`;
         }
+    } catch (error) {
+    }
+
+    try {
+        const summary = await fetchWikipediaSummaryFallback(subject || resolvedMessage);
+        if (!summary?.extract) return null;
+        return `${summary.extract}\n\nSource:\n1. [${summary.title}](${summary.sourceUrl})`;
+    } catch (fallbackError) {
+        return null;
     }
 }
 
@@ -4457,6 +4456,27 @@ function buildUniversalSoftFallback(userMessage) {
     }
 
     return "I hear you. Keep going a little more, and I will respond to the actual point you care about.";
+}
+
+function isDirectExplainerQuery(text) {
+    const t = String(text || '').trim().toLowerCase();
+    if (!t) return false;
+    return /^(what\s+is|what's|who\s+is|who's|tell\s+me\s+about|define|meaning\s+of|do\s+you\s+know|what\s+do\s+you\s+know\s+about)\b/.test(t);
+}
+
+function isLowSignalModelAnswer(text) {
+    const t = String(text || '').trim().toLowerCase();
+    if (!t) return true;
+
+    return [
+        /keep going a little more/,
+        /respond to the actual point you care about/,
+        /give me one more line of context/,
+        /respond directly instead of guessing/,
+        /tell me a little more/,
+        /say a bit more/,
+        /i hear you\./
+    ].some(pattern => pattern.test(t));
 }
 
 function isLikelyLocationOrTravelQuery(text) {
@@ -4601,6 +4621,18 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         if (typeof data.response === 'string') {
             data.response = postProcessAssistantResponse(data.response, normalizedUserMessage);
         }
+
+        if (isLowSignalModelAnswer(data.response || data.text) &&
+            (isDirectExplainerQuery(normalizedUserMessage) || isConciseDirectFactQuery(normalizedUserMessage))) {
+            const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || userMessage);
+            if (searchFallback) {
+                return {
+                    response: searchFallback,
+                    intent: 'search_fallback'
+                };
+            }
+        }
+
         conversationContext.push({ role: 'assistant', text: data.response || data.text });
         
         return data;
