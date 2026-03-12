@@ -10168,8 +10168,8 @@ function requiresStrictLiveVerification(userText, liveIntent = null, entityInten
     }
 
     if (entity.relationType === 'role') {
-        const unstableRole = /\b(ceo|president|prime minister|governor|mayor|captain|coach|chairman|chairperson|minister|chief minister)\b/.test(lower);
-        if ((entity.timeframe === 'current' || hasExplicitFreshnessLanguage(text)) && unstableRole) {
+        const politicalOffice = /\b(president|prime minister|governor|mayor|minister|chief minister)\b/.test(lower);
+        if ((entity.timeframe === 'current' || hasExplicitFreshnessLanguage(text)) && politicalOffice) {
             return true;
         }
     }
@@ -10184,11 +10184,71 @@ function requiresStrictLiveVerification(userText, liveIntent = null, entityInten
 async function publishUniversalModelFallback(pipeline, label = 'Model fallback') {
     const ai = await askGeminiAI(pipeline.userText);
     const answer = String(ai?.response || ai?.text || '').trim();
-    if (!answer || ai?.aborted) return false;
+    if (!answer || ai?.aborted || ai?.intent === 'soft_fallback') return false;
     addModelAssistantMessage(answer, label);
     speak(answer);
     saveToHistory(pipeline.userText, answer);
     return true;
+}
+
+function extractRequestedDish(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+    const patterns = [
+        /\brecipe\s+for\s+(.+?)\s*$/i,
+        /\bhow\s+to\s+make\s+(.+?)\s*$/i,
+        /\bgive\s+me\s+a\s+recipe\s+for\s+(?:making\s+)?(.+?)\s*$/i,
+        /\bmake\s+(.+?)\s*$/i
+    ];
+    for (const pattern of patterns) {
+        const match = raw.match(pattern);
+        if (match?.[1]) {
+            return match[1].replace(/[?.!,;]+$/g, '').trim();
+        }
+    }
+    return raw.replace(/[?.!,;]+$/g, '').trim();
+}
+
+function buildOfflineRecipeFallback(text) {
+    const dish = extractRequestedDish(text);
+    const lowerDish = dish.toLowerCase();
+
+    if (/\baloo\s+fry\b/.test(lowerDish)) {
+        return `Recipe: Aloo Fry
+Serves: 3-4
+Prep time: 10 minutes
+Cook time: 20 minutes
+
+Ingredients:
+- 4 medium potatoes
+- 2 tbsp oil
+- 1 tsp mustard seeds or cumin seeds
+- 1 onion, sliced thin
+- 1-2 green chilies, chopped
+- 1/4 tsp turmeric
+- 1 tsp red chili powder
+- 1 tsp coriander powder
+- Salt to taste
+- 8-10 curry leaves
+- 2 tbsp chopped coriander leaves
+
+Steps:
+1. Peel the potatoes and cut them into thin cubes or small slices. Rinse and pat them dry.
+2. Heat oil in a pan, add mustard or cumin, then add curry leaves, chilies, and onion. Saute until the onion softens.
+3. Add potatoes, turmeric, chili powder, coriander powder, and salt. Mix well so the masala coats everything.
+4. Cook on medium-low heat, stirring every few minutes, until the potatoes turn tender and lightly crisp on the edges.
+5. Finish with chopped coriander and serve hot with rice, rasam, sambar, or chapati.
+
+Tips:
+- Do not overcrowd the pan if you want crisp potatoes.
+- A little extra curry leaf and chili makes it taste more South Indian.`;
+    }
+
+    if (dish) {
+        return `I couldn't generate a full recipe from the model right now, but I understood the dish as "${dish}". Try asking again, or ask for a short version like "simple ${dish} recipe".`;
+    }
+
+    return `I couldn't generate that recipe right now. Try asking again with the dish name, for example: "Recipe for aloo fry".`;
 }
 
 async function retrieveUniversalEntitySources(pipeline, controller) {
@@ -10867,9 +10927,16 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
 
                 const recipeResponse = await callAIWithTyping(recipePrompt, 'Preparing recipe...');
                 if (recipeResponse?.aborted) return;
-                addModelAssistantMessage(recipeResponse.response, 'Model answer');
+                const recipeText = String(recipeResponse?.response || '').trim();
+                const shouldUseRecipeFallback = !recipeText ||
+                    recipeResponse?.intent === 'soft_fallback' ||
+                    recipeResponse?.intent === 'local_fallback';
+                const finalRecipe = shouldUseRecipeFallback
+                    ? buildOfflineRecipeFallback(text)
+                    : recipeText;
+                addModelAssistantMessage(finalRecipe, 'Model answer');
                 speak("Here is the recipe.");
-                saveToHistory(text, recipeResponse.response);
+                saveToHistory(text, finalRecipe);
                 return;
             }
 
