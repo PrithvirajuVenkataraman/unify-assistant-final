@@ -4518,6 +4518,19 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
     return raw;
 }
 
+async function resolveFinalAssistantAnswer(userMessage, answerText) {
+    const safeAnswer = sanitizeWeakModelAnswer(answerText, userMessage);
+    if (safeAnswer) return safeAnswer;
+
+    const searchFallback = await buildSearchFallbackAnswer(userMessage);
+    if (searchFallback) return searchFallback;
+
+    const directKnowledgeFallback = buildDirectKnowledgeFallback(userMessage);
+    if (directKnowledgeFallback) return directKnowledgeFallback;
+
+    return buildUniversalSoftFallback(userMessage);
+}
+
 function isLikelyLocationOrTravelQuery(text) {
     const t = String(text || '').toLowerCase();
     if (!t.trim()) return false;
@@ -9421,6 +9434,110 @@ function decideHybridResponseMode(classification) {
     return 'chat_first';
 }
 
+const ROUTING_REGRESSION_CASES = [
+    {
+        name: 'Stable explainer',
+        prompt: 'What is jalebi?',
+        expectedPath: 'default_model',
+        expectedMode: 'chat_first',
+        fallbackContains: 'Jalebi is a popular South Asian sweet'
+    },
+    {
+        name: 'Stable biography',
+        prompt: 'Who is Donald Trump?',
+        expectedPath: 'default_model',
+        expectedMode: 'chat_first'
+    },
+    {
+        name: 'Strict political office',
+        prompt: 'Who is the current prime minister of India?',
+        expectedPath: 'entity_fact',
+        expectedMode: 'verify_first'
+    },
+    {
+        name: 'Mixed current topic',
+        prompt: "Tell me about Nvidia's latest earnings",
+        expectedPath: 'current_info',
+        expectedMode: 'answer_then_cite'
+    },
+    {
+        name: 'Recipe route',
+        prompt: 'Give me a recipe for aloo fry',
+        expectedPath: 'recipe',
+        expectedMode: 'chat_first'
+    }
+];
+
+function runRoutingRegressionSuite() {
+    return ROUTING_REGRESSION_CASES.map(testCase => {
+        const classification = classifyUserMessage(testCase.prompt);
+        const actualPath = decideAnswerPath(classification);
+        const actualMode = decideHybridResponseMode(classification);
+        const fallback = buildDirectKnowledgeFallback(testCase.prompt);
+        const checks = [
+            {
+                label: 'path',
+                expected: testCase.expectedPath,
+                actual: actualPath,
+                pass: actualPath === testCase.expectedPath
+            },
+            {
+                label: 'mode',
+                expected: testCase.expectedMode,
+                actual: actualMode,
+                pass: actualMode === testCase.expectedMode
+            }
+        ];
+
+        if (testCase.fallbackContains) {
+            checks.push({
+                label: 'fallback',
+                expected: `contains "${testCase.fallbackContains}"`,
+                actual: fallback ? `contains "${testCase.fallbackContains}"` : '(empty)',
+                pass: String(fallback || '').includes(testCase.fallbackContains)
+            });
+        }
+
+        return {
+            ...testCase,
+            actualPath,
+            actualMode,
+            checks,
+            passed: checks.every(check => check.pass)
+        };
+    });
+}
+
+function formatRoutingRegressionReport(results) {
+    const suite = Array.isArray(results) ? results : [];
+    const passedCount = suite.filter(result => result.passed).length;
+    const lines = [
+        `Routing regression suite: ${passedCount}/${suite.length} passed`,
+        ''
+    ];
+
+    suite.forEach(result => {
+        const prefix = result.passed ? '[PASS]' : '[FAIL]';
+        lines.push(`${prefix} ${result.name}`);
+        lines.push(`Prompt: ${result.prompt}`);
+        result.checks.forEach(check => {
+            const checkPrefix = check.pass ? 'OK' : 'Mismatch';
+            lines.push(`- ${checkPrefix} ${check.label}: expected ${check.expected}, got ${check.actual}`);
+        });
+        lines.push('');
+    });
+
+    lines.push('This suite is local only. It checks classifier/routing/fallback logic without calling the network.');
+    return lines.join('\n').trim();
+}
+
+function isRoutingRegressionCommand(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    return /\b(run|check|show|diagnose)\b.*\b(routing|regression|fallback)\b.*\b(test|tests|suite|report)?\b/.test(t) ||
+        /\brouting regression\b/.test(t);
+}
+
 function isNewsworthyLiveTopic(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -10995,6 +11112,14 @@ ${snippets}`
         async function processCommand(text) {
             const lower = text.toLowerCase();
 
+            if (isRoutingRegressionCommand(text)) {
+                const report = formatRoutingRegressionReport(runRoutingRegressionSuite());
+                addChatMessage(report, false);
+                speak('Routing regression report ready.');
+                saveToHistory(text, report);
+                return;
+            }
+
             // Mark as visited (for analytics) but don't hide suggestions
             if (!localStorage.getItem('unify_has_visited')) {
                 localStorage.setItem('unify_has_visited', 'true');
@@ -12426,7 +12551,8 @@ ${sourceLinksBlock}
                 const aiResponse = await callAIWithTyping(text);
                 if (aiResponse?.aborted) return;
                 const inferredLocation = detectPrimaryLocationFromText(text);
-                const safeResponse = sanitizeHallucinatedTerrain(aiResponse.response, text, inferredLocation);
+                const finalizedResponse = await resolveFinalAssistantAnswer(text, aiResponse?.response || aiResponse?.text || '');
+                const safeResponse = sanitizeHallucinatedTerrain(finalizedResponse, text, inferredLocation);
                 addModelAssistantMessage(safeResponse, 'Model answer');
                 speak(safeResponse);
                 await maybeShowReferenceImageForQuery(text, safeResponse);
