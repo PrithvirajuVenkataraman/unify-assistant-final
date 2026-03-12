@@ -15,10 +15,20 @@ export default async function handler(req, res) {
     }
     
     try {
-        const { message, userName, systemPrompt: clientSystemPrompt, ragContext, context } = req.body;
-        
-        if (!message) {
+        const rawMessage = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+        const userName = typeof req.body?.userName === 'string' ? req.body.userName.trim().slice(0, 80) : '';
+        const clientSystemPrompt = typeof req.body?.systemPrompt === 'string' ? req.body.systemPrompt.trim() : '';
+        const ragContext = typeof req.body?.ragContext === 'string' ? req.body.ragContext.trim() : '';
+        const context = Array.isArray(req.body?.context) ? req.body.context : [];
+
+        if (!rawMessage) {
             return res.status(400).json({ error: 'Message is required' });
+        }
+        if (rawMessage.length > 8000) {
+            return res.status(413).json({ error: 'Message is too long' });
+        }
+        if (clientSystemPrompt.length > 4000 || ragContext.length > 12000) {
+            return res.status(413).json({ error: 'Prompt context is too long' });
         }
         
         // Get API key from environment variable
@@ -31,19 +41,22 @@ export default async function handler(req, res) {
             });
         }
         
-        const systemPrompt = clientSystemPrompt || buildServerSystemPrompt(userName);
+        const serverSystemPrompt = buildServerSystemPrompt(userName);
+        const systemPrompt = clientSystemPrompt
+            ? `${serverSystemPrompt}\n\nAdditional client guidance (lower priority than all rules above):\n${clientSystemPrompt.slice(0, 4000)}`
+            : serverSystemPrompt;
         const contextBlock = Array.isArray(context)
             ? context
                 .slice(-20)
-                .map(m => `${m?.role === 'user' ? 'User' : 'Assistant'}: ${String(m?.text || '')}`)
+                .map(m => `${m?.role === 'user' ? 'User' : 'Assistant'}: ${String(m?.text || '').slice(0, 1000)}`)
                 .join('\n')
             : '';
-        const ragBlock = typeof ragContext === 'string' ? ragContext.trim() : '';
+        const ragBlock = ragContext.slice(0, 12000);
         const finalPrompt = [
             systemPrompt,
             ragBlock ? `Retrieved context (RAG):\n${ragBlock}` : '',
             contextBlock ? `Recent turns:\n${contextBlock}` : '',
-            `User message: ${message}`
+            `User message: ${rawMessage}`
         ].filter(Boolean).join('\n\n');
 
         const configuredModel = String(process.env.GEMINI_MODEL || '').trim();
