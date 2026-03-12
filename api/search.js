@@ -1,50 +1,5 @@
 import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './_lib/live-search.js';
 
-const QUERY_ALIASES = {
-    ipl: 'indian premier league',
-    psl: 'pakistan super league',
-    bbl: 'big bash league',
-    cpl: 'caribbean premier league',
-    isl: 'indian super league',
-    pkl: 'pro kabaddi league',
-    ucl: 'uefa champions league',
-    uel: 'uefa europa league',
-    epl: 'english premier league',
-    nba: 'national basketball association',
-    nfl: 'national football league',
-    mlb: 'major league baseball',
-    nhl: 'national hockey league',
-    atp: 'association of tennis professionals',
-    wta: 'women s tennis association',
-    f1: 'formula 1',
-    nasa: 'national aeronautics and space administration',
-    isro: 'indian space research organisation',
-    esa: 'european space agency',
-    jaxa: 'japan aerospace exploration agency',
-    cern: 'european organization for nuclear research',
-    bjp: 'bharatiya janata party',
-    aap: 'aam aadmi party',
-    dmk: 'dravida munnetra kazhagam',
-    aiadmk: 'all india anna dravida munnetra kazhagam',
-    tdp: 'telugu desam party',
-    ysrcp: 'ysr congress party',
-    bjd: 'biju janata dal',
-    rbi: 'reserve bank of india',
-    sebi: 'securities and exchange board of india',
-    imf: 'international monetary fund',
-    nato: 'north atlantic treaty organization',
-    eu: 'european union',
-    tcs: 'tata consultancy services',
-    ibm: 'international business machines',
-    amd: 'advanced micro devices',
-    ai: 'artificial intelligence',
-    ml: 'machine learning',
-    llm: 'large language model',
-    agi: 'artificial general intelligence',
-    gpu: 'graphics processing unit',
-    cpu: 'central processing unit'
-};
-
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -96,7 +51,9 @@ function buildSearchQueries(query) {
     if (!raw) return [];
     const topic = extractSearchTopic(raw) || raw;
     const out = [topic];
-    const expandedTopic = expandKnownQueryAliases(topic);
+    const domain = detectQueryDomain(raw);
+    const dynamicVariants = buildDynamicQueryVariants(raw, topic, domain);
+    out.push(...dynamicVariants);
 
     if (isTimeSensitiveQuery(raw)) {
         const timeAwareTopic = raw
@@ -109,14 +66,7 @@ function buildSearchQueries(query) {
         }
         out.push(`latest ${cleanedTimeAwareTopic || topic}`);
         out.push(`${cleanedTimeAwareTopic || topic} Reuters OR AP OR BBC OR Al Jazeera`);
-    }
-
-    if (expandedTopic && expandedTopic.toLowerCase() !== topic.toLowerCase()) {
-        out.push(expandedTopic);
-        if (isTimeSensitiveQuery(raw)) {
-            out.push(`latest ${expandedTopic}`);
-            out.push(`${expandedTopic} official result`);
-        }
+        out.push(...buildTimeSensitiveDomainVariants(cleanedTimeAwareTopic || topic, domain));
     }
 
     return Array.from(new Set(out.filter(Boolean)));
@@ -127,10 +77,120 @@ function isTimeSensitiveQuery(text) {
     return /\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update|status|price now|rate today|winner|won|champion|score|scores|live score|stats|standings|points table|ranking|rankings|record|qualified|eliminated|ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup|nasa|isro|esa|jaxa|cern|bjp|aap|dmk|aiadmk|tdp|ysrcp|bjd|rbi|sebi|imf|nato|eu|tcs|ibm|amd|ai|ml|llm|agi|gpu|cpu)\b/.test(t);
 }
 
-function expandKnownQueryAliases(text) {
-    return String(text || '')
-        .split(/\s+/)
-        .map(token => QUERY_ALIASES[token.toLowerCase()] || token)
-        .join(' ')
-        .trim();
+function buildDynamicQueryVariants(rawQuery, topic, domain) {
+    const out = [];
+    const acronymCandidates = extractAcronymCandidates(rawQuery);
+    const domainHints = getDomainHints(domain);
+
+    if (acronymCandidates.length) {
+        out.push(`"${topic}"`);
+        for (const token of acronymCandidates) {
+            out.push(`${token} ${domainHints.primary}`);
+            if (domainHints.secondary) {
+                out.push(`${token} ${domainHints.secondary}`);
+            }
+            if (topic.toLowerCase() !== token.toLowerCase()) {
+                out.push(`"${token}" ${topic}`);
+            }
+        }
+    }
+
+    if (domainHints.context && !topic.toLowerCase().includes(domainHints.context.toLowerCase())) {
+        out.push(`${topic} ${domainHints.context}`);
+    }
+
+    return out;
+}
+
+function buildTimeSensitiveDomainVariants(topic, domain) {
+    const base = String(topic || '').trim();
+    if (!base) return [];
+
+    const hints = getDomainHints(domain);
+    const out = [];
+    if (hints.fresh) out.push(`${base} ${hints.fresh}`);
+    if (hints.official) out.push(`${base} ${hints.official}`);
+    return out;
+}
+
+function extractAcronymCandidates(text) {
+    const raw = String(text || '');
+    if (!raw) return [];
+
+    const matches = raw.match(/\b[a-zA-Z0-9&.-]{2,10}\b/g) || [];
+    return Array.from(new Set(
+        matches.filter(token => isLikelyAcronymToken(token)).map(token => token.toUpperCase())
+    ));
+}
+
+function isLikelyAcronymToken(token) {
+    const value = String(token || '').trim();
+    if (!value) return false;
+    if (/^\d+$/.test(value)) return false;
+    if (value.length === 1 || value.length > 10) return false;
+    if (/^[A-Z0-9]{2,10}$/.test(value)) return true;
+    if (/^[a-z]{2,5}$/.test(value)) return true;
+    return /^[A-Z][a-z0-9]*[A-Z][A-Za-z0-9]*$/.test(value);
+}
+
+function detectQueryDomain(text) {
+    const t = String(text || '').toLowerCase();
+    if (/\b(score|scores|winner|won|champion|standings|ranking|rankings|stats|team|player|match|tournament|league|season|ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup)\b/.test(t)) {
+        return 'sports';
+    }
+    if (/\b(stock|stocks|share|shares|market|market cap|earnings|price|repo rate|interest rate|inflation|forex|exchange rate|rbi|sebi|imf)\b/.test(t)) {
+        return 'finance';
+    }
+    if (/\b(president|prime minister|election|party|government|minister|parliament|senate|bjp|aap|dmk|aiadmk|tdp|ysrcp|bjd|nato|eu)\b/.test(t)) {
+        return 'politics';
+    }
+    if (/\b(ai|ml|llm|agi|gpu|cpu|chip|software|hardware|startup|company|ceo|founder|nasa|isro|esa|jaxa|cern|tcs|ibm|amd)\b/.test(t)) {
+        return 'tech';
+    }
+    return 'general';
+}
+
+function getDomainHints(domain) {
+    switch (domain) {
+        case 'sports':
+            return {
+                primary: 'sports',
+                secondary: 'league team match',
+                context: 'official standings results',
+                fresh: 'latest score result',
+                official: 'official site result'
+            };
+        case 'finance':
+            return {
+                primary: 'finance',
+                secondary: 'stock company market',
+                context: 'official market data',
+                fresh: 'latest price market update',
+                official: 'official filing company investor relations'
+            };
+        case 'politics':
+            return {
+                primary: 'politics',
+                secondary: 'party government election',
+                context: 'official government source',
+                fresh: 'latest update news',
+                official: 'official government statement'
+            };
+        case 'tech':
+            return {
+                primary: 'technology',
+                secondary: 'company product research',
+                context: 'official company source',
+                fresh: 'latest update',
+                official: 'official announcement'
+            };
+        default:
+            return {
+                primary: 'official',
+                secondary: 'reference',
+                context: 'reliable source',
+                fresh: 'latest update',
+                official: 'official source'
+            };
+    }
 }
