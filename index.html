@@ -4202,7 +4202,7 @@ Why funny: He blames the pen instead of admitting he skipped homework.`;
 }
 
 function extractKnowledgeSubject(text) { 
-    const raw = String(text || '').trim();
+    const raw = normalizeIntentTypos(String(text || '').trim());
     if (!raw) return '';
     const patterns = [
         /^\s*do\s+you\s+know\s+(.+?)\s*\??$/i,
@@ -4214,13 +4214,84 @@ function extractKnowledgeSubject(text) {
         const m = raw.match(p);
         if (m && m[1]) {
             return m[1]
+                .replace(/^(a|an|the)\s+/i, '')
                 .replace(/\b(company|organization|org|inc|ltd|llc)\b/gi, '')
                 .replace(/[?.!,;]+$/g, '')
                 .trim();
         }
     }
-    return raw.replace(/[?.!,;]+$/g, '').trim(); 
+    return raw
+        .replace(/^(a|an|the)\s+/i, '')
+        .replace(/[?.!,;]+$/g, '')
+        .trim(); 
 } 
+
+function normalizeKnowledgeSubject(subject) {
+    const raw = String(subject || '').trim();
+    if (!raw) return '';
+    const typoMap = {
+        gujya: 'gujiya',
+        gujhia: 'gujiya',
+        biriyani: 'biryani',
+        hydrabad: 'hyderabad',
+        bengluru: 'bengaluru',
+        tamill: 'tamil',
+        jilebi: 'jalebi',
+        jilabi: 'jalebi',
+        jelabi: 'jalebi'
+    };
+    return typoMap[raw.toLowerCase()] || raw;
+}
+
+async function fetchWikipediaSummaryFallback(subject) {
+    const normalized = normalizeKnowledgeSubject(subject);
+    if (!normalized) return null;
+
+    async function fetchSummaryByTitle(title) {
+        const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        const data = await response.json();
+        const extract = String(data?.extract || '').trim();
+        if (!extract) return null;
+        return {
+            title: data?.title || title,
+            extract,
+            sourceUrl: data?.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(data?.title || title)}`
+        };
+    }
+
+    async function searchSummary(query) {
+        const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=5&format=json&origin=*`;
+        const response = await fetch(searchUrl);
+        if (!response.ok) return null;
+        const data = await response.json();
+        const hits = Array.isArray(data?.query?.search) ? data.query.search : [];
+        for (const hit of hits) {
+            const summary = await fetchSummaryByTitle(hit.title);
+            if (summary?.extract) return summary;
+        }
+        return null;
+    }
+
+    const candidates = [
+        normalized,
+        normalized.replace(/\b\w/g, c => c.toUpperCase())
+    ];
+
+    for (const candidate of candidates) {
+        try {
+            const summary = await fetchSummaryByTitle(candidate);
+            if (summary?.extract) return summary;
+        } catch (e) {}
+    }
+
+    try {
+        return await searchSummary(normalized);
+    } catch (e) {
+        return null;
+    }
+}
 
 function isPronounKnowledgeFollowup(text) {
     const t = String(text || '').toLowerCase().trim();
@@ -4298,7 +4369,7 @@ function maybeCaptureKnowledgeEntity(text) {
 async function buildSearchFallbackAnswer(userMessage) { 
     try { 
         const resolvedMessage = resolveKnowledgeFollowupQuery(userMessage);
-        const subject = extractKnowledgeSubject(resolvedMessage); 
+        const subject = normalizeKnowledgeSubject(extractKnowledgeSubject(resolvedMessage)); 
         const query = subject || String(resolvedMessage || '').trim(); 
         if (!query) return null; 
 
@@ -4325,7 +4396,15 @@ async function buildSearchFallbackAnswer(userMessage) {
 
         return `${lead}\n\nSources:\n${lines}`;
     } catch (error) {
-        return null;
+        try {
+            const resolvedMessage = resolveKnowledgeFollowupQuery(userMessage);
+            const subject = normalizeKnowledgeSubject(extractKnowledgeSubject(resolvedMessage));
+            const summary = await fetchWikipediaSummaryFallback(subject || resolvedMessage);
+            if (!summary?.extract) return null;
+            return `${summary.extract}\n\nSource:\n1. [${summary.title}](${summary.sourceUrl})`;
+        } catch (fallbackError) {
+            return null;
+        }
     }
 }
 
