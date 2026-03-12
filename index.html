@@ -3223,7 +3223,7 @@ function openEmailModal(type) {
                     <label class="block text-sm font-medium ${textColor} mb-1">Email Address</label>
                     <input type="email" id="email-input"
                            placeholder="your.email@example.com"
-                           value="${savedEmail}"
+                           value="${escapeHtml(savedEmail)}"
                            class="w-full px-4 py-3 rounded-xl border ${inputBg} focus:outline-none focus:ring-2 focus:ring-purple-500"
                            onkeypress="if(event.key === 'Enter') sendEmail('${type}')">
                 </div>
@@ -4479,6 +4479,16 @@ function isLowSignalModelAnswer(text) {
     ].some(pattern => pattern.test(t));
 }
 
+function sanitizeWeakModelAnswer(answerText, userMessage) {
+    const raw = String(answerText || '').trim();
+    if (!raw) return '';
+    if (isLowSignalModelAnswer(raw) &&
+        (isDirectExplainerQuery(userMessage) || isConciseDirectFactQuery(userMessage))) {
+        return '';
+    }
+    return raw;
+}
+
 function isLikelyLocationOrTravelQuery(text) {
     const t = String(text || '').toLowerCase();
     if (!t.trim()) return false;
@@ -4620,6 +4630,11 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         const data = await response.json();
         if (typeof data.response === 'string') {
             data.response = postProcessAssistantResponse(data.response, normalizedUserMessage);
+            data.response = sanitizeWeakModelAnswer(data.response, normalizedUserMessage);
+        }
+        if (!data.response && typeof data.text === 'string') {
+            data.text = postProcessAssistantResponse(data.text, normalizedUserMessage);
+            data.text = sanitizeWeakModelAnswer(data.text, normalizedUserMessage);
         }
 
         if (isLowSignalModelAnswer(data.response || data.text) &&
@@ -6136,7 +6151,8 @@ async function handleNameCorrection(text) {
                 chatContainer.appendChild(messageDiv);
                 
                 
-                const shouldTypewriter = typewriter === null ? !hasHtmlContent : !!typewriter;
+                const containsRenderedMarkup = /<[^>]+>/.test(formattedText);
+                const shouldTypewriter = (typewriter === null ? !hasHtmlContent : !!typewriter) && !containsRenderedMarkup;
                 if (shouldTypewriter) {
                     const textElement = messageDiv.querySelector('.typewriter-text');
                     let charIndex = 0;
@@ -6199,20 +6215,106 @@ function normalizeUiTokens(text) {
         }
 
         function formatModelSourceBadge(label = 'Model answer') {
-            return `<div class="assistant-source-badge model">${escapeHtml(label)}</div>`;
+            return '';
         }
 
         function addModelAssistantMessage(text, label = 'Model answer') {
-            const html = `${formatModelSourceBadge(label)}\n${text}`;
-            addChatMessage(html, false, false);
+            addChatMessage(text, false, false);
+        }
+
+        function isSafeAssistantUrl(url) {
+            try {
+                const parsed = new URL(String(url || ''), window.location.origin);
+                return ['http:', 'https:'].includes(parsed.protocol);
+            } catch (error) {
+                return false;
+            }
+        }
+
+        function isSafeAssistantIframeUrl(url) {
+            try {
+                const parsed = new URL(String(url || ''), window.location.origin);
+                if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+                const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+                return host === 'maps.google.com' ||
+                    host === 'google.com' ||
+                    host === 'openstreetmap.org';
+            } catch (error) {
+                return false;
+            }
         }
 
         function sanitizeAssistantMarkup(html) {
-            return String(html || '')
-                .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-                .replace(/\son\w+="[^"]*"/gi, '')
-                .replace(/\son\w+='[^']*'/gi, '')
-                .replace(/javascript:/gi, '');
+            const template = document.createElement('template');
+            template.innerHTML = String(html || '');
+
+            const allowedTags = new Set(['A', 'BR', 'DIV', 'IFRAME', 'IMG', 'LI', 'OL', 'P', 'SPAN', 'STRONG', 'TABLE', 'TBODY', 'TD', 'TH', 'THEAD', 'TR', 'UL']);
+            const allowedAttrs = {
+                A: new Set(['href', 'target', 'rel', 'class']),
+                DIV: new Set(['class']),
+                IFRAME: new Set(['src', 'width', 'height', 'loading', 'allowfullscreen', 'class']),
+                IMG: new Set(['src', 'alt', 'class']),
+                P: new Set(['class']),
+                SPAN: new Set(['class']),
+                TABLE: new Set(['class']),
+                TBODY: new Set(['class']),
+                TD: new Set(['class', 'colspan', 'rowspan']),
+                TH: new Set(['class', 'colspan', 'rowspan']),
+                THEAD: new Set(['class']),
+                TR: new Set(['class']),
+                UL: new Set(['class']),
+                OL: new Set(['class']),
+                LI: new Set(['class']),
+                STRONG: new Set(),
+                BR: new Set()
+            };
+
+            const nodes = Array.from(template.content.querySelectorAll('*'));
+            for (const node of nodes) {
+                const tag = node.tagName;
+                if (!allowedTags.has(tag)) {
+                    node.replaceWith(...Array.from(node.childNodes));
+                    continue;
+                }
+
+                for (const attr of Array.from(node.attributes)) {
+                    const name = attr.name.toLowerCase();
+                    const value = attr.value;
+                    const tagAllowedAttrs = allowedAttrs[tag] || new Set();
+                    const isAllowedAttr = tagAllowedAttrs.has(attr.name);
+                    const isEventHandler = name.startsWith('on');
+                    if (!isAllowedAttr || isEventHandler) {
+                        node.removeAttribute(attr.name);
+                        continue;
+                    }
+
+                    if ((name === 'href' || name === 'src') && /^(?:javascript|data|vbscript):/i.test(value)) {
+                        node.removeAttribute(attr.name);
+                        continue;
+                    }
+
+                    if (tag === 'A' && name === 'href') {
+                        if (!isSafeAssistantUrl(value)) {
+                            node.replaceWith(node.textContent || '');
+                            break;
+                        }
+                        node.setAttribute('target', '_blank');
+                        node.setAttribute('rel', 'noopener noreferrer');
+                    }
+
+                    if (tag === 'IFRAME' && name === 'src' && !isSafeAssistantIframeUrl(value)) {
+                        node.remove();
+                        break;
+                    }
+
+                    if (tag === 'IMG' && name === 'src' && !isSafeAssistantUrl(value)) {
+                        node.remove();
+                        break;
+                    }
+                }
+            }
+
+            return template.innerHTML;
         }
 
         function toggleSendButton() {
