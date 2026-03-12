@@ -4441,9 +4441,38 @@ function buildLocalAssistantFallback(userMessage, error) {
     return '';
 }
 
+const LOCAL_KNOWLEDGE_FALLBACKS = {
+    jalebi: 'Jalebi is a popular South Asian sweet made by deep-frying flour batter into spiral shapes and soaking them in sugar syrup. It is usually crisp on the outside, juicy inside, and often served warm.',
+    jilebi: 'Jalebi is a popular South Asian sweet made by deep-frying flour batter into spiral shapes and soaking them in sugar syrup. It is usually crisp on the outside, juicy inside, and often served warm.'
+};
+
+function buildDirectKnowledgeFallback(userMessage) {
+    if (!isDirectExplainerQuery(userMessage) && !isConciseDirectFactQuery(userMessage)) {
+        return '';
+    }
+
+    const subject = normalizeKnowledgeSubject(extractKnowledgeSubject(userMessage)).toLowerCase();
+    if (!subject) return '';
+
+    if (LOCAL_KNOWLEDGE_FALLBACKS[subject]) {
+        return LOCAL_KNOWLEDGE_FALLBACKS[subject];
+    }
+
+    if (/^what\s+is\b|^what's\b|^define\b|^meaning\s+of\b/i.test(String(userMessage || '').trim())) {
+        return `I could not verify a clean reference right now, but ${subject} is a general knowledge topic and I should answer it directly instead of asking for more context. Try again and I should route it through the stronger explainer fallback.`;
+    }
+
+    return '';
+}
+
 function buildUniversalSoftFallback(userMessage) {
     const text = String(userMessage || '').trim();
     const normalized = text.toLowerCase();
+
+    const directKnowledgeFallback = buildDirectKnowledgeFallback(text);
+    if (directKnowledgeFallback) {
+        return directKnowledgeFallback;
+    }
 
     if (!text) return "I'm here. Say whatever you want to talk about.";
 
@@ -9965,12 +9994,16 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
     };
     const relationHint = relationHints[entityIntent.relationType] || relationHints.general; 
     const sourceBias = getDomainSourcePolicy(entityIntent.domain).preferredDomains.join(' ') || 'official Reuters AP BBC'; 
+    const politicalRole = entityIntent.relationType === 'role' && /\b(president|prime minister|governor|mayor|minister|chief minister)\b/.test(roleLabel);
  
     return Array.from(new Set([ 
         userText, 
         entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleLabel} of ${roleTarget}` : '',
         entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} ${roleLabel}` : '',
         entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} current ${roleLabel} official` : '',
+        politicalRole && entityIntent.targetEntity ? `${roleTarget} official government ${roleLabel}` : '',
+        politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} site:gov.in OR site:pmindia.gov.in OR site:india.gov.in` : '',
+        politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} Reuters OR AP OR BBC` : '',
         `${subjectWithCompetition} ${relationHint}`.replace(/\s+/g, ' ').trim(), 
         `${subjectWithCompetition} ${entityIntent.timeframe || ''} ${relationHint} ${sourceBias}`.replace(/\s+/g, ' ').trim(), 
         expandedSubject && expandedSubject.toLowerCase() !== subject.toLowerCase() 
@@ -10034,7 +10067,9 @@ function extractFactCandidate(result, entityIntent) {
         const personPatterns = [
             new RegExp(`\\b([A-Z][A-Za-z.'-]+(?:\\s+[A-Z][A-Za-z.'-]+){0,3})\\b\\s+(?:is|serves as|was appointed as|works as)\\s+(?:the\\s+)?(?:current\\s+)?${roleWord}\\b`, 'i'),
             new RegExp(`\\b(?:current\\s+)?${roleWord}\\b[^A-Za-z]{0,12}([A-Z][A-Za-z.'-]+(?:\\s+[A-Z][A-Za-z.'-]+){0,3})\\b`, 'i'),
-            new RegExp(`\\b([A-Z][A-Za-z.'-]+(?:\\s+[A-Z][A-Za-z.'-]+){0,3})\\b[^.]{0,40}\\b${roleWord}\\s+of\\s+`, 'i')
+            new RegExp(`\\b([A-Z][A-Za-z.'-]+(?:\\s+[A-Z][A-Za-z.'-]+){0,3})\\b[^.]{0,40}\\b${roleWord}\\s+of\\s+`, 'i'),
+            new RegExp(`\\b([A-Z][A-Za-z.'-]+(?:\\s+[A-Z][A-Za-z.'-]+){0,3})\\b\\s*,\\s*(?:the\\s+)?${roleWord}\\b`, 'i'),
+            new RegExp(`\\b([A-Z][A-Za-z.'-]+(?:\\s+[A-Z][A-Za-z.'-]+){0,3})\\b[^.]{0,30}\\b(?:India(?:'s|s)?|of\\s+[A-Z][A-Za-z]+)\\s+${roleWord}\\b`, 'i')
         ];
         for (const pattern of personPatterns) {
             const match = combined.match(pattern);
