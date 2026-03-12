@@ -9379,6 +9379,48 @@ function decideAnswerPath(classification) {
     return 'default_model';
 }
 
+function shouldUseAnswerThenCiteMode(text, classification) {
+    const raw = String(text || '').trim();
+    const lower = raw.toLowerCase();
+    const flags = classification?.flags || {};
+    if (!raw) return false;
+
+    if (flags.inappropriate || flags.stableBiography || flags.exchangeRate || flags.marketPrice || flags.news) {
+        return false;
+    }
+
+    if (!flags.currentInfo && !flags.liveRetrieval && !flags.universalEntityFact) {
+        return false;
+    }
+
+    if (requiresStrictLiveVerification(raw, classification?.liveIntent, classification?.entityIntent)) {
+        return false;
+    }
+
+    const mixedSignals = /\b(latest|recent|current|today|this year|update|updates|status|earnings|results|layoffs|launch|release|lawsuit|investigation|funding|roadmap)\b/;
+    const explainerSignals = /^(tell me about|what is|what's|who is|who was|explain|summarize)\b/;
+    const entitySignals = /\b(company|stock|startup|product|platform|app|team|brand|movie|show|artist|player|election|war|conflict)\b/;
+
+    return (mixedSignals.test(lower) && explainerSignals.test(lower)) ||
+        (mixedSignals.test(lower) && entitySignals.test(lower));
+}
+
+function decideHybridResponseMode(classification) {
+    if (!classification?.raw) return 'chat_first';
+
+    const raw = classification.raw;
+    const flags = classification.flags || {};
+    const strictLiveRequired = requiresStrictLiveVerification(raw, classification.liveIntent, classification.entityIntent);
+
+    if (flags.inappropriate) return 'special_handler';
+    if (flags.news || flags.exchangeRate || flags.marketPrice) return 'verify_first';
+    if (flags.currentInfo && strictLiveRequired) return 'verify_first';
+    if (flags.universalEntityFact && strictLiveRequired) return 'verify_first';
+    if (shouldUseAnswerThenCiteMode(raw, classification)) return 'answer_then_cite';
+    if (flags.currentInfo || flags.liveRetrieval || flags.universalEntityFact) return 'chat_first';
+    return 'chat_first';
+}
+
 function isNewsworthyLiveTopic(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -10439,6 +10481,113 @@ async function publishUniversalModelFallback(pipeline, label = 'Model fallback')
     return true;
 }
 
+async function fetchHybridCitationSources(userText, intent, controller) {
+    const query = String(userText || '').trim();
+    if (!query) return [];
+
+    const searchQueries = buildLiveSearchQueries(query, intent || extractLiveQueryIntent(query));
+    const resultSets = await Promise.all(
+        searchQueries.slice(0, 3).map(async (q) => {
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller?.signal,
+                    body: JSON.stringify({ query: q, maxResults: 5 })
+                });
+                if (!response.ok) return [];
+                const data = await response.json();
+                return Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
+            } catch (error) {
+                return [];
+            }
+        })
+    );
+
+    const ranked = rankSourcesByPolicy(resultSets.flat(), intent?.domain || 'general', query);
+    const deduped = [];
+    const seen = new Set();
+    for (const item of ranked) {
+        const url = String(item?.url || '').trim();
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        deduped.push(item);
+        if (deduped.length >= 4) break;
+    }
+    return deduped;
+}
+
+function buildHybridAnswerWithSources(answer, sources) {
+    const cleanAnswer = String(answer || '').trim();
+    if (!cleanAnswer) return '';
+    const sourceLines = (Array.isArray(sources) ? sources : [])
+        .slice(0, 4)
+        .map((item, index) => `${index + 1}. [${item.title}](${item.url})`)
+        .join('\n');
+    if (!sourceLines) return cleanAnswer;
+    return `${cleanAnswer}\n\nSources:\n${sourceLines}`;
+}
+
+async function handleAnswerThenCiteQuery(userText, classification) {
+    const query = String(userText || '').trim();
+    if (!query) return false;
+
+    const ai = await askGeminiAI(query);
+    if (ai?.aborted) return true;
+
+    const answer = String(ai?.response || ai?.text || '').trim();
+    if (!answer || ai?.intent === 'soft_fallback') {
+        return false;
+    }
+
+    const controller = beginAbortableRequest();
+    try {
+        const sources = await fetchHybridCitationSources(query, classification?.liveIntent, controller);
+        const finalMsg = buildHybridAnswerWithSources(answer, sources);
+        if (sources.length) {
+            addVerifiedAssistantMessage(finalMsg, 'Answer with sources');
+        } else {
+            addModelAssistantMessage(answer, 'Model answer');
+        }
+        speak(answer);
+        saveToHistory(query, finalMsg || answer);
+        return true;
+    } catch (error) {
+        if (isAbortError(error)) return true;
+        addModelAssistantMessage(answer, 'Model answer');
+        speak(answer);
+        saveToHistory(query, answer);
+        return true;
+    } finally {
+        clearActiveRequest(controller);
+    }
+}
+
+async function handleChatFirstCurrentQuery(userText, classification) {
+    const query = String(userText || '').trim();
+    if (!query) return false;
+
+    const ai = await askGeminiAI(query);
+    if (ai?.aborted) return true;
+
+    const answer = String(ai?.response || ai?.text || '').trim();
+    if (answer && ai?.intent !== 'soft_fallback') {
+        addModelAssistantMessage(answer, 'Model answer');
+        speak(answer);
+        saveToHistory(query, answer);
+        return true;
+    }
+
+    const flags = classification?.flags || {};
+    if (flags.exchangeRate) return await handleExchangeRateLookup(query);
+    if (flags.marketPrice) return await handleMarketLookup(query);
+    if (flags.news || shouldUseNewsEndpointForCurrentQuery(query)) {
+        await fetchAndDisplayNews(query);
+        return true;
+    }
+    return await handleLiveRetrievalQuery(query);
+}
+
 function extractRequestedDish(text) {
     const raw = String(text || '').trim();
     if (!raw) return '';
@@ -11035,6 +11184,7 @@ ${snippets}`
             updateTopicMemory(cleanText);
             const classification = classifyUserMessage(cleanText);
             const answerPath = decideAnswerPath(classification);
+            const hybridMode = decideHybridResponseMode(classification);
             const fallbackEntityIntent = classification.entityIntent || classifyUniversalEntityIntent(cleanText, classification.liveIntent);
 
             if (answerPath === 'moderation') {
@@ -11055,11 +11205,25 @@ ${snippets}`
                     return;
                 }
 
+                if (hybridMode === 'answer_then_cite') {
+                    const handled = await handleAnswerThenCiteQuery(cleanText, classification);
+                    if (handled) return;
+                }
+
+                if (hybridMode === 'chat_first') {
+                    const handled = await handleChatFirstCurrentQuery(cleanText, classification);
+                    if (handled) return;
+                }
+
                 const handled = await handleUniversalEntityFactQuery(cleanText, entityFactIntent);
                 if (handled) return;
             }
 
-            if (answerPath !== 'entity_fact' && !isStableBiographyQuestion(cleanText) && fallbackEntityIntent?.isEntityFact && isConciseDirectFactQuery(cleanText)) {
+            if (answerPath !== 'entity_fact' &&
+                hybridMode === 'verify_first' &&
+                !isStableBiographyQuestion(cleanText) &&
+                fallbackEntityIntent?.isEntityFact &&
+                isConciseDirectFactQuery(cleanText)) {
                 const handled = await handleUniversalEntityFactQuery(cleanText, classification.liveIntent);
                 if (handled) return;
             }
@@ -11082,6 +11246,16 @@ ${snippets}`
 
                 if (isMarketPriceQuery(cleanText)) {
                     const handled = await handleMarketLookup(cleanText);
+                    if (handled) return;
+                }
+
+                if (hybridMode === 'answer_then_cite') {
+                    const handled = await handleAnswerThenCiteQuery(cleanText, classification);
+                    if (handled) return;
+                }
+
+                if (hybridMode === 'chat_first') {
+                    const handled = await handleChatFirstCurrentQuery(cleanText, classification);
                     if (handled) return;
                 }
 
@@ -11133,6 +11307,14 @@ ${snippets}`
             }
 
             if (answerPath === 'live_retrieval') {
+                if (hybridMode === 'answer_then_cite') {
+                    const handled = await handleAnswerThenCiteQuery(cleanText, classification);
+                    if (handled) return;
+                }
+                if (hybridMode === 'chat_first') {
+                    const handled = await handleChatFirstCurrentQuery(cleanText, classification);
+                    if (handled) return;
+                }
                 const handled = await handleLiveRetrievalQuery(cleanText);
                 if (handled) return;
             }
