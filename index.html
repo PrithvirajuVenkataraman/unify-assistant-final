@@ -4034,6 +4034,37 @@ ${snippets}`
     return cleanLiveAnswerText(String(data?.response || data?.text || ''));
 }
 
+async function buildNewsSearchFallback(query, signal) {
+    const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal,
+        body: JSON.stringify({
+            query,
+            maxResults: 8
+        })
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const results = Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
+    if (!results.length) return null;
+
+    const trustedResults = results.filter(item => scoreSourcePolicy(item?.url, 'general') > 0);
+    const sourcePool = (trustedResults.length >= 2 ? trustedResults : results).slice(0, 6);
+    if (!sourcePool.length) return null;
+
+    const directAnswer = await buildDirectLiveAnswer(query, sourcePool, signal);
+    const answer = directAnswer || cleanLiveAnswerText(String(sourcePool[0]?.description || sourcePool[0]?.title || '').trim());
+    if (!answer) return null;
+
+    return {
+        answer,
+        sources: sourcePool
+    };
+}
+
 // ========== NEWS FETCHING FUNCTION ==========
 async function fetchAndDisplayNews(query) {
     showThinkingIndicator('[Map] Fetching latest news...');
@@ -4063,6 +4094,16 @@ async function fetchAndDisplayNews(query) {
         }
 
         if (!data.success) {
+            const fallbackNews = await buildNewsSearchFallback(query, controller.signal);
+            if (fallbackNews?.answer) {
+                const sourceLines = formatLiveSourceLinks(fallbackNews.sources, 5);
+                const newsMsg = `${fallbackNews.answer}\n\nSources:\n${sourceLines}`;
+                addVerifiedAssistantMessage(newsMsg, 'Verified live sources');
+                speak('I checked current sources and summarized the latest update.');
+                saveToHistory(query, newsMsg);
+                return;
+            }
+
             const fallbackMsg = data?.details
                 ? `I couldn't fetch the latest news right now. ${data.details}`
                 : "I couldn't fetch the latest news right now. Please try again in a moment, or check out Google News for current headlines.";
@@ -4073,6 +4114,16 @@ async function fetchAndDisplayNews(query) {
 
         const articles = Array.isArray(data.articles) ? data.articles : [];
         if (!articles.length) {
+            const fallbackNews = await buildNewsSearchFallback(query, controller.signal);
+            if (fallbackNews?.answer) {
+                const sourceLines = formatLiveSourceLinks(fallbackNews.sources, 5);
+                const newsMsg = `${fallbackNews.answer}\n\nSources:\n${sourceLines}`;
+                addVerifiedAssistantMessage(newsMsg, 'Verified live sources');
+                speak('I checked current sources and summarized the latest update.');
+                saveToHistory(query, newsMsg);
+                return;
+            }
+
             const fallbackMsg = "I couldn't find enough verified live news sources right now.";
             addChatMessage(fallbackMsg, false);
             speak(fallbackMsg);
@@ -4092,6 +4143,18 @@ async function fetchAndDisplayNews(query) {
         if (isAbortError(error)) {
             return;
         }
+        try {
+            const fallbackNews = await buildNewsSearchFallback(query, controller.signal);
+            if (fallbackNews?.answer) {
+                hideThinkingIndicator();
+                const sourceLines = formatLiveSourceLinks(fallbackNews.sources, 5);
+                const newsMsg = `${fallbackNews.answer}\n\nSources:\n${sourceLines}`;
+                addVerifiedAssistantMessage(newsMsg, 'Verified live sources');
+                speak('I checked current sources and summarized the latest update.');
+                saveToHistory(query, newsMsg);
+                return;
+            }
+        } catch (fallbackError) {}
         hideThinkingIndicator();
         const errorMsg = "I'm having trouble fetching news right now. You can check [Google News](https://news.google.com) for the latest headlines.";
         addChatMessage(errorMsg, false);
@@ -4522,13 +4585,30 @@ async function resolveFinalAssistantAnswer(userMessage, answerText) {
     const safeAnswer = sanitizeWeakModelAnswer(answerText, userMessage);
     if (safeAnswer) return safeAnswer;
 
-    const searchFallback = await buildSearchFallbackAnswer(userMessage);
-    if (searchFallback) return searchFallback;
-
     const directKnowledgeFallback = buildDirectKnowledgeFallback(userMessage);
     if (directKnowledgeFallback) return directKnowledgeFallback;
 
+    const searchFallback = await buildSearchFallbackAnswer(userMessage);
+    if (searchFallback) return searchFallback;
+
     return buildUniversalSoftFallback(userMessage);
+}
+
+async function publishResolvedModelMessage(userMessage, answerText, options = {}) {
+    const label = options?.label || 'Model answer';
+    const historyText = options?.historyText || null;
+    const speechText = options?.speechText || '';
+    const finalized = await resolveFinalAssistantAnswer(userMessage, answerText);
+    const safeText = String(finalized || '').trim();
+    if (!safeText) return false;
+    addModelAssistantMessage(safeText, label);
+    if (speechText) {
+        speak(speechText);
+    } else {
+        speak(safeText);
+    }
+    saveToHistory(userMessage, historyText || safeText);
+    return true;
 }
 
 function isLikelyLocationOrTravelQuery(text) {
@@ -10592,10 +10672,7 @@ async function publishUniversalModelFallback(pipeline, label = 'Model fallback')
     const ai = await askGeminiAI(pipeline.userText);
     const answer = String(ai?.response || ai?.text || '').trim();
     if (!answer || ai?.aborted || ai?.intent === 'soft_fallback') return false;
-    addModelAssistantMessage(answer, label);
-    speak(answer);
-    saveToHistory(pipeline.userText, answer);
-    return true;
+    return await publishResolvedModelMessage(pipeline.userText, answer, { label });
 }
 
 async function fetchHybridCitationSources(userText, intent, controller) {
@@ -10663,17 +10740,18 @@ async function handleAnswerThenCiteQuery(userText, classification) {
         const finalMsg = buildHybridAnswerWithSources(answer, sources);
         if (sources.length) {
             addVerifiedAssistantMessage(finalMsg, 'Answer with sources');
+            speak(answer);
+            saveToHistory(query, finalMsg || answer);
         } else {
-            addModelAssistantMessage(answer, 'Model answer');
+            await publishResolvedModelMessage(query, answer, {
+                label: 'Model answer',
+                historyText: finalMsg || answer
+            });
         }
-        speak(answer);
-        saveToHistory(query, finalMsg || answer);
         return true;
     } catch (error) {
         if (isAbortError(error)) return true;
-        addModelAssistantMessage(answer, 'Model answer');
-        speak(answer);
-        saveToHistory(query, answer);
+        await publishResolvedModelMessage(query, answer, { label: 'Model answer' });
         return true;
     } finally {
         clearActiveRequest(controller);
@@ -10689,9 +10767,7 @@ async function handleChatFirstCurrentQuery(userText, classification) {
 
     const answer = String(ai?.response || ai?.text || '').trim();
     if (answer && ai?.intent !== 'soft_fallback') {
-        addModelAssistantMessage(answer, 'Model answer');
-        speak(answer);
-        saveToHistory(query, answer);
+        await publishResolvedModelMessage(query, answer, { label: 'Model answer' });
         return true;
     }
 
@@ -11311,11 +11387,22 @@ ${snippets}`
             const answerPath = decideAnswerPath(classification);
             const hybridMode = decideHybridResponseMode(classification);
             const fallbackEntityIntent = classification.entityIntent || classifyUniversalEntityIntent(cleanText, classification.liveIntent);
+            const immediateKnowledgeFallback = buildDirectKnowledgeFallback(cleanText);
 
             if (answerPath === 'moderation') {
                 const moderationMsg = getContentModerationResponse();
                 addChatMessage(moderationMsg, false);
                 speak("I'm not able to help with that. Let me know if you have other questions!");
+                return;
+            }
+
+            if (immediateKnowledgeFallback && isDirectExplainerQuery(cleanText)) {
+                addModelAssistantMessage(immediateKnowledgeFallback, 'Model answer');
+                speak(immediateKnowledgeFallback);
+                await maybeShowReferenceImageForQuery(text, immediateKnowledgeFallback);
+                saveToHistory(text, immediateKnowledgeFallback);
+                suggestQuickReplies(immediateKnowledgeFallback);
+                addFeedbackButtons(text, immediateKnowledgeFallback);
                 return;
             }
 
@@ -11592,9 +11679,10 @@ Format:
 - Safer next step: <when to contact a doctor/pharmacist>`;
                 const medicalResponse = await callAIWithTyping(medicalPrompt, 'Preparing safe medical guidance...');
                 if (medicalResponse?.aborted) return;
-                addModelAssistantMessage(medicalResponse.response, 'Model answer');
-                speak("Here is some general medical guidance.");
-                saveToHistory(text, medicalResponse.response);
+                await publishResolvedModelMessage(text, medicalResponse.response, {
+                    label: 'Model answer',
+                    speechText: "Here is some general medical guidance."
+                });
                 return;
             }
 
@@ -11613,9 +11701,10 @@ Important:
 - Keep it concise and human`;
                 const mhResponse = await callAIWithTyping(mhPrompt, 'I am here with you...');
                 if (mhResponse?.aborted) return;
-                addModelAssistantMessage(mhResponse.response, 'Model answer');
-                speak("I'm here for you.");
-                saveToHistory(text, mhResponse.response);
+                await publishResolvedModelMessage(text, mhResponse.response, {
+                    label: 'Model answer',
+                    speechText: "I'm here for you."
+                });
                 return;
             }
 
@@ -11631,9 +11720,10 @@ Respond in a debate style that is:
 Do not use repetitive filler or generic wording.`;
                 const debateResponse = await callAIWithTyping(debatePrompt, 'Preparing a focused response...');
                 if (debateResponse?.aborted) return;
-                addModelAssistantMessage(debateResponse.response, 'Model answer');
-                speak("Here is a focused response.");
-                saveToHistory(text, debateResponse.response);
+                await publishResolvedModelMessage(text, debateResponse.response, {
+                    label: 'Model answer',
+                    speechText: "Here is a focused response."
+                });
                 return;
             }
 
@@ -11652,9 +11742,10 @@ Rules:
 - Keep it accurate and practical.`;
                 const learningResponse = await callAIWithTyping(learningPrompt, 'Preparing a clear explanation...');
                 if (learningResponse?.aborted) return;
-                addModelAssistantMessage(learningResponse.response, 'Model answer');
-                speak("Here is a clear explanation.");
-                saveToHistory(text, learningResponse.response);
+                await publishResolvedModelMessage(text, learningResponse.response, {
+                    label: 'Model answer',
+                    speechText: "Here is a clear explanation."
+                });
                 return;
             }
 
@@ -12278,11 +12369,10 @@ If user asks for 2 days, provide both days with balanced pacing.`;
                 
                 const aiResponse = await callAIWithTyping(itineraryPrompt, '[Plan] Planning your itinerary...');
                 if (aiResponse?.aborted) return;
-                addModelAssistantMessage(aiResponse.response, 'Model answer');
-                speak("I've created an itinerary for you. Check the chat for details!");
-                
-                
-                saveToHistory(text, aiResponse.response);
+                await publishResolvedModelMessage(text, aiResponse.response, {
+                    label: 'Model answer',
+                    speechText: "I've created an itinerary for you. Check the chat for details!"
+                });
                 return; 
             }
             
@@ -12337,11 +12427,10 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 
                 const aiResponse = await callAIWithTyping(specialtyPrompt);
                 if (aiResponse?.aborted) return;
-                addModelAssistantMessage(aiResponse.response, 'Model answer');
-                speak("Let me tell you about the local food specialties!");
-                
-                
-                saveToHistory(text, aiResponse.response);
+                await publishResolvedModelMessage(text, aiResponse.response, {
+                    label: 'Model answer',
+                    speechText: "Let me tell you about the local food specialties!"
+                });
                 return; 
             }
             
