@@ -64,6 +64,9 @@ export default async function handler(req, res) {
         if (!query) {
             return res.status(400).json({ error: 'query is required' });
         }
+        if (query.length > 500) {
+            return res.status(413).json({ error: 'query is too long' });
+        }
 
         const liveQueries = buildSearchQueries(query);
         const verified = await runVerifiedWebSearch(liveQueries, {
