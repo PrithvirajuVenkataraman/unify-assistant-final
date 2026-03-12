@@ -8996,6 +8996,12 @@ function isCurrentInfoQuery(text) {
     return false;
 }
 
+function hasExplicitFreshnessLanguage(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    return /\b(latest|recent|current|today|right now|as of now|live|just now|this year|2025|2026|2027)\b/.test(t);
+}
+
 function shouldUseNewsEndpointForCurrentQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -9601,10 +9607,38 @@ function detectEntityType(text, relationType, domain) {
     if (/\b(ceo|founder|actor|actress|singer|director|engineer|doctor|lawyer|author|writer)\b/.test(lower)) return 'profession_person'; 
     return 'entity'; 
 } 
+
+function extractRoleQueryParts(text) {
+    const raw = String(text || '').trim();
+    if (!raw) {
+        return { roleLabel: '', targetEntity: '' };
+    }
+
+    const rolePatterns = [
+        /\b(?:who is|who was|what is)\s+(?:the\s+)?(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor)\s+of\s+(.+?)\s*\??$/i,
+        /\b(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor)\s+of\s+(.+?)\s*\??$/i
+    ];
+
+    for (const pattern of rolePatterns) {
+        const match = raw.match(pattern);
+        if (match?.[1] && match?.[2]) {
+            return {
+                roleLabel: match[1].toLowerCase(),
+                targetEntity: match[2].replace(/[?.!,;]+$/g, '').trim()
+            };
+        }
+    }
+
+    return { roleLabel: '', targetEntity: '' };
+}
  
 function extractEntitySubject(text, relationType, liveIntent = null) { 
     const raw = String(text || '').trim();
     const competition = extractEntityCompetition(raw, liveIntent);
+    const roleParts = relationType === 'role' ? extractRoleQueryParts(raw) : { targetEntity: '' };
+    if (roleParts.targetEntity) {
+        return roleParts.targetEntity;
+    }
     const patterns = [
         /\bhow many\b[\w\s]*?\b(?:titles|cups|trophies|championships|wins)\b\s+(?:did|do|has|have)\s+(.+?)\s+(?:win|won|have|has)\b/i,
         /\bwho is\b\s+(.+?)\s*\??$/i,
@@ -9654,6 +9688,7 @@ function buildStructuredEntityRecord(text, liveIntent = null) {
     const relationType = detectEntityRelationType(raw, liveIntent); 
     const domain = detectNormalizedEntityDomain(raw, relationType, liveIntent); 
     const entityType = detectEntityType(raw, relationType, domain); 
+    const roleParts = relationType === 'role' ? extractRoleQueryParts(raw) : { roleLabel: '', targetEntity: '' };
     const subject = extractEntitySubject(raw, relationType, liveIntent); 
     const competition = extractEntityCompetition(raw, liveIntent);
     const timeframe = extractEntityTimeframe(raw, liveIntent);
@@ -9663,6 +9698,8 @@ function buildStructuredEntityRecord(text, liveIntent = null) {
         relationType, 
         entityType, 
         subject, 
+        roleLabel: roleParts.roleLabel,
+        targetEntity: roleParts.targetEntity,
         year: timeframe.year, 
         timeframe: timeframe.timeframe,
         factType: liveIntent?.factType || relationType, 
@@ -9695,6 +9732,8 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
     const entityIntent = extractUniversalEntityIntent(userText, liveIntent); 
     const subject = entityIntent.subject || userText; 
     const expandedSubject = expandKnownQueryAliases(subject); 
+    const roleTarget = entityIntent.targetEntity || subject;
+    const roleLabel = entityIntent.roleLabel || 'role';
     const competition = entityIntent.competition || '';
     const competitionExpanded = competition ? expandKnownQueryAliases(competition) : '';
     const subjectWithCompetition = [subject, competition, entityIntent.year].filter(Boolean).join(' ').trim();
@@ -9716,6 +9755,9 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
  
     return Array.from(new Set([ 
         userText, 
+        entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleLabel} of ${roleTarget}` : '',
+        entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} ${roleLabel}` : '',
+        entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} current ${roleLabel} official` : '',
         `${subjectWithCompetition} ${relationHint}`.replace(/\s+/g, ' ').trim(), 
         `${subjectWithCompetition} ${entityIntent.timeframe || ''} ${relationHint} ${sourceBias}`.replace(/\s+/g, ' ').trim(), 
         expandedSubject && expandedSubject.toLowerCase() !== subject.toLowerCase() 
@@ -9773,8 +9815,19 @@ function extractFactCandidate(result, entityIntent) {
     }
 
     if (entityIntent.relationType === 'role') {
-        const match = combined.match(/\b(?:is|serves as|appointed as|works as)\s+(?:the\s+)?([A-Za-z][A-Za-z0-9&.\-\s]{2,80})/i);
-        return match ? match[1].trim() : '';
+        const roleWord = entityIntent.roleLabel
+            ? entityIntent.roleLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            : '(?:ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor)';
+        const personPatterns = [
+            new RegExp(`\\b([A-Z][A-Za-z.'-]+(?:\\s+[A-Z][A-Za-z.'-]+){0,3})\\b\\s+(?:is|serves as|was appointed as|works as)\\s+(?:the\\s+)?(?:current\\s+)?${roleWord}\\b`, 'i'),
+            new RegExp(`\\b(?:current\\s+)?${roleWord}\\b[^A-Za-z]{0,12}([A-Z][A-Za-z.'-]+(?:\\s+[A-Z][A-Za-z.'-]+){0,3})\\b`, 'i'),
+            new RegExp(`\\b([A-Z][A-Za-z.'-]+(?:\\s+[A-Z][A-Za-z.'-]+){0,3})\\b[^.]{0,40}\\b${roleWord}\\s+of\\s+`, 'i')
+        ];
+        for (const pattern of personPatterns) {
+            const match = combined.match(pattern);
+            if (match?.[1]) return match[1].trim();
+        }
+        return '';
     }
 
     if (entityIntent.relationType === 'price') {
@@ -9841,6 +9894,9 @@ function formatConsensusAnswer(entityIntent, agreement) {
         return `${entityIntent.subject} is associated with ${value}.`;
     }
     if (entityIntent.relationType === 'role') {
+        if (entityIntent.targetEntity && entityIntent.roleLabel) {
+            return `The current ${entityIntent.roleLabel} of ${entityIntent.targetEntity} is ${value}.`;
+        }
         return `${entityIntent.subject} is ${value}.`;
     } 
     if (entityIntent.relationType === 'price') {
@@ -10092,6 +10148,49 @@ function buildUniversalFactPipelineContext(userText, liveIntent = null) {
     };
 }
 
+function requiresStrictLiveVerification(userText, liveIntent = null, entityIntent = null) {
+    const text = String(userText || '').trim();
+    const lower = text.toLowerCase();
+    const intent = liveIntent || extractLiveQueryIntent(text);
+    const entity = entityIntent || extractUniversalEntityIntent(text, intent);
+
+    if (!text) return false;
+    if (isExchangeRateQuery(text) || isMarketPriceQuery(text) || isNewsworthyLiveTopic(text) || isSportsLiveResultQuery(text)) {
+        return true;
+    }
+
+    if (['winner', 'score', 'standings', 'qualification', 'price'].includes(entity.relationType)) {
+        return true;
+    }
+
+    if (['team_membership', 'party_membership'].includes(entity.relationType)) {
+        return true;
+    }
+
+    if (entity.relationType === 'role') {
+        const unstableRole = /\b(ceo|president|prime minister|governor|mayor|captain|coach|chairman|chairperson|minister|chief minister)\b/.test(lower);
+        if ((entity.timeframe === 'current' || hasExplicitFreshnessLanguage(text)) && unstableRole) {
+            return true;
+        }
+    }
+
+    if (intent?.year && ['winner', 'score', 'standings', 'qualification', 'stats'].includes(intent.factType)) {
+        return true;
+    }
+
+    return false;
+}
+
+async function publishUniversalModelFallback(pipeline, label = 'Model fallback') {
+    const ai = await askGeminiAI(pipeline.userText);
+    const answer = String(ai?.response || ai?.text || '').trim();
+    if (!answer || ai?.aborted) return false;
+    addModelAssistantMessage(answer, label);
+    speak(answer);
+    saveToHistory(pipeline.userText, answer);
+    return true;
+}
+
 async function retrieveUniversalEntitySources(pipeline, controller) {
     const queries = buildUniversalEntityQueries(pipeline.userText, pipeline.intent);
     const resultSets = await Promise.all(
@@ -10228,13 +10327,16 @@ ${snippets}`
 
 async function handleUniversalEntityFactQuery(userText, liveIntent = null) { 
     const pipeline = buildUniversalFactPipelineContext(userText, liveIntent);
+    const strictLiveRequired = requiresStrictLiveVerification(userText, pipeline.intent, pipeline.entityIntent);
     showThinkingIndicator('Checking verified sources...'); 
     const controller = beginAbortableRequest(); 
     try { 
         const deduped = await retrieveUniversalEntitySources(pipeline, controller);
 
         if (!deduped.length) { 
-            return publishUniversalKnownFact(pipeline) || publishUniversalVerificationFallback(pipeline, 'I could not verify that result right now.');
+            if (publishUniversalKnownFact(pipeline)) return true;
+            if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
+            return publishUniversalVerificationFallback(pipeline, 'I could not verify that result right now.');
         } 
 
         const agreement = buildSourceAgreement(deduped.slice(0, 6), pipeline.entityIntent);
@@ -10244,13 +10346,18 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
             if (pipeline.knownFact && pipeline.entityIntent.relationType === 'title_count') {
                 return publishUniversalKnownFact(pipeline);
             }
+            if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) {
+                return true;
+            }
             return publishUniversalMixedEvidence(pipeline, deduped);
         }
 
         return await summarizeUniversalEntitySources(pipeline, deduped, controller);
     } catch (error) { 
         if (isAbortError(error)) return true; 
-        return publishUniversalKnownFact(pipeline) || publishUniversalVerificationFallback(pipeline);
+        if (publishUniversalKnownFact(pipeline)) return true;
+        if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
+        return publishUniversalVerificationFallback(pipeline);
     } finally { 
         clearActiveRequest(controller);
         hideThinkingIndicator();
@@ -10267,6 +10374,8 @@ async function handleLiveRetrievalQuery(userText) {
     try {
         const query = String(userText || '').trim();
         const intent = extractLiveQueryIntent(query);
+        const entityIntent = extractUniversalEntityIntent(query, intent);
+        const strictLiveRequired = requiresStrictLiveVerification(query, intent, entityIntent);
         const directFactQuery = intent.directFact || isSportsLiveResultQuery(query);
         const conciseFactQuery = isConciseDirectFactQuery(query);
         const queries = buildLiveSearchQueries(query, intent);
@@ -10300,6 +10409,9 @@ async function handleLiveRetrievalQuery(userText) {
         }
 
         if (!deduped.length) {
+            if (!strictLiveRequired) {
+                return await publishUniversalModelFallback({ userText: query }, 'Model fallback');
+            }
             await fetchAndDisplayNews(userText);
             return true;
         }
@@ -10308,6 +10420,9 @@ async function handleLiveRetrievalQuery(userText) {
         const sourcePool = trusted.length >= 3 ? trusted : deduped;
         const distinctDomains = Array.from(new Set(sourcePool.map(r => getDomainFromUrl(r.url)).filter(Boolean)));
         if (!directFactQuery && distinctDomains.length < 2) {
+            if (!strictLiveRequired) {
+                return await publishUniversalModelFallback({ userText: query }, 'Model fallback');
+            }
             await fetchAndDisplayNews(userText);
             return true;
         }
@@ -10374,6 +10489,9 @@ ${snippets}`
         if (!answer) {
             const top = sourcePool[0];
             if (!top) {
+                if (!strictLiveRequired) {
+                    return await publishUniversalModelFallback({ userText: query }, 'Model fallback');
+                }
                 await fetchAndDisplayNews(userText);
                 return true;
             }
@@ -13798,25 +13916,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
-/*
-1. TYPING INDICATOR:
-   - Call showTypingIndicator() before AI response
-   - Call hideTypingIndicator() before showing response
-
-2. EDIT MESSAGES:
-   - Integrated in addChatMessage() with edit button on user messages
-   - Editing a message regenerates the response from that turn
-
-3. CONVERSATION HISTORY:
-   - Call saveToHistory(userMsg, aiMsg) after each exchange
-   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
-   - Search, export, and clear functions included
-
-4. ERROR FEEDBACK:
-   - Call showError("Error message") instead of addChatMessage for errors
-   - Visual shake animation + auto-dismiss
-*/
 
 </script>
 </body>
