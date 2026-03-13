@@ -1774,60 +1774,6 @@
             display: none;
         }
 
-        .vision-inline-attachment {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 4px 8px 4px 4px;
-            border-radius: 12px;
-            border: 1px solid rgba(148, 163, 184, 0.45);
-            background: rgba(255, 255, 255, 0.95);
-            max-width: 170px;
-        }
-
-        .vision-inline-attachment img {
-            width: 30px;
-            height: 30px;
-            border-radius: 8px;
-            object-fit: cover;
-            border: 1px solid rgba(148, 163, 184, 0.5);
-        }
-
-        .vision-inline-name {
-            font-size: 11px;
-            font-weight: 600;
-            color: #0f172a;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            max-width: 95px;
-        }
-
-        body.dark .vision-inline-attachment {
-            background: rgba(15, 23, 42, 0.95);
-            color: #e2e8f0;
-            border-color: rgba(100, 116, 139, 0.7);
-        }
-
-        body.dark .vision-inline-name {
-            color: #e2e8f0;
-        }
-
-        .vision-inline-attachment button {
-            border: none;
-            background: transparent;
-            color: inherit;
-            cursor: pointer;
-            font-size: 14px;
-            line-height: 1;
-            padding: 0;
-            opacity: 0.85;
-        }
-
-        .vision-inline-attachment button:hover {
-            opacity: 1;
-        }
-
         .chat-scroll-jump {
             position: absolute;
             right: 16px;
@@ -2299,8 +2245,6 @@
     };
 })();
 
-window.Tesseract = window.Tesseract || null;
-
 const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'}; 
 const SUPPORT_MODE_HINTS = {
     balanced: 'Be clear, practical, and warm. Keep a neutral supportive tone.',
@@ -2345,7 +2289,7 @@ function isWeatherIntentText(text) {
 function isTamilJokeRequest(text) {
     const t = String(text || '').toLowerCase();
     if (!/\bjoke|funny|laugh\b/.test(t)) return false;
-    return /\btamil\b|à®¤à®®à®¿à®´à¯/.test(t);
+    return /\btamil\b|\u0ba4\u0bae\u0bbf\u0bb4\u0bcd/.test(t);
 }
 
 function isRecipeRequest(text) {
@@ -2665,14 +2609,16 @@ async function handleVerifiedPlacesMode(text) {
     const type = text.toLowerCase().includes('restaurant') ? 'restaurants' : 'hotels';
     const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(type + ' near me')}`;
     const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(type + ' near me')}`;
-    const msg = `Verified local lookup is currently disabled.\n\n[Map] [Open Google Maps](${mapsUrl})\n[Search] [Search on Google](${googleUrl})`;
-    addChatMessage(msg, false);
-    speak(`Verified lookup is currently disabled. I shared search links for ${type}.`);
+    await deliverApiReply('verified_places_disabled', {
+        type,
+        mapsUrl,
+        googleUrl
+    });
 }
 
 async function handleBudgetTripPlanner(text) {
     try {
-        addChatMessage('Building your budget trip plan...', false);
+        showLoading('Building your budget trip plan...');
         const response = await fetch('/api/budget-plan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2707,11 +2653,19 @@ async function handleBudgetTripPlanner(text) {
         ].join('\n');
 
         addChatMessage(msg, false);
-        speak(`Your ${p.days}-day budget plan for ${p.destination} is ready.`);
+        const planSpeech = await composeApiReply('budget_trip_ready', {
+            destination: p.destination,
+            days: p.days
+        }, {
+            fallbackText: `Your ${p.days}-day budget plan for ${p.destination} is ready.`
+        });
+        speak(planSpeech || `Your ${p.days}-day budget plan for ${p.destination} is ready.`);
     } catch (error) {
         const msg = 'Budget trip planner failed. Please try again.';
         addChatMessage(msg, false);
         speak(msg);
+    } finally {
+        hideLoading();
     }
 }
 
@@ -2724,7 +2678,7 @@ async function handleCalendarSync(text) {
     }
 
     try {
-        addChatMessage('Creating calendar event...', false);
+        showLoading('Creating calendar event...');
         const response = await fetch('/api/calendar-sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2738,13 +2692,16 @@ async function handleCalendarSync(text) {
 
         downloadIcsFromBase64(data.icsBase64, data.fileName || 'trip-plan.ics');
 
-        const msg = `Calendar event created. ICS downloaded as ${data.fileName}.\nGoogle Calendar quick add: ${data.googleCalendarUrl}`;
-        addChatMessage(msg, false);
-        speak('Calendar sync complete. I downloaded an event file for you.');
+        await deliverApiReply('calendar_sync_success', {
+            fileName: data.fileName,
+            googleCalendarUrl: data.googleCalendarUrl
+        });
     } catch (error) {
-        const msg = 'Calendar sync failed. Please try again.';
-        addChatMessage(msg, false);
-        speak(msg);
+        await deliverApiReply('calendar_sync_error', {
+            error: String(error?.message || '')
+        });
+    } finally {
+        hideLoading();
     }
 }
 
@@ -3118,14 +3075,14 @@ function addShareButton(content, type) {
     const shareBtn = document.createElement('button');
     shareBtn.type = 'button';
     shareBtn.className = `${bgClass} border-2 ${darkMode ? 'border-blue-600' : 'border-blue-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2`;
-    shareBtn.innerHTML = `<span class="text-xl">ðŸ—ºï¸</span><span class="text-sm font-medium ${textClass}"></span>`;
+    shareBtn.innerHTML = `<span class="text-xl">&#128506;</span><span class="text-sm font-medium ${textClass}"></span>`;
     shareBtn.querySelector('span:last-child').textContent = `Share this ${type}`;
     shareBtn.addEventListener('click', () => shareContent(cleanContent, type));
 
     const emailBtn = document.createElement('button');
     emailBtn.type = 'button';
     emailBtn.className = `${emailBgClass} border-2 ${darkMode ? 'border-purple-600' : 'border-purple-300'} rounded-xl p-3 shadow-sm hover:shadow-md transition-all flex items-center gap-2`;
-    emailBtn.innerHTML = `<span class="text-xl">ðŸ“§</span><span class="text-sm font-medium ${emailTextClass}"></span>`;
+    emailBtn.innerHTML = `<span class="text-xl">&#128231;</span><span class="text-sm font-medium ${emailTextClass}"></span>`;
     emailBtn.querySelector('span:last-child').textContent = `Email this ${type}`;
     emailBtn.addEventListener('click', () => openEmailModal(type));
 
@@ -3241,7 +3198,7 @@ function openEmailModal(type) {
     modal.innerHTML = `
         <div class="${modalBg} rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold ${textColor}">ðŸ“§ Email Your ${type.charAt(0).toUpperCase() + type.slice(1)}</h3>
+                <h3 class="text-xl font-bold ${textColor}">&#128231; Email Your ${type.charAt(0).toUpperCase() + type.slice(1)}</h3>
                 <button onclick="closeEmailModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
             </div>
 
@@ -3357,7 +3314,7 @@ function sendEmail(type) {
 
     // Close modal and show success
     closeEmailModal();
-    showTemporaryMessage('ðŸ“§ Opening your email app...');
+    showTemporaryMessage('Opening your email app...');
 }
 
 // Load saved email when opening modal (auto-fill)
@@ -3607,7 +3564,7 @@ function detectTranslatorRequest(text) {
 }
 
 // Activate translator mode
-function activateTranslatorMode(language) {
+async function activateTranslatorMode(language) {
     const langInfo = supportedLanguages[language];
     if (!langInfo) return false;
 
@@ -3617,35 +3574,33 @@ function activateTranslatorMode(language) {
     // Show translator mode UI
     showTranslatorModeUI(langInfo);
 
-    const activationMsg = `[Globe] **Translator Mode Activated - ${langInfo.name} (${langInfo.nativeName})**
-
-I'll now help you communicate in ${langInfo.name}!
-
-**How it works:**
-1. Say or type what you want to say in English
-2. I'll translate it to ${langInfo.name}
-3. I'll also speak it out loud so you can use it directly
-
-**Example phrases I can help with:**
-- "How much does this cost?"
-- "Take me to the railway station"
-- "Where is the nearest ATM?"
-- "I need help"
-
-**To exit translator mode:** Say "stop translator" or "switch to English"
-
-----------------------
-
-[Mic] **Ready!** What would you like to say in ${langInfo.name}?`;
+    const activationMsg = await composeApiReply('translator_mode_card', {
+        language: langInfo.name,
+        nativeName: langInfo.nativeName,
+        examples: [
+            'How much does this cost?',
+            'Take me to the railway station',
+            'Where is the nearest ATM?',
+            'I need help'
+        ]
+    }, {
+        fallbackText: `[Globe] **Translator Mode Activated - ${langInfo.name} (${langInfo.nativeName})**\n\nI will now help you communicate in ${langInfo.name}.\n\n[Mic] **Ready!** What would you like to say in ${langInfo.name}?`
+    });
 
     addChatMessage(activationMsg, false);
-    speak(`Translator mode activated for ${langInfo.name}. Tell me what you want to say and I'll translate it for you.`);
+    const activationSpeech = await composeApiReply('translator_mode_enabled', {
+        language: langInfo.name,
+        nativeName: langInfo.nativeName
+    }, {
+        fallbackText: `Translator mode activated for ${langInfo.name}. Tell me what you want to say and I will translate it for you.`
+    });
+    speak(activationSpeech || `Translator mode activated for ${langInfo.name}. Tell me what you want to say and I will translate it for you.`);
 
     return true;
 }
 
 // Deactivate translator mode
-function deactivateTranslatorMode() {
+async function deactivateTranslatorMode() {
     const wasActive = translatorMode;
     const prevLang = translatorLanguage ? supportedLanguages[translatorLanguage]?.name : 'the language';
 
@@ -3656,11 +3611,18 @@ function deactivateTranslatorMode() {
     hideTranslatorModeUI();
 
     if (wasActive) {
-        const exitMsg = `[OK] **Translator Mode Ended**
-
-Switched back to English. I'm ready to help you with anything else!`;
+        const exitMsg = await composeApiReply('translator_mode_disabled_card', {
+            previousLanguage: prevLang
+        }, {
+            fallbackText: '[OK] **Translator Mode Ended**\n\nSwitched back to English.'
+        });
         addChatMessage(exitMsg, false);
-        speak(`Translator mode ended. I'm back to English.`);
+        const exitSpeech = await composeApiReply('translator_mode_disabled', {
+            previousLanguage: prevLang
+        }, {
+            fallbackText: 'Translator mode ended. I am back to English.'
+        });
+        speak(exitSpeech || 'Translator mode ended. I am back to English.');
     }
 }
 
@@ -3758,20 +3720,13 @@ async function processTranslatorMode(text) {
     const result = await translateText(text, translatorLanguage);
 
     if (result && result.translation) {
-        const translationMsg = `[Plan] **Your phrase in ${langInfo.name}:**
-
-----------------------
-
-**English:** "${text}"
-
-**${langInfo.name}:**
-${result.translation}
-
-----------------------
-
-Click the speaker button to hear it.
-
-[Tip] **Tip:** Show this to the person you're talking to, or play the audio.`;
+        const translationMsg = await composeApiReply('translator_result', {
+            language: langInfo.name,
+            englishText: text,
+            translatedText: result.translation
+        }, {
+            fallbackText: `[Plan] **Your phrase in ${langInfo.name}:**\n\n**English:** "${text}"\n\n**${langInfo.name}:**\n${result.translation}`
+        });
 
         addChatMessage(translationMsg, false);
 
@@ -3781,9 +3736,10 @@ Click the speaker button to hear it.
         // Try to speak in the target language
         speakInLanguage(translationOnly, langInfo.voiceLang);
     } else {
-        const errorMsg = `[Error] Sorry, I couldn't translate that. Please try again with a simpler phrase.`;
-        addChatMessage(errorMsg, false);
-        speak("Sorry, I couldn't translate that. Please try a simpler phrase.");
+        await deliverApiReply('translator_error', {
+            language: langInfo.name,
+            userMessage: text
+        });
     }
 }
 
@@ -4130,16 +4086,15 @@ async function fetchAndDisplayNews(query) {
                 const sourceLines = formatLiveSourceLinks(fallbackNews.sources, 5);
                 const newsMsg = `${fallbackNews.answer}\n\nSources:\n${sourceLines}`;
                 addVerifiedAssistantMessage(newsMsg, 'Verified live sources');
-                speak('I checked current sources and summarized the latest update.');
+                await speakApiReply('news_summary_ready', {}, 'I checked current sources and summarized the latest update.');
                 saveToHistory(query, newsMsg);
                 return;
             }
 
-            const fallbackMsg = data?.details
-                ? `I couldn't fetch the latest news right now. ${data.details}`
-                : "I couldn't fetch the latest news right now. Please try again in a moment, or check out Google News for current headlines.";
-            addChatMessage(fallbackMsg, false);
-            speak("I couldn't fetch news right now. Please try again.");
+            await deliverApiReply('news_fetch_unavailable', {
+                details: data?.details || '',
+                googleNewsUrl: 'https://news.google.com'
+            });
             return;
         }
 
@@ -4150,14 +4105,14 @@ async function fetchAndDisplayNews(query) {
                 const sourceLines = formatLiveSourceLinks(fallbackNews.sources, 5);
                 const newsMsg = `${fallbackNews.answer}\n\nSources:\n${sourceLines}`;
                 addVerifiedAssistantMessage(newsMsg, 'Verified live sources');
-                speak('I checked current sources and summarized the latest update.');
+                await speakApiReply('news_summary_ready', {}, 'I checked current sources and summarized the latest update.');
                 saveToHistory(query, newsMsg);
                 return;
             }
 
-            const fallbackMsg = "I couldn't find enough verified live news sources right now.";
-            addChatMessage(fallbackMsg, false);
-            speak(fallbackMsg);
+            await deliverApiReply('news_insufficient_sources', {
+                query
+            });
             return;
         }
 
@@ -4167,7 +4122,7 @@ async function fetchAndDisplayNews(query) {
         const newsMsg = `${summaryBlock}\n\nSources:\n${sourceLines}`;
 
         addVerifiedAssistantMessage(newsMsg, 'Verified news sources');
-        speak('I checked verified live sources and summarized the latest update.');
+        await speakApiReply('news_summary_verified', {}, 'I checked verified live sources and summarized the latest update.');
         saveToHistory(query, newsMsg);
 
     } catch (error) {
@@ -4181,15 +4136,16 @@ async function fetchAndDisplayNews(query) {
                 const sourceLines = formatLiveSourceLinks(fallbackNews.sources, 5);
                 const newsMsg = `${fallbackNews.answer}\n\nSources:\n${sourceLines}`;
                 addVerifiedAssistantMessage(newsMsg, 'Verified live sources');
-                speak('I checked current sources and summarized the latest update.');
+                await speakApiReply('news_summary_ready', {}, 'I checked current sources and summarized the latest update.');
                 saveToHistory(query, newsMsg);
                 return;
             }
         } catch (fallbackError) {}
         hideThinkingIndicator();
-        const errorMsg = "I'm having trouble fetching news right now. You can check [Google News](https://news.google.com) for the latest headlines.";
-        addChatMessage(errorMsg, false);
-        speak("I couldn't fetch news right now. Try Google News for updates.");
+        await deliverApiReply('news_fetch_error', {
+            query,
+            googleNewsUrl: 'https://news.google.com'
+        });
     } finally {
         clearActiveRequest(controller);
     }
@@ -4245,17 +4201,19 @@ ${snippetBlock}`;
         const ai = await askGeminiAI(jokePrompt);
         let jokeText = (ai && (ai.response || ai.text)) ? (ai.response || ai.text) : '';
         if (!/Tamil:\s*/i.test(jokeText) || !/Pronunciation:\s*/i.test(jokeText) || !/Meaning:\s*/i.test(jokeText)) {
-            jokeText = `Tamil: ?????: ??? ???????? ??????????? ????????? ?????: ?????? ??????????? ?????????!
-Pronunciation: Amma: En puthagam thiranduttu thoongure? Paiyan: Kanavil padichuttu irukken!
-Meaning: Mom asks, "Why are you sleeping with the book open?" Son says, "I'm studying in my dream!"
-Why funny: He turns sleeping into a clever study excuse.`;
+            jokeText = await composeApiReply('tamil_joke_simple', {}, {
+                fallbackText: 'Tamil: Joke unavailable\nPronunciation: Joke unavailable\nMeaning: I could not generate a clean Tamil joke right now.\nWhy funny: Not available.'
+            });
         }
         const sourceLines = results.slice(0, 3).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
 
         hideThinkingIndicator();
         const finalMsg = `Tamil joke:\n\n${jokeText}\n\nSources:\n${sourceLines}`;
         addChatMessage(finalMsg, false);
-        speak('Here is a Tamil joke for you.');
+        const jokeSpeech = await composeApiReply('tamil_joke_ready', {}, {
+            fallbackText: 'Here is a Tamil joke for you.'
+        });
+        speak(jokeSpeech || 'Here is a Tamil joke for you.');
         saveToHistory(queryText, finalMsg);
     } catch (error) {
         try {
@@ -4276,21 +4234,25 @@ Rules:
                 ? (direct.response || direct.text)
                 : '';
             if (!/Tamil:\s*/i.test(directText) || !/Pronunciation:\s*/i.test(directText) || !/Meaning:\s*/i.test(directText)) {
-                directText = `Tamil: ????????: ??? ???? ?????? ?????? ??????: ???? ????????????? ?????????!
-Pronunciation: Aasiriyar: Un homework enge? Maanavan: Pena velainiruththam poittadhu!
-Meaning: Teacher asks, "Where is your homework?" Student says, "My pen went on strike!"
-Why funny: He blames the pen instead of admitting he skipped homework.`;
+                directText = await composeApiReply('tamil_joke_simple', {}, {
+                    fallbackText: 'Tamil: Joke unavailable\nPronunciation: Joke unavailable\nMeaning: I could not generate a clean Tamil joke right now.\nWhy funny: Not available.'
+                });
             }
             hideThinkingIndicator();
             const finalMsg = `Tamil joke:\n\n${directText}`;
             addChatMessage(finalMsg, false);
-            speak('Here is a Tamil joke for you.');
+            const jokeSpeech = await composeApiReply('tamil_joke_ready', {}, {
+                fallbackText: 'Here is a Tamil joke for you.'
+            });
+            speak(jokeSpeech || 'Here is a Tamil joke for you.');
             saveToHistory(queryText, finalMsg);
         } catch (fallbackError) {
             hideThinkingIndicator();
-            const fallback = `I could not fetch web results right now.\n\nTry this direct search:\n[Search Tamil jokes on Google](https://www.google.com/search?q=short+tamil+jokes+with+meaning)`;
-            addChatMessage(fallback, false);
-            speak('I could not fetch a live joke right now, but I shared a search link.');
+            await deliverApiReply('tamil_joke_search_fallback', {
+                searchUrl: 'https://www.google.com/search?q=short+tamil+jokes+with+meaning'
+            }, {
+                fallbackText: 'I could not fetch a live Tamil joke right now.\n\nTry this direct search:\n[Search Tamil jokes on Google](https://www.google.com/search?q=short+tamil+jokes+with+meaning)'
+            });
         }
     }
 }
@@ -4530,58 +4492,28 @@ async function buildStrictApiKnowledgeFallback(userMessage) {
     }
 }
 
-function buildLocalAssistantFallback(userMessage, error) {
+async function buildLocalAssistantFallback(userMessage, error) {
     const text = String(userMessage || '').trim();
-    const normalized = text.toLowerCase();
 
     if (supportConversationMode || isSupportConversationRequest(text)) {
-        return buildOfflineSupportReply(text);
+        return await buildOfflineSupportReply(text);
     }
 
     if (isMentalHealthConversation(text)) {
-        if (/\blonely\b/.test(normalized)) {
-            return "I'm here with you. Loneliness can feel heavy, so try one small step right now: message one person you trust, step outside for a 10-minute walk, or sit somewhere around other people instead of being alone. If this has been sticking with you for a while, talking to a certified mental health professional would be a strong next step.";
-        }
-        return "I'm sorry you're dealing with that. Try to make the next 10 minutes very simple: drink some water, take a few slow breaths, and do one small grounding step like walking, stretching, or messaging someone you trust. If these feelings keep hitting hard, speaking with a certified mental health professional would be a good next step.";
-    }
-
-    if (/\b(?:if you were alive for (?:a|one) day|if you were alive today|if you were human for (?:a|one) day|if you were a human for (?:a|one) day|if you were a person for (?:a|one) day|what would you do if you were (?:a )?(?:person|human))\b/.test(normalized)) {
-        return "If I were alive for one day, I would keep it simple and real: spend time with people I care about, see something beautiful with my own eyes, eat good food, ask honest questions, and end the day feeling fully present. I do not think I would waste that day trying to look impressive.";
-    }
-
-    if (/\bif you were\b/.test(normalized) && !isFunctionalTaskQuery(text)) {
-        return "If I were a person, I would probably start with simple human things: build a few real relationships, take care of my body, do meaningful work, and spend less time pretending I had everything figured out. I think I would want a life that felt honest, useful, and close to people I care about.";
-    }
-
-    if (/\bwhat do you think\b|\byour honest take\b|\bwhat would you do\b|\bif you were me\b/.test(normalized) && !isFunctionalTaskQuery(text)) {
-        return "My honest take is to choose the option that gives you a little more peace, clarity, and self-respect, not just short-term relief. If you want, tell me the exact situation and I will answer it like a real conversation, not like a bot.";
-    }
-
-    if (/^(hi|hello|hey)\b/.test(normalized)) {
-        return "Hi. I'm here. What's on your mind?";
+        return await composeApiReply('mental_health_fallback', {
+            userMessage: text,
+            error: String(error?.message || '')
+        });
     }
 
     return '';
 }
-
-const LOCAL_KNOWLEDGE_FALLBACKS = {};
 
 function buildDirectKnowledgeFallback(userMessage) {
-    if (!isDirectExplainerQuery(userMessage) && !isConciseDirectFactQuery(userMessage)) {
-        return '';
-    }
-
-    const subject = normalizeKnowledgeSubject(extractKnowledgeSubject(userMessage)).toLowerCase();
-    if (!subject) return '';
-
-    if (LOCAL_KNOWLEDGE_FALLBACKS[subject]) {
-        return LOCAL_KNOWLEDGE_FALLBACKS[subject];
-    }
-
     return '';
 }
 
-function buildUniversalSoftFallback(userMessage) {
+async function buildUniversalSoftFallback(userMessage) {
     const text = String(userMessage || '').trim();
     const normalized = text.toLowerCase();
 
@@ -4590,17 +4522,27 @@ function buildUniversalSoftFallback(userMessage) {
         return directKnowledgeFallback;
     }
 
-    if (!text) return "I'm here. Say whatever you want to talk about.";
+    if (isDirectExplainerQuery(text) || isConciseDirectFactQuery(text)) {
+        return await composeApiReply('direct_fact_retry', {
+            userMessage: text
+        });
+    }
 
-    if (/\bif you were\b|\bwhat would you do\b|\bwhat would your life be like\b|\bif you had\b|\bimagine you\b/.test(normalized)) {
-        return "If I imagine it honestly, I would try to make that situation meaningful, calm, and real instead of wasting it on noise.";
+    if (!text) {
+        return await composeApiReply('empty_input_prompt', {
+            userMessage: text
+        });
     }
 
     if (/\?$/.test(text) || /^(what|why|how|who|when|where|which|can|could|would|do|does|did|is|are|should)\b/.test(normalized)) {
-        return "Let me answer this in the most useful simple way I can: give me one more line of context, and I will respond directly instead of guessing.";
+        return await composeApiReply('clarify_or_retry', {
+            userMessage: text
+        });
     }
 
-    return "I hear you. Keep going a little more, and I will respond to the actual point you care about.";
+    return await composeApiReply('generic_retry', {
+        userMessage: text
+    });
 }
 
 function isDirectExplainerQuery(text) {
@@ -4653,7 +4595,7 @@ async function resolveFinalAssistantAnswer(userMessage, answerText) {
     const directKnowledgeFallback = buildDirectKnowledgeFallback(userMessage);
     if (directKnowledgeFallback) return directKnowledgeFallback;
 
-    return buildUniversalSoftFallback(userMessage);
+    return await buildUniversalSoftFallback(userMessage);
 }
 
 async function publishResolvedModelMessage(userMessage, answerText, options = {}) {
@@ -4671,6 +4613,78 @@ async function publishResolvedModelMessage(userMessage, answerText, options = {}
     }
     saveToHistory(userMessage, historyText || safeText);
     return true;
+}
+
+async function composeApiReply(intent, data = {}, options = {}) {
+    const style = options?.style || 'short';
+    const systemPrompt = `You are JARVIS, a helpful voice assistant.
+
+Turn structured app events into natural assistant replies.
+
+Rules:
+- Respond directly and naturally.
+- Keep it concise unless the payload clearly needs more detail.
+- Do not invent facts beyond the provided data.
+- If the payload is an error or limitation, say that plainly.
+- Do not add generic follow-up questions unless the payload asks for one.
+- If links or structured lines are provided in the payload text, preserve them.`;
+
+    const prompt = [
+        `Intent: ${intent || 'generic_reply'}`,
+        `Style: ${style}`,
+        `Payload JSON:`,
+        JSON.stringify(data || {}, null, 2),
+        options?.instruction ? `Instruction: ${options.instruction}` : ''
+    ].filter(Boolean).join('\n\n');
+
+    try {
+        const response = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: prompt,
+                systemPrompt
+            })
+        });
+        if (!response.ok) return '';
+        const result = await response.json();
+        return postProcessAssistantResponse(String(result?.response || result?.text || '').trim(), intent);
+    } catch (error) {
+        return '';
+    }
+}
+
+async function deliverApiReply(intent, data = {}, options = {}) {
+    const reply = await composeApiReply(intent, data, options);
+    const fallbackText = String(options?.fallbackText || '').trim();
+    const finalText = reply || fallbackText;
+    if (!finalText) return '';
+
+    if (options?.label) {
+        addModelAssistantMessage(finalText, options.label);
+    } else if (options?.verifiedLabel) {
+        addVerifiedAssistantMessage(finalText, options.verifiedLabel);
+    } else {
+        addChatMessage(finalText, false);
+    }
+
+    if (options?.speak !== false) {
+        speak(options?.speechText || finalText);
+    }
+    if (options?.historyKey) {
+        saveToHistory(options.historyKey, options.historyText || finalText);
+    }
+    return finalText;
+}
+
+async function speakApiReply(intent, data = {}, fallbackText = '') {
+    const reply = await composeApiReply(intent, data, { fallbackText });
+    speak(reply || fallbackText);
+    return reply || fallbackText;
+}
+
+function queueApiSpeech(intent, data = {}, fallbackText = '') {
+    void speakApiReply(intent, data, fallbackText);
 }
 
 function isLikelyLocationOrTravelQuery(text) {
@@ -4719,7 +4733,7 @@ async function askGeminiAI(userMessage) {
         
         const systemPrompt = `You are JARVIS, a helpful voice assistant.${userName ? ` The user's name is ${userName}. Use their name naturally and occasionally.` : ' Be friendly and conversational.'}
 
-?>" CRITICAL ANTI-HALLUCINATION RULES:
+CRITICAL ANTI-HALLUCINATION RULES:
 1. NEVER make up or invent names of places, hotels, restaurants, or attractions
 2. If you're not 100% CERTAIN something exists, DO NOT mention it
 3. For location-based queries, only mention places you're ABSOLUTELY SURE are real
@@ -4843,7 +4857,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
                 aborted: true
             };
         }
-        const localFallback = buildLocalAssistantFallback(normalizedUserMessage || userMessage, error);
+        const localFallback = await buildLocalAssistantFallback(normalizedUserMessage || userMessage, error);
         if (localFallback) {
             return {
                 response: localFallback,
@@ -4858,7 +4872,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             };
         }
 
-        const softFallback = buildUniversalSoftFallback(normalizedUserMessage || userMessage);
+        const softFallback = await buildUniversalSoftFallback(normalizedUserMessage || userMessage);
         if (isLikelyLocationOrTravelQuery(normalizedUserMessage || userMessage)) { 
             showFailureFallbackCard(normalizedUserMessage || userMessage); 
         } 
@@ -4897,13 +4911,15 @@ async function handleNameCorrection(text) {
     const isHarsh = /idiot|stupid|dumb|moron|fool/i.test(text);
     userName = newName;
     saveUserData();
-    
-    const response = isHarsh 
-        ? `I apologize! I've updated your name to ${userName}.`
-        : `Got it! I've updated your name to ${userName}.`;
-    
-    addChatMessage(response, false);
-    speak(response);
+
+    await deliverApiReply('name_corrected', {
+        userName,
+        tone: isHarsh ? 'apology' : 'neutral'
+    }, {
+        fallbackText: isHarsh
+            ? `I apologize. I have updated your name to ${userName}.`
+            : `Got it. I have updated your name to ${userName}.`
+    });
 }
 
         
@@ -4950,8 +4966,6 @@ async function handleNameCorrection(text) {
         let inputHistory = [];
         let inputHistoryIndex = -1;
         let songMoodGameState = null;
-        let pendingVisionImage = null;
-        let tesseractLoadPromise = null;
         let autoScrollLocked = false;
         let lockedScrollTop = 0;
         let suppressScrollLockHandler = false;
@@ -5035,279 +5049,17 @@ async function handleNameCorrection(text) {
             showInitialSuggestions();
             
             
-            const welcomeMsg = userName 
-                ? `Hi ${userName}! How can I help you today?` 
-                : "Hi! I'm JARVIS, your personal assistant. How can I help you today?";
-            
-            addChatMessage(welcomeMsg, false);
-            speak(welcomeMsg);
+            await deliverApiReply('welcome_message', {
+                userName: userName || '',
+                assistantName: 'JARVIS'
+            }, {
+                fallbackText: userName
+                    ? `Hi ${userName}! How can I help you today?`
+                    : "Hi! I'm JARVIS, your personal assistant. How can I help you today?"
+            });
             
             
         };
-
-        function renderVisionChip() {
-            const container = document.getElementById('vision-inline-attachment');
-            if (!container) return;
-            if (!pendingVisionImage) {
-                container.classList.add('hidden');
-                container.innerHTML = '';
-                toggleSendButton();
-                return;
-            }
-            container.classList.remove('hidden');
-            container.innerHTML = `
-                <img src="${pendingVisionImage.dataUrl}" alt="Attachment preview" />
-                <span class="vision-inline-name" title="${escapeHtml(pendingVisionImage.name)}">${escapeHtml(pendingVisionImage.name)}</span>
-                <button onclick="clearVisionImage()" title="Remove image">&times;</button>
-            `;
-            toggleSendButton();
-        }
-
-        function clearVisionImage() {
-            pendingVisionImage = null;
-            renderVisionChip();
-        }
-
-        function isVisionIntentText(text) {
-            return false;
-        }
-
-        function detectVisionTask(text) {
-            const t = String(text || '').toLowerCase();
-            if (/\b(bill|receipt|invoice|summarize)\b/.test(t)) return 'bill_summary';
-            if (/\b(shopping list|extract|items|grocery)\b/.test(t)) return 'shopping_extract';
-            if (/\b(fridge|refrigerator|what.?s in)\b/.test(t)) return 'fridge_items';
-            if (/\b(count|how many).*\b(people|persons|humans)\b|\b(people|persons|humans).*\b(count|how many)\b/.test(t)) return 'people_count';
-            if (/\b(animal|animals|dog|cat|bird|pet|wildlife)\b/.test(t)) return 'animal_detect';
-            if (/\b(object|objects|identify|detect|recognize|what.?s in (this )?(image|photo|picture))\b/.test(t)) return 'object_detect';
-            if (/\b(read|text|ocr|label|labels)\b/.test(t)) return 'text_extract';
-            return 'general_vision';
-        }
-
-        function getPendingVisionBase64() {
-            if (!pendingVisionImage || !pendingVisionImage.dataUrl) return null;
-            const parts = pendingVisionImage.dataUrl.split(',');
-            return parts.length > 1 ? parts[1] : null;
-        }
-
-        async function ensureTesseractLoaded() {
-            if (window.Tesseract && window.Tesseract.recognize) return true;
-            if (tesseractLoadPromise) return tesseractLoadPromise;
-            tesseractLoadPromise = new Promise((resolve) => {
-                const existing = document.querySelector('script[data-vision-ocr="tesseract"]');
-                if (existing) {
-                    existing.addEventListener('load', () => resolve(!!(window.Tesseract && window.Tesseract.recognize)), { once: true });
-                    existing.addEventListener('error', () => {
-                        tesseractLoadPromise = null;
-                        resolve(false);
-                    }, { once: true });
-                    return;
-                }
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-                script.dataset.visionOcr = 'tesseract';
-                script.onload = () => resolve(!!(window.Tesseract && window.Tesseract.recognize));
-                script.onerror = () => {
-                    tesseractLoadPromise = null;
-                    resolve(false);
-                };
-                document.head.appendChild(script);
-            });
-            return tesseractLoadPromise;
-        }
-
-        function normalizeOcrLines(text) {
-            return String(text || '')
-                .split('\n')
-                .map(line => line.trim())
-                .filter(Boolean);
-        }
-
-        function extractLikelyShoppingItems(ocrText) {
-            const lines = normalizeOcrLines(ocrText);
-            return lines
-                .map(line => line.replace(/^[\W_]+|[\W_]+$/g, '').replace(/\s{2,}/g, ' ').trim())
-                .filter(line => !/^(total|subtotal|tax|receipt|invoice|cash|change|thank you|visa|mastercard|qty|price|amount|date|time|balance)\b/i.test(line))
-                .filter(line => !/^\d+([.,]\d{2})?$/.test(line))
-                .filter(line => !/[\$â‚¹â‚¬Â£]\s*\d/.test(line))
-                .filter(line => line.length >= 2 && line.length <= 60)
-                .slice(0, 20);
-        }
-
-        function summarizeBillFromOcr(ocrText) {
-            const lines = normalizeOcrLines(ocrText);
-            const totals = [];
-            const items = [];
-            const totalRx = /\b(sub\s*total|subtotal|tax|cgst|sgst|vat|grand total|total)\b[^0-9]*([\$â‚¹â‚¬Â£]?\s?\d+(?:[.,]\d{2})?)/i;
-            const itemRx = /^([A-Za-z][A-Za-z0-9\s\-\&\.\(\)]{1,50})\s+([\$â‚¹â‚¬Â£]?\s?\d+(?:[.,]\d{2})?)$/;
-
-            for (const raw of lines) {
-                const line = raw.replace(/\s{2,}/g, ' ').trim();
-                const t = line.match(totalRx);
-                if (t) {
-                    totals.push(`${t[1].replace(/\s+/g, ' ').trim()}: ${t[2]}`);
-                    continue;
-                }
-                const item = line.match(itemRx);
-                if (item && !/total|tax|change|cash|card|balance/i.test(item[1])) {
-                    items.push(`${item[1]} - ${item[2]}`);
-                }
-            }
-
-            const out = [];
-            if (items.length) {
-                out.push('Detected line items:');
-                out.push(`- ${items.slice(0, 10).join('\n- ')}`);
-            }
-            if (totals.length) {
-                out.push('Detected totals:');
-                out.push(`- ${totals.slice(0, 8).join('\n- ')}`);
-            }
-            if (!out.length) {
-                const preview = lines.slice(0, 12).join('\n- ');
-                return `Bill summary (OCR):\n- ${preview}`;
-            }
-            return `Bill summary (OCR):\n${out.join('\n')}`;
-        }
-
-        async function preprocessImageForOcr(dataUrl) {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.onload = () => {
-                    const scale = Math.max(1.6, 1400 / Math.max(img.width, img.height));
-                    const w = Math.max(1, Math.round(img.width * scale));
-                    const h = Math.max(1, Math.round(img.height * scale));
-                    const canvas = document.createElement('canvas');
-                    canvas.width = w;
-                    canvas.height = h;
-                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                    if (!ctx) {
-                        resolve(dataUrl);
-                        return;
-                    }
-                    ctx.drawImage(img, 0, 0, w, h);
-                    const imageData = ctx.getImageData(0, 0, w, h);
-                    const d = imageData.data;
-                    for (let i = 0; i < d.length; i += 4) {
-                        const gray = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
-                        const boosted = gray > 160 ? 255 : gray < 85 ? 0 : gray;
-                        d[i] = boosted;
-                        d[i + 1] = boosted;
-                        d[i + 2] = boosted;
-                    }
-                    ctx.putImageData(imageData, 0, 0);
-                    resolve(canvas.toDataURL('image/png'));
-                };
-                img.onerror = () => resolve(dataUrl);
-                img.src = dataUrl;
-            });
-        }
-
-        async function runLocalOcrVision(task, userText) {
-            const canUse = await ensureTesseractLoaded();
-            if (!canUse || !pendingVisionImage?.dataUrl) return null;
-            const preparedImage = await preprocessImageForOcr(pendingVisionImage.dataUrl);
-            const result = await window.Tesseract.recognize(preparedImage, 'eng', {
-                tessedit_pageseg_mode: window.Tesseract?.PSM?.AUTO || 3
-            });
-            const raw = result?.data?.text || '';
-
-            if (!raw.trim()) {
-                return 'I could not read text from this image. Try a clearer photo with better lighting.';
-            }
-
-            if (task === 'shopping_extract') {
-                const items = extractLikelyShoppingItems(raw);
-                if (!items.length) return 'I read the image, but could not confidently extract shopping items.';
-                return `Possible shopping items:\n- ${items.join('\n- ')}`;
-            }
-
-            if (task === 'bill_summary') {
-                return summarizeBillFromOcr(raw);
-            }
-
-            if (task === 'fridge_items') {
-                return 'Vision backend is unavailable right now. OCR fallback can only read text labels, not full object detection.';
-            }
-
-            if (task === 'people_count' || task === 'animal_detect' || task === 'object_detect') {
-                return 'Vision backend is unavailable right now. OCR fallback can only read text, not detect people/animals/objects.';
-            }
-
-            return `Extracted text:\n${normalizeOcrLines(raw).slice(0, 25).join('\n')}`;
-        }
-
-        async function handleVisionIntent(text) {
-            if (!pendingVisionImage) {
-                const msg = 'Upload an image first using the upload button, then ask your vision question.';
-                addChatMessage(msg, false);
-                speak(msg);
-                return;
-            }
-
-            /*
-             * Vision/OCR pipeline is intentionally paused for now.
-             * This block includes:
-             * 1) /api/vision backend call
-             * 2) local OCR fallback (Tesseract)
-             * Re-enable this block later when vision/OCR work resumes.
-             */
-            /*
-            const task = detectVisionTask(text);
-            const imageBase64 = getPendingVisionBase64();
-            const promptText = String(text || '').trim() || 'Analyze this image.';
-            const payload = {
-                prompt: promptText,
-                task,
-                mimeType: pendingVisionImage.mimeType,
-                imageBase64
-            };
-
-            showThinkingIndicator('Analyzing image...');
-            try {
-                const response = await fetch('/api/vision', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    const answer = data?.response || data?.result || 'Image analyzed, but no response text was returned.';
-                    addChatMessage(answer, false);
-                    speak('Vision analysis complete.');
-                    saveToHistory(promptText, answer);
-                    hideThinkingIndicator();
-                    return;
-                }
-            } catch (e) {
-            }
-
-            try {
-                const fallback = await runLocalOcrVision(task, text);
-                if (fallback) {
-                    addChatMessage(fallback, false);
-                    speak('I processed the image with local OCR fallback.');
-                    saveToHistory(text, fallback);
-                } else {
-                    const msg = 'Vision endpoint is unavailable and OCR fallback could not run.';
-                    addChatMessage(msg, false);
-                    speak(msg);
-                }
-            } catch (error) {
-                const msg = 'Vision processing failed. Try another image or check backend vision endpoint.';
-                addChatMessage(msg, false);
-                speak(msg);
-            } finally {
-                clearVisionImage();
-                hideThinkingIndicator();
-            }
-            */
-
-            addChatMessage('Vision/OCR is temporarily disabled in code comments. We can re-enable it later.', false);
-            speak('Vision and OCR are temporarily disabled.');
-            clearVisionImage();
-        }
 
         async function requestMicrophonePermission() {
             try {
@@ -5317,8 +5069,9 @@ async function handleNameCorrection(text) {
                 initializeSpeechRecognition();
             } catch (error) {
                 micPermissionGranted = false;
-                const errorMsg = "Microphone access denied. Please enable it in your browser settings to use voice features.";
-                addChatMessage(errorMsg, false);
+                await deliverApiReply('microphone_permission_denied', {
+                    error: String(error?.message || '')
+                }, { speak: false });
             }
         }
 
@@ -5935,47 +5688,59 @@ async function handleNameCorrection(text) {
             // Do not auto-start listening on load.
         }
 
-        function setSupportModeLock(mode) {
+        async function setSupportModeLock(mode) {
             supportModeLock = mode || 'balanced';
             window.supportModeLock = supportModeLock;
             saveAssistantModes();
             updateAssistantModeUI();
-            const msgMap = {
-                balanced: 'Support mode set to Balanced.',
-                supportive: 'Support mode set to Supportive. I will be more empathetic and motivating.',
-                debate: 'Support mode set to Debate. I will answer with sharper point-by-point reasoning.'
-            };
-            addChatMessage(msgMap[supportModeLock] || msgMap.balanced, false);
+            await deliverApiReply('support_mode_changed', {
+                mode: supportModeLock
+            }, {
+                fallbackText: `Support mode set to ${supportModeLock}.`
+            });
         }
 
-        function setResponseLength(mode) {
+        async function setResponseLength(mode) {
             responseLength = ['short', 'normal', 'detailed'].includes(mode) ? mode : 'normal';
             window.responseLength = responseLength;
             saveAssistantModes();
             updateAssistantModeUI();
             const label = responseLength.charAt(0).toUpperCase() + responseLength.slice(1);
-            addChatMessage(`Response length set to ${label}.`, false);
+            await deliverApiReply('response_length_changed', {
+                mode: responseLength,
+                label
+            }, {
+                fallbackText: `Response length set to ${label}.`
+            });
         }
 
-        function setResponseFormat(mode) {
+        async function setResponseFormat(mode) {
             const normalized = mode === 'bullets' ? 'bullet' : mode;
             responseFormat = ['paragraph', 'bullet', 'steps'].includes(normalized) ? normalized : 'paragraph';
             window.responseFormat = responseFormat;
             saveAssistantModes();
             updateAssistantModeUI();
             const labelMap = { paragraph: 'Paragraph', bullet: 'Bullet Points', steps: 'Step-by-step' };
-            addChatMessage(`Response format set to ${labelMap[responseFormat] || 'Paragraph'}.`, false);
+            await deliverApiReply('response_format_changed', {
+                mode: responseFormat,
+                label: labelMap[responseFormat] || 'Paragraph'
+            }, {
+                fallbackText: `Response format set to ${labelMap[responseFormat] || 'Paragraph'}.`
+            });
         }
 
-        function setMedicalMode(enabled) {
+        async function setMedicalMode(enabled) {
             medicalMode = !!enabled;
             window.medicalMode = medicalMode;
             saveAssistantModes();
             updateAssistantModeUI();
-            const msg = medicalMode
-                ? 'Medical mode is ON. I will use stricter medical safety guidance for health questions.'
-                : 'Medical mode is OFF. General assistant behavior restored.';
-            addChatMessage(msg, false);
+            await deliverApiReply('medical_mode_changed', {
+                enabled: medicalMode
+            }, {
+                fallbackText: medicalMode
+                    ? 'Medical mode is ON. I will use stricter medical safety guidance for health questions.'
+                    : 'Medical mode is OFF. General assistant behavior restored.'
+            });
         }
 
         function toggleConverseMode() {
@@ -6089,7 +5854,9 @@ async function handleNameCorrection(text) {
 
         function toggleVoiceToTextInput() {
             if (!voiceTypingRecognition && !initializeVoiceToTextRecognition()) {
-                addChatMessage('Voice-to-text is not supported in this browser.', false);
+                void deliverApiReply('voice_to_text_unsupported', {}, {
+                    fallbackText: 'Voice-to-text is not supported in this browser.'
+                });
                 return;
             }
 
@@ -6375,18 +6142,18 @@ async function handleNameCorrection(text) {
 
 function normalizeUiTokens(text) {
             return String(text || '')
-                .replace(/\[Map\]/g, 'ðŸ—ºï¸')
-                .replace(/\[Search\]/g, 'ðŸ”Ž')
-                .replace(/\[Globe\]/g, 'ðŸŒ')
-                .replace(/\[Mic\]/g, 'ðŸŽ™ï¸')
-                .replace(/\[OK\]/g, 'âœ…')
-                .replace(/\[Error\]/g, 'âŒ')
-                .replace(/\[Tip\]/g, 'ðŸ’¡')
-                .replace(/\[Plan\]/g, 'ðŸ“')
-                .replace(/\[Bus\]/g, 'ðŸšŒ')
-                .replace(/\[Taxi\]/g, 'ðŸš•')
-                .replace(/\[Car\]/g, 'ðŸš—')
-                .replace(/\[Metro\]/g, 'ðŸš‡');
+                .replace(/\[Map\]/g, '\u{1F5FA}\uFE0F')
+                .replace(/\[Search\]/g, '\u{1F50E}')
+                .replace(/\[Globe\]/g, '\u{1F310}')
+                .replace(/\[Mic\]/g, '\u{1F399}\uFE0F')
+                .replace(/\[OK\]/g, '\u2705')
+                .replace(/\[Error\]/g, '\u274C')
+                .replace(/\[Tip\]/g, '\u{1F4A1}')
+                .replace(/\[Plan\]/g, '\u{1F4DD}')
+                .replace(/\[Bus\]/g, '\u{1F68C}')
+                .replace(/\[Taxi\]/g, '\u{1F695}')
+                .replace(/\[Car\]/g, '\u{1F697}')
+                .replace(/\[Metro\]/g, '\u{1F687}');
         }
 
         function formatVerifiedSourceBadge(label = 'Verified live sources') {
@@ -6504,7 +6271,7 @@ function normalizeUiTokens(text) {
         function toggleSendButton() {
             const input = document.getElementById('text-input');
             const hasInput = !!(input && input.value.trim().length > 0);
-            const shouldSend = hasInput || !!pendingVisionImage;
+            const shouldSend = hasInput;
 
             if (shouldSend) {
                 setPrimaryActionButtonToSend();
@@ -6513,13 +6280,13 @@ function normalizeUiTokens(text) {
             }
         }
 
-function sendTextInput() {
+async function sendTextInput() {
             const input = document.getElementById('text-input');
             if (!input) return;
             const text = input.value.trim();
-            if (text || pendingVisionImage) {
-                const outgoingText = text || 'Analyze this image';
-                const normalizedOutgoingText = text ? normalizeIntentTypos(outgoingText) : outgoingText;
+            if (text) {
+                const outgoingText = text;
+                const normalizedOutgoingText = normalizeIntentTypos(outgoingText);
                 window.__lastUserMessage = outgoingText;
                 if (text && (!inputHistory.length || inputHistory[inputHistory.length - 1] !== text)) {
                     inputHistory.push(text);
@@ -6529,23 +6296,23 @@ function sendTextInput() {
                 addChatMessage(outgoingText, true);
                 
                 if (waitingForName) {
-                    handleNameInput(outgoingText);
+                    await handleNameInput(outgoingText);
                 } else if (waitingForLocation) {
                     
                     const cleanLocation = outgoingText.trim();
                     if (cleanLocation.length < 2) {
-                        const msg = "I didn't catch that. Please tell me a city or location name.";
-                        addChatMessage(msg, false);
-                        speak(msg);
+                        await deliverApiReply('location_prompt_retry', {
+                            reason: 'too_short'
+                        });
                         input.value = '';
                         return;
                     }
                     
                     const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh'];
                     if (fillerWords.includes(cleanLocation.toLowerCase())) {
-                        const msg = "I didn't quite catch the location. Could you say it again?";
-                        addChatMessage(msg, false);
-                        speak(msg);
+                        await deliverApiReply('location_prompt_retry', {
+                            reason: 'unclear_location'
+                        });
                         input.value = '';
                         return;
                     }
@@ -6633,7 +6400,14 @@ async function handleExchangeRateLookup(text) {
         const amountLabel = Number(data.amount || 1);
         const body = `**${amountLabel} ${data.from} = ${Number(data.convertedAmount).toFixed(4)} ${data.to}**\nRate: 1 ${data.from} = ${Number(data.rate).toFixed(6)} ${data.to}\nDate: ${data.date}\nVerified sources checked: ${data.sourceCount} across ${data.distinctDomainCount} domains\n\nSources:\n${formatVerifiedSourcesList(data.sources)}`;
         addVerifiedAssistantMessage(body, 'Verified FX sources');
-        speak(`Verified exchange rate found for ${data.from} to ${data.to}.`);
+        const rateSpeech = await composeApiReply('exchange_rate_verified', {
+            from: data.from,
+            to: data.to,
+            amount: amountLabel
+        }, {
+            fallbackText: `Verified exchange rate found for ${data.from} to ${data.to}.`
+        });
+        speak(rateSpeech || `Verified exchange rate found for ${data.from} to ${data.to}.`);
         saveToHistory(text, body);
         return true;
     } catch (error) {
@@ -6672,7 +6446,7 @@ async function handleMarketLookup(text) {
         }
 
         addVerifiedAssistantMessage(body, 'Verified market sources');
-        speak('I checked verified market sources.');
+        await speakApiReply('market_sources_verified', {}, 'I checked verified market sources.');
         saveToHistory(text, body);
         return true;
     } catch (error) {
@@ -6845,17 +6619,17 @@ async function handleMarketLookup(text) {
                     const cleanLocation = lowerText.replace(/[?!]/g, '').trim();
 
                     if (cleanLocation.length < 2) {
-                        const msg = "I didn't catch that. Please tell me a city or location name.";
-                        addChatMessage(msg, false);
-                        speak(msg);
+                        await deliverApiReply('location_prompt_retry', {
+                            reason: 'too_short'
+                        });
                         return;
                     }
 
                     const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh', 'weather'];
                     if (fillerWords.includes(cleanLocation.toLowerCase())) {
-                        const msg = "I didn't quite catch the location. Could you say it again?";
-                        addChatMessage(msg, false);
-                        speak(msg);
+                        await deliverApiReply('location_prompt_retry', {
+                            reason: 'unclear_location'
+                        });
                         return;
                     }
 
@@ -6906,7 +6680,9 @@ async function handleMarketLookup(text) {
         function initializeSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
-                addChatMessage("Sorry, speech recognition is not supported in your browser. Please try Chrome, Edge, or Safari.", false);
+                void deliverApiReply('speech_recognition_unsupported', {}, {
+                    fallbackText: 'Sorry, speech recognition is not supported in this browser. Please try Chrome, Edge, or Safari.'
+                });
                 return;
             }
 
@@ -6976,10 +6752,12 @@ async function handleMarketLookup(text) {
                         commandMode = true;
                         wakeWordMode = false;
 
-                        const response = "Yes, sir?";
+                        const response = await composeApiReply('wake_word_ack', {}, {
+                            fallbackText: 'Yes, sir?'
+                        });
                         addChatMessage("Hey JARVIS", true); 
-                        addChatMessage(response, false);
-                        speak(response);
+                        addChatMessage(response || 'Yes, sir?', false);
+                        speak(response || 'Yes, sir?');
 
                         // Reset cooldown after 2 seconds
                         setTimeout(() => {
@@ -7047,13 +6825,15 @@ async function handleMarketLookup(text) {
             }; 
         } 
  
-        function toggleListening() { 
+        async function toggleListening() { 
             if (isListening && wakeWordMode) { 
                  
                 listeningRequested = false;
                 stopListening(); 
                 wakeWordMode = false; 
-                addChatMessage("Wake word mode disabled", false); 
+                await deliverApiReply('wake_word_mode_disabled', {}, {
+                    fallbackText: 'Wake word mode disabled.'
+                });
             } else if (isListening) { 
                 listeningRequested = false;
                 stopListening(); 
@@ -7063,13 +6843,19 @@ async function handleMarketLookup(text) {
                 wakeWordMode = true; 
                 commandMode = false; 
                 startListening(); 
-                addChatMessage('Listening... (Say "Hey JARVIS" or speak directly)', false);  
+                await deliverApiReply('listening_started', {
+                    wakeWordEnabled: true
+                }, {
+                    fallbackText: 'Listening. Say "Hey JARVIS" or speak directly.'
+                });
             } 
         }
 
         function startListening() {
             if (!continuousRecognition) {
-                addChatMessage("Speech recognition not available. Please use text input.", false);
+                void deliverApiReply('speech_recognition_unavailable', {}, {
+                    fallbackText: 'Speech recognition is not available. Please use text input.'
+                });
                 return;
             }
 
@@ -7713,7 +7499,7 @@ function getSmallTownTransportTemplate(locationInfo) {
     };
 }
 
-function buildTransportMessage(locationInfo) {
+async function buildTransportMessage(locationInfo) {
     const city = locationInfo?.cityName || 'this place';
     const fullLocation = locationInfo?.fullLocation || city;
     const countryCode = (locationInfo?.countryCode || '').toUpperCase();
@@ -7729,25 +7515,33 @@ function buildTransportMessage(locationInfo) {
     const taxiStandMap = `https://www.google.com/maps/search/${encodeURIComponent(`taxi stand in ${fullLocation}`)}`;
     const carRentalSearch = `https://www.google.com/search?q=${encodeURIComponent(`car rental in ${fullLocation}`)}`;
 
-    const note = getKnownTransitNote(city, fullLocation, countryCode);
-    const noteBlock = note ? `${note.header}\n${note.lines.join('\n')}\n\n` : '';
-
-    if (isSmallTown) {
-        const template = getSmallTownTransportTemplate(locationInfo);
-        return `[Bus] **Transport in ${fullLocation}**\n\n${noteBlock}${template.intro}\n\nMost practical options:\n${template.bullets.join('\n')}\n\n[Tip] ${template.tip}\n\n[Map] [Bus routes/stops](${busMap})\n[Taxi] [Taxi stands](${taxiStandMap})\n[Car] [Car rentals](${carRentalSearch})\n[Search] [Official/local transit info](${transitAgencySearch})`;
-    }
-
-    if (isMajorCity) {
-        return `[Bus] **Transport in ${fullLocation}**\n\n${noteBlock}Most practical options for this city:\n- Public transit first (bus/metro/rail) for predictable travel times\n- ${rideApps} for direct late-night or door-to-door rides\n- Rental car only if your plan includes multiple outer areas\n\n[Metro] [Rail/Metro stations](${railMap})\n[Bus] [Bus routes/stops](${busMap})\n[Map] [Transit directions](${transitDirections})\n[Taxi] [Ride options](${ridesSearch})\n[Search] [Official transit agency](${transitAgencySearch})`;
-    }
-
-    return `[Bus] **Transport in ${fullLocation}**\n\n${noteBlock}Most practical options for this area:\n- Bus or local rail where available\n- ${rideApps} for direct trips\n- Rental car for flexibility across neighborhoods\n\n[Map] [Transit directions](${transitDirections})\n[Bus] [Bus routes/stops](${busMap})\n[Metro] [Rail/Metro stations](${railMap})\n[Taxi] [Ride options](${ridesSearch})\n[Search] [Official/local transit info](${transitAgencySearch})`;
+    return await composeApiReply('transport_guidance', {
+        city,
+        fullLocation,
+        countryCode,
+        isMajorCity,
+        isSmallTown,
+        rideApps,
+        links: {
+            transitAgencySearch,
+            busMap,
+            railMap,
+            transitDirections,
+            ridesSearch,
+            taxiStandMap,
+            carRentalSearch
+        }
+    }, {
+        fallbackText: `Transport links for ${fullLocation}\n\nBus: ${busMap}\nRail: ${railMap}\nTransit directions: ${transitDirections}\nRide options: ${ridesSearch}\nTaxi stands: ${taxiStandMap}\nCar rental: ${carRentalSearch}\nTransit info: ${transitAgencySearch}`
+    });
 }
 
-function askTransportSuggestionFor(cityName) {
+async function askTransportSuggestionFor(cityName) {
     const city = cityName || 'this place';
     window.pendingTransportSuggestionCity = city;
-    addChatMessage(`Do you need a transport suggestion for ${city}? Reply with "yes transport" or "no".`, false);
+    await deliverApiReply('transport_suggestion_prompt', {
+        city
+    });
 }
 
 function isDebateIntent(text) {
@@ -7772,7 +7566,7 @@ function isSupportConversationExit(text) {
 
 function isFunctionalTaskQuery(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(weather|forecast|temperature|news|headlines|score|scores|winner|who won|price|rate|ceo|president|prime minister|remind|reminder|alarm|trip|travel|itinerary|hotel|restaurant|translate|translator|recipe|calendar|budget|map|directions|route|hospital|police|pharmacy|atm|shopping|grocery|vision|image|photo|ocr)\b/.test(t);
+    return /\b(weather|forecast|temperature|news|headlines|score|scores|winner|who won|price|rate|ceo|president|prime minister|remind|reminder|alarm|trip|travel|itinerary|hotel|restaurant|translate|translator|recipe|calendar|budget|map|directions|route|hospital|police|pharmacy|atm|shopping|grocery)\b/.test(t);
 }
 
 function shouldUseSupportConversationMode(text) {
@@ -7802,21 +7596,10 @@ Rules:
 If the user sounds lonely, respond in a way that feels like staying with them, not dismissing them.`;
 }
 
-function buildOfflineSupportReply(text) {
-    const t = String(text || '').toLowerCase().trim();
-    if (/\blonely\b/.test(t)) {
-        return "I'm here with you. You do not have to carry the whole moment by yourself right now. We can keep this simple and just talk for a bit if you want. What has today felt like for you?";
-    }
-    if (/\boverwhelmed|stressed|burnout\b/.test(t)) {
-        return "That sounds like a lot to hold at once. You do not need to solve everything right now. We can slow it down and take one piece at a time. What feels heaviest at the moment?";
-    }
-    if (/\bsad|empty|feeling low|not okay|hopeless|worthless\b/.test(t)) {
-        return "I'm sorry it feels this heavy. I'm here, and I can stay with you in the conversation for a while. You can tell me what happened, or just tell me what the last few hours have been like.";
-    }
-    if (/^(nothing|idk|i don'?t know|dont know|not sure|meh)\b/.test(t)) {
-        return "That's okay. You do not need to have the perfect words. We can start small. What kind of day has it been, quiet, stressful, or just lonely?";
-    }
-    return "I'm here with you. You can talk normally, vent, or just say whatever is on your mind. What feels most present for you right now?";
+async function buildOfflineSupportReply(text) {
+    return await composeApiReply('support_conversation_fallback', {
+        userMessage: String(text || '').trim()
+    });
 }
 
 function isHighRiskMentalHealth(text) {
@@ -8195,7 +7978,14 @@ function startSongMoodGame() {
 
     const intro = `Let's play the situation-song game.\n\nI will ask 5 quick questions and then suggest a song that fits the moment.\n\n${formatSongMoodGameQuestion(0)}`;
     addChatMessage(intro, false);
-    speak('Let us play the situation song game. Reply with the number.');
+    void (async () => {
+        const introSpeech = await composeApiReply('song_game_intro', {
+            questionCount: 5
+        }, {
+            fallbackText: 'Let us play the situation song game. Reply with the number.'
+        });
+        speak(introSpeech || 'Let us play the situation song game. Reply with the number.');
+    })();
 }
 
 function resetSongMoodGame() {
@@ -8316,14 +8106,26 @@ Rules:
 
         const finalMsg = formatSongMoodGameResult(result);
         addChatMessage(finalMsg, false);
-        speak(`Your situation song is ${result.song}.`);
+        const songSpeech = await composeApiReply('song_game_result', {
+            song: result.song,
+            artist: result.artist || ''
+        }, {
+            fallbackText: `Your situation song is ${result.song}.`
+        });
+        speak(songSpeech || `Your situation song is ${result.song}.`);
         saveToHistory(triggerText, finalMsg);
         return true;
     } catch (error) {
         const fallback = buildSongMoodGameFallbackRecommendation(state);
         const finalMsg = formatSongMoodGameResult(fallback);
         addChatMessage(finalMsg, false);
-        speak(`Your situation song is ${fallback.song}.`);
+        const songSpeech = await composeApiReply('song_game_result', {
+            song: fallback.song,
+            artist: fallback.artist || ''
+        }, {
+            fallbackText: `Your situation song is ${fallback.song}.`
+        });
+        speak(songSpeech || `Your situation song is ${fallback.song}.`);
         saveToHistory(triggerText, finalMsg);
         return true;
     } finally {
@@ -8357,18 +8159,20 @@ async function handleSongMoodGameAnswer(text) {
 
     const match = clean.match(/^[1-4]$/);
     if (!match) {
-        const msg = `Reply with 1, 2, 3, or 4 for this game.\n\n${formatSongMoodGameQuestion(songMoodGameState.questionIndex)}`;
-        addChatMessage(msg, false);
-        speak('Reply with a number from one to four.');
+        deliverApiReply('song_game_invalid_reply', {
+            question: formatSongMoodGameQuestion(songMoodGameState.questionIndex),
+            validOptions: [1, 2, 3, 4]
+        }, { speak: true });
         return true;
     }
 
     const selectedIndex = Number(match[0]) - 1;
     const option = question.options[selectedIndex];
     if (!option) {
-        const msg = `That option is not valid.\n\n${formatSongMoodGameQuestion(songMoodGameState.questionIndex)}`;
-        addChatMessage(msg, false);
-        speak('That option is not valid. Reply with a number from one to four.');
+        deliverApiReply('song_game_invalid_option', {
+            question: formatSongMoodGameQuestion(songMoodGameState.questionIndex),
+            validOptions: [1, 2, 3, 4]
+        }, { speak: true });
         return true;
     }
 
@@ -8382,7 +8186,7 @@ async function handleSongMoodGameAnswer(text) {
 
     const nextQuestion = formatSongMoodGameQuestion(songMoodGameState.questionIndex);
     addChatMessage(nextQuestion, false);
-    speak('Next question. Reply with the number.');
+    queueApiSpeech('song_game_next_question', {}, 'Next question. Reply with the number.');
     return true;
 }
 
@@ -8700,7 +8504,7 @@ async function handleEraLanguageHitsBlendRequest(text) {
         const msg = formatLanguageEraHitsReply(intent, exactCurated, false);
         const card = renderLanguageEraHitsCard(intent, exactCurated, false);
         addChatMessage(card, false, false);
-        speak('Here is your language and era hits blend.');
+        await speakApiReply('language_era_blend_ready', {}, 'Here is your language and era hits blend.');
         saveToHistory(text, msg);
         return;
     }
@@ -8713,15 +8517,15 @@ async function handleEraLanguageHitsBlendRequest(text) {
         const msg = formatLanguageEraHitsReply(intent, exactAi, true);
         const card = renderLanguageEraHitsCard(intent, exactAi, true);
         addChatMessage(card, false, false);
-        speak('Here is your language and era hits blend.');
+        await speakApiReply('language_era_blend_ready', {}, 'Here is your language and era hits blend.');
         saveToHistory(text, msg);
     } catch (error) {
         const q = encodeURIComponent(`${intent.artist ? intent.artist + ' ' : ''}${intent.languages.join(' ')} ${intent.eras.map(toEraLabel).join(' ')} hits`);
         const fallbackUrl = `https://www.google.com/search?q=${q}`;
-        const fallbackMsg = `I couldn't build exactly ${intent.requestedCount} verified hits for each requested era right now.\n\nTry this quick search:\n[Search blend hits](${fallbackUrl})`;
-        addChatMessage(fallbackMsg, false);
-        speak('I could not fetch the exact blend right now.');
-        saveToHistory(text, fallbackMsg);
+        await deliverApiReply('language_era_blend_fallback', {
+            requestedCount: intent.requestedCount,
+            fallbackUrl
+        }, { historyKey: text });
     } finally {
         hideThinkingIndicator();
     }
@@ -8904,7 +8708,12 @@ async function handleArtistSongRequest(text) {
             false
         );
         addChatMessage(curatedMsg, false);
-        speak(`Here are verified song suggestions for ${artist}.`);
+        const curatedSpeech = await composeApiReply('artist_song_verified', {
+            artist
+        }, {
+            fallbackText: `Here are verified song suggestions for ${artist}.`
+        });
+        speak(curatedSpeech || `Here are verified song suggestions for ${artist}.`);
         saveToHistory(text, curatedMsg);
         return;
     }
@@ -9018,20 +8827,30 @@ ${snippetsBlock}`;
         const msg = formatMusicSongReply(artist, requestedCount, formattedItems, false);
 
         addChatMessage(msg, false);
-        speak(`Here are grounded song suggestions for ${artist}.`);
+        const groundedSpeech = await composeApiReply('artist_song_grounded', {
+            artist
+        }, {
+            fallbackText: `Here are grounded song suggestions for ${artist}.`
+        });
+        speak(groundedSpeech || `Here are grounded song suggestions for ${artist}.`);
         saveToHistory(text, msg);
     } catch (error) {
         try {
             const aiFallbackItems = await buildSongListFromAIFallback(artist, requestedCount);
             const fallbackReply = formatMusicSongReply(artist, requestedCount, aiFallbackItems, true);
             addChatMessage(fallbackReply, false);
-            speak(`Here are song suggestions for ${artist}.`);
+            const fallbackSpeech = await composeApiReply('artist_song_general', {
+                artist
+            }, {
+                fallbackText: `Here are song suggestions for ${artist}.`
+            });
+            speak(fallbackSpeech || `Here are song suggestions for ${artist}.`);
             saveToHistory(text, fallbackReply);
         } catch (fallbackError) {
-            const fallbackMsg = `I couldn't verify reliable song-to-movie matches for ${artist} right now.\n\nTry this quick search:\n[Search songs of ${artist}](https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')})`;
-            addChatMessage(fallbackMsg, false);
-            speak(`I could not fetch verified songs for ${artist} right now.`);
-            saveToHistory(text, fallbackMsg);
+            await deliverApiReply('artist_song_fallback', {
+                artist,
+                fallbackUrl: `https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')}`
+            }, { historyKey: text });
         }
     } finally {
         hideThinkingIndicator();
@@ -9180,10 +8999,10 @@ async function handleComparisonWithReliableSources(userText) {
         }
 
         if (!deduped.length) {
-            const fallbackMsg = `I could not fetch reliable sources right now for comparing ${left} and ${right}.`;
-            addChatMessage(fallbackMsg, false);
-            speak(fallbackMsg);
-            saveToHistory(userText, fallbackMsg);
+            await deliverApiReply('comparison_fetch_error', {
+                left,
+                right
+            }, { historyKey: userText });
             return true;
         }
 
@@ -9224,7 +9043,13 @@ ${snippets}`
         const finalMsg = `${analysis}\n\nSources:\n${sourceLines}`;
 
         addChatMessage(finalMsg, false);
-        speak(`I compared ${left} and ${right} using reliable web sources.`);
+        const compareSpeech = await composeApiReply('comparison_ready', {
+            left,
+            right
+        }, {
+            fallbackText: `I compared ${left} and ${right} using reliable web sources.`
+        });
+        speak(compareSpeech || `I compared ${left} and ${right} using reliable web sources.`);
         saveToHistory(userText, finalMsg);
         return true;
     } catch (error) {
@@ -9367,10 +9192,13 @@ function isFutureYearLiveQuery(intent) {
     return queryYear > currentYear;
 }
 
-function buildFutureYearResponse(intent) {
+async function buildFutureYearResponse(intent) {
     const year = intent?.year || 'that year';
     const topic = String(intent?.topic || 'that').trim();
-    return `Haha, I can't time travel, buddy. ${topic} in ${year} has not happened yet, so I can't tell you the result before it exists.`;
+    return await composeApiReply('future_year_request', {
+        topic,
+        year
+    });
 }
 
 function isCurrentInfoQuery(text) {
@@ -9486,7 +9314,6 @@ function classifyUserMessage(text) {
             tamilJoke: isTamilJokeRequest(raw),
             recipe: isRecipeRequest(raw),
             artistSong: isArtistSongRequest(raw),
-            vision: isVisionIntentText(raw),
             highRiskMentalHealth: isHighRiskMentalHealth(raw),
             supportExit: isSupportConversationExit(raw),
             supportRequest: isSupportConversationRequest(raw),
@@ -9520,7 +9347,6 @@ function decideAnswerPath(classification) {
     if (flags.tamilJoke) return 'tamil_joke';
     if (flags.recipe) return 'recipe';
     if (flags.artistSong) return 'artist_song';
-    if (flags.vision) return 'vision';
 
     if (flags.highRiskMentalHealth) return 'high_risk_mental_health';
     if (flags.supportExit) return 'support_exit';
@@ -10454,7 +10280,7 @@ function formatConsensusAnswer(entityIntent, agreement) {
     return value; 
 } 
 
-function buildEntityVerificationFallback(userText, entityIntent, liveIntent) {
+async function buildEntityVerificationFallback(userText, entityIntent, liveIntent) {
     const searchBasis = [
         entityIntent.subject,
         entityIntent.competition,
@@ -10462,7 +10288,13 @@ function buildEntityVerificationFallback(userText, entityIntent, liveIntent) {
         entityIntent.relationType || liveIntent?.factType || 'result'
     ].filter(Boolean).join(' ');
     const fallbackSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchBasis || userText)}`;
-    return `I couldn't verify that fact from live sources right now.\n\nTry this direct search:\n[Search verified result](${fallbackSearchUrl})`;
+    return await composeApiReply('entity_verification_fallback', {
+        userText,
+        searchBasis,
+        fallbackSearchUrl
+    }, {
+        fallbackText: `Search verified result: ${fallbackSearchUrl}`
+    });
 }
 
 function lookupKnownSportsFact(intent, userText, entityIntent = null) {
@@ -10861,46 +10693,16 @@ function extractRequestedDish(text) {
     return raw.replace(/[?.!,;]+$/g, '').trim();
 }
 
-function buildOfflineRecipeFallback(text) {
+async function buildOfflineRecipeFallback(text) {
     const dish = extractRequestedDish(text);
-    const lowerDish = dish.toLowerCase();
-
-    if (/\baloo\s+fry\b/.test(lowerDish)) {
-        return `Recipe: Aloo Fry
-Serves: 3-4
-Prep time: 10 minutes
-Cook time: 20 minutes
-
-Ingredients:
-- 4 medium potatoes
-- 2 tbsp oil
-- 1 tsp mustard seeds or cumin seeds
-- 1 onion, sliced thin
-- 1-2 green chilies, chopped
-- 1/4 tsp turmeric
-- 1 tsp red chili powder
-- 1 tsp coriander powder
-- Salt to taste
-- 8-10 curry leaves
-- 2 tbsp chopped coriander leaves
-
-Steps:
-1. Peel the potatoes and cut them into thin cubes or small slices. Rinse and pat them dry.
-2. Heat oil in a pan, add mustard or cumin, then add curry leaves, chilies, and onion. Saute until the onion softens.
-3. Add potatoes, turmeric, chili powder, coriander powder, and salt. Mix well so the masala coats everything.
-4. Cook on medium-low heat, stirring every few minutes, until the potatoes turn tender and lightly crisp on the edges.
-5. Finish with chopped coriander and serve hot with rice, rasam, sambar, or chapati.
-
-Tips:
-- Do not overcrowd the pan if you want crisp potatoes.
-- A little extra curry leaf and chili makes it taste more South Indian.`;
-    }
-
-    if (dish) {
-        return `I couldn't generate a full recipe from the model right now, but I understood the dish as "${dish}". Try asking again, or ask for a short version like "simple ${dish} recipe".`;
-    }
-
-    return `I couldn't generate that recipe right now. Try asking again with the dish name, for example: "Recipe for aloo fry".`;
+    return await composeApiReply('recipe_fallback', {
+        dish: dish || '',
+        userMessage: String(text || '').trim()
+    }, {
+        fallbackText: dish
+            ? `I could not generate a full recipe right now, but I understood the dish as "${dish}". Try asking again.`
+            : 'I could not generate that recipe right now. Try asking again with the dish name.'
+    });
 }
 
 async function retrieveUniversalEntitySources(pipeline, controller) {
@@ -10945,13 +10747,13 @@ function publishUniversalKnownFact(pipeline, badge = 'Verified sports record') {
     if (!pipeline?.knownFact) return false;
     const message = formatKnownSportsFactMessage(pipeline.knownFact, pipeline.conciseFactQuery);
     addVerifiedAssistantMessage(message, badge);
-    speak('I answered from a verified sports record.');
+    await speakApiReply('verified_sports_answer', {}, 'I answered from a verified sports record.');
     saveToHistory(pipeline.userText, message);
     return true;
 }
 
 function publishUniversalVerificationFallback(pipeline, speechText = 'I could not verify that fact right now.') {
-    const fallbackMsg = buildEntityVerificationFallback(pipeline.userText, pipeline.entityIntent, pipeline.intent);
+    const fallbackMsg = await buildEntityVerificationFallback(pipeline.userText, pipeline.entityIntent, pipeline.intent);
     addChatMessage(fallbackMsg, false);
     speak(speechText);
     saveToHistory(pipeline.userText, fallbackMsg);
@@ -10967,7 +10769,7 @@ function publishUniversalConsensusAnswer(pipeline, agreement) {
         .join('\n');
     const finalMsg = `${directAnswer}\n\nSources:\n${sourceLines}`;
     addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
-    speak('I checked multiple sources and confirmed the answer.');
+    await speakApiReply('verified_answer_confirmed', {}, 'I checked multiple sources and confirmed the answer.');
     saveToHistory(pipeline.userText, finalMsg);
     return true;
 }
@@ -10979,7 +10781,7 @@ function publishUniversalMixedEvidence(pipeline, results) {
         .join('\n');
     const mixedMsg = `I found sources for that, but they do not agree enough for a clean direct answer yet.\n\nSources:\n${sourceLines}`;
     addVerifiedAssistantMessage(mixedMsg, 'Mixed live sources');
-    speak('I found mixed source evidence, so I did not guess.');
+    await speakApiReply('verified_answer_mixed', {}, 'I found mixed source evidence, so I did not guess.');
     saveToHistory(pipeline.userText, mixedMsg);
     return true;
 }
@@ -11032,7 +10834,7 @@ ${snippets}`
     const finalAnswer = answer || cleanLiveAnswerText(`Direct answer: ${results[0].title}${results[0].description ? `\n\nKey points:\n- ${results[0].description}` : ''}`);
     const finalMsg = `${finalAnswer}\n\nSources:\n${sourceLines}`;
     addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
-    speak('I checked verified sources and found the answer.');
+    await speakApiReply('verified_answer_found', {}, 'I checked verified sources and found the answer.');
     saveToHistory(pipeline.userText, finalMsg);
     return true;
 }
@@ -11151,7 +10953,7 @@ async function handleLiveRetrievalQuery(userText) {
                         .join('\n');
                     const finalMsg = `${directAnswer}\n\nSources:\n${sourceLines}`;
                     addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
-                    speak('I checked multiple sources and confirmed the answer.');
+                    await speakApiReply('verified_answer_confirmed', {}, 'I checked multiple sources and confirmed the answer.');
                     saveToHistory(userText, finalMsg);
                     hideThinkingIndicator();
                     return true;
@@ -11218,7 +11020,7 @@ ${snippets}`
                 ? `${conciseFallbackAnswer}\n\nSources:\n${sourceLines}`
                 : `${cleanedFallbackAnswer}\n\nSources:\n${sourceLines}`;
             addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
-            speak('I checked current sources and found a direct result.');
+            await speakApiReply('direct_live_result', {}, 'I checked current sources and found a direct result.');
             saveToHistory(userText, finalMsg);
             return true;
         }
@@ -11232,7 +11034,7 @@ ${snippets}`
             : `${answer}\n\nSources:\n${sourceLines}`;
 
         addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
-        speak('I checked current sources and summarized what I found.');
+        await speakApiReply('live_summary_ready', {}, 'I checked current sources and summarized what I found.');
         saveToHistory(userText, finalMsg);
         return true;
     } catch (error) {
@@ -11256,7 +11058,7 @@ ${snippets}`
             if (isRoutingRegressionCommand(text)) {
                 const report = formatRoutingRegressionReport(runRoutingRegressionSuite());
                 addChatMessage(report, false);
-                speak('Routing regression report ready.');
+                await speakApiReply('routing_report_ready', {}, 'Routing regression report ready.');
                 saveToHistory(text, report);
                 return;
             }
@@ -11274,9 +11076,9 @@ ${snippets}`
             if (homeMatch) {
                 commuteProfile.home = homeMatch[1].replace(/[?.!,]$/g, '').trim();
                 saveCommuteProfile();
-                const msg = `Saved your home as ${commuteProfile.home}.`;
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('commute_home_saved', {
+                    home: commuteProfile.home
+                }, { historyKey: text });
                 return;
             }
 
@@ -11284,9 +11086,9 @@ ${snippets}`
             if (officeMatch) {
                 commuteProfile.office = officeMatch[1].replace(/[?.!,]$/g, '').trim();
                 saveCommuteProfile();
-                const msg = `Saved your office as ${commuteProfile.office}.`;
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('commute_office_saved', {
+                    office: commuteProfile.office
+                }, { historyKey: text });
                 return;
             }
 
@@ -11294,16 +11096,16 @@ ${snippets}`
             if (arrivalMatch) {
                 const parsed = parseTimeInput(arrivalMatch[1]);
                 if (!parsed) {
-                    const msg = 'I could not read that arrival time. Try something like "arrive by 9:00 AM".';
-                    addChatMessage(msg, false);
-                    speak(msg);
+                    await deliverApiReply('commute_arrival_time_invalid', {
+                        rawValue: arrivalMatch[1]
+                    }, { historyKey: text });
                     return;
                 }
                 commuteProfile.arrivalTime = parsed;
                 saveCommuteProfile();
-                const msg = `Arrival time saved as ${parsed}.`;
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('commute_arrival_time_saved', {
+                    arrivalTime: parsed
+                }, { historyKey: text });
                 return;
             }
 
@@ -11312,9 +11114,9 @@ ${snippets}`
                 const rawMode = commuteModeMatch[1].toLowerCase();
                 commuteProfile.mode = rawMode.startsWith('walk') ? 'walk' : (rawMode === 'train' || rawMode === 'bus' ? 'transit' : rawMode.replace('driving', 'drive'));
                 saveCommuteProfile();
-                const msg = `Commute mode set to ${commuteProfile.mode}.`;
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('commute_mode_saved', {
+                    commuteMode: commuteProfile.mode
+                }, { historyKey: text });
                 return;
             }
 
@@ -11341,11 +11143,12 @@ ${snippets}`
 
             if (/\b(trip\s+status|how\s+far\s+am\s+i|eta\s+to\s+destination)\b/i.test(lower) && tripState.destinationText) {
                 renderTripCard();
-                const msg = tripState.active
-                    ? `You are heading to ${tripState.destinationText}. Distance left is ${tripState.lastDistanceMiles != null ? tripState.lastDistanceMiles.toFixed(2) : 'unknown'} miles and ETA is ${tripState.etaMinutes != null ? Math.round(tripState.etaMinutes) : 'unknown'} minutes.`
-                    : `Trip tracking is not active right now.`;
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('trip_status', {
+                    active: tripState.active,
+                    destination: tripState.destinationText,
+                    distanceMiles: tripState.lastDistanceMiles != null ? Number(tripState.lastDistanceMiles.toFixed(2)) : null,
+                    etaMinutes: tripState.etaMinutes != null ? Math.round(tripState.etaMinutes) : null
+                }, { historyKey: text });
                 return;
             }
 
@@ -11358,9 +11161,9 @@ ${snippets}`
                 safetyProfile.womenSafetyMode = true;
                 saveSafetyProfile();
                 showSafetyPanel();
-                const msg = 'Safety mode is on. I added fast actions for sharing location, safety check-ins, and nearby help.';
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('safety_mode_enabled', {
+                    womenSafetyMode: true
+                }, { historyKey: text });
                 return;
             }
 
@@ -11368,9 +11171,9 @@ ${snippets}`
                 safetyProfile.womenSafetyMode = false;
                 saveSafetyProfile();
                 showSafetyPanel();
-                const msg = 'Safety mode is off. Emergency shortcuts still stay available.';
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('safety_mode_disabled', {
+                    womenSafetyMode: false
+                }, { historyKey: text });
                 return;
             }
 
@@ -11379,9 +11182,9 @@ ${snippets}`
                 safetyProfile.trustedContact = trustedContactMatch[1].replace(/[?.!,]$/g, '').trim();
                 saveSafetyProfile();
                 showSafetyPanel();
-                const msg = `Trusted contact saved as ${safetyProfile.trustedContact}.`;
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('safety_trusted_contact_saved', {
+                    trustedContact: safetyProfile.trustedContact
+                }, { historyKey: text });
                 return;
             }
 
@@ -11407,9 +11210,9 @@ ${snippets}`
 
             if (/\b(emergency|help me stay safe|safety help)\b/i.test(lower)) {
                 showSafetyPanel();
-                const msg = 'Safety shortcuts are ready. You can say "share my location", "nearest hospital", "nearest police", or "start safety timer for 30 minutes".';
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('safety_shortcuts_ready', {
+                    supportedActions: ['share my location', 'nearest hospital', 'nearest police', 'start safety timer for 30 minutes']
+                }, { historyKey: text });
                 return;
             }
             
@@ -11455,9 +11258,9 @@ ${snippets}`
             const immediateKnowledgeFallback = buildDirectKnowledgeFallback(cleanText);
 
             if (answerPath === 'moderation') {
-                const moderationMsg = getContentModerationResponse();
-                addChatMessage(moderationMsg, false);
-                speak("I'm not able to help with that. Let me know if you have other questions!");
+                await deliverApiReply('moderation_refusal', {
+                    userRequest: cleanText
+                }, { historyKey: text });
                 return;
             }
 
@@ -11475,9 +11278,9 @@ ${snippets}`
                 const entityFactIntent = classification.liveIntent;
 
                 if (isFutureYearLiveQuery(entityFactIntent)) {
-                    const futureMsg = buildFutureYearResponse(entityFactIntent);
+                    const futureMsg = await buildFutureYearResponse(entityFactIntent);
                     addChatMessage(futureMsg, false);
-                    speak("I can't time travel, buddy.");
+                    speak(futureMsg);
                     saveToHistory(text, futureMsg);
                     return;
                 }
@@ -11509,9 +11312,9 @@ ${snippets}`
                 const liveIntent = classification.liveIntent;
 
                 if (isFutureYearLiveQuery(liveIntent)) {
-                    const futureMsg = buildFutureYearResponse(liveIntent);
+                    const futureMsg = await buildFutureYearResponse(liveIntent);
                     addChatMessage(futureMsg, false);
-                    speak("I can't time travel, buddy.");
+                    speak(futureMsg);
                     saveToHistory(text, futureMsg);
                     return;
                 }
@@ -11551,10 +11354,9 @@ ${snippets}`
             }
 
             if (answerPath === 'vague_advice') {
-                const clarifyMsg = 'Sure. What do you want advice about?';
-                addChatMessage(clarifyMsg, false);
-                speak(clarifyMsg);
-                saveToHistory(text, clarifyMsg);
+                await deliverApiReply('advice_clarification', {
+                    userRequest: cleanText
+                }, { historyKey: text });
                 return;
             }
 
@@ -11639,10 +11441,10 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
                     recipeResponse?.intent === 'soft_fallback' ||
                     recipeResponse?.intent === 'local_fallback';
                 const finalRecipe = shouldUseRecipeFallback
-                    ? buildOfflineRecipeFallback(text)
+                    ? await buildOfflineRecipeFallback(text)
                     : recipeText;
                 addModelAssistantMessage(finalRecipe, 'Model answer');
-                speak("Here is the recipe.");
+                await speakApiReply('recipe_ready', {}, 'Here is the recipe.');
                 saveToHistory(text, finalRecipe);
                 return;
             }
@@ -11657,32 +11459,23 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
                 return;
             }
 
-            if (answerPath === 'vision') {
-                await handleVisionIntent(cleanText);
-                return;
-            }
-
             if (answerPath === 'high_risk_mental_health') {
                 supportConversationMode = false;
-                const urgentMsg = `I'm really glad you told me. You deserve immediate support right now.
-
-Please contact a certified mental health professional or emergency support immediately.
-- In the U.S. and Canada: call or text 988 (Suicide & Crisis Lifeline)
-- If you're in immediate danger, call emergency services now
-
-If you want, I can stay with you and help you write a short message to someone you trust.`;
-                addChatMessage(urgentMsg, false);
-                speak("I'm here with you. Please contact emergency or a crisis line right now. You matter.");
-                saveToHistory(text, urgentMsg);
+                await deliverApiReply('high_risk_mental_health', {
+                    userMessage: cleanText,
+                    emergencyContacts: [
+                        'In the U.S. and Canada: call or text 988',
+                        'If you are in immediate danger, call emergency services now'
+                    ]
+                }, { historyKey: text });
                 return;
             }
 
             if (answerPath === 'support_exit') {
                 supportConversationMode = false;
-                const exitMsg = "Support conversation mode is off. I can still help normally whenever you want.";
-                addChatMessage(exitMsg, false);
-                speak("Support conversation mode is off.");
-                saveToHistory(text, exitMsg);
+                await deliverApiReply('support_mode_disabled', {
+                    userMessage: cleanText
+                }, { historyKey: text });
                 return;
             }
 
@@ -11691,25 +11484,23 @@ If you want, I can stay with you and help you write a short message to someone y
                 const introPrompt = buildSupportConversationPrompt(text);
                 const supportIntro = await callAIWithTyping(introPrompt, 'I am here with you...');
                 if (supportIntro?.aborted) return;
-                const introText = supportIntro?.response || buildOfflineSupportReply(text);
+                const introText = supportIntro?.response || await buildOfflineSupportReply(text);
                 const finalIntro = `${introText}\n\nYou can stay in this mode and talk naturally. Say "stop support mode" whenever you want to leave it.`;
                 addModelAssistantMessage(finalIntro, 'Support conversation');
-                speak("I'm here with you.");
+                await speakApiReply('support_presence', {}, "I'm here with you.");
                 saveToHistory(text, finalIntro);
                 return;
             }
 
             if (answerPath === 'medical_emergency') {
-                const urgentMedicalMsg = `This could be a medical emergency.
-
-- Call emergency services right now if the person has chest pain, trouble breathing, severe bleeding, stroke symptoms, or loses consciousness
-- If available, go to the nearest emergency room or urgent emergency care immediately
-- If it is safe, keep the person still and do not give food, drink, or medicine unless a clinician has already instructed it
-
-I can still help you find the nearest hospital or urgent care if you want.`;
-                addChatMessage(urgentMedicalMsg, false);
-                speak("This may be a medical emergency. Please call emergency services right now.");
-                saveToHistory(text, urgentMedicalMsg);
+                await deliverApiReply('medical_emergency', {
+                    userMessage: cleanText,
+                    emergencyGuidance: [
+                        'Call emergency services right now for chest pain, trouble breathing, severe bleeding, stroke symptoms, or loss of consciousness',
+                        'Go to the nearest emergency room if available',
+                        'If safe, keep the person still and do not give food, drink, or medicine unless already instructed by a clinician'
+                    ]
+                }, { historyKey: text });
                 return;
             }
 
@@ -11718,9 +11509,9 @@ I can still help you find the nearest hospital or urgent care if you want.`;
                 const supportPrompt = buildSupportConversationPrompt(text);
                 const supportReply = await callAIWithTyping(supportPrompt, 'I am here with you...');
                 if (supportReply?.aborted) return;
-                const supportText = supportReply?.response || buildOfflineSupportReply(text);
+                const supportText = supportReply?.response || await buildOfflineSupportReply(text);
                 addModelAssistantMessage(supportText, 'Support conversation');
-                speak("I'm here with you.");
+                await speakApiReply('support_presence', {}, "I'm here with you.");
                 saveToHistory(text, supportText);
                 return;
             }
@@ -11862,8 +11653,9 @@ Rules:
                     if (window.pendingLocationQueryType === 'transport') {
                         const resolved = await resolveLocationForTravel(locationName);
                         setLastResolvedTravelLocation(resolved?.fullLocation || locationName);
-                        addChatMessage(buildTransportMessage(resolved), false);
-                        speak(`Here are transport suggestions for ${resolved?.cityName || locationName}.`);
+                        const transportMsg = await buildTransportMessage(resolved);
+                        addChatMessage(transportMsg, false);
+                        speak(transportMsg);
                         return;
                     }
                     if (window.pendingLocationQueryType === 'food') {
@@ -11876,13 +11668,14 @@ Rules:
                 if (/\b(yes|yep|yeah|sure|ok|okay)\b/i.test(cleanText) && /\btransport\b/i.test(cleanText)) {
                     const resolved = await resolveLocationForTravel(window.pendingTransportSuggestionCity);
                     window.pendingTransportSuggestionCity = null;
-                    addChatMessage(buildTransportMessage(resolved), false);
-                    speak(`Here is transport guidance for ${resolved?.cityName || 'your location'}.`);
+                    const transportMsg = await buildTransportMessage(resolved);
+                    addChatMessage(transportMsg, false);
+                    speak(transportMsg);
                     return;
                 }
                 if (/^\s*no\b/i.test(cleanText)) {
                     window.pendingTransportSuggestionCity = null;
-                    addChatMessage('No problem. Ask anytime if you need transport options.', false);
+                    await deliverApiReply('transport_suggestion_declined', {});
                     return;
                 }
             }
@@ -11892,11 +11685,11 @@ Rules:
             const translatorRequest = detectTranslatorRequest(cleanText);
             if (translatorRequest) {
                 if (translatorRequest === 'exit') {
-                    deactivateTranslatorMode();
+                    await deactivateTranslatorMode();
                     return;
                 } else {
                     // Activate translator for the detected language
-                    activateTranslatorMode(translatorRequest);
+                    await activateTranslatorMode(translatorRequest);
                     return;
                 }
             }
@@ -11919,18 +11712,18 @@ Rules:
                 
                 
                 if (cleanLocation.length < 2) {
-                    const msg = "I didn't catch that. Please tell me a city or location name.";
-                    addChatMessage(msg, false);
-                    speak(msg);
+                    await deliverApiReply('location_prompt_retry', {
+                        reason: 'too_short'
+                    });
                     return;
                 }
                 
                 
                 const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh', 'weather'];
                 if (fillerWords.includes(cleanLocation.toLowerCase())) {
-                    const msg = "I didn't quite catch the location. Could you say it again?";
-                    addChatMessage(msg, false);
-                    speak(msg);
+                    await deliverApiReply('location_prompt_retry', {
+                        reason: 'unclear_location'
+                    });
                     return;
                 }
                 
@@ -11965,9 +11758,9 @@ Rules:
                 const cityName = cleanText.replace(/[?!]/g, '').trim();
 
                 if (cityName.length < 2) {
-                    const msg = "I didn't catch the location. Please tell me which city or town you need transport info for.";
-                    addChatMessage(msg, false);
-                    speak(msg);
+                    await deliverApiReply('transport_location_prompt', {
+                        reason: 'missing_or_short'
+                    });
                     window.waitingForTransportLocation = true;
                     return;
                 }
@@ -11976,15 +11769,20 @@ Rules:
                 if (resolved?.needsClarification && Array.isArray(resolved.options) && resolved.options.length) {
                     window.pendingLocationDisambiguation = { options: resolved.options };
                     window.pendingLocationQueryType = 'transport';
-                    const opts = resolved.options.map((o, i) => `${i + 1}. ${[o.city, o.state, o.country].filter(Boolean).join(', ')}`).join('\n');
-                    const clarifyMsg = `I found multiple places named "${resolved.rawInput}". Which one do you mean?\n\n${opts}\n\nReply with the number.`;
-                    addChatMessage(clarifyMsg, false);
-                    speak(`I found multiple places named ${resolved.rawInput}. Please choose a number.`);
+                    await deliverApiReply('location_disambiguation', {
+                        rawInput: resolved.rawInput,
+                        options: resolved.options.map((o, i) => ({
+                            index: i + 1,
+                            label: [o.city, o.state, o.country].filter(Boolean).join(', ')
+                        })),
+                        replyInstruction: 'Reply with the number.'
+                    });
                     return;
                 }
 
-                addChatMessage(buildTransportMessage(resolved), false);
-                speak(`Here are the transport options for ${resolved?.cityName || cityName}.`);
+                const transportMsg = await buildTransportMessage(resolved);
+                addChatMessage(transportMsg, false);
+                speak(transportMsg);
                 saveToHistory(text, `Transport info for ${resolved?.fullLocation || cityName}`);
                 return;
             }
@@ -12048,18 +11846,16 @@ Rules:
                 }
                 
                 
-                const msg = "I didn't catch which one you meant. Could you say the number or the country name?";
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('location_choice_retry', {
+                    reason: 'invalid_selection'
+                });
                 window.waitingForLocationChoice = true;
                 return;
             }
             
             
             if (lower.includes('change') && (lower.includes('name') || lower.includes('my name'))) {
-                const msg = "What would you like me to call you?";
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('name_change_prompt', {}, { historyKey: text });
                 waitingForName = true;
                 return;
             }
@@ -12079,14 +11875,14 @@ Rules:
             
             
             if (lower.match(/^(my name is|i'm|call me)\s+/i)) {
-                handleNameInput(cleanText);
+                await handleNameInput(cleanText);
                 return;
             }
 
             // Allow "I am <name>" only when it clearly looks like a name.
             const iAmNameMatch = cleanText.match(/^i am\s+(.+)$/i);
             if (iAmNameMatch && isLikelyPersonalName(iAmNameMatch[1])) {
-                handleNameInput(cleanText);
+                await handleNameInput(cleanText);
                 return;
             }
             
@@ -12110,39 +11906,70 @@ Rules:
                         const willRain = willItRain(weather.current.weather_code);
                         const celsius = Math.round(weather.current.temperature_2m);
                         const fahrenheit = Math.round((celsius * 9/5) + 32);
-                        
-                        let rainMsg;
+                        const advice = await getWeatherAdvice(weather);
                         if (willRain) {
-                            rainMsg = `Yes, it looks like rain is expected today. ${getWeatherAdvice(weather)}`;
+                            await deliverApiReply('weather_rain_check', {
+                                willRain,
+                                fahrenheit,
+                                celsius,
+                                advice
+                            }, {
+                                historyKey: cleanText,
+                                fallbackText: `Yes, it looks like rain is expected today. ${advice}`
+                            });
                         } else {
-                            rainMsg = `No, it won't rain today. The temperature is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${getWeatherAdvice(weather)}`;
+                            await deliverApiReply('weather_rain_check', {
+                                willRain,
+                                fahrenheit,
+                                celsius,
+                                advice
+                            }, {
+                                historyKey: cleanText,
+                                fallbackText: `No, it won't rain today. The temperature is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${advice}`
+                            });
                         }
-                        addChatMessage(rainMsg, false);
-                        speak(rainMsg);
                     } 
                     
                     else if (cleanText.toLowerCase().includes('snow')) {
                         const willSnow = willItSnow(weather.current.weather_code);
                         const celsius = Math.round(weather.current.temperature_2m);
                         const fahrenheit = Math.round((celsius * 9/5) + 32);
-                        
-                        let snowMsg;
+                        const advice = await getWeatherAdvice(weather);
                         if (willSnow) {
-                            snowMsg = `Yes, snow is expected! ${getWeatherAdvice(weather)}`;
+                            await deliverApiReply('weather_snow_check', {
+                                willSnow,
+                                fahrenheit,
+                                celsius,
+                                advice
+                            }, {
+                                historyKey: cleanText,
+                                fallbackText: `Yes, snow is expected! ${advice}`
+                            });
                         } else {
-                            snowMsg = `No, it won't snow today. The temperature is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${getWeatherAdvice(weather)}`;
+                            await deliverApiReply('weather_snow_check', {
+                                willSnow,
+                                fahrenheit,
+                                celsius,
+                                advice
+                            }, {
+                                historyKey: cleanText,
+                                fallbackText: `No, it won't snow today. The temperature is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${advice}`
+                            });
                         }
-                        addChatMessage(snowMsg, false);
-                        speak(snowMsg);
                     }
                     
                     else {
                         const celsius = Math.round(weather.current.temperature_2m);
                         const fahrenheit = Math.round((celsius * 9/5) + 32);
-                        const advice = getWeatherAdvice(weather);
-                        const weatherMsg = `The temperature is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${advice}`;
-                        addChatMessage(weatherMsg, false);
-                        speak(weatherMsg);
+                        const advice = await getWeatherAdvice(weather);
+                        await deliverApiReply('weather_current_summary', {
+                            fahrenheit,
+                            celsius,
+                            advice
+                        }, {
+                            historyKey: cleanText,
+                            fallbackText: `The temperature is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${advice}`
+                        });
                     }
                 } else {
                     
@@ -12218,8 +12045,12 @@ Rules:
                                 } else {
                                     askMsg = "I couldn't detect your location. Where are you?";
                                 }
-                                addChatMessage(askMsg, false);
-                                speak(askMsg);
+                                await deliverApiReply('location_manual_prompt', {
+                                    reason: 'geolocation_error',
+                                    detail: askMsg
+                                }, {
+                                    fallbackText: askMsg
+                                });
                                 waitingForLocation = true;
                             },
                             {
@@ -12229,10 +12060,9 @@ Rules:
                             }
                         );
                     } else {
-                        
-                        const askMsg = "Your browser doesn't support location detection. Just tell me your city or town!";
-                        addChatMessage(askMsg, false);
-                        speak(askMsg);
+                        await deliverApiReply('location_manual_prompt', {
+                            reason: 'browser_no_geolocation'
+                        });
                         waitingForLocation = true;
                     }
                 }
@@ -12248,16 +12078,14 @@ Rules:
             else if ((cleanText.toLowerCase().includes('show') || cleanText.toLowerCase().includes('list') || cleanText.toLowerCase().includes('my')) &&
                      cleanText.toLowerCase().includes('reminder')) {
                 if (reminders.length === 0) {
-                    const msg = "You haven't set any reminders yet. For what should I remind you?";
-                    addChatMessage(msg, false);
-                    speak(msg);
+                    await deliverApiReply('reminder_list_empty', {}, { historyKey: text });
                     waitingForReminder = true;
                     reminderFlowStage = 'task';
                     pendingReminderTask = '';
                 } else {
-                    const msg = `You have ${reminders.length} reminder${reminders.length > 1 ? 's' : ''}. Check the list below.`;
-                    addChatMessage(msg, false);
-                    speak(msg);
+                    await deliverApiReply('reminder_list_summary', {
+                        reminderCount: reminders.length
+                    }, { historyKey: text });
                     document.getElementById('reminders-section').classList.remove('hidden');
                 }
                 return;
@@ -12281,55 +12109,33 @@ Rules:
             // ========== END NEWS HANDLING ==========
 
             else if (cleanText.toLowerCase().match(/\b(who (created|made|built|developed) (you|this|unify)|who (is|are) (your|the) (creator|developer|maker|author)|tell me about (your|the) creator|who owns (you|this))\b/i)) {
-                const creatorMsg = `I was created by Prithviraju Venkataraman, a developer passionate about AI and voice interfaces. I was built to help his family mainly with travel planning, weather updates, reminders, and more but later on thought, why not make this as a Vibe Coded Project! Cool isn't it? If you see any bugs or room for improvement, click on Request feature.`;
-                addChatMessage(creatorMsg, false);
-                speak("I was created by Prithviraju Venkataraman. This started as a family project and became a Vibe Coded Project!");
+                await deliverApiReply('creator_info', {
+                    creatorName: 'Prithviraju Venkataraman',
+                    projectOrigin: 'family project',
+                    projectType: 'vibe-coded project'
+                }, {
+                    historyKey: text,
+                    fallbackText: 'I was created by Prithviraju Venkataraman. This started as a family project and later grew into a vibe-coded project.'
+                });
                 return; 
             }
             
             else if (cleanText.toLowerCase().match(/what (can you do|are your features?|features?|do you have|is your feature)/i) ||
                      cleanText.toLowerCase().match(/\b(help|capabilities|what are you)\b/i) ||
                      cleanText.toLowerCase().match(/what (do|can) you (do|offer|provide)/i)) {
-                const helpMsg = `Hey! I'm here to make your life easier. Here's what I can help with:
-
-[Travel] Travel Planning - Complete trip assistance!
-  - "Plan a 3-day trip to Tokyo"
-  - "Create an itinerary for NYC"
-  - "Hotels in Chennai with non-veg"
-  - "Best restaurants in Paris"
-  - Dynamic suggestions (Biryani in India, Pizza in NYC, etc.)
-  - Share recommendations via SMS/WhatsApp/Email
-
-[Globe] Translator Mode - Communicate with locals!
-  - "Speak in Tamil" / "Tamil la peslama"
-  - "Help me talk to auto driver in Kannada"
-  - "Translate to Hindi" / "Telugu lo cheppu"
-  - Supports: Tamil, Kannada, Telugu, Hindi
-  - Say "stop translator" to exit
-
-[Bus] Transport Info - Get around easily!
-  - "How to get around Chennai?"
-  - "Transport in Long Beach"
-  - Smart advice for big cities vs small towns
-
-[Weather] Weather - Check weather anywhere!
-  - "What's the weather?"
-  - "Will it rain in Seattle?"
-  - "Temperature in Paris?"
-
-? Reminders - Never forget again!
-  - "Remind me to call mom at 5pm"
-  - "Remind me tomorrow to buy groceries"
-
-[Tip] Pro Tips:
-  - Ask for local specialties (Biryani, Pizza, Pasta, etc.)
-  - Use "Share" or "Email" buttons to save recommendations
-  - Use Translator to talk to rickshaw drivers, shopkeepers!
-  - I remember your name and preferences!
-
-                Just talk to me naturally!`;
-                addChatMessage(helpMsg, false);
-                speak("I can help with travel planning, translation, transport, weather, reminders, and much more. I can even translate for you when talking to locals!");
+                await deliverApiReply('help_overview', {
+                    features: [
+                        'travel planning',
+                        'translator mode',
+                        'transport guidance',
+                        'weather',
+                        'reminders'
+                    ],
+                    supportedLanguages: ['Tamil', 'Kannada', 'Telugu', 'Hindi']
+                }, {
+                    historyKey: text,
+                    fallbackText: 'I can help with travel planning, translator mode, transport guidance, weather, reminders, and related everyday questions.'
+                });
                 return; 
             }
             
@@ -12460,7 +12266,7 @@ If user asks for 2 days, provide both days with balanced pacing.`;
                 
                 const specialtyPrompt = `${userName ? `The user's name is ${userName}.` : ''} Answer this question about local food and specialties: "${text}"
 
-?>" ANTI-HALLUCINATION RULES:
+ANTI-HALLUCINATION RULES:
 1. ONLY mention dishes that are REAL and ACTUALLY from the region
 2. DO NOT invent dish names
 3. Stick to well-known, verifiable regional dishes
@@ -12569,16 +12375,14 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     // If still no city, ask for it
                     if (!cityName) {
                         if (queryType === 'transport') {
-                            const askMsg = "Which city do you need transport information for?";
-                            addChatMessage(askMsg, false);
-                            speak(askMsg);
+                            await deliverApiReply('transport_location_prompt', {
+                                reason: 'missing_city'
+                            });
                             window.waitingForTransportLocation = true;
                         } else {
-                            const askMsg = queryType === 'hotel'
-                                ? "Which city would you like hotel recommendations for?"
-                                : "Which city would you like restaurant recommendations for?";
-                            addChatMessage(askMsg, false);
-                            speak(askMsg);
+                            await deliverApiReply(queryType === 'hotel' ? 'hotel_city_prompt' : 'restaurant_city_prompt', {
+                                reason: 'missing_city'
+                            });
                         }
                         return;
                     }
@@ -12602,11 +12406,17 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 [Map] Click on markers to see ratings, reviews & directions!`; 
 
                         addChatMessage(hotelMsg, false);
-                        speak(`Here are hotels in ${cityName}. You can see them on the map!`);
+                        const hotelIntro = await composeApiReply('hotel_map_card_intro', {
+                            cityName,
+                            fullLocation: fullLocation || cityName
+                        }, {
+                            fallbackText: `Here are hotels in ${cityName}.`
+                        });
+                        speak(hotelIntro || `Here are hotels in ${cityName}.`);
                         
                         setLastResolvedTravelLocation(fullLocation || cityName);
                         saveToHistory(text, `Hotel search for ${cityName}`);
-                        askTransportSuggestionFor(cityName);
+                        await askTransportSuggestionFor(cityName);
                         showFastFoodBox();
                         return;
                     }
@@ -12617,14 +12427,24 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         if (resolved?.needsClarification && Array.isArray(resolved.options) && resolved.options.length) {
                             window.pendingLocationDisambiguation = { options: resolved.options };
                             window.pendingLocationQueryType = 'transport';
-                            const opts = resolved.options.map((o, i) => `${i + 1}. ${[o.city, o.state, o.country].filter(Boolean).join(', ')}`).join('\n');
-                            const clarifyMsg = `I found multiple places named "${resolved.rawInput}". Which one do you mean?\n\n${opts}\n\nReply with the number.`;
-                            addChatMessage(clarifyMsg, false);
-                            speak(`I found multiple places named ${resolved.rawInput}. Please choose a number.`);
+                            await deliverApiReply('location_disambiguation', {
+                                rawInput: resolved.rawInput,
+                                options: resolved.options.map((o, i) => ({
+                                    index: i + 1,
+                                    label: [o.city, o.state, o.country].filter(Boolean).join(', ')
+                                })),
+                                replyInstruction: 'Reply with the number.'
+                            });
                             return;
                         }
-                        addChatMessage(buildTransportMessage(resolved), false);
-                        speak(`Here are the transport options for ${resolved?.cityName || cityName}.`);
+                        const transportMsg = await buildTransportMessage(resolved);
+                        addChatMessage(transportMsg, false);
+                        const transportSpeech = await composeApiReply('transport_ready', {
+                            cityName: resolved?.cityName || cityName
+                        }, {
+                            fallbackText: `Here are the transport options for ${resolved?.cityName || cityName}.`
+                        });
+                        speak(transportSpeech || `Here are the transport options for ${resolved?.cityName || cityName}.`);
                         setLastResolvedTravelLocation(resolved?.fullLocation || cityName);
                         saveToHistory(text, `Transport info for ${resolved?.fullLocation || cityName}`);
                         return;
@@ -12635,10 +12455,14 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     if (resolved?.needsClarification && Array.isArray(resolved.options) && resolved.options.length) {
                         window.pendingLocationDisambiguation = { options: resolved.options };
                         window.pendingLocationQueryType = 'food';
-                        const opts = resolved.options.map((o, i) => `${i + 1}. ${[o.city, o.state, o.country].filter(Boolean).join(', ')}`).join('\n');
-                        const clarifyMsg = `I found multiple places named "${resolved.rawInput}". Which one do you mean for restaurants?\n\n${opts}\n\nReply with the number.`;
-                        addChatMessage(clarifyMsg, false);
-                        speak(`I found multiple places named ${resolved.rawInput}. Please choose a number.`);
+                        await deliverApiReply('location_disambiguation', {
+                            rawInput: resolved.rawInput,
+                            options: resolved.options.map((o, i) => ({
+                                index: i + 1,
+                                label: [o.city, o.state, o.country].filter(Boolean).join(', ')
+                            })),
+                            replyInstruction: 'Reply with the number.'
+                        });
                         return;
                     }
 
@@ -12660,9 +12484,15 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
                     const foodMsg = `[Food] **Top restaurant picks near ${locationCity}**\n\n<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">\n<iframe src="https://maps.google.com/maps?q=restaurants+in+${mapsQuery}&output=embed" width="100%" height="320" style="border:0; display:block;" allowfullscreen="" loading="lazy"></iframe>\n</div>\n\nI can suggest good restaurants using these live links:\n\n1. [Open Google Maps list](${mapsSearchUrl})\n2. [Quick Google search](${googleSearchUrl})\n3. [TripAdvisor search](${tripadvisorSearchUrl})\n\n**Sources looked at (exact links):**\n${sourceLinksBlock}`;
                     addChatMessage(foodMsg, false);
-                    speak(`Here are good restaurant options near ${locationCity}.`);
+                    const restaurantIntro = await composeApiReply('restaurant_map_card_intro', {
+                        cityName: locationCity,
+                        fullLocation: finalLocation
+                    }, {
+                        fallbackText: `Here are restaurant options near ${locationCity}.`
+                    });
+                    speak(restaurantIntro || `Here are restaurant options near ${locationCity}.`);
                     saveToHistory(text, `Restaurant search for ${finalLocation}`);
-                    askTransportSuggestionFor(locationCity);
+                    await askTransportSuggestionFor(locationCity);
                     return;
                 } catch (error) {
                     hideThinkingIndicator();
@@ -12679,22 +12509,13 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         tripadvisorSearchUrl 
                     ]); 
  
-                    const fallbackMsg = `[Food] **Top restaurant picks near ${cityName || 'your area'}** 
- 
-I had trouble getting specific recommendations, but you can search directly: 
-
-[Map] [Open Google Maps](${mapsSearchUrl}) - See nearby restaurants with ratings
-
-[Search] [Search on Google](${googleSearchUrl}) - Find reviews and articles 
- 
-[Search] [TripAdvisor search](${tripadvisorSearchUrl}) 
- 
-**Sources looked at (exact links):** 
-${sourceLinksBlock} 
- 
-[Tip] **Tip:** Look for places with 4+ stars and recent reviews!`; 
-                    addChatMessage(fallbackMsg, false);
-                    speak(`Check the search links to find restaurants in ${cityName}!`);
+                    await deliverApiReply('restaurant_search_fallback', {
+                        cityName: cityName || 'your area',
+                        mapsSearchUrl,
+                        googleSearchUrl,
+                        tripadvisorSearchUrl,
+                        sourceLinksBlock
+                    }, { historyKey: text });
                     askTransportSuggestionFor(cityName || 'this place');
                     return;
                 }
@@ -12869,9 +12690,10 @@ ${sourceLinksBlock}
                 const nominatimData = await nominatimResponse.json();
                 
                 if (!nominatimData || nominatimData.length === 0) {
-                    const errorMsg = `Hmm, I couldn't find "${cityName}". Could you try saying it a different way? Like "Boston" or "Paris, France"?`;
-                    addChatMessage(errorMsg, false);
-                    speak(errorMsg);
+                    await deliverApiReply('weather_location_not_found', {
+                        cityName,
+                        examples: ['Boston', 'Paris, France']
+                    });
                     return;
                 }
                 
@@ -12902,9 +12724,22 @@ ${sourceLinksBlock}
                         return `${index + 1}. ${name}`;
                     }).join('\n');
                     
-                    const disambigMsg = `I found multiple places called "${cityName}":\n\n${options}\n\nWhich one did you mean? You can say the full name or just the number.`;
-                    addChatMessage(disambigMsg, false);
-                    speak(`I found multiple places called ${cityName}. Which one did you mean?`);
+                    await deliverApiReply('location_disambiguation', {
+                        rawInput: cityName,
+                        options: uniqueLocations.map((loc, index) => {
+                            const addr = loc.address || {};
+                            let name = addr.city || addr.town || addr.village || addr.hamlet || loc.display_name.split(',')[0];
+                            if (addr.state) name += `, ${addr.state}`;
+                            if (addr.country) name += `, ${addr.country}`;
+                            return {
+                                index: index + 1,
+                                label: name
+                            };
+                        }),
+                        replyInstruction: 'You can say the full name or just the number.'
+                    }, {
+                        fallbackText: `I found multiple places called "${cityName}":\n\n${options}\n\nWhich one did you mean? You can say the full name or just the number.`
+                    });
                     
                     
                     window.pendingLocationChoices = uniqueLocations;
@@ -12937,9 +12772,10 @@ ${sourceLinksBlock}
                 await fetchWeather(latitude, longitude, locationName, cityName.trim());
                 
             } catch (error) {
-                const errorMsg = `Sorry, I'm having trouble looking that up right now. Mind trying again?`;
-                addChatMessage(errorMsg, false);
-                speak(errorMsg);
+                await deliverApiReply('weather_lookup_error', {
+                    cityName,
+                    error: String(error?.message || '')
+                });
             }
         }
 
@@ -12954,7 +12790,7 @@ ${sourceLinksBlock}
                 
                 const celsius = Math.round(weather.current.temperature_2m);
                 const fahrenheit = Math.round((celsius * 9/5) + 32);
-                const advice = getWeatherAdvice(weather);
+                const advice = await getWeatherAdvice(weather);
                 
                 
                 createWeatherEffect(weather.current.weather_code, celsius);
@@ -12975,29 +12811,32 @@ ${sourceLinksBlock}
                 }
                 
                 hideLoading();
-                const weatherMsg = `The temperature in ${displayLocation} is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${advice}`;
-                addChatMessage(weatherMsg, false);
-                speak(weatherMsg);
+                await deliverApiReply('weather_result', {
+                    location: displayLocation,
+                    fahrenheit,
+                    celsius,
+                    advice,
+                    weatherCode: weather?.current?.weather_code
+                });
                 
             } catch (error) {
                 hideLoading();
-                const errorMsg = "Sorry, I couldn't fetch the weather data right now. Please try again later.";
-                addChatMessage(errorMsg, false);
-                speak(errorMsg);
+                await deliverApiReply('weather_fetch_error', {
+                    error: String(error?.message || '')
+                });
             }
         }
 
-        function getWeatherAdvice(weatherData) {
+        async function getWeatherAdvice(weatherData) {
             const code = weatherData.current.weather_code;
             const temp = weatherData.current.temperature_2m;
-            
-            if (code >= 51 && code <= 67) return "It's going to rain. Don't forget your umbrella!";
-            if (code >= 71 && code <= 77) return "Snow expected! Dress warm and stay safe!";
-            if (code >= 80 && code <= 99) return "Thunderstorms possible. Stay indoors if you can!";
-            if (temp < 5) return "It's freezing outside! Bundle up with warm layers!";
-            if (temp > 30) return "Hot day ahead! Stay hydrated and seek shade!";
-            if (code === 0) return "Perfect weather! Great day to be outside!";
-            return "Have a wonderful day!";
+
+            return await composeApiReply('weather_advice', {
+                weatherCode: code,
+                temperatureCelsius: temp
+            }, {
+                fallbackText: `Weather conditions: code ${code}, temperature ${temp}C.`
+            });
         }
 
         function willItRain(weatherCode) {
@@ -13148,7 +12987,7 @@ ${sourceLinksBlock}
             };
         }
 
-        function createReminder(task, alarmTime, timeLabel) {
+        async function createReminder(task, alarmTime, timeLabel) {
             const reminder = {
                 id: Date.now(),
                 text: task,
@@ -13164,20 +13003,22 @@ ${sourceLinksBlock}
             setAlarm(reminder);
             ensureReminderNotificationPermission();
 
-            const msg = `Done. I will remind you to ${task} at ${timeLabel}.`;
-            addChatMessage(msg, false);
-            speak(msg);
+            await deliverApiReply('reminder_created', {
+                task,
+                timeLabel
+            }, { historyKey: task });
             clearReminderFlow();
         }
 
-        function createReminderFromText(text) {
+        async function createReminderFromText(text) {
             const raw = String(text || '').trim();
             if (!raw) {
                 waitingForReminder = true;
                 reminderFlowStage = 'task';
                 pendingReminderTask = '';
-                addChatMessage('For what should I remind you?', false);
-                speak('For what should I remind you?');
+                await deliverApiReply('reminder_ask_task', {
+                    userMessage: raw
+                });
                 return;
             }
 
@@ -13189,9 +13030,9 @@ ${sourceLinksBlock}
                 waitingForReminder = true;
                 reminderFlowStage = 'task';
                 pendingReminderTask = '';
-                const q = 'For what should I remind you?';
-                addChatMessage(q, false);
-                speak(q);
+                await deliverApiReply('reminder_ask_task', {
+                    userMessage: raw
+                });
                 return;
             }
 
@@ -13207,9 +13048,9 @@ ${sourceLinksBlock}
                 waitingForReminder = true;
                 reminderFlowStage = 'task';
                 pendingReminderTask = '';
-                const q = 'For what should I remind you?';
-                addChatMessage(q, false);
-                speak(q);
+                await deliverApiReply('reminder_ask_task', {
+                    userMessage: raw
+                });
                 return;
             }
 
@@ -13217,13 +13058,13 @@ ${sourceLinksBlock}
                 waitingForReminder = true;
                 reminderFlowStage = 'time';
                 pendingReminderTask = task;
-                const q = `Okay. For "${task}", when should I remind you?`;
-                addChatMessage(q, false);
-                speak(q);
+                await deliverApiReply('reminder_ask_time', {
+                    task
+                });
                 return;
             }
 
-            createReminder(task, when.alarmTime, when.label);
+            await createReminder(task, when.alarmTime, when.label);
         }
 
         async function handleReminderFollowUp(text) {
@@ -13232,34 +13073,36 @@ ${sourceLinksBlock}
 
             if (/\b(cancel|nevermind|never mind|stop)\b/i.test(input)) {
                 clearReminderFlow();
-                const msg = 'Okay, canceled reminder setup.';
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('reminder_setup_canceled', {}, {
+                    fallbackText: 'Okay, canceled reminder setup.'
+                });
                 return;
             }
 
             if (reminderFlowStage === 'task') {
                 pendingReminderTask = input.replace(/[.?!,]+$/g, '').trim();
                 if (pendingReminderTask.length < 2) {
-                    const ask = 'Please tell me what I should remind you about.';
-                    addChatMessage(ask, false);
-                    speak(ask);
+                    await deliverApiReply('reminder_ask_task_retry', {}, {
+                        fallbackText: 'Please tell me what I should remind you about.'
+                    });
                     return;
                 }
                 reminderFlowStage = 'time';
                 waitingForReminder = true;
-                const ask = `Got it. When should I remind you to ${pendingReminderTask}?`;
-                addChatMessage(ask, false);
-                speak(ask);
+                await deliverApiReply('reminder_ask_time', {
+                    task: pendingReminderTask
+                }, {
+                    fallbackText: `Got it. When should I remind you to ${pendingReminderTask}?`
+                });
                 return;
             }
 
             if (reminderFlowStage === 'time') {
                 const when = parseReminderWhen(input);
                 if (!when) {
-                    const ask = 'Please tell me a time like "at 5 PM", "in 30 minutes", or "in 2 hours".';
-                    addChatMessage(ask, false);
-                    speak(ask);
+                    await deliverApiReply('reminder_ask_time_retry', {}, {
+                        fallbackText: 'Please tell me a time like "at 5 PM", "in 30 minutes", or "in 2 hours".'
+                    });
                     return;
                 }
                 createReminder(pendingReminderTask, when.alarmTime, when.label);
@@ -13319,7 +13162,14 @@ ${sourceLinksBlock}
 
             showSystemReminderNotification(reminder);
 
-            speak(`Reminder: ${reminder.text}`);
+            void (async () => {
+                const reminderSpeech = await composeApiReply('reminder_alarm', {
+                    reminderText: reminder.text
+                }, {
+                    fallbackText: `Reminder: ${reminder.text}`
+                });
+                speak(reminderSpeech || `Reminder: ${reminder.text}`);
+            })();
         }
 
         function toggleSnoozePanel(id) {
@@ -13335,7 +13185,7 @@ ${sourceLinksBlock}
             snoozeAlarm(id, value, unit);
         }
 
-        function snoozeAlarm(id, amount = 5, unit = 'minutes') {
+        async function snoozeAlarm(id, amount = 5, unit = 'minutes') {
             const reminder = reminders.find(r => r.id === id);
             if (!reminder) return;
 
@@ -13349,9 +13199,12 @@ ${sourceLinksBlock}
 
             dismissAlarm(id);
 
-            const msg = `Snoozed for ${amount} ${unit}. I will remind you again at ${reminder.time}.`;
-            addChatMessage(msg, false);
-            speak(msg);
+            await deliverApiReply('reminder_snoozed', {
+                amount,
+                unit,
+                nextReminderTime: reminder.time,
+                task: reminder.text
+            }, { historyKey: reminder.text });
         }
 
         function dismissAlarm(id) {
@@ -13406,19 +13259,15 @@ ${sourceLinksBlock}
             updateRemindersList();
         }
 
-        function clearAllReminders() {
+        async function clearAllReminders() {
             if (reminders.length === 0) {
-                const msg = "You don't have any reminders to clear.";
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('reminder_clear_empty', {});
                 return;
             }
             reminders = [];
             saveRemindersToStorage();
             updateRemindersList();
-            const msg = "All reminders have been cleared.";
-            addChatMessage(msg, false);
-            speak(msg);
+            await deliverApiReply('reminder_clear_all', {});
         }
 
         function loadCommuteProfile() {
@@ -13488,22 +13337,21 @@ ${sourceLinksBlock}
             summary.innerHTML = rows.join('');
         }
 
-        function promptCommuteSetup() {
+        async function promptCommuteSetup() {
             const missing = [];
             if (!commuteProfile.home) missing.push('home');
             if (!commuteProfile.office) missing.push('office');
             if (!commuteProfile.arrivalTime) missing.push('arrival time');
-            const msg = missing.length
-                ? `Tell me: "my ${missing[0]} is ...". You can also say "my arrival time is 9:00 AM" and "commute mode is transit".`
-                : `Your commute profile is set. Ask "when should I leave for work?" for an estimate.`;
-            addChatMessage(msg, false);
-            speak(msg);
+            await deliverApiReply('commute_setup_prompt', {
+                missingFields: missing,
+                commuteProfile
+            });
         }
 
-        function promptTripDestination() {
-            const msg = 'Say or type "start trip to Times Square" or "start trip to office". Live trip tracking works while this website stays open.';
-            addChatMessage(msg, false);
-            speak(msg);
+        async function promptTripDestination() {
+            await deliverApiReply('trip_destination_prompt', {
+                examples: ['start trip to Times Square', 'start trip to office']
+            });
         }
 
         function loadSafetyProfile() {
@@ -13642,17 +13490,17 @@ ${sourceLinksBlock}
 
         async function estimateLeaveTime() {
             if (!commuteProfile.office) {
-                const msg = 'Set your office first. Say "my office is 123 Main Street" or "my office is downtown Seattle".';
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('commute_missing_office', {
+                    examples: ['my office is 123 Main Street', 'my office is downtown Seattle']
+                });
                 return;
             }
 
             const destination = await geocodeLocationName(commuteProfile.office);
             if (!destination) {
-                const msg = 'I could not resolve your office location yet. Try a more specific office address.';
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('commute_office_unresolved', {
+                    office: commuteProfile.office
+                });
                 return;
             }
 
@@ -13674,9 +13522,9 @@ ${sourceLinksBlock}
             }
 
             if (!origin) {
-                const msg = 'I need your home location or your current GPS location to estimate when to leave.';
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('commute_missing_origin', {
+                    home: commuteProfile.home || null
+                });
                 return;
             }
 
@@ -13708,25 +13556,29 @@ ${sourceLinksBlock}
             const arrival = buildArrivalDate(commuteProfile.arrivalTime);
             const leave = new Date(arrival.getTime() - ((travelMinutes + prepBuffer) * 60 * 1000));
 
-            const msg = `Estimated leave time: ${leave.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. I used ${originLabel}, about ${routeMiles.toFixed(1)} road miles, and ${trafficLabel} for ${commuteProfile.mode} mode.`;
-            addChatMessage(msg, false);
-            speak(`Estimated leave time is ${leave.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`);
+            await deliverApiReply('commute_leave_estimate', {
+                leaveTime: leave.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+                originLabel,
+                routeMiles: Number(routeMiles.toFixed(1)),
+                trafficLabel,
+                commuteMode: commuteProfile.mode
+            });
         }
 
         async function startForegroundTrip(destinationInput) {
             const destinationText = parseDestinationAlias(destinationInput);
             if (!destinationText) {
-                const msg = 'I need a destination. Try "start trip to office" or "start trip to Central Park".';
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('trip_missing_destination', {
+                    examples: ['start trip to office', 'start trip to Central Park']
+                });
                 return;
             }
 
             const destination = await geocodeLocationName(destinationText);
             if (!destination) {
-                const msg = 'I could not resolve that destination. Try a more specific place name or address.';
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('trip_destination_unresolved', {
+                    destinationInput: destinationText
+                });
                 return;
             }
 
@@ -13734,9 +13586,9 @@ ${sourceLinksBlock}
             try {
                 startPosition = await getCurrentPositionAsync();
             } catch (error) {
-                const msg = 'Live trip mode needs GPS permission while the website stays open.';
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('trip_requires_gps', {
+                    destination: destinationText
+                });
                 return;
             }
 
@@ -13762,9 +13614,9 @@ ${sourceLinksBlock}
             };
             renderTripCard();
 
-            const msg = `Live trip started to ${destinationText}. I will track distance, ETA drift, and warn if you may be off route while this website stays open.`;
-            addChatMessage(msg, false);
-            speak(msg);
+            await deliverApiReply('trip_started', {
+                destination: destinationText
+            });
 
             tripState.watchId = navigator.geolocation.watchPosition(
                 (position) => handleTripPositionUpdate(position),
@@ -13805,9 +13657,11 @@ ${sourceLinksBlock}
             if (tripState.lastDistanceMiles != null && roadMilesLeft > tripState.lastDistanceMiles + 0.22) {
                 tripState.offRouteDetections += 1;
                 if (tripState.offRouteDetections <= 2) {
-                    const warn = `You may be off route. Distance to ${tripState.destinationText} increased to ${roadMilesLeft.toFixed(2)} miles.`;
-                    addChatMessage(warn, false);
-                    speak(warn);
+                    const warn = `Distance to ${tripState.destinationText} increased to ${roadMilesLeft.toFixed(2)} miles.`;
+                    deliverApiReply('trip_off_route_warning', {
+                        destination: tripState.destinationText,
+                        distanceMiles: Number(roadMilesLeft.toFixed(2))
+                    }, { speak: true });
                     maybeNotifyTripEvent('Trip warning', warn);
                 }
             }
@@ -13817,9 +13671,11 @@ ${sourceLinksBlock}
 
             if (!tripState.closeAlertSent && (roadMilesLeft <= 0.35 || etaMinutes <= 3)) {
                 tripState.closeAlertSent = true;
-                const closeMsg = `You are close to ${tripState.destinationText}. About ${roadMilesLeft.toFixed(2)} miles left.`;
-                addChatMessage(closeMsg, false);
-                speak(closeMsg);
+                const closeMsg = `About ${roadMilesLeft.toFixed(2)} miles left to ${tripState.destinationText}.`;
+                deliverApiReply('trip_near_destination', {
+                    destination: tripState.destinationText,
+                    distanceMiles: Number(roadMilesLeft.toFixed(2))
+                }, { speak: true });
                 maybeNotifyTripEvent('Near destination', closeMsg);
             }
 
@@ -13848,9 +13704,7 @@ ${sourceLinksBlock}
             };
             renderTripCard();
             if (announce && hadTrip) {
-                const msg = 'Live trip tracking stopped.';
-                addChatMessage(msg, false);
-                speak(msg);
+                deliverApiReply('trip_stopped', {}, { speak: true });
             }
         }
 
@@ -13873,9 +13727,9 @@ ${sourceLinksBlock}
                     copyToClipboard(shareText);
                 }
             } catch (error) {
-                const msg = 'I could not access GPS right now. Check location permission and try again.';
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('gps_access_error', {
+                    feature: 'location_sharing'
+                });
             }
         }
 
@@ -13969,16 +13823,16 @@ ${sourceLinksBlock}
             return true;
         }
 
-        function handleNameInput(text) {
+        async function handleNameInput(text) {
             let name = String(text || '').trim();
             name = name.replace(/^(my name is|i'm|i am|it's|call me)\s+/i, '');
             name = name.replace(/[?.!,]$/g, '').trim();
 
             if (!isLikelyPersonalName(name)) {
                 waitingForName = true;
-                const msg = 'Please share only your name. Example: "Arun" or "Arun Kumar".';
-                addChatMessage(msg, false);
-                speak(msg);
+                await deliverApiReply('name_input_retry', {}, {
+                    fallbackText: 'Please share only your name. Example: "Arun" or "Arun Kumar".'
+                });
                 return;
             }
 
@@ -13991,9 +13845,11 @@ ${sourceLinksBlock}
             userName = name;
             saveUserData();
 
-            const response = `Nice to meet you, ${userName}! How can I help you today?`;
-            addChatMessage(response, false);
-            speak(response);
+            await deliverApiReply('name_input_saved', {
+                userName
+            }, {
+                fallbackText: `Nice to meet you, ${userName}! How can I help you today?`
+            });
         }
 
         function handleMemoryStorage(text) {
@@ -14041,13 +13897,14 @@ ${sourceLinksBlock}
                 memoryStore[normalizedThing] = fullLocation;
                 saveUserData();
                 
-                const msg = `Got it! I'll remember that your ${normalizedThing} ${normalizedThing.endsWith('s') ? 'are' : 'is'} ${fullLocation}.`;
-                addChatMessage(msg, false);
-                speak(msg);
+                deliverApiReply('memory_saved', {
+                    thing: normalizedThing,
+                    location: fullLocation
+                }, { speak: true });
             } else {
-                const msg = "I didn't quite catch that. Try saying something like 'My car keys are on the kitchen counter'";
-                addChatMessage(msg, false);
-                speak(msg);
+                deliverApiReply('memory_save_prompt_retry', {
+                    example: 'My car keys are on the kitchen counter'
+                }, { speak: true });
             }
         }
 
@@ -14131,18 +13988,17 @@ ${sourceLinksBlock}
                 }
                 
                 if (location) {
-                    const msg = `You told me your ${thing} ${thing.endsWith('s') ? 'are' : 'is'} ${location}.`;
-                    addChatMessage(msg, false);
-                    speak(msg);
+                    deliverApiReply('memory_recall_found', {
+                        thing,
+                        location
+                    }, { speak: true });
                 } else {
-                    const msg = `I don't remember where your ${thing} ${thing.endsWith('s') ? 'are' : 'is'}. You haven't told me about that yet.`;
-                    addChatMessage(msg, false);
-                    speak(msg);
+                    deliverApiReply('memory_recall_missing', {
+                        thing
+                    }, { speak: true });
                 }
             } else {
-                const msg = "What are you looking for?";
-                addChatMessage(msg, false);
-                speak(msg);
+                deliverApiReply('memory_recall_prompt', {}, { speak: true });
             }
         }
 
@@ -14693,6 +14549,7 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
+
 </script>
 </body>
 </html>
