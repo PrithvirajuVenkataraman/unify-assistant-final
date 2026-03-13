@@ -3712,7 +3712,7 @@ Format your response EXACTLY like this:
 async function processTranslatorMode(text) {
     const langInfo = supportedLanguages[translatorLanguage];
     if (!langInfo) {
-        deactivateTranslatorMode();
+        await deactivateTranslatorMode();
         return;
     }
 
@@ -6319,9 +6319,9 @@ async function sendTextInput() {
                     waitingForLocation = false;
                     getWeatherByCity(cleanLocation);
                 } else if (waitingForReminder) {
-                    handleReminderFollowUp(outgoingText);
+                    await handleReminderFollowUp(outgoingText);
                 } else {
-                    processCommand(normalizedOutgoingText);
+                    await processCommand(normalizedOutgoingText);
                 }
                 
                 input.value = '';
@@ -11618,13 +11618,13 @@ Rules:
 
             const supportModeMatch = cleanText.match(/\b(?:set|change|switch)\s+support\s+mode\s+(balanced|supportive|debate)\b/i);
             if (supportModeMatch) {
-                setSupportModeLock(supportModeMatch[1].toLowerCase());
+                await setSupportModeLock(supportModeMatch[1].toLowerCase());
                 return;
             }
 
             const responseLengthMatch = cleanText.match(/\b(?:set|change|switch)\s+(?:response\s+)?length\s+(short|normal|detailed)\b/i);
             if (responseLengthMatch) {
-                setResponseLength(responseLengthMatch[1].toLowerCase());
+                await setResponseLength(responseLengthMatch[1].toLowerCase());
                 return;
             }
 
@@ -11632,7 +11632,7 @@ Rules:
             if (responseFormatMatch) {
                 const rawMode = responseFormatMatch[1].toLowerCase();
                 const mode = rawMode.includes('step') ? 'steps' : (rawMode.includes('bullet') ? 'bullet' : 'paragraph');
-                setResponseFormat(mode);
+                await setResponseFormat(mode);
                 return;
             }
 
@@ -14549,6 +14549,7 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
+
 
 </script>
 </body>
