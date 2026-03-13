@@ -5023,7 +5023,7 @@ async function handleNameCorrection(text) {
             // Ensure no queued/leftover speech survives a refresh.
             stopAllSpeechPlayback();
 
-            await requestMicrophonePermission(); 
+            requestMicrophonePermission().catch(() => {});
             loadUserData(); 
             loadNoiseFilterSettings(); 
             loadAssistantModes();
@@ -10743,7 +10743,7 @@ async function retrieveUniversalEntitySources(pipeline, controller) {
     return deduped;
 }
 
-function publishUniversalKnownFact(pipeline, badge = 'Verified sports record') {
+async function publishUniversalKnownFact(pipeline, badge = 'Verified sports record') {
     if (!pipeline?.knownFact) return false;
     const message = formatKnownSportsFactMessage(pipeline.knownFact, pipeline.conciseFactQuery);
     addVerifiedAssistantMessage(message, badge);
@@ -10752,7 +10752,7 @@ function publishUniversalKnownFact(pipeline, badge = 'Verified sports record') {
     return true;
 }
 
-function publishUniversalVerificationFallback(pipeline, speechText = 'I could not verify that fact right now.') {
+async function publishUniversalVerificationFallback(pipeline, speechText = 'I could not verify that fact right now.') {
     const fallbackMsg = await buildEntityVerificationFallback(pipeline.userText, pipeline.entityIntent, pipeline.intent);
     addChatMessage(fallbackMsg, false);
     speak(speechText);
@@ -10760,7 +10760,7 @@ function publishUniversalVerificationFallback(pipeline, speechText = 'I could no
     return true;
 }
 
-function publishUniversalConsensusAnswer(pipeline, agreement) {
+async function publishUniversalConsensusAnswer(pipeline, agreement) {
     if (!agreement?.agreed || !agreement?.top) return false;
     const directAnswer = formatConsensusAnswer(pipeline.entityIntent, agreement);
     const sourceLines = agreement.top.sources
@@ -10774,7 +10774,7 @@ function publishUniversalConsensusAnswer(pipeline, agreement) {
     return true;
 }
 
-function publishUniversalMixedEvidence(pipeline, results) {
+async function publishUniversalMixedEvidence(pipeline, results) {
     const sourceLines = results
         .slice(0, 5)
         .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
@@ -12029,7 +12029,7 @@ Rules:
                                     fetchWeather(lat, lon, "your location");
                                 }
                             },
-                            (error) => {
+                            async (error) => {
                                 
                                 hideThinkingIndicator();
                                 let askMsg;
@@ -14550,6 +14550,24 @@ document.head.appendChild(style);
 
 loadHistory();
 
+/*
+1. TYPING INDICATOR:
+   - Call showTypingIndicator() before AI response
+   - Call hideTypingIndicator() before showing response
+
+2. EDIT MESSAGES:
+   - Integrated in addChatMessage() with edit button on user messages
+   - Editing a message regenerates the response from that turn
+
+3. CONVERSATION HISTORY:
+   - Call saveToHistory(userMsg, aiMsg) after each exchange
+   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
+   - Search, export, and clear functions included
+
+4. ERROR FEEDBACK:
+   - Call showError("Error message") instead of addChatMessage for errors
+   - Visual shake animation + auto-dismiss
+*/
 
 </script>
 </body>
