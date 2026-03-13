@@ -8103,7 +8103,27 @@ function clampSongCount(value, fallback = 5) {
 }
 
 function getCuratedSongsForArtist(artist) {
-    return [];
+    const normalized = toCompactLower(artist);
+    if (!normalized) return [];
+
+    const curated = {
+        'ed sheeran': [
+            { song: 'Shape of You', work: 'Divide', reason: 'One of his biggest crossover hits.' },
+            { song: 'Perfect', work: 'Divide', reason: 'A signature romantic ballad.' },
+            { song: 'Thinking Out Loud', work: 'x', reason: 'One of his most recognizable love songs.' },
+            { song: 'Photograph', work: 'x', reason: 'A fan-favorite acoustic pop song.' },
+            { song: 'Castle on the Hill', work: 'Divide', reason: 'A major anthem from his catalog.' },
+            { song: 'Bad Habits', work: '=', reason: 'A huge modern pop single.' },
+            { song: 'Shivers', work: '=', reason: 'Another major upbeat hit.' },
+            { song: 'The A Team', work: '+', reason: 'An early breakout song.' },
+            { song: 'Lego House', work: '+', reason: 'A well-known early Ed Sheeran track.' },
+            { song: 'Afterglow', work: 'Single', reason: 'A popular later-era standalone release.' },
+            { song: 'Galway Girl', work: 'Divide', reason: 'One of his most streamed upbeat songs.' },
+            { song: 'I See Fire', work: 'The Hobbit: The Desolation of Smaug', reason: 'A standout soundtrack song.' }
+        ]
+    };
+
+    return curated[normalized] ? curated[normalized].map(item => ({ ...item })) : [];
 }
 
 function getCuratedLanguageEraHits(language, era) {
@@ -8567,6 +8587,20 @@ async function handleArtistSongRequest(text) {
         const msg = 'Tell me the artist name and I will suggest good songs. Example: "Best songs of AR Rahman".';
         addChatMessage(msg, false);
         speak(msg);
+        return;
+    }
+
+    const curatedSongs = getCuratedSongsForArtist(artist).slice(0, requestedCount);
+    if (curatedSongs.length) {
+        const curatedReply = formatMusicSongReply(artist, requestedCount, curatedSongs, true);
+        addModelAssistantMessage(curatedReply, 'Curated song picks');
+        const curatedSpeech = await composeApiReply('artist_song_general', {
+            artist
+        }, {
+            fallbackText: `Here are song suggestions for ${artist}.`
+        });
+        speak(curatedSpeech || `Here are song suggestions for ${artist}.`);
+        saveToHistory(text, curatedReply);
         return;
     }
 
