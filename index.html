@@ -7692,12 +7692,12 @@ function extractRequestedEras(text) {
 function extractRequestedMusicLanguages(text) {
     const raw = String(text || '').toLowerCase();
     const aliases = {
-        tamil: ['tamil', 'tamizh'],
+        tamil: ['tamil', 'tamizh','Tamil'],
         hindi: ['hindi', 'bollywood'],
         telugu: ['telugu', 'tollywood'],
         kannada: ['kannada'],
         malayalam: ['malayalam'],
-        english: ['english'],
+        english: ['english','English'],
         spanish: ['spanish'],
         french: ['french'],
         arabic: ['arabic'],
@@ -7860,97 +7860,6 @@ const SONG_MOOD_GAME_QUESTIONS = [
     }
 ];
 
-const SONG_MOOD_GAME_FALLBACKS = {
-    tamil: {
-        heavy: [
-            { song: 'Nenjukkul Peidhidum', artist: 'Harris Jayaraj', work: 'Vaaranam Aayiram' },
-            { song: 'Uyirin Uyire', artist: 'Harris Jayaraj', work: 'Kaakha Kaakha' },
-            { song: 'Munbe Vaa', artist: 'A. R. Rahman', work: 'Sillunu Oru Kadhal' }
-        ],
-        calm: [
-            { song: 'Ilaya Nila', artist: 'Ilaiyaraaja', work: 'Payanangal Mudivathillai' },
-            { song: 'Vaseegara', artist: 'Harris Jayaraj', work: 'Minnale' },
-            { song: 'Oru Maalai', artist: 'Harris Jayaraj', work: 'Ghajini' }
-        ],
-        romantic: [
-            { song: 'Vaseegara', artist: 'Harris Jayaraj', work: 'Minnale' },
-            { song: 'Munbe Vaa', artist: 'A. R. Rahman', work: 'Sillunu Oru Kadhal' },
-            { song: 'Anjali Anjali', artist: 'Ilaiyaraaja', work: 'Anjali' }
-        ],
-        hype: [
-            { song: 'Mukkala Muqabla', artist: 'A. R. Rahman', work: 'Kadhalan' },
-            { song: 'Aalaporan Tamizhan', artist: 'A. R. Rahman', work: 'Mersal' },
-            { song: 'Vaathi Coming', artist: 'Anirudh Ravichander', work: 'Master' }
-        ]
-    },
-    hindi: {
-        heavy: [
-            { song: 'Kal Ho Naa Ho', artist: 'Shankar-Ehsaan-Loy', work: 'Kal Ho Naa Ho' },
-            { song: 'Tere Liye', artist: 'Madan Mohan / Sanjeev Kohli', work: 'Veer-Zaara' },
-            { song: 'Agar Tum Saath Ho', artist: 'A. R. Rahman', work: 'Tamasha' }
-        ],
-        calm: [
-            { song: 'Pehla Nasha', artist: 'Jatin-Lalit', work: 'Jo Jeeta Wohi Sikandar' },
-            { song: 'Iktara', artist: 'Amit Trivedi', work: 'Wake Up Sid' },
-            { song: 'Kho Gaye Hum Kahan', artist: 'Jasleen Royal / Prateek Kuhad', work: 'Baar Baar Dekho' }
-        ],
-        romantic: [
-            { song: 'Tujhe Dekha To', artist: 'Jatin-Lalit', work: 'Dilwale Dulhania Le Jayenge' },
-            { song: 'Tum Se Hi', artist: 'Pritam', work: 'Jab We Met' },
-            { song: 'Raabta', artist: 'Pritam', work: 'Agent Vinod' }
-        ],
-        hype: [
-            { song: 'Chaiyya Chaiyya', artist: 'A. R. Rahman', work: 'Dil Se' },
-            { song: 'Kajra Re', artist: 'Shankar-Ehsaan-Loy', work: 'Bunty Aur Babli' },
-            { song: 'Malhari', artist: 'Sanjay Leela Bhansali', work: 'Bajirao Mastani' }
-        ]
-    },
-    telugu: {
-        heavy: [
-            { song: 'Priyatama Neevachata Kusalama', artist: 'Ilaiyaraaja', work: 'Jagadeka Veerudu Athiloka Sundari' },
-            { song: 'Adiga Adiga', artist: 'Gopi Sundar', work: 'Ninnu Kori' },
-            { song: 'Inthandham', artist: 'Vishal Chandrashekhar', work: 'Sita Ramam' }
-        ],
-        calm: [
-            { song: 'Nuvvostanante', artist: 'Devi Sri Prasad', work: 'Varsham' },
-            { song: 'Chilipiga', artist: 'Harris Jayaraj', work: 'Orange' },
-            { song: 'Yamaho Nee', artist: 'Ilaiyaraaja', work: 'Jagadeka Veerudu Athiloka Sundari' }
-        ],
-        romantic: [
-            { song: 'Cheliya Cheliya', artist: 'Koti', work: 'Nuvvu Naaku Nachav' },
-            { song: 'Inthandham', artist: 'Vishal Chandrashekhar', work: 'Sita Ramam' },
-            { song: 'Nuvvostanante', artist: 'Devi Sri Prasad', work: 'Varsham' }
-        ],
-        hype: [
-            { song: 'Butta Bomma', artist: 'S. Thaman', work: 'Ala Vaikunthapurramuloo' },
-            { song: 'Ramuloo Ramulaa', artist: 'S. Thaman', work: 'Ala Vaikunthapurramuloo' },
-            { song: 'Saami Saami', artist: 'Devi Sri Prasad', work: 'Pushpa' }
-        ]
-    },
-    english: {
-        heavy: [
-            { song: 'Fix You', artist: 'Coldplay', work: 'X&Y' },
-            { song: 'Someone Like You', artist: 'Adele', work: '21' },
-            { song: 'The Night We Met', artist: 'Lord Huron', work: 'Strange Trails' }
-        ],
-        calm: [
-            { song: 'Yellow', artist: 'Coldplay', work: 'Parachutes' },
-            { song: 'Ocean Eyes', artist: 'Billie Eilish', work: 'Ocean Eyes' },
-            { song: 'Until I Found You', artist: 'Stephen Sanchez', work: 'Easy On My Eyes' }
-        ],
-        romantic: [
-            { song: 'Perfect', artist: 'Ed Sheeran', work: 'Divide' },
-            { song: 'Lover', artist: 'Taylor Swift', work: 'Lover' },
-            { song: 'Can’t Help Falling in Love', artist: 'Elvis Presley', work: 'Blue Hawaii' }
-        ],
-        hype: [
-            { song: 'Blinding Lights', artist: 'The Weeknd', work: 'After Hours' },
-            { song: 'Levitating', artist: 'Dua Lipa', work: 'Future Nostalgia' },
-            { song: 'Uptown Funk', artist: 'Mark Ronson ft. Bruno Mars', work: 'Uptown Special' }
-        ]
-    }
-};
-
 function isSongMoodGameRequest(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -8001,26 +7910,6 @@ function getSongMoodGameProfileSummary(state) {
         if (option) parts.push(`${question.key}: ${option.label}`);
     }
     return parts.join(', ');
-}
-
-function buildSongMoodGameFallbackRecommendation(state) {
-    const answers = state?.answers || {};
-    const language = answers.language || 'english';
-    const mood = answers.mood || 'calm';
-    const library = SONG_MOOD_GAME_FALLBACKS[language] || SONG_MOOD_GAME_FALLBACKS.english;
-    const picks = Array.isArray(library[mood]) && library[mood].length ? library[mood] : library.calm;
-    const [primary, ...rest] = picks;
-    return {
-        song: primary?.song || 'Yellow',
-        artist: primary?.artist || 'Coldplay',
-        work: primary?.work || 'Parachutes',
-        why: `Based on your vibe, this feels like the best fit: ${getSongMoodGameProfileSummary(state)}.`,
-        backups: rest.slice(0, 2).map(item => ({
-            song: item.song,
-            artist: item.artist,
-            work: item.work
-        }))
-    };
 }
 
 function formatSongMoodGameResult(result) {
@@ -8116,17 +8005,13 @@ Rules:
         saveToHistory(triggerText, finalMsg);
         return true;
     } catch (error) {
-        const fallback = buildSongMoodGameFallbackRecommendation(state);
-        const finalMsg = formatSongMoodGameResult(fallback);
-        addChatMessage(finalMsg, false);
-        const songSpeech = await composeApiReply('song_game_result', {
-            song: fallback.song,
-            artist: fallback.artist || ''
+        await deliverApiReply('song_game_unavailable', {
+            profile: getSongMoodGameProfileSummary(state),
+            error: String(error?.message || error)
         }, {
-            fallbackText: `Your situation song is ${fallback.song}.`
+            historyKey: triggerText,
+            fallbackText: 'I could not generate a song-game result right now.'
         });
-        speak(songSpeech || `Your situation song is ${fallback.song}.`);
-        saveToHistory(triggerText, finalMsg);
         return true;
     } finally {
         hideThinkingIndicator();
@@ -8217,105 +8102,12 @@ function clampSongCount(value, fallback = 5) {
     return Math.max(1, Math.min(12, n));
 }
 
-const CURATED_ARTIST_SONGS = {
-    'ilayaraja': [
-        { song: 'Ilaya Nila', work: 'Payanangal Mudivathillai' },
-        { song: 'Janani Janani', work: 'Thai Moogambikai' },
-        { song: 'Thenpaandi Cheemayile', work: 'Nayakan' },
-        { song: 'Sundari Kannal Oru Sethi', work: 'Thalapathi' },
-        { song: 'Anjali Anjali', work: 'Anjali' },
-        { song: 'Raja Raja Chozhan Naan', work: 'Rettai Vaal Kuruvi' }
-    ],
-    'ilaiyaraja': [
-        { song: 'Ilaya Nila', work: 'Payanangal Mudivathillai' },
-        { song: 'Janani Janani', work: 'Thai Moogambikai' },
-        { song: 'Thenpaandi Cheemayile', work: 'Nayakan' },
-        { song: 'Sundari Kannal Oru Sethi', work: 'Thalapathi' },
-        { song: 'Anjali Anjali', work: 'Anjali' },
-        { song: 'Raja Raja Chozhan Naan', work: 'Rettai Vaal Kuruvi' }
-    ],
-    'ilaiyaraaja': [
-        { song: 'Ilaya Nila', work: 'Payanangal Mudivathillai' },
-        { song: 'Janani Janani', work: 'Thai Moogambikai' },
-        { song: 'Thenpaandi Cheemayile', work: 'Nayakan' },
-        { song: 'Sundari Kannal Oru Sethi', work: 'Thalapathi' },
-        { song: 'Anjali Anjali', work: 'Anjali' },
-        { song: 'Raja Raja Chozhan Naan', work: 'Rettai Vaal Kuruvi' }
-    ],
-    'isaignani ilaiyaraja': [
-        { song: 'Ilaya Nila', work: 'Payanangal Mudivathillai' },
-        { song: 'Janani Janani', work: 'Thai Moogambikai' },
-        { song: 'Thenpaandi Cheemayile', work: 'Nayakan' },
-        { song: 'Sundari Kannal Oru Sethi', work: 'Thalapathi' },
-        { song: 'Anjali Anjali', work: 'Anjali' },
-        { song: 'Raja Raja Chozhan Naan', work: 'Rettai Vaal Kuruvi' }
-    ],
-    'harris jayaraj': [
-        { song: 'Vaseegara', work: 'Minnale' },
-        { song: 'Oru Maalai', work: 'Ghajini' },
-        { song: 'Uyirin Uyire', work: 'Kaakha Kaakha' },
-        { song: 'Nenjukkul Peidhidum', work: 'Vaaranam Aayiram' },
-        { song: 'Mudhal Mazhai', work: 'Bheema' },
-        { song: 'Ava Enna', work: 'Vaaranam Aayiram' }
-    ]
-};
-
-const CURATED_LANGUAGE_ERA_HITS = {
-    tamil: {
-        1990: [
-            { song: 'Mukkala Muqabla', work: 'Kadhalan', artist: 'A. R. Rahman' },
-            { song: 'Thanga Thamarai', work: 'Minsara Kanavu', artist: 'A. R. Rahman' },
-            { song: 'Ennavale Adi Ennavale', work: 'Kadhalan', artist: 'A. R. Rahman' },
-            { song: 'Poovukkul Olinthirukkum', work: 'Jeans', artist: 'A. R. Rahman' }
-        ],
-        2000: [
-            { song: 'Vaseegara', work: 'Minnale', artist: 'Harris Jayaraj' },
-            { song: 'Munbe Vaa', work: 'Sillunu Oru Kadhal', artist: 'A. R. Rahman' },
-            { song: 'Suttrum Vizhi', work: 'Ghajini', artist: 'Harris Jayaraj' },
-            { song: 'Nenjukkul Peidhidum', work: 'Vaaranam Aayiram', artist: 'Harris Jayaraj' }
-        ]
-    },
-    hindi: {
-        1990: [
-            { song: 'Pehla Nasha', work: 'Jo Jeeta Wohi Sikandar', artist: 'Jatin-Lalit' },
-            { song: 'Tujhe Dekha To', work: 'Dilwale Dulhania Le Jayenge', artist: 'Jatin-Lalit' },
-            { song: 'Chaiyya Chaiyya', work: 'Dil Se', artist: 'A. R. Rahman' },
-            { song: 'Humma Humma', work: 'Bombay', artist: 'A. R. Rahman' }
-        ],
-        2000: [
-            { song: 'Kal Ho Naa Ho', work: 'Kal Ho Naa Ho', artist: 'Shankar-Ehsaan-Loy' },
-            { song: 'Mitwa', work: 'Kabhi Alvida Naa Kehna', artist: 'Shankar-Ehsaan-Loy' },
-            { song: 'Kajra Re', work: 'Bunty Aur Babli', artist: 'Shankar-Ehsaan-Loy' },
-            { song: 'Tere Liye', work: 'Veer-Zaara', artist: 'Madan Mohan / Sanjeev Kohli' }
-        ]
-    },
-    telugu: {
-        1990: [
-            { song: 'Priyatama Neevachata Kusalama', work: 'Jagadeka Veerudu Athiloka Sundari', artist: 'Ilaiyaraaja' },
-            { song: 'Andamaina Premarani', work: 'Premikudu', artist: 'A. R. Rahman' },
-            { song: 'Yamaho Nee', work: 'Jagadeka Veerudu Athiloka Sundari', artist: 'Ilaiyaraaja' },
-            { song: 'Abbanee Teeyani Debba', work: 'Jagadeka Veerudu Athiloka Sundari', artist: 'Ilaiyaraaja' }
-        ],
-        2000: [
-            { song: 'Nuvvostanante', work: 'Varsham', artist: 'Devi Sri Prasad' },
-            { song: 'Aadavari Matalaku', work: 'Kushi', artist: 'Mani Sharma' },
-            { song: 'Cheliya Cheliya', work: 'Nuvvu Naaku Nachav', artist: 'Koti' },
-            { song: 'Chilipiga', work: 'Orange', artist: 'Harris Jayaraj' }
-        ]
-    }
-};
-
 function getCuratedSongsForArtist(artist) {
-    const key = String(artist || '').toLowerCase().trim();
-    if (!key) return [];
-    return Array.isArray(CURATED_ARTIST_SONGS[key]) ? CURATED_ARTIST_SONGS[key] : [];
+    return [];
 }
 
 function getCuratedLanguageEraHits(language, era) {
-    const lang = String(language || '').toLowerCase().trim();
-    const decade = Number(era);
-    if (!lang || !Number.isFinite(decade)) return [];
-    return CURATED_LANGUAGE_ERA_HITS?.[lang]?.[decade] || [];
+    return [];
 }
 
 function formatLanguageEraHitsReply(intent, eraBuckets, fallback = false) {
@@ -8480,35 +8272,6 @@ Rules:
 async function handleEraLanguageHitsBlendRequest(text) {
     const intent = extractEraLanguageBlendIntent(text);
 
-    const curatedBuckets = [];
-    for (const era of intent.eras) {
-        const collected = [];
-        for (const lang of intent.languages) {
-            const candidates = getCuratedLanguageEraHits(lang, era);
-            for (const item of candidates) {
-                if (intent.artist) {
-                    const itemArtist = String(item.artist || '').toLowerCase();
-                    const wantedArtist = intent.artist.toLowerCase();
-                    if (!itemArtist.includes(wantedArtist) && !wantedArtist.includes(itemArtist)) continue;
-                }
-                collected.push(item);
-            }
-        }
-        if (collected.length) {
-            curatedBuckets.push({ era, items: collected });
-        }
-    }
-
-    const exactCurated = normalizeEraBucketsToExactCount(curatedBuckets, intent);
-    if (exactCurated) {
-        const msg = formatLanguageEraHitsReply(intent, exactCurated, false);
-        const card = renderLanguageEraHitsCard(intent, exactCurated, false);
-        addChatMessage(card, false, false);
-        await speakApiReply('language_era_blend_ready', {}, 'Here is your language and era hits blend.');
-        saveToHistory(text, msg);
-        return;
-    }
-
     showThinkingIndicator('[Music] Building era blend hits...');
     try {
         const aiBuckets = await buildEraLanguageHitsWithAI(intent);
@@ -8636,6 +8399,118 @@ Rules:
     return items;
 }
 
+async function fetchSongsFromVerifiedSources(artist, requestedCount) {
+    const safeArtist = String(artist || '').trim();
+    if (!safeArtist) return { items: [], sources: [] };
+
+    const searchResponse = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            query: `${safeArtist} best songs top tracks official discography reviews`,
+            maxResults: 7
+        })
+    });
+
+    if (!searchResponse.ok) {
+        throw new Error('verified music search failed');
+    }
+
+    const searchData = await searchResponse.json();
+    const snippets = (Array.isArray(searchData?.results) ? searchData.results : [])
+        .filter(r => {
+            const title = String(r?.title || '').trim();
+            const url = String(r?.url || '').trim();
+            return !!title && /^https?:\/\//i.test(url);
+        })
+        .slice(0, 7);
+
+    if (snippets.length < 4) {
+        throw new Error('not enough verification sources');
+    }
+
+    const snippetsBlock = snippets
+        .map((r, idx) => `${idx + 1}. TITLE: ${r.title}\nURL: ${r.url}\nSNIPPET: ${r.description}`)
+        .join('\n\n');
+
+    const verifyPrompt = `You are verifying popular songs for an artist using multiple web sources.
+
+Artist: "${safeArtist}"
+
+Return strict JSON only in this schema:
+{
+  "artist": "<artist>",
+  "songs": [
+    {
+      "song": "<song name>",
+      "work": "<album, film, or single>",
+      "reason": "<short grounded reason>",
+      "evidenceIds": [1,2]
+    }
+  ]
+}
+
+Rules:
+- Give up to ${requestedCount} songs.
+- Use only the sources below.
+- Every song must have at least one evidence id.
+- Prefer songs that are widely recognized across multiple sources.
+- Do not invent titles, albums, or evidence ids.
+- Output valid JSON only.
+
+Sources:
+${snippetsBlock}`;
+
+    const verifyResponse = await fetch('/api/chat-groq', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            message: verifyPrompt,
+            systemPrompt: 'You are a strict fact verifier. Output valid JSON only.'
+        })
+    });
+
+    if (!verifyResponse.ok) {
+        throw new Error('verified song extraction failed');
+    }
+
+    const verifyData = await verifyResponse.json();
+    const parsed = extractJsonObject(verifyData?.response || verifyData?.text || '');
+    const songs = Array.isArray(parsed?.songs) ? parsed.songs : [];
+    if (!songs.length) {
+        throw new Error('verified song extraction returned no songs');
+    }
+
+    const items = [];
+    for (const rawItem of songs.slice(0, requestedCount)) {
+        const song = String(rawItem?.song || '').trim();
+        const work = String(rawItem?.work || '').trim();
+        const reason = String(rawItem?.reason || '').trim();
+        const ids = Array.isArray(rawItem?.evidenceIds) ? rawItem.evidenceIds : [];
+        if (!song) continue;
+
+        const mapped = ids
+            .map(id => Number(id))
+            .filter(n => Number.isFinite(n) && n >= 1 && n <= snippets.length)
+            .map(n => snippets[n - 1]);
+
+        if (!mapped.length) continue;
+
+        items.push({
+            song,
+            work,
+            workVerified: !!work && isWorkMentionedInEvidence(work, mapped),
+            reason
+        });
+    }
+
+    if (!items.length) {
+        throw new Error('verified songs could not be grounded');
+    }
+
+    return { items, sources: snippets };
+}
+
 function formatMusicSongReply(artist, requestedCount, items, fallback = false) {
     const safeArtist = String(artist || 'Unknown artist').trim();
     const count = clampSongCount(requestedCount, 5);
@@ -8695,27 +8570,23 @@ async function handleArtistSongRequest(text) {
         return;
     }
 
-    const curatedSongs = getCuratedSongsForArtist(artist);
-    if (curatedSongs.length) {
-        const curatedMsg = formatMusicSongReply(
-            artist,
-            requestedCount,
-            curatedSongs.slice(0, requestedCount).map(item => ({
-                song: item.song,
-                work: item.work,
-                reason: 'Verified pick'
-            })),
-            false
-        );
-        addChatMessage(curatedMsg, false);
-        const curatedSpeech = await composeApiReply('artist_song_verified', {
-            artist
-        }, {
-            fallbackText: `Here are verified song suggestions for ${artist}.`
-        });
-        speak(curatedSpeech || `Here are verified song suggestions for ${artist}.`);
-        saveToHistory(text, curatedMsg);
-        return;
+    try {
+        const verifiedSongs = await fetchSongsFromVerifiedSources(artist, requestedCount);
+        if (verifiedSongs.items.length) {
+            const sourceLines = formatLiveSourceLinks(verifiedSongs.sources, 7);
+            const catalogMsg = `${formatMusicSongReply(artist, requestedCount, verifiedSongs.items, false)}\n\nSources:\n${sourceLines}`;
+            addVerifiedAssistantMessage(catalogMsg, 'Verified music sources');
+            const catalogSpeech = await composeApiReply('artist_song_verified', {
+                artist
+            }, {
+                fallbackText: `Here are song suggestions for ${artist}.`
+            });
+            speak(catalogSpeech || `Here are song suggestions for ${artist}.`);
+            saveToHistory(text, catalogMsg);
+            return;
+        }
+    } catch (catalogError) {
+        // Fall through to web-search and AI fallbacks.
     }
 
     showThinkingIndicator(`[Music] Finding songs for ${artist}...`);
@@ -10298,207 +10169,7 @@ async function buildEntityVerificationFallback(userText, entityIntent, liveInten
 }
 
 function lookupKnownSportsFact(intent, userText, entityIntent = null) {
-    const factType = String(intent?.factType || entityIntent?.factType || '').toLowerCase();
-    const relationType = String(entityIntent?.relationType || '').toLowerCase();
-    const year = String(intent?.year || entityIntent?.year || '').trim();
-    const topic = normalizeSportsFactKey(intent?.topic || userText);
-    const subject = normalizeSportsFactKey(entityIntent?.subject || '');
-    const raw = normalizeSportsFactKey(userText);
-    const searchableText = [topic, subject, raw].filter(Boolean).join(' ');
-    if ((!factType && !relationType) || !searchableText) return null;
-
-    const knownFacts = [
-        {
-            matches: ['csk', 'chennai super kings'],
-            year: '',
-            factType: 'stats',
-            answer: 'CSK have won 5 IPL titles in total.',
-            keyPoints: [
-                'They won in 2010, 2011, 2018, 2021, and 2023.',
-                'That puts Chennai Super Kings among the most successful IPL teams.',
-                'If you want, I can also list the finals they won.'
-            ],
-            sources: [
-                {
-                    title: 'IPL: Champions list',
-                    url: 'https://www.iplt20.com/'
-                },
-                {
-                    title: 'Britannica: Chennai Super Kings',
-                    url: 'https://www.britannica.com/topic/Chennai-Super-Kings'
-                }
-            ]
-        },
-        {
-            matches: ['rcb', 'royal challengers bengaluru', 'royal challengers bangalore'],
-            year: '',
-            factType: 'stats',
-            answer: 'Royal Challengers Bengaluru have won 1 IPL title in total.',
-            keyPoints: [
-                'They won their first IPL title in 2025.',
-                'Before that, they had reached multiple finals without winning the trophy.',
-                'The 2025 title was their breakthrough IPL championship.'
-            ],
-            sources: [
-                {
-                    title: 'IPL: Champions list',
-                    url: 'https://www.iplt20.com/'
-                },
-                {
-                    title: 'AP: Royal Challengers Bengaluru crowned IPL 2025 champions',
-                    url: 'https://apnews.com/article/403e4c82a5b423cf8161ef1191237078'
-                }
-            ]
-        },
-        {
-            matches: ['mi', 'mumbai indians'],
-            year: '',
-            factType: 'stats',
-            answer: 'Mumbai Indians have won 5 IPL titles in total.',
-            keyPoints: [
-                'They won in 2013, 2015, 2017, 2019, and 2020.',
-                'Mumbai Indians are tied among the most successful IPL teams.',
-                'Their peak run came under Rohit Sharma\'s captaincy.'
-            ],
-            sources: [
-                {
-                    title: 'IPL: Champions list',
-                    url: 'https://www.iplt20.com/'
-                }
-            ]
-        },
-        {
-            matches: ['kkr', 'kolkata knight riders'],
-            year: '',
-            factType: 'stats',
-            answer: 'Kolkata Knight Riders have won 3 IPL titles in total.',
-            keyPoints: [
-                'They won in 2012, 2014, and 2024.',
-                'Their third title came a decade after their second.',
-                'KKR are among the most successful IPL franchises.'
-            ],
-            sources: [
-                {
-                    title: 'IPL: Champions list',
-                    url: 'https://www.iplt20.com/'
-                }
-            ]
-        },
-        {
-            matches: ['srh', 'sunrisers hyderabad'],
-            year: '',
-            factType: 'stats',
-            answer: 'Sunrisers Hyderabad have won 1 IPL title in total.',
-            keyPoints: [
-                'They won the IPL in 2016.',
-                'That title came after defeating Royal Challengers Bangalore in the final.',
-                'They have remained competitive in multiple later seasons as well.'
-            ],
-            sources: [
-                {
-                    title: 'IPL: Champions list',
-                    url: 'https://www.iplt20.com/'
-                }
-            ]
-        },
-        {
-            matches: ['rr', 'rajasthan royals'],
-            year: '',
-            factType: 'stats',
-            answer: 'Rajasthan Royals have won 1 IPL title in total.',
-            keyPoints: [
-                'They won the inaugural IPL season in 2008.',
-                'That remains their only IPL title so far.',
-                'Shane Warne captained Rajasthan Royals to that championship.'
-            ],
-            sources: [
-                {
-                    title: 'IPL: Champions list',
-                    url: 'https://www.iplt20.com/'
-                }
-            ]
-        },
-        {
-            matches: ['gt', 'gujarat titans'],
-            year: '',
-            factType: 'stats',
-            answer: 'Gujarat Titans have won 1 IPL title in total.',
-            keyPoints: [
-                'They won the IPL in their debut season in 2022.',
-                'They also reached the final again in 2023.',
-                'Their first title came under Hardik Pandya\'s captaincy.'
-            ],
-            sources: [
-                {
-                    title: 'IPL: Champions list',
-                    url: 'https://www.iplt20.com/'
-                }
-            ]
-        },
-        {
-            matches: ['dc', 'delhi capitals', 'daredevils', 'delhi daredevils'],
-            year: '',
-            factType: 'stats',
-            answer: 'Delhi Capitals have won 0 IPL titles so far.',
-            keyPoints: [
-                'They have reached the IPL final once, in 2020.',
-                'They were previously known as Delhi Daredevils.',
-                'They are still chasing their first IPL title.'
-            ],
-            sources: [
-                {
-                    title: 'IPL: Champions list',
-                    url: 'https://www.iplt20.com/'
-                }
-            ]
-        },
-        {
-            matches: ['pbks', 'punjab kings', 'kxip', 'kings xi punjab'],
-            year: '',
-            factType: 'stats',
-            answer: 'Punjab Kings have won 0 IPL titles so far.',
-            keyPoints: [
-                'They reached the final in 2014 and 2025 but did not win the trophy.',
-                'They were previously known as Kings XI Punjab.',
-                'Punjab Kings are still seeking their first IPL title.'
-            ],
-            sources: [
-                {
-                    title: 'IPL: Champions list',
-                    url: 'https://www.iplt20.com/'
-                }
-            ]
-        },
-        {
-            matches: ['ipl', 'indian premier league'],
-            year: '2025',
-            factType: 'winner',
-            answer: 'Royal Challengers Bengaluru won IPL 2025, beating Punjab Kings by 6 runs in the final.',
-            keyPoints: [
-                'It was RCB\'s first IPL title.',
-                'The final was played on June 3, 2025.',
-                'Punjab Kings were the runners-up.'
-            ],
-            sources: [
-                {
-                    title: 'AP: Cricket\'s Indian Premier League crowns Royal Challengers Bengaluru as champions',
-                    url: 'https://apnews.com/article/403e4c82a5b423cf8161ef1191237078'
-                },
-                {
-                    title: 'Times of India: IPL Winners List 2008-2025',
-                    url: 'https://timesofindia.indiatimes.com/sports/cricket/ipl/top-stories/ipl-winners-list-20082025-final-results-opponents-margins/articleshow/121604424.cms'
-                }
-            ]
-        }
-    ];
-
-    return knownFacts.find((item) => {
-        const factTypeMatches = item.factType === factType ||
-            (item.factType === 'stats' && (factType === 'stats' || relationType === 'title_count'));
-        if (!factTypeMatches) return false;
-        if (item.year && item.year !== year) return false;
-        return item.matches.some(match => searchableText.includes(match));
-    }) || null;
+    return null;
 }
 
 function formatKnownSportsFactMessage(knownFact, concise = false) {
@@ -10698,10 +10369,6 @@ async function buildOfflineRecipeFallback(text) {
     return await composeApiReply('recipe_fallback', {
         dish: dish || '',
         userMessage: String(text || '').trim()
-    }, {
-        fallbackText: dish
-            ? `I could not generate a full recipe right now, but I understood the dish as "${dish}". Try asking again.`
-            : 'I could not generate that recipe right now. Try asking again with the dish name.'
     });
 }
 
@@ -11441,8 +11108,18 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
                     recipeResponse?.intent === 'soft_fallback' ||
                     recipeResponse?.intent === 'local_fallback';
                 const finalRecipe = shouldUseRecipeFallback
-                    ? await buildOfflineRecipeFallback(text)
+                    ? String(await buildOfflineRecipeFallback(text) || '').trim()
                     : recipeText;
+                if (!finalRecipe) {
+                    await deliverApiReply('recipe_unavailable', {
+                        dish: extractRequestedDish(text) || '',
+                        userMessage: text
+                    }, {
+                        historyKey: text,
+                        fallbackText: 'I could not generate that recipe right now.'
+                    });
+                    return;
+                }
                 addModelAssistantMessage(finalRecipe, 'Model answer');
                 await speakApiReply('recipe_ready', {}, 'Here is the recipe.');
                 saveToHistory(text, finalRecipe);
@@ -14549,25 +14226,6 @@ style.textContent = `
 document.head.appendChild(style);
 
 loadHistory();
-
-/*
-1. TYPING INDICATOR:
-   - Call showTypingIndicator() before AI response
-   - Call hideTypingIndicator() before showing response
-
-2. EDIT MESSAGES:
-   - Integrated in addChatMessage() with edit button on user messages
-   - Editing a message regenerates the response from that turn
-
-3. CONVERSATION HISTORY:
-   - Call saveToHistory(userMsg, aiMsg) after each exchange
-   - Add button to show history panel: <button onclick="showHistoryPanel()">History</button>
-   - Search, export, and clear functions included
-
-4. ERROR FEEDBACK:
-   - Call showError("Error message") instead of addChatMessage for errors
-   - Visual shake animation + auto-dismiss
-*/
 
 </script>
 </body>
