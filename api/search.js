@@ -39,9 +39,15 @@ export default async function handler(req, res) {
             results
         });
     } catch (error) {
-        return res.status(500).json({
-            success: false,
-            error: 'search failed'
+        return res.status(200).json({
+            success: true,
+            provider: 'none',
+            queryVariants: [],
+            distinctDomainCount: 0,
+            trustedCount: 0,
+            results: [],
+            error: 'search_unavailable',
+            details: String(error?.message || error)
         });
     }
 }
@@ -51,8 +57,12 @@ function buildSearchQueries(query) {
     if (!raw) return [];
     const topic = extractSearchTopic(raw) || raw;
     const out = [topic];
+    const aliasedTopic = normalizeSearchTopic(topic);
     const domain = detectQueryDomain(raw);
-    const dynamicVariants = buildDynamicQueryVariants(raw, topic, domain);
+    if (aliasedTopic && aliasedTopic.toLowerCase() !== topic.toLowerCase()) {
+        out.push(aliasedTopic);
+    }
+    const dynamicVariants = buildDynamicQueryVariants(raw, aliasedTopic || topic, domain);
     out.push(...dynamicVariants);
 
     if (isTimeSensitiveQuery(raw)) {
@@ -67,6 +77,11 @@ function buildSearchQueries(query) {
         out.push(`latest ${cleanedTimeAwareTopic || topic}`);
         out.push(`${cleanedTimeAwareTopic || topic} Reuters OR AP OR BBC OR Al Jazeera`);
         out.push(...buildTimeSensitiveDomainVariants(cleanedTimeAwareTopic || topic, domain));
+        if (aliasedTopic && aliasedTopic.toLowerCase() !== topic.toLowerCase()) {
+            out.push(`latest ${aliasedTopic}`);
+            out.push(`${aliasedTopic} Reuters OR AP OR BBC OR Al Jazeera`);
+            out.push(...buildTimeSensitiveDomainVariants(aliasedTopic, domain));
+        }
     }
 
     return Array.from(new Set(out.filter(Boolean)));
@@ -102,6 +117,17 @@ function buildDynamicQueryVariants(rawQuery, topic, domain) {
     return out;
 }
 
+function expandCriticalQueryAliases(text) {
+    return normalizeSearchTopic(text);
+}
+
+function normalizeSearchTopic(text) {
+    return String(text || '')
+        .replace(/[^\w\s&.-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function buildTimeSensitiveDomainVariants(topic, domain) {
     const base = String(topic || '').trim();
     if (!base) return [];
@@ -129,7 +155,6 @@ function isLikelyAcronymToken(token) {
     if (/^\d+$/.test(value)) return false;
     if (value.length === 1 || value.length > 10) return false;
     if (/^[A-Z0-9]{2,10}$/.test(value)) return true;
-    if (/^[a-z]{2,5}$/.test(value)) return true;
     return /^[A-Z][a-z0-9]*[A-Z][A-Za-z0-9]*$/.test(value);
 }
 
