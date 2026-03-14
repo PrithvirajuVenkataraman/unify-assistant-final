@@ -14262,5 +14262,129 @@ document.head.appendChild(style);
 loadHistory();
 
 </script>
+
+<!-- ===== Global Attraction Intelligence + Real-Place Itinerary Engine ===== -->
+<script>
+
+/* -------- Place classification for visit duration -------- */
+function classifyPlace(name){
+    const n = String(name || "").toLowerCase();
+
+    if(n.includes("temple") || n.includes("church") || n.includes("mosque") || n.includes("shrine"))
+        return {type:"religious", time:2.5};
+
+    if(n.includes("museum"))
+        return {type:"museum", time:2};
+
+    if(n.includes("fort") || n.includes("palace") || n.includes("castle"))
+        return {type:"historical", time:2};
+
+    if(n.includes("park") || n.includes("garden"))
+        return {type:"park", time:1};
+
+    if(n.includes("market") || n.includes("bazaar"))
+        return {type:"market", time:1};
+
+    if(n.includes("beach"))
+        return {type:"beach", time:2};
+
+    if(n.includes("viewpoint") || n.includes("lookout"))
+        return {type:"viewpoint", time:0.5};
+
+    return {type:"attraction", time:1.5};
+}
+
+/* -------- Build a full realistic day (target ~8 hrs) -------- */
+function buildDayPlan(places){
+    let hours = 0;
+    const maxHours = 8;
+    const plan = [];
+
+    for(const place of places){
+        const info = classifyPlace(place);
+
+        if(hours + info.time <= maxHours){
+            plan.push({
+                name: place,
+                duration: info.time,
+                type: info.type
+            });
+
+            hours += info.time;
+        }
+    }
+
+    return plan;
+}
+
+/* -------- Automatically insert food stops -------- */
+function insertFoodStops(plan){
+    const updated = [];
+
+    plan.forEach((p,i)=>{
+        updated.push(p);
+
+        if(i === 0){
+            updated.push({name:"Breakfast nearby", duration:1, type:"food"});
+        }
+
+        if(i === 1){
+            updated.push({name:"Lunch nearby", duration:1, type:"food"});
+        }
+    });
+
+    return updated;
+}
+
+/* -------- Safety check to avoid hallucinated places -------- */
+function validatePlaces(aiText, allowedPlaces){
+    if(!aiText) return false;
+
+    const lines = aiText.split("\n");
+
+    for(const line of lines){
+        const containsAllowed = allowedPlaces.some(p =>
+            line.toLowerCase().includes(String(p).toLowerCase())
+        );
+
+        if(!containsAllowed && /(temple|museum|park|fort|beach|palace)/i.test(line)){
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/* -------- Prepare confirmed place list from search results -------- */
+function extractConfirmedPlaces(searchResults){
+    if(!Array.isArray(searchResults)) return [];
+    return searchResults
+        .slice(0,6)
+        .map(r => r.title)
+        .filter(Boolean);
+}
+
+/* -------- Convert plan into structured list for AI formatting -------- */
+function planToPromptList(plan){
+    return plan.map((p,i)=>{
+        return `${i+1}. ${p.name} (${p.duration}h)`;
+    }).join("\n");
+}
+
+/* -------- Main builder used before sending prompt to AI -------- */
+function generateStructuredTravelPlan(searchResults){
+    const places = extractConfirmedPlaces(searchResults);
+
+    const dayPlan = buildDayPlan(places);
+    const fullPlan = insertFoodStops(dayPlan);
+
+    return {
+        allowedPlaces: places,
+        planList: planToPromptList(fullPlan)
+    };
+}
+
+</script>
+
 </body>
 </html>
