@@ -4753,8 +4753,8 @@ async function askGeminiAI(userMessage) {
     let resolvedUserMessage = rawUserMessage;
     const controller = beginAbortableRequest();
     try { 
-        resolvedUserMessage = resolveKnowledgeFollowupQuery(rawUserMessage);
-        normalizedUserMessage = isPronounKnowledgeFollowup(rawUserMessage) ? resolvedUserMessage : rawUserMessage;
+        normalizedUserMessage = String(userMessage || '').trim();
+        resolvedUserMessage = normalizedUserMessage;
         maybeCaptureKnowledgeEntity(normalizedUserMessage);
         updateTopicMemory(normalizedUserMessage);
         const topicHint = getTopicMemoryHint(normalizedUserMessage);
@@ -4830,12 +4830,27 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         const conciseFactHint = isConciseDirectFactQuery(normalizedUserMessage)
             ? 'This is a direct fact query. Answer in 1-2 sentences max. Give the fact immediately. Do not add generic extra explanation or follow-up offers unless the user asks.'
             : '';
-        const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\n${conciseFactHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
-        
+        const prompt = `User question:
+${normalizedUserMessage}
+
+Teach this clearly for a beginner.
+
+Rules:
+- Cover any domain based on the user question.
+- Start with a plain definition.
+- Explain in simple steps with one real-world example.
+- End with a short quick recap.
+- Avoid jargon unless you define it.
+- Keep it accurate and practical.
+
+Response length: ${responseMode}. ${responseHint}
+Response format: ${formatMode}. ${formatHint}
+${conciseFactHint}`.trim();
+        const effectiveMessage = prompt;
+
         console.log("RAW USER MESSAGE:", rawUserMessage);
-        console.log("RESOLVED USER MESSAGE:", resolvedUserMessage);
-        console.log("NORMALIZED USER MESSAGE:", normalizedUserMessage);
-        console.log("EFFECTIVE MESSAGE SENT:", effectiveMessage);
+        console.log("NORMALIZED MESSAGE:", normalizedUserMessage);
+        console.log("PROMPT SENT TO GEMINI:", prompt);
         console.log("SYSTEM PROMPT:", systemPromptWithTopic);
         console.log("INTENT:", intent);
         console.log("RESPONSE MODE:", responseMode);
@@ -11422,18 +11437,18 @@ Do not use repetitive filler or generic wording.`;
             }
 
             if (isLearningIntent(cleanText)) {
-                const learningPrompt = `User asked: "${text}"
+                const learningPrompt = `User question:
+${text}
 
 Teach this clearly for a beginner.
 
 Rules:
-- Cover any domain (tech, science, finance, history, life skills, etc.) based on user question.
+- Cover any domain based on the user question.
 - Start with a plain definition.
 - Explain in simple steps with one real-world example.
-- End with a short "quick recap".
-- If useful, add "next thing to learn" in one line.
-- Avoid jargon unless you define it immediately.
-- Keep it accurate and practical.`;
+- End with a short quick recap.
+- Avoid jargon unless you define it.
+- Keep it accurate and practical.`.trim();
                 const learningResponse = await callAIWithTyping(learningPrompt, 'Preparing a clear explanation...');
                 if (learningResponse?.aborted) return;
                 await publishResolvedModelMessage(text, learningResponse.response, {
@@ -14924,5 +14939,9 @@ window.validatePlaces = function(aiText, allowedPlaces) {
     return true;
 };
 </script>
+
 </body>
 </html>
+
+
+
