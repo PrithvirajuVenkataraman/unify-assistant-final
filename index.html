@@ -4409,7 +4409,38 @@ function resolveKnowledgeFollowupQuery(text) {
     const raw = String(text || '').trim();
     if (!raw || !lastDiscussedEntity) return raw;
     if (!isPronounKnowledgeFollowup(raw)) return raw;
-    return raw.replace(/\b(it|this|that|this one|that one|the company|the person|the topic)(\s+company)?\b/gi, lastDiscussedEntity).trim();
+
+    const pronounPattern = /\b(it|this|that|this one|that one|the company|the person|the topic)(\s+company)?\b/gi;
+    const resolved = raw.replace(pronounPattern, lastDiscussedEntity).trim();
+
+    if (!resolved) return raw;
+    if (resolved === raw) return raw;
+
+    return resolved;
+}
+
+function extractAssistantResponseText(payload) {
+    if (typeof payload?.response === 'string' && payload.response.trim()) {
+        return payload.response.trim();
+    }
+    if (typeof payload?.text === 'string' && payload.text.trim()) {
+        return payload.text.trim();
+    }
+
+    const candidateText = payload?.candidates?.[0]?.content?.parts
+        ?.map(part => typeof part?.text === 'string' ? part.text : '')
+        .join('')
+        .trim();
+    if (candidateText) {
+        return candidateText;
+    }
+
+    const altCandidateText = payload?.candidates?.[0]?.output?.[0]?.content?.[0]?.text;
+    if (typeof altCandidateText === 'string' && altCandidateText.trim()) {
+        return altCandidateText.trim();
+    }
+
+    return '';
 }
 
 function maybeCaptureKnowledgeEntity(text) {
@@ -4717,10 +4748,13 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
 
 async function askGeminiAI(userMessage) { 
     console.log("askGeminiAI CALLED with:", userMessage);
-    let normalizedUserMessage = String(userMessage || '');
+    const rawUserMessage = String(userMessage || '').trim();
+    let normalizedUserMessage = rawUserMessage;
+    let resolvedUserMessage = rawUserMessage;
     const controller = beginAbortableRequest();
     try { 
-        normalizedUserMessage = resolveKnowledgeFollowupQuery(userMessage);
+        resolvedUserMessage = resolveKnowledgeFollowupQuery(rawUserMessage);
+        normalizedUserMessage = isPronounKnowledgeFollowup(rawUserMessage) ? resolvedUserMessage : rawUserMessage;
         maybeCaptureKnowledgeEntity(normalizedUserMessage);
         updateTopicMemory(normalizedUserMessage);
         const topicHint = getTopicMemoryHint(normalizedUserMessage);
@@ -4798,7 +4832,8 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             : '';
         const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\n${conciseFactHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
         
-        console.log("RAW USER MESSAGE:", userMessage);
+        console.log("RAW USER MESSAGE:", rawUserMessage);
+        console.log("RESOLVED USER MESSAGE:", resolvedUserMessage);
         console.log("NORMALIZED USER MESSAGE:", normalizedUserMessage);
         console.log("EFFECTIVE MESSAGE SENT:", effectiveMessage);
         console.log("SYSTEM PROMPT:", systemPromptWithTopic);
@@ -4836,31 +4871,39 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         
         const data = await response.json();
         console.log("RAW API RESPONSE:", data);
-        data.sources = Array.isArray(data.sources) ? data.sources : [];
-        if (typeof data.response === 'string') {
-            data.response = postProcessAssistantResponse(data.response, normalizedUserMessage);
-            data.response = sanitizeWeakModelAnswer(data.response, normalizedUserMessage);
-        }
-        if (!data.response && typeof data.text === 'string') {
-            data.text = postProcessAssistantResponse(data.text, normalizedUserMessage);
-            data.text = sanitizeWeakModelAnswer(data.text, normalizedUserMessage);
+
+        const extractedResponseText = extractAssistantResponseText(data);
+        const processedResponseText = extractedResponseText
+            ? sanitizeWeakModelAnswer(
+                postProcessAssistantResponse(extractedResponseText, normalizedUserMessage),
+                normalizedUserMessage
+            )
+            : '';
+
+        data.response = processedResponseText || "Sorry, I couldn't generate a response.";
+        data.text = data.response;
+
+        const backendSources = Array.isArray(data?.sources) ? data.sources.filter(Boolean) : [];
+        data.sources = Array.isArray(data?.verifiedSources) ? data.verifiedSources.filter(Boolean) : [];
+        if (!data.sources.length && data?.sourcesVerified === true) {
+            data.sources = backendSources;
         }
 
-        if (isLowSignalModelAnswer(data.response || data.text) &&
+        if (isLowSignalModelAnswer(data.response) &&
             (isDirectExplainerQuery(normalizedUserMessage) || isConciseDirectFactQuery(normalizedUserMessage))) {
-            const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || userMessage);
+            const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || rawUserMessage);
             if (searchFallback) {
                 return {
                     response: searchFallback,
+                    text: searchFallback,
+                    sources: [],
                     intent: 'search_fallback'
                 };
             }
         }
 
-        conversationContext.push({ role: 'assistant', text: data.response || data.text });
-        window.__pendingAssistantSources = Array.isArray(data.sources) ? data.sources : [];
-        return data;
-        
+        conversationContext.push({ role: 'assistant', text: data.response });
+        window.__pendingAssistantSources = [];
         return data;
     } catch (error) {
         if (isAbortError(error)) {
@@ -6042,12 +6085,19 @@ async function handleNameCorrection(text) {
                     Array.isArray(sources) && sources.length
                         ? sources
                         : (Array.isArray(window.__pendingAssistantSources) ? window.__pendingAssistantSources : []);
+                const safeRenderedSources = effectiveSources.filter(item =>
+                    item &&
+                    typeof item.url === 'string' &&
+                    /^https?:\/\//i.test(item.url) &&
+                    typeof item.title === 'string' &&
+                    item.title.trim()
+                );
                 window.__pendingAssistantSources = [];
                 const isDarkTheme = document.body.classList.contains('dark');
                 const linkClass = isDarkTheme
                     ? 'text-sky-300 hover:text-sky-200 underline font-medium'
                     : 'text-indigo-700 hover:text-indigo-900 underline font-medium';
-                const sourcesHtml = renderAssistantSources(effectiveSources);
+                const sourcesHtml = renderAssistantSources(safeRenderedSources);
 
 
                 const textForSpeech = displayText.replace(/<[^>]*>/g, '');
@@ -10394,12 +10444,7 @@ async function fetchHybridCitationSources(userText, intent, controller) {
 function buildHybridAnswerWithSources(answer, sources) {
     const cleanAnswer = String(answer || '').trim();
     if (!cleanAnswer) return '';
-    const sourceLines = (Array.isArray(sources) ? sources : [])
-        .slice(0, 4)
-        .map((item, index) => `${index + 1}. [${item.title}](${item.url})`)
-        .join('\n');
-    if (!sourceLines) return cleanAnswer;
-    return `${cleanAnswer}\n\nSources:\n${sourceLines}`;
+    return cleanAnswer;
 }
 
 async function handleAnswerThenCiteQuery(userText, classification) {
@@ -10419,7 +10464,7 @@ async function handleAnswerThenCiteQuery(userText, classification) {
         const sources = await fetchHybridCitationSources(query, classification?.liveIntent, controller);
         const finalMsg = buildHybridAnswerWithSources(answer, sources);
         if (sources.length) {
-            addVerifiedAssistantMessage(finalMsg, 'Answer with sources');
+            addVerifiedAssistantMessage(finalMsg, 'Model answer');
             speak(answer);
             saveToHistory(query, finalMsg || answer);
         } else {
@@ -14879,6 +14924,5 @@ window.validatePlaces = function(aiText, allowedPlaces) {
     return true;
 };
 </script>
-
 </body>
 </html>
