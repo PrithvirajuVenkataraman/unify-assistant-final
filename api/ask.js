@@ -52,6 +52,8 @@ export default async function handler(req, res) {
                 ? verified.results
                 : await searchWeb(userMessage, Math.min(Number(maxResults) || 6, 8));
 
+            
+
             sources = normalizeSources(searchResults).slice(0, Math.min(Number(maxResults) || 6, 8));
             ragContext = buildRagContext(sources, userMessage);
 
@@ -139,12 +141,19 @@ function normalizeSearchTopic(text) {
         .trim();
 }
 
+function stripHtml(text = '') {
+    return String(text)
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function normalizeSources(results) {
     return (Array.isArray(results) ? results : [])
         .map((item) => ({
-            title: String(item?.title || 'Untitled').trim(),
+            title: stripHtml(item?.title || item?.name || 'Untitled'),
             url: String(item?.url || item?.link || '').trim(),
-            description: String(item?.description || item?.snippet || '').trim()
+            description: stripHtml(item?.description || item?.snippet || '').slice(0, 300)
         }))
         .filter((item) => item.url);
 }
