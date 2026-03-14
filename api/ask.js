@@ -206,7 +206,7 @@ When web context is provided:
 - Do not invent facts beyond the provided evidence.
 - If sources disagree or look weak, say that clearly.
 - Keep the answer direct and useful.
-- When relevant, mention the most credible sources naturally.
+- When referring to sources, use the titles or domains from the provided sources list.
 - Do not output markdown tables.
 - Return JSON only in this format:
 {
