@@ -14386,5 +14386,213 @@ function generateStructuredTravelPlan(searchResults){
 
 </script>
 
+
+<!-- ===== Distance-Aware Itinerary Engine ===== -->
+<script>
+
+/* Haversine distance in km */
+function haversineDistance(a,b){
+    const R = 6371;
+    const dLat = (b.lat-a.lat) * Math.PI/180;
+    const dLon = (b.lon-a.lon) * Math.PI/180;
+
+    const lat1 = a.lat*Math.PI/180;
+    const lat2 = b.lat*Math.PI/180;
+
+    const sin1 = Math.sin(dLat/2);
+    const sin2 = Math.sin(dLon/2);
+
+    const c = 2 * Math.atan2(
+        Math.sqrt(sin1*sin1 + Math.cos(lat1)*Math.cos(lat2)*sin2*sin2),
+        Math.sqrt(1-(sin1*sin1 + Math.cos(lat1)*Math.cos(lat2)*sin2*sin2))
+    );
+
+    return R*c;
+}
+
+/* Convert search results to geo objects */
+function extractGeoPlaces(results){
+    if(!Array.isArray(results)) return [];
+
+    return results.map(r=>({
+        title: r.title,
+        description: r.description || "",
+        lat: r.lat || r.latitude || null,
+        lon: r.lon || r.lng || r.longitude || null
+    })).filter(p=>p.lat && p.lon);
+}
+
+/* Sort attractions to minimize travel */
+function orderByProximity(places){
+
+    if(places.length <= 1) return places;
+
+    const ordered = [places[0]];
+    const remaining = places.slice(1);
+
+    while(remaining.length){
+
+        const last = ordered[ordered.length-1];
+
+        let closestIndex = 0;
+        let closestDist = Infinity;
+
+        remaining.forEach((p,i)=>{
+            const d = haversineDistance(last,p);
+            if(d < closestDist){
+                closestDist = d;
+                closestIndex = i;
+            }
+        });
+
+        ordered.push(remaining.splice(closestIndex,1)[0]);
+    }
+
+    return ordered;
+}
+
+/* Cluster nearby attractions (<3km) */
+function clusterNearbyPlaces(places){
+
+    const clusters = [];
+    const used = new Set();
+
+    for(let i=0;i<places.length;i++){
+
+        if(used.has(i)) continue;
+
+        const cluster = [places[i]];
+        used.add(i);
+
+        for(let j=i+1;j<places.length;j++){
+
+            if(used.has(j)) continue;
+
+            const d = haversineDistance(places[i],places[j]);
+
+            if(d < 3){
+                cluster.push(places[j]);
+                used.add(j);
+            }
+        }
+
+        clusters.push(cluster);
+    }
+
+    return clusters;
+}
+
+/* Main distance-aware planner */
+function buildSmartRoute(searchResults){
+
+    const geoPlaces = extractGeoPlaces(searchResults);
+
+    if(!geoPlaces.length) return searchResults;
+
+    const ordered = orderByProximity(geoPlaces);
+    const clusters = clusterNearbyPlaces(ordered);
+
+    const flattened = clusters.flat();
+
+    return flattened;
+}
+
+</script>
+
+
+<!-- ===== Travel Time Estimation Engine ===== -->
+<script>
+function inferTravelMode(distanceKm){
+    if(distanceKm <= 1.2) return "walk";
+    if(distanceKm <= 4) return "auto";
+    return "drive";
+}
+
+function estimateTravelTimeKm(distanceKm, mode){
+    const speeds = {
+        walk: 4.5,
+        auto: 18,
+        drive: 28
+    };
+
+    const speed = speeds[mode] || speeds.drive;
+    const rawMinutes = (distanceKm / speed) * 60;
+    const fixedBuffer = mode === "walk" ? 5 : 12;
+    return Math.max(8, Math.round(rawMinutes + fixedBuffer));
+}
+
+function formatTravelTime(minutes, mode){
+    const modeLabel = mode === "walk" ? "Walk" : mode === "auto" ? "Auto/Taxi" : "Drive";
+    if(minutes < 60) return `${modeLabel} • ~${minutes} min`;
+    const hrs = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${modeLabel} • ~${hrs}h ${mins}m`;
+}
+
+function addTravelHintsToPlan(places){
+    if(!Array.isArray(places) || !places.length) return [];
+
+    return places.map((place, index) => {
+        if(index === 0){
+            return {
+                ...place,
+                travelFromPreviousKm: 0,
+                travelMinutes: 0,
+                travelMode: "start",
+                travelHint: "Start here"
+            };
+        }
+
+        const prev = places[index - 1];
+
+        if(
+            typeof prev.lat === "number" && typeof prev.lon === "number" &&
+            typeof place.lat === "number" && typeof place.lon === "number"
+        ){
+            const distanceKm = haversineDistance(
+                { lat: prev.lat, lon: prev.lon },
+                { lat: place.lat, lon: place.lon }
+            );
+            const mode = inferTravelMode(distanceKm);
+            const minutes = estimateTravelTimeKm(distanceKm, mode);
+
+            return {
+                ...place,
+                travelFromPreviousKm: Number(distanceKm.toFixed(2)),
+                travelMinutes: minutes,
+                travelMode: mode,
+                travelHint: formatTravelTime(minutes, mode)
+            };
+        }
+
+        return {
+            ...place,
+            travelFromPreviousKm: null,
+            travelMinutes: 15,
+            travelMode: "drive",
+            travelHint: "Transit • ~15 min"
+        };
+    });
+}
+
+const __originalBuildSmartRoute = window.buildSmartRoute;
+window.buildSmartRoute = function(searchResults){
+    const ordered = typeof __originalBuildSmartRoute === "function"
+        ? __originalBuildSmartRoute(searchResults)
+        : (Array.isArray(searchResults) ? searchResults : []);
+
+    return addTravelHintsToPlan(ordered);
+};
+
+window.planToPromptList = function(plan){
+    return (plan || []).map((p, i) => {
+        const title = p.title || p.name || "Attraction";
+        const duration = p.duration ? `${p.duration}h` : "1.5h";
+        const travel = p.travelHint ? ` | Transit from previous: ${p.travelHint}` : "";
+        return `${i + 1}. ${title} (${duration})${travel}`;
+    }).join("\n");
+};
+</script>
+
 </body>
 </html>
