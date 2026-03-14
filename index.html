@@ -6074,7 +6074,6 @@ async function handleNameCorrection(text) {
                 const speechId = 'speech_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 window[speechId] = textForSpeech;
 
-                const sourcesHtml = renderAssistantSources(sources);
                 messageDiv.innerHTML = `
                     <div class="w-full ${containerWidth}">
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
@@ -14852,4 +14851,5 @@ window.validatePlaces = function(aiText, allowedPlaces) {
 
 </body>
 </html>
+
 
