@@ -14594,5 +14594,209 @@ window.planToPromptList = function(plan){
 };
 </script>
 
+
+<!-- ===== Fully Dynamic Travel Intent + Search Logic Patch ===== -->
+<script>
+window.detectTravelIntent = function(text) {
+    const t = String(text || '').toLowerCase();
+
+    if (/street food|foodie|food|eat|local food|night market|snack|dessert|coffee|tea/.test(t)) return 'food';
+    if (/history|historical|heritage|fort|palace|museum|monument|ruins|archaeological/.test(t)) return 'history';
+    if (/temple|church|mosque|culture|spiritual|cathedral|basilica|shrine|pagoda|monastery|synagogue/.test(t)) return 'culture';
+    if (/nature|park|lake|waterfall|beach|scenic|hike|forest|garden|river|mangrove/.test(t)) return 'nature';
+    if (/shopping|market|bazaar|souq|mall|shopping street/.test(t)) return 'shopping';
+
+    return 'general';
+};
+
+window.buildSearchQueries = function(location, intent) {
+    const q = String(location || '').trim();
+
+    const queryMap = {
+        food: [
+            `best street food in ${q}`,
+            `${q} famous food streets`,
+            `${q} night market food`,
+            `${q} local food market`
+        ],
+        history: [
+            `top historical places in ${q}`,
+            `${q} heritage attractions`,
+            `${q} forts museums monuments`
+        ],
+        culture: [
+            `top cultural places in ${q}`,
+            `${q} temples churches mosques shrines`,
+            `${q} spiritual places to visit`
+        ],
+        nature: [
+            `best nature places in ${q}`,
+            `${q} parks lakes beaches waterfalls`,
+            `${q} scenic spots`
+        ],
+        shopping: [
+            `best markets in ${q}`,
+            `${q} shopping streets bazaar`,
+            `${q} local market attractions`
+        ],
+        general: [
+            `top tourist places in ${q}`,
+            `things to do in ${q}`,
+            `${q} attractions must visit`
+        ]
+    };
+
+    return queryMap[intent] || queryMap.general;
+};
+
+window.normalizeSearchResults = function(results) {
+    return (results || [])
+        .filter(r => r && r.title)
+        .map(r => ({
+            title: r.title,
+            description: r.description || '',
+            lat: typeof r.lat === 'number' ? r.lat : (typeof r.latitude === 'number' ? r.latitude : null),
+            lon: typeof r.lon === 'number' ? r.lon : (typeof r.lng === 'number' ? r.lng : (typeof r.longitude === 'number' ? r.longitude : null)),
+            source: r.source || ''
+        }));
+};
+
+window.classifyPlace = function(place) {
+    const text = `${place.title || ''} ${place.description || ''}`.toLowerCase();
+
+    if (/temple|church|mosque|cathedral|basilica|shrine|pagoda|monastery|synagogue/.test(text))
+        return { type: 'religious', time: 2.5 };
+
+    if (/museum|gallery|exhibit|heritage center/.test(text))
+        return { type: 'museum', time: 2 };
+
+    if (/fort|palace|castle|citadel|ruins|archaeological|monument|amphitheatre/.test(text))
+        return { type: 'historical', time: 2 };
+
+    if (/park|garden|botanical|national park/.test(text))
+        return { type: 'park', time: 1.25 };
+
+    if (/market|bazaar|souq|food street|night market|street food/.test(text))
+        return { type: 'market_food', time: 1.5 };
+
+    if (/beach|coast|bay|shore/.test(text))
+        return { type: 'beach', time: 2 };
+
+    if (/viewpoint|tower|observation deck|lookout/.test(text))
+        return { type: 'viewpoint', time: 0.75 };
+
+    if (/lake|river|mangrove|waterfall|forest/.test(text))
+        return { type: 'nature', time: 1.5 };
+
+    return { type: 'attraction', time: 1.5 };
+};
+
+window.matchesIntent = function(place, intent) {
+    const text = `${place.title || ''} ${place.description || ''}`.toLowerCase();
+
+    const rules = {
+        food: /food|eat|street food|snack|market|bazaar|stall|restaurant|cafe|coffee|dessert|night market/,
+        history: /fort|palace|museum|monument|heritage|historical|ruins|archaeological/,
+        culture: /temple|church|mosque|cathedral|basilica|shrine|cultural|spiritual|pagoda|monastery|synagogue/,
+        nature: /park|beach|lake|waterfall|forest|garden|nature|scenic|viewpoint|mangrove|river/,
+        shopping: /market|bazaar|shopping|souq|street market|mall/,
+        general: /.*/
+    };
+
+    return (rules[intent] || rules.general).test(text);
+};
+
+window.extractConfirmedPlaces = function(searchResults, intent = 'general') {
+    const normalized = window.normalizeSearchResults(searchResults);
+    const filtered = normalized.filter(p => window.matchesIntent(p, intent));
+    const pool = filtered.length ? filtered : normalized;
+    return pool.slice(0, 10);
+};
+
+window.buildDayPlan = function(places) {
+    let hours = 0;
+    const maxHours = 8;
+    const plan = [];
+
+    for (const place of places) {
+        const info = window.classifyPlace(place);
+        if (hours + info.time <= maxHours) {
+            plan.push({
+                ...place,
+                name: place.title,
+                duration: info.time,
+                type: info.type
+            });
+            hours += info.time;
+        }
+    }
+    return plan;
+};
+
+window.insertFoodStops = function(plan, intent = 'general') {
+    const updated = [];
+    plan.forEach((p, i) => {
+        if (intent === 'food' && i === 0) {
+            updated.push({ name: 'Breakfast street-food stop nearby', title: 'Breakfast street-food stop nearby', duration: 1, type: 'food' });
+        }
+        updated.push(p);
+        if (i === 1) {
+            updated.push({
+                name: intent === 'food' ? 'Lunch food-market stop nearby' : 'Lunch nearby',
+                title: intent === 'food' ? 'Lunch food-market stop nearby' : 'Lunch nearby',
+                duration: 1,
+                type: 'food'
+            });
+        }
+    });
+
+    if (!updated.some(x => (x.type || '') === 'food')) {
+        updated.splice(1, 0, { name: 'Lunch nearby', title: 'Lunch nearby', duration: 1, type: 'food' });
+    }
+    return updated;
+};
+
+window.generateStructuredTravelPlan = function(searchResults, userText = '') {
+    const intent = window.detectTravelIntent(userText);
+    const confirmedPlaces = window.extractConfirmedPlaces(searchResults, intent);
+
+    const routeBase = (typeof window.buildSmartRoute === 'function')
+        ? window.buildSmartRoute(confirmedPlaces)
+        : confirmedPlaces;
+
+    const planned = window.buildDayPlan(routeBase);
+    const withFood = window.insertFoodStops(planned, intent);
+
+    const allowedPlaces = confirmedPlaces.map(p => p.title);
+    const planList = (typeof window.planToPromptList === 'function')
+        ? window.planToPromptList(withFood)
+        : withFood.map((p, i) => `${i + 1}. ${p.title || p.name || 'Stop'} (${p.duration || 1.5}h)`).join('\n');
+
+    return {
+        intent,
+        allowedPlaces,
+        confirmedPlaces,
+        planList
+    };
+};
+
+window.validatePlaces = function(aiText, allowedPlaces) {
+    if (!aiText) return false;
+    const lines = aiText.split('\n');
+
+    for (const line of lines) {
+        const looksLikePlace = /(temple|museum|park|fort|beach|palace|market|tower|cathedral|basilica|garden|lake|river|street|bazaar)/i.test(line);
+        if (!looksLikePlace) continue;
+
+        const containsAllowed = (allowedPlaces || []).some(p =>
+            String(line).toLowerCase().includes(String(p).toLowerCase())
+        );
+
+        if (!containsAllowed) return false;
+    }
+    return true;
+};
+</script>
+
 </body>
 </html>
