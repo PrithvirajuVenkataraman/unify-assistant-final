@@ -99,13 +99,7 @@ function needsLiveSearch(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
 
-    return /\b(
-        latest|recent|current|today|tonight|this week|right now|news|headline|update|updates|
-        best|top|compare|comparison|review|reviews|price|pricing|cost|rate|rates|
-        score|scores|standings|ranking|rankings|result|results|winner|won|
-        weather|forecast|traffic|train|flight|flights|
-        where should i|what should i buy|recommend|recommendation|recommendations
-    )\b/ix.test(t);
+    return /\b(latest|recent|current|today|tonight|this week|right now|news|headline|update|updates|best|top|compare|comparison|review|reviews|price|pricing|cost|rate|rates|score|scores|standings|ranking|rankings|result|results|winner|won|weather|forecast|traffic|train|flight|flights|where should i|what should i buy|recommend|recommendation|recommendations)\b/i.test(t);
 }
 
 function buildSearchQueries(query) {
@@ -135,11 +129,7 @@ function buildSearchQueries(query) {
 
 function isTimeSensitiveQuery(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(
-        latest|recent|current|today|right now|as of now|breaking|news|headline|update|updates|
-        score|scores|winner|won|result|results|standings|ranking|rankings|
-        price|pricing|rate|rates|weather|forecast
-    )\b/ix.test(t);
+    return /\b(latest|recent|current|today|right now|as of now|breaking|news|headline|update|updates|score|scores|winner|won|result|results|standings|ranking|rankings|price|pricing|rate|rates|weather|forecast)\b/i.test(t);
 }
 
 function normalizeSearchTopic(text) {
