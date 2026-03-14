@@ -4693,6 +4693,8 @@ function isLikelyLocationOrTravelQuery(text) {
     return /\b(map|maps|directions?|route|near me|nearby|location|where is|where to|hotel|hotels|restaurant|restaurants|food|trip|travel|itinerary|weather|transport|bus|train|taxi|uber|airport|station)\b/.test(t);
 }
 
+console.log("JARVIS FILE LOADED - TEST 123");
+
 function postProcessAssistantResponse(rawText, userMessage = '') {
     let text = String(rawText || '').trim();
     if (!text) return text;
@@ -4714,6 +4716,7 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
 }
 
 async function askGeminiAI(userMessage) { 
+    console.log("askGeminiAI CALLED with:", userMessage);
     let normalizedUserMessage = String(userMessage || '');
     const controller = beginAbortableRequest();
     try { 
@@ -7700,12 +7703,32 @@ function isLearningIntent(text) {
 }
 
 function isArtistSongRequest(text) {
-    const t = String(text || '').toLowerCase();
-    const hasMusicAsk = /\b(song|songs|track|tracks|music|playlist|recommend|suggest|best|top|hit|hits|melody|melodies)\b/.test(t);
-    if (!hasMusicAsk) return false;
+    const raw = String(text || '').trim();
+    const t = raw.toLowerCase();
+    if (!t) return false;
 
-    return /\b(songs?\s+(of|by|from)|tracks?\s+(of|by|from)|recommend|suggest|best|top)\b/.test(t) ||
-           /\b[a-z][a-z0-9.'&\-\s]{2,}\s+songs?\b/.test(t);
+    const directSongPatterns = [
+        /(?:best|top)\s+\d*\s*songs?\s+(?:of|by|from)\s+.+/i,
+        /(?:recommend|suggest)\s+(?:me\s+)?(?:some\s+)?songs?\s+(?:of|by|from)\s+.+/i,
+        /(?:songs?|tracks?)\s+(?:of|by|from)\s+.+/i,
+        /.+\s+(?:best|top)\s+songs?/i,
+        /.+\s+songs?/i
+    ];
+
+    const hasDirectSongPattern = directSongPatterns.some((regex) => regex.test(raw));
+    if (!hasDirectSongPattern) return false;
+
+    const knownMusicTerms = /(song|songs|track|tracks|music|playlist|album|albums|discography|hit|hits|singer|composer|artist|band)/i.test(raw);
+    if (!knownMusicTerms) return false;
+
+    const obviousNonMusicTravelContext = /(kyoto|tokyo|japan|trip|travel|itinerary|temple|shrines?|hotel|stay|weather|visa|route|map|photo|photos|picture|pictures|image|images|places to visit|things to do)/i.test(raw);
+    const explicitArtistMarkers = /(?:artist|singer|composer|band|musician|album|discography)/i.test(raw) || /(?:songs?|tracks?)\s+(?:of|by|from)/i.test(raw);
+
+    if (obviousNonMusicTravelContext && !explicitArtistMarkers) {
+        return false;
+    }
+
+    return true;
 }
 
 function isEraLanguageHitsBlendRequest(text) {
@@ -11012,6 +11035,7 @@ ${snippets}`
             updateTopicMemory(cleanText);
             const classification = classifyUserMessage(cleanText);
             const answerPath = decideAnswerPath(classification);
+            console.log('ROUTER answerPath:', answerPath, 'for:', cleanText);
             const hybridMode = decideHybridResponseMode(classification);
             const fallbackEntityIntent = classification.entityIntent || classifyUniversalEntityIntent(cleanText, classification.liveIntent);
             const immediateKnowledgeFallback = buildDirectKnowledgeFallback(cleanText);
@@ -14858,6 +14882,3 @@ window.validatePlaces = function(aiText, allowedPlaces) {
 
 </body>
 </html>
-
-
-
