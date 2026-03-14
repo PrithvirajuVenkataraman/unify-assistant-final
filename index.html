@@ -4794,8 +4794,14 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             ? 'This is a direct fact query. Answer in 1-2 sentences max. Give the fact immediately. Do not add generic extra explanation or follow-up offers unless the user asks.'
             : '';
         const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\n${conciseFactHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
-
-         
+        
+        console.log("RAW USER MESSAGE:", userMessage);
+        console.log("NORMALIZED USER MESSAGE:", normalizedUserMessage);
+        console.log("EFFECTIVE MESSAGE SENT:", effectiveMessage);
+        console.log("SYSTEM PROMPT:", systemPromptWithTopic);
+        console.log("INTENT:", intent);
+        console.log("RESPONSE MODE:", responseMode);
+        console.log("FORMAT MODE:", formatMode); 
         const response = await fetch('/api/ask', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
@@ -4826,6 +4832,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         } 
         
         const data = await response.json();
+        console.log("RAW API RESPONSE:", data);
         data.sources = Array.isArray(data.sources) ? data.sources : [];
         if (typeof data.response === 'string') {
             data.response = postProcessAssistantResponse(data.response, normalizedUserMessage);
@@ -14851,5 +14858,6 @@ window.validatePlaces = function(aiText, allowedPlaces) {
 
 </body>
 </html>
+
 
 
