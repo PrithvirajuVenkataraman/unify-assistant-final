@@ -2314,28 +2314,32 @@ function normalizeIntentTypos(text) {
         'calendar', 'budget', 'sync'
     ];
 
-    return raw
-        .split(/(\s+)/)
-        .map(token => {
-            if (!/^[a-zA-Z']+$/.test(token)) return token;
-            const lower = token.toLowerCase();
-            if (dictionary.includes(lower)) return lower;
-            if (lower.length < 3) return lower;
+    const tokens = raw.split(/(\s+)/);
+    const firstWordIndex = tokens.findIndex(token => /^[a-zA-Z']+$/.test(token));
+    if (firstWordIndex === -1) return raw;
 
-            let best = lower;
-            let min = 99;
-            for (const word of dictionary) {
-                const d = levenshteinDistance(lower, word);
-                if (d < min) {
-                    min = d;
-                    best = word;
-                }
-            }
+    const token = tokens[firstWordIndex];
+    const lower = token.toLowerCase();
+    if (dictionary.includes(lower) || lower.length < 3) return raw;
 
-            const limit = lower.length <= 4 ? 1 : 2;
-            return min <= limit ? best : lower;
-        })
-        .join('');
+    let best = lower;
+    let min = Infinity;
+    for (const word of dictionary) {
+        if (word[0] !== lower[0]) continue;
+        const d = levenshteinDistance(lower, word);
+        if (d < min) {
+            min = d;
+            best = word;
+        }
+    }
+
+    const MAX_DISTANCE = 1;
+    if (min <= MAX_DISTANCE && best !== lower) {
+        tokens[firstWordIndex] = best;
+        return tokens.join('');
+    }
+
+    return raw;
 }
 
 function extractReferenceSubject(text) {
@@ -3925,11 +3929,11 @@ function getTopicMemoryHint(userText) {
     return `Active topic: ${activeConversationTopic.label}. Treat this as a follow-up unless user explicitly changes topic.`;
 }
 
-async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
+async function callAIWithTyping(message, loadingMessage = 'Thinking...', aiOptions = {}) {
     
     showThinkingIndicator(loadingMessage);
     try {
-        const responsePromise = askGeminiAI(message);
+        const responsePromise = askGeminiAI(message, aiOptions);
         await Promise.all([
             responsePromise,
             new Promise(resolve => setTimeout(resolve, 2000))
@@ -4746,7 +4750,7 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
     return text;
 }
 
-async function askGeminiAI(userMessage) { 
+async function askGeminiAI(userMessage, options = {}) { 
     console.log("askGeminiAI CALLED with:", userMessage);
     const rawUserMessage = String(userMessage || '').trim();
     let normalizedUserMessage = rawUserMessage;
@@ -4830,10 +4834,8 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         const conciseFactHint = isConciseDirectFactQuery(normalizedUserMessage)
             ? 'This is a direct fact query. Answer in 1-2 sentences max. Give the fact immediately. Do not add generic extra explanation or follow-up offers unless the user asks.'
             : '';
-        const prompt = `User question:
-${normalizedUserMessage}
-
-Teach this clearly for a beginner.
+        const teachingInstructions = options?.teachingMode
+            ? `Teach this clearly for a beginner.
 
 Rules:
 - Cover any domain based on the user question.
@@ -4843,7 +4845,12 @@ Rules:
 - Avoid jargon unless you define it.
 - Keep it accurate and practical.
 
-Response length: ${responseMode}. ${responseHint}
+`
+            : '';
+        const prompt = `User question:
+${normalizedUserMessage}
+
+${teachingInstructions}Response length: ${responseMode}. ${responseHint}
 Response format: ${formatMode}. ${formatHint}
 ${conciseFactHint}`.trim();
         const effectiveMessage = prompt;
@@ -11437,19 +11444,9 @@ Do not use repetitive filler or generic wording.`;
             }
 
             if (isLearningIntent(cleanText)) {
-                const learningPrompt = `User question:
-${text}
-
-Teach this clearly for a beginner.
-
-Rules:
-- Cover any domain based on the user question.
-- Start with a plain definition.
-- Explain in simple steps with one real-world example.
-- End with a short quick recap.
-- Avoid jargon unless you define it.
-- Keep it accurate and practical.`.trim();
-                const learningResponse = await callAIWithTyping(learningPrompt, 'Preparing a clear explanation...');
+                const learningResponse = await callAIWithTyping(text, 'Preparing a clear explanation...', {
+                    teachingMode: true
+                });
                 if (learningResponse?.aborted) return;
                 await publishResolvedModelMessage(text, learningResponse.response, {
                     label: 'Model answer',
@@ -14939,9 +14936,5 @@ window.validatePlaces = function(aiText, allowedPlaces) {
     return true;
 };
 </script>
-
 </body>
 </html>
-
-
-
