@@ -9329,18 +9329,33 @@ async function buildFutureYearResponse(intent) {
     });
 }
 
+function isEntityFactQuery(text) {
+    const raw = String(text || '').trim();
+    const lower = raw.toLowerCase();
+    if (!raw) return false;
+
+    const roleTerms = '(ceo|cfo|cto|coo|founder|president|prime minister|captain|coach|chairman|chairperson|owner|managing director|md|director|governor|mayor)';
+
+    return (
+        new RegExp(`\bwho\s+is\s+the\s+(?:current\s+)?${roleTerms}\s+of\s+.+`, 'i').test(raw) ||
+        new RegExp(`\bwho\s+is\s+(?:the\s+)?(?:current\s+)?${roleTerms}\s+of\s+.+`, 'i').test(raw) ||
+        new RegExp(`\bcurrent\s+${roleTerms}\s+of\s+.+`, 'i').test(raw) ||
+        new RegExp(`\b${roleTerms}\s+of\s+.+`, 'i').test(raw) ||
+        /\bfounder\s+of\s+.+/i.test(raw) ||
+        /\bpresident\s+of\s+.+/i.test(raw)
+    );
+}
+
 function isStrictCurrentRoleLookup(text) {
     const raw = String(text || '').trim();
     const lower = raw.toLowerCase();
     if (!raw) return false;
 
-    const explicitRoleLookup = /\b(?:who is|who was|what is)\s+(?:the\s+)?(?:current\s+)?(ceo|cfo|cto|coo|founder|president|prime minister|captain|coach|chairman|chairperson|owner|managing director|md|director|governor|mayor)\s+of\s+.+/i;
-    const compactRoleLookup = /\b(?:current\s+)?(ceo|cfo|cto|coo|founder|president|prime minister|captain|coach|chairman|chairperson|owner|managing director|md|director|governor|mayor)\s+of\s+.+/i;
     const freshnessTerms = /\b(current|currently|latest|today|right now|as of now|present)\b/;
     const roleTerms = /\b(ceo|cfo|cto|coo|founder|president|prime minister|captain|coach|chairman|chairperson|owner|managing director|md|director|governor|mayor)\b/;
     const ofEntityPattern = /\bof\s+.+/i;
 
-    return explicitRoleLookup.test(raw) || compactRoleLookup.test(raw) || (freshnessTerms.test(lower) && roleTerms.test(lower) && ofEntityPattern.test(raw));
+    return isEntityFactQuery(raw) || (freshnessTerms.test(lower) && roleTerms.test(lower) && ofEntityPattern.test(raw));
 }
 
 function isCurrentInfoQuery(text) {
@@ -9475,6 +9490,8 @@ function decideAnswerPath(classification) {
 
     const flags = classification.flags || {};
     const forceCurrentRoleLookup = isStrictCurrentRoleLookup(classification.raw);
+    const strictEntityFactQuery = isEntityFactQuery(classification.raw);
+    const entityIntent = classification.entityIntent || {};
 
     if (flags.inappropriate) return 'moderation';
     if (flags.stableBiography) return 'default_model';
@@ -9487,8 +9504,9 @@ function decideAnswerPath(classification) {
     if (flags.medicalAdvice) return 'medical_advice';
     if (flags.mentalHealth) return 'mental_health';
 
-    if (forceCurrentRoleLookup && flags.universalEntityFact) return 'entity_fact';
+    if ((forceCurrentRoleLookup || strictEntityFactQuery) && flags.universalEntityFact) return 'entity_fact';
     if (flags.currentInfo) return 'current_info';
+    if (flags.universalEntityFact && entityIntent.relationType === 'role' && !strictEntityFactQuery) return 'current_info';
     if (flags.universalEntityFact) return 'entity_fact';
 
     if (flags.vagueAdvice) return 'vague_advice';
@@ -10280,12 +10298,11 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
     const relationHint = relationHints[entityIntent.relationType] || relationHints.general; 
     const sourceBias = getDomainSourcePolicy(entityIntent.domain).preferredDomains.join(' ') || 'official Reuters AP BBC'; 
     const politicalRole = entityIntent.relationType === 'role' && /\b(president|prime minister|governor|mayor|minister|chief minister)\b/.test(roleLabel);
- 
-    return Array.from(new Set([ 
+    const queryCandidates = [ 
         userText, 
+        entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} current ${roleLabel} official` : '',
         entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleLabel} of ${roleTarget}` : '',
         entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} ${roleLabel}` : '',
-        entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} current ${roleLabel} official` : '',
         politicalRole && entityIntent.targetEntity ? `${roleTarget} official government ${roleLabel}` : '',
         politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} site:gov.in OR site:pmindia.gov.in OR site:india.gov.in` : '',
         politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} Reuters OR AP OR BBC` : '',
@@ -10297,7 +10314,9 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         expandedSubject && expandedSubject.toLowerCase() !== subject.toLowerCase() 
             ? `${expandedSubjectWithCompetition} ${entityIntent.timeframe || ''} ${relationHint} ${sourceBias}`.replace(/\s+/g, ' ').trim() 
             : '' 
-    ].filter(Boolean))); 
+    ].filter(Boolean);
+
+    return Array.from(new Set(queryCandidates)).slice(0, 3); 
 } 
 
 function normalizeAgreementValue(value) {
