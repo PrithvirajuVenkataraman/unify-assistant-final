@@ -1,4 +1,17 @@
-import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './live-search.js';
+import { runVerifiedWebSearch, searchWeb } from './live-search.js';
+import {
+    buildSearchQueries,
+    isCurrentRoleLookup,
+    isTimeSensitiveQuery
+} from './search_current_role_fixed.js';
+
+const DEFAULT_MAX_RESULTS = 6;
+const MIN_MAX_RESULTS = 1;
+const MAX_MAX_RESULTS = 8;
+const MAX_CONTEXT_TURNS = 12;
+const MAX_SOURCE_SNIPPET_LENGTH = 300;
+const MAX_RAG_SOURCES = 6;
+const SEARCH_TRIGGER_PATTERN = /\b(latest|recent|current|today|tonight|this week|right now|news|headline|update|updates|best|top|compare|comparison|review|reviews|price|pricing|cost|rate|rates|score|scores|standings|ranking|rankings|result|results|winner|won|weather|forecast|traffic|train|flight|flights|where should i|what should i buy|recommend|recommendation|recommendations|ceo|cfo|cto|coo|chairman|chairperson|founder|owner|president|managing director|executive team|leadership)\b/i;
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -19,11 +32,12 @@ export default async function handler(req, res) {
             userName,
             context,
             forceSearch = false,
-            maxResults = 6,
+            maxResults = DEFAULT_MAX_RESULTS,
             systemPrompt
         } = req.body || {};
 
-        const userMessage = String(message || '').trim();
+        const userMessage = normalizeText(message);
+        const normalizedMaxResults = clampInteger(maxResults, DEFAULT_MAX_RESULTS, MIN_MAX_RESULTS, MAX_MAX_RESULTS);
 
         if (!userMessage) {
             return res.status(400).json({ error: 'message is required' });
@@ -34,14 +48,7 @@ export default async function handler(req, res) {
 
         let sources = [];
         let ragContext = '';
-        let searchMeta = {
-            used: false,
-            provider: 'none',
-            queryVariants: [],
-            distinctDomainCount: 0,
-            trustedCount: 0,
-            forcedCurrentRoleLookup: strictCurrentRoleLookup
-        };
+        let searchMeta = buildDefaultSearchMeta(strictCurrentRoleLookup);
 
         if (shouldSearch) {
             const liveQueries = buildSearchQueries(userMessage);
@@ -50,23 +57,25 @@ export default async function handler(req, res) {
             console.log('ASK LIVE QUERY VARIANTS:', liveQueries);
 
             const verified = await runVerifiedWebSearch(liveQueries, {
-                maxResultsPerQuery: Math.min(Number(maxResults) || 6, 6),
-                limit: Math.min(Number(maxResults) || 6, 8)
+                maxResultsPerQuery: Math.min(normalizedMaxResults, 6),
+                limit: normalizedMaxResults
             });
 
             const searchResults = verified?.results?.length
                 ? verified.results
-                : await searchWeb(userMessage, Math.min(Number(maxResults) || 6, 8));
+                : await searchWeb(userMessage, normalizedMaxResults);
 
-            sources = normalizeSources(searchResults).slice(0, Math.min(Number(maxResults) || 6, 8));
+            sources = normalizeSources(searchResults).slice(0, normalizedMaxResults);
             ragContext = buildRagContext(sources, userMessage, { strictCurrentRoleLookup });
 
             searchMeta = {
                 used: true,
                 provider: sources.length ? 'aggregated-search' : 'none',
-                queryVariants: liveQueries,
-                distinctDomainCount: verified?.distinctDomains?.length || countDistinctDomains(sources),
-                trustedCount: verified?.trustedCount || 0,
+                queryVariants: Array.isArray(liveQueries) ? liveQueries : [],
+                distinctDomainCount: Array.isArray(verified?.distinctDomains)
+                    ? verified.distinctDomains.length
+                    : countDistinctDomains(sources),
+                trustedCount: Number(verified?.trustedCount) || 0,
                 forcedCurrentRoleLookup: strictCurrentRoleLookup
             };
         }
@@ -97,161 +106,39 @@ export default async function handler(req, res) {
             action: null,
             details: String(error?.message || error),
             provider: 'none',
-            sources: []
+            sources: [],
+            search: buildDefaultSearchMeta(false)
         });
     }
 }
 
 function needsLiveSearch(text) {
-    const t = String(text || '').toLowerCase().trim();
-    if (!t) return false;
-    if (isCurrentRoleLookup(t)) return true;
-
-    return /\b(latest|recent|current|today|tonight|this week|right now|news|headline|update|updates|best|top|compare|comparison|review|reviews|price|pricing|cost|rate|rates|score|scores|standings|ranking|rankings|result|results|winner|won|weather|forecast|traffic|train|flight|flights|where should i|what should i buy|recommend|recommendation|recommendations|ceo|cfo|cto|coo|chairman|chairperson|founder|owner|president|managing director|executive team|leadership)\b/i.test(t);
+    const value = normalizeText(text).toLowerCase();
+    if (!value) return false;
+    if (isCurrentRoleLookup(value)) return true;
+    if (isTimeSensitiveQuery(value)) return true;
+    return SEARCH_TRIGGER_PATTERN.test(value);
 }
 
-function buildSearchQueries(query) {
-    const raw = String(query || '').trim();
-    if (!raw) return [];
-
-    const topic = extractSearchTopic(raw) || raw;
-    const cleanTopic = normalizeSearchTopic(topic);
-
-    if (isCurrentRoleLookup(raw)) {
-        return buildCurrentRoleQueries(raw, cleanTopic);
-    }
-
-    const out = [
-        cleanTopic,
-        `${cleanTopic} reliable source`
-    ];
-
-    if (isTimeSensitiveQuery(raw)) {
-        out.push(`latest ${cleanTopic}`);
-        out.push(`${cleanTopic} Reuters OR AP OR BBC OR official source`);
-    }
-
-    if (/\b(best|top|recommend|recommendations|places to visit|restaurants|hotels)\b/i.test(raw)) {
-        out.push(`${cleanTopic} official tourism guide`);
-        out.push(`${cleanTopic} trusted travel guide`);
-    }
-
-    return Array.from(new Set(out.filter(Boolean)));
+function buildDefaultSearchMeta(strictCurrentRoleLookup) {
+    return {
+        used: false,
+        provider: 'none',
+        queryVariants: [],
+        distinctDomainCount: 0,
+        trustedCount: 0,
+        forcedCurrentRoleLookup: Boolean(strictCurrentRoleLookup)
+    };
 }
 
-function isTimeSensitiveQuery(text) {
-    const t = String(text || '').toLowerCase();
-    return /\b(latest|recent|current|today|right now|as of now|breaking|news|headline|update|updates|score|scores|winner|won|result|results|standings|ranking|rankings|price|pricing|rate|rates|weather|forecast)\b/i.test(t);
+function normalizeText(value) {
+    return String(value || '').trim();
 }
 
-function isCurrentRoleLookup(text) {
-    const t = String(text || '').toLowerCase().trim();
-    if (!t) return false;
-
-    const hasRole = /\b(ceo|chief executive officer|cfo|chief financial officer|cto|chief technology officer|coo|chief operating officer|chief product officer|chief revenue officer|founder|co-founder|owner|president|chairman|chairperson|chair|managing director|director|executive director|general manager|md)\b/i.test(t);
-    const hasFreshness = /\b(current|latest|now|right now|as of now|today|present)\b/i.test(t);
-    const hasLookupPattern = /\bwho(?:'s| is)?\b/i.test(t) || /\bname of\b/i.test(t) || /\bwho heads\b/i.test(t) || /\bwho leads\b/i.test(t);
-    const hasOrgCue = /\b(of|at|for)\b/i.test(t) || /\bcompany\b/i.test(t) || /\bcorp\b/i.test(t) || /\bltd\b/i.test(t) || /\binc\b/i.test(t) || /\bllc\b/i.test(t) || /\bplc\b/i.test(t);
-
-    return hasRole && (hasFreshness || hasLookupPattern || hasOrgCue);
-}
-
-function extractRoleFromQuery(text) {
-    const raw = String(text || '').trim();
-    if (!raw) return '';
-
-    const roles = [
-        ['chief executive officer', 'CEO'],
-        ['ceo', 'CEO'],
-        ['chief financial officer', 'CFO'],
-        ['cfo', 'CFO'],
-        ['chief technology officer', 'CTO'],
-        ['cto', 'CTO'],
-        ['chief operating officer', 'COO'],
-        ['coo', 'COO'],
-        ['chief product officer', 'Chief Product Officer'],
-        ['chief revenue officer', 'Chief Revenue Officer'],
-        ['co-founder', 'Co-Founder'],
-        ['founder', 'Founder'],
-        ['chairperson', 'Chairperson'],
-        ['chairman', 'Chairman'],
-        ['chair', 'Chair'],
-        ['owner', 'Owner'],
-        ['president', 'President'],
-        ['managing director', 'Managing Director'],
-        ['executive director', 'Executive Director'],
-        ['director', 'Director'],
-        ['general manager', 'General Manager'],
-        ['md', 'Managing Director']
-    ];
-
-    const lowered = raw.toLowerCase();
-    for (const [needle, normalized] of roles) {
-        if (lowered.includes(needle)) return normalized;
-    }
-
-    return '';
-}
-
-function extractOrganizationFromRoleQuery(text, roleLabel = '') {
-    let raw = String(text || '').trim();
-    if (!raw) return '';
-
-    const escapedRole = roleLabel
-        ? roleLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        : '';
-
-    const patterns = [
-        escapedRole ? new RegExp(`\\b(?:who(?:'s| is)?\\s+the\\s+)?(?:current|latest|present)?\\s*${escapedRole}\\s+(?:of|at|for)\\s+(.+)$`, 'i') : null,
-        escapedRole ? new RegExp(`\\b${escapedRole}\\s+(?:of|at|for)\\s+(.+)$`, 'i') : null,
-        /\b(?:who heads|who leads|who runs)\s+(.+)$/i,
-        /\b(?:leadership|executive team|management team)\s+(?:of|at|for)\s+(.+)$/i
-    ].filter(Boolean);
-
-    for (const pattern of patterns) {
-        const match = raw.match(pattern);
-        if (match?.[1]) {
-            raw = match[1];
-            break;
-        }
-    }
-
-    return normalizeSearchTopic(
-        raw
-            .replace(/^(?:the\s+)?(?:company\s+)?/i, '')
-            .replace(/\b(current|latest|present|right now|today|now)\b/gi, ' ')
-            .replace(/\b(ceo|chief executive officer|cfo|chief financial officer|cto|chief technology officer|coo|chief operating officer|chief product officer|chief revenue officer|founder|co-founder|owner|president|chairman|chairperson|chair|managing director|director|executive director|general manager|md)\b/gi, ' ')
-            .replace(/^of\s+/i, '')
-            .replace(/[?]+$/g, '')
-            .replace(/\s+/g, ' ')
-            .trim()
-    );
-}
-
-function buildCurrentRoleQueries(rawQuery, cleanTopic) {
-    const roleLabel = extractRoleFromQuery(rawQuery) || 'leadership';
-    const company = extractOrganizationFromRoleQuery(rawQuery, roleLabel) || cleanTopic;
-    const quotedCompany = company.includes(' ') ? `"${company}"` : company;
-
-    return Array.from(new Set([
-        `${quotedCompany} ${roleLabel} official site`,
-        `${quotedCompany} ${roleLabel} investor relations`,
-        `${quotedCompany} leadership team official`,
-        `${quotedCompany} management team official`,
-        `${quotedCompany} board of directors official`,
-        `${quotedCompany} annual report ${roleLabel}`,
-        `${quotedCompany} SEC filing ${roleLabel}`,
-        `${quotedCompany} Reuters ${roleLabel}`,
-        `${quotedCompany} Bloomberg ${roleLabel}`,
-        `${quotedCompany} official leadership page`
-    ].filter(Boolean)));
-}
-
-function normalizeSearchTopic(text) {
-    return String(text || '')
-        .replace(/[^\w\s&.-]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+function clampInteger(value, fallback, min, max) {
+    const numeric = Number.parseInt(value, 10);
+    if (!Number.isFinite(numeric)) return fallback;
+    return Math.min(Math.max(numeric, min), max);
 }
 
 function stripHtml(text = '') {
@@ -265,10 +152,32 @@ function normalizeSources(results) {
     return (Array.isArray(results) ? results : [])
         .map((item) => ({
             title: stripHtml(item?.title || item?.name || 'Untitled'),
-            url: String(item?.url || item?.link || '').trim(),
-            description: stripHtml(item?.description || item?.snippet || '').slice(0, 300)
+            url: normalizeText(item?.url || item?.link),
+            description: stripHtml(item?.description || item?.snippet || '').slice(0, MAX_SOURCE_SNIPPET_LENGTH)
         }))
-        .filter((item) => item.url);
+        .filter((item) => item.url)
+        .filter(dedupeSourceByUrl());
+}
+
+function dedupeSourceByUrl() {
+    const seen = new Set();
+
+    return (item) => {
+        const key = canonicalizeUrl(item?.url);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    };
+}
+
+function canonicalizeUrl(url) {
+    try {
+        const parsed = new URL(String(url || '').trim());
+        parsed.hash = '';
+        return parsed.toString();
+    } catch (_) {
+        return '';
+    }
 }
 
 function buildRagContext(sources, originalQuestion, options = {}) {
@@ -289,7 +198,7 @@ function buildRagContext(sources, originalQuestion, options = {}) {
 
     lines.push('');
 
-    sources.slice(0, 6).forEach((source, index) => {
+    sources.slice(0, MAX_RAG_SOURCES).forEach((source, index) => {
         lines.push(
             `[Source ${index + 1}]`,
             `Title: ${source.title || 'Untitled'}`,
@@ -305,12 +214,12 @@ function buildRagContext(sources, originalQuestion, options = {}) {
 function countDistinctDomains(sources) {
     const domains = new Set();
 
-    for (const source of sources || []) {
+    for (const source of Array.isArray(sources) ? sources : []) {
         try {
             const hostname = new URL(source.url).hostname.replace(/^www\./, '');
             if (hostname) domains.add(hostname);
         } catch (_) {
-            // ignore bad URLs
+            // ignore malformed urls
         }
     }
 
@@ -351,12 +260,13 @@ async function callChatModel({ message, userName, context, ragContext, systemPro
         systemPrompt,
         ragContext,
         context,
-        message
+        message,
+        userName
     });
 
     const groqApiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
     if (groqApiKey) {
-        const groqConfiguredModel = String(process.env.GROQ_MODEL || '').trim();
+        const groqConfiguredModel = normalizeText(process.env.GROQ_MODEL);
         const groqCandidates = [
             groqConfiguredModel,
             'llama-3.3-70b-versatile',
@@ -386,7 +296,7 @@ async function callChatModel({ message, userName, context, ragContext, systemPro
 
             if (response.ok) {
                 const data = await response.json();
-                text = String(data?.choices?.[0]?.message?.content || '').trim();
+                text = normalizeText(data?.choices?.[0]?.message?.content);
                 modelUsed = model;
                 break;
             }
@@ -417,7 +327,7 @@ async function callChatModel({ message, userName, context, ragContext, systemPro
         };
     }
 
-    const geminiConfiguredModel = String(process.env.GEMINI_MODEL || '').trim();
+    const geminiConfiguredModel = normalizeText(process.env.GEMINI_MODEL);
     const geminiCandidates = [
         geminiConfiguredModel,
         'gemini-2.5-flash',
@@ -451,7 +361,7 @@ async function callChatModel({ message, userName, context, ragContext, systemPro
 
         if (response.ok) {
             const data = await response.json();
-            aiText = String(data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+            aiText = normalizeText(data?.candidates?.[0]?.content?.parts?.[0]?.text);
             modelUsed = model;
             break;
         }
@@ -471,16 +381,20 @@ async function callChatModel({ message, userName, context, ragContext, systemPro
     };
 }
 
-function buildFinalPrompt({ systemPrompt, ragContext, context, message }) {
+function buildFinalPrompt({ systemPrompt, ragContext, context, message, userName }) {
     const contextBlock = Array.isArray(context)
         ? context
-            .slice(-12)
-            .map((m) => `${m?.role === 'user' ? 'User' : 'Assistant'}: ${String(m?.text || '')}`)
+            .slice(-MAX_CONTEXT_TURNS)
+            .map((item) => `${item?.role === 'user' ? 'User' : 'Assistant'}: ${normalizeText(item?.text)}`)
+            .filter(Boolean)
             .join('\n')
         : '';
 
+    const userLabel = normalizeText(userName) ? `User name: ${normalizeText(userName)}` : '';
+
     return [
         systemPrompt,
+        userLabel,
         ragContext ? `Retrieved context (RAG):\n${ragContext}` : '',
         contextBlock ? `Recent turns:\n${contextBlock}` : '',
         `User message: ${message}`
@@ -492,13 +406,13 @@ function safeParseAssistantJson(text) {
         const parsed = JSON.parse(text);
         return {
             intent: parsed?.intent || 'casual_chat',
-            response: String(parsed?.response || '').trim(),
+            response: normalizeText(parsed?.response),
             action: parsed?.action || null
         };
     } catch (_) {
         return {
             intent: 'casual_chat',
-            response: String(text || '').trim(),
+            response: normalizeText(text),
             action: null
         };
     }
