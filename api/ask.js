@@ -3,7 +3,7 @@ import {
     buildSearchQueries,
     isCurrentRoleLookup,
     isTimeSensitiveQuery
-} from './search_current_role_fixed.js';
+} from './search.js';
 
 const DEFAULT_MAX_RESULTS = 6;
 const MIN_MAX_RESULTS = 1;
