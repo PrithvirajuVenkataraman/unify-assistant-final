@@ -29,7 +29,8 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'message is required' });
         }
 
-        const shouldSearch = Boolean(forceSearch) || needsLiveSearch(userMessage);
+        const strictCurrentRoleLookup = isCurrentRoleLookup(userMessage);
+        const shouldSearch = Boolean(forceSearch) || strictCurrentRoleLookup || needsLiveSearch(userMessage);
 
         let sources = [];
         let ragContext = '';
@@ -38,11 +39,16 @@ export default async function handler(req, res) {
             provider: 'none',
             queryVariants: [],
             distinctDomainCount: 0,
-            trustedCount: 0
+            trustedCount: 0,
+            forcedCurrentRoleLookup: strictCurrentRoleLookup
         };
 
         if (shouldSearch) {
             const liveQueries = buildSearchQueries(userMessage);
+            console.log('ASK QUESTION:', userMessage);
+            console.log('ASK FORCE CURRENT ROLE LOOKUP:', strictCurrentRoleLookup);
+            console.log('ASK LIVE QUERY VARIANTS:', liveQueries);
+
             const verified = await runVerifiedWebSearch(liveQueries, {
                 maxResultsPerQuery: Math.min(Number(maxResults) || 6, 6),
                 limit: Math.min(Number(maxResults) || 6, 8)
@@ -52,17 +58,16 @@ export default async function handler(req, res) {
                 ? verified.results
                 : await searchWeb(userMessage, Math.min(Number(maxResults) || 6, 8));
 
-            
-
             sources = normalizeSources(searchResults).slice(0, Math.min(Number(maxResults) || 6, 8));
-            ragContext = buildRagContext(sources, userMessage);
+            ragContext = buildRagContext(sources, userMessage, { strictCurrentRoleLookup });
 
             searchMeta = {
                 used: true,
                 provider: sources.length ? 'aggregated-search' : 'none',
                 queryVariants: liveQueries,
                 distinctDomainCount: verified?.distinctDomains?.length || countDistinctDomains(sources),
-                trustedCount: verified?.trustedCount || 0
+                trustedCount: verified?.trustedCount || 0,
+                forcedCurrentRoleLookup: strictCurrentRoleLookup
             };
         }
 
@@ -100,8 +105,9 @@ export default async function handler(req, res) {
 function needsLiveSearch(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
+    if (isCurrentRoleLookup(t)) return true;
 
-    return /\b(latest|recent|current|today|tonight|this week|right now|news|headline|update|updates|best|top|compare|comparison|review|reviews|price|pricing|cost|rate|rates|score|scores|standings|ranking|rankings|result|results|winner|won|weather|forecast|traffic|train|flight|flights|where should i|what should i buy|recommend|recommendation|recommendations)\b/i.test(t);
+    return /\b(latest|recent|current|today|tonight|this week|right now|news|headline|update|updates|best|top|compare|comparison|review|reviews|price|pricing|cost|rate|rates|score|scores|standings|ranking|rankings|result|results|winner|won|weather|forecast|traffic|train|flight|flights|where should i|what should i buy|recommend|recommendation|recommendations|ceo|cfo|cto|coo|chairman|chairperson|founder|owner|president|managing director|executive team|leadership)\b/i.test(t);
 }
 
 function buildSearchQueries(query) {
@@ -110,6 +116,10 @@ function buildSearchQueries(query) {
 
     const topic = extractSearchTopic(raw) || raw;
     const cleanTopic = normalizeSearchTopic(topic);
+
+    if (isCurrentRoleLookup(raw)) {
+        return buildCurrentRoleQueries(raw, cleanTopic);
+    }
 
     const out = [
         cleanTopic,
@@ -132,6 +142,109 @@ function buildSearchQueries(query) {
 function isTimeSensitiveQuery(text) {
     const t = String(text || '').toLowerCase();
     return /\b(latest|recent|current|today|right now|as of now|breaking|news|headline|update|updates|score|scores|winner|won|result|results|standings|ranking|rankings|price|pricing|rate|rates|weather|forecast)\b/i.test(t);
+}
+
+function isCurrentRoleLookup(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+
+    const hasRole = /\b(ceo|chief executive officer|cfo|chief financial officer|cto|chief technology officer|coo|chief operating officer|chief product officer|chief revenue officer|founder|co-founder|owner|president|chairman|chairperson|chair|managing director|director|executive director|general manager|md)\b/i.test(t);
+    const hasFreshness = /\b(current|latest|now|right now|as of now|today|present)\b/i.test(t);
+    const hasLookupPattern = /\bwho(?:'s| is)?\b/i.test(t) || /\bname of\b/i.test(t) || /\bwho heads\b/i.test(t) || /\bwho leads\b/i.test(t);
+    const hasOrgCue = /\b(of|at|for)\b/i.test(t) || /\bcompany\b/i.test(t) || /\bcorp\b/i.test(t) || /\bltd\b/i.test(t) || /\binc\b/i.test(t) || /\bllc\b/i.test(t) || /\bplc\b/i.test(t);
+
+    return hasRole && (hasFreshness || hasLookupPattern || hasOrgCue);
+}
+
+function extractRoleFromQuery(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+
+    const roles = [
+        ['chief executive officer', 'CEO'],
+        ['ceo', 'CEO'],
+        ['chief financial officer', 'CFO'],
+        ['cfo', 'CFO'],
+        ['chief technology officer', 'CTO'],
+        ['cto', 'CTO'],
+        ['chief operating officer', 'COO'],
+        ['coo', 'COO'],
+        ['chief product officer', 'Chief Product Officer'],
+        ['chief revenue officer', 'Chief Revenue Officer'],
+        ['co-founder', 'Co-Founder'],
+        ['founder', 'Founder'],
+        ['chairperson', 'Chairperson'],
+        ['chairman', 'Chairman'],
+        ['chair', 'Chair'],
+        ['owner', 'Owner'],
+        ['president', 'President'],
+        ['managing director', 'Managing Director'],
+        ['executive director', 'Executive Director'],
+        ['director', 'Director'],
+        ['general manager', 'General Manager'],
+        ['md', 'Managing Director']
+    ];
+
+    const lowered = raw.toLowerCase();
+    for (const [needle, normalized] of roles) {
+        if (lowered.includes(needle)) return normalized;
+    }
+
+    return '';
+}
+
+function extractOrganizationFromRoleQuery(text, roleLabel = '') {
+    let raw = String(text || '').trim();
+    if (!raw) return '';
+
+    const escapedRole = roleLabel
+        ? roleLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        : '';
+
+    const patterns = [
+        escapedRole ? new RegExp(`\\b(?:who(?:'s| is)?\\s+the\\s+)?(?:current|latest|present)?\\s*${escapedRole}\\s+(?:of|at|for)\\s+(.+)$`, 'i') : null,
+        escapedRole ? new RegExp(`\\b${escapedRole}\\s+(?:of|at|for)\\s+(.+)$`, 'i') : null,
+        /\b(?:who heads|who leads|who runs)\s+(.+)$/i,
+        /\b(?:leadership|executive team|management team)\s+(?:of|at|for)\s+(.+)$/i
+    ].filter(Boolean);
+
+    for (const pattern of patterns) {
+        const match = raw.match(pattern);
+        if (match?.[1]) {
+            raw = match[1];
+            break;
+        }
+    }
+
+    return normalizeSearchTopic(
+        raw
+            .replace(/^(?:the\s+)?(?:company\s+)?/i, '')
+            .replace(/\b(current|latest|present|right now|today|now)\b/gi, ' ')
+            .replace(/\b(ceo|chief executive officer|cfo|chief financial officer|cto|chief technology officer|coo|chief operating officer|chief product officer|chief revenue officer|founder|co-founder|owner|president|chairman|chairperson|chair|managing director|director|executive director|general manager|md)\b/gi, ' ')
+            .replace(/^of\s+/i, '')
+            .replace(/[?]+$/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+    );
+}
+
+function buildCurrentRoleQueries(rawQuery, cleanTopic) {
+    const roleLabel = extractRoleFromQuery(rawQuery) || 'leadership';
+    const company = extractOrganizationFromRoleQuery(rawQuery, roleLabel) || cleanTopic;
+    const quotedCompany = company.includes(' ') ? `"${company}"` : company;
+
+    return Array.from(new Set([
+        `${quotedCompany} ${roleLabel} official site`,
+        `${quotedCompany} ${roleLabel} investor relations`,
+        `${quotedCompany} leadership team official`,
+        `${quotedCompany} management team official`,
+        `${quotedCompany} board of directors official`,
+        `${quotedCompany} annual report ${roleLabel}`,
+        `${quotedCompany} SEC filing ${roleLabel}`,
+        `${quotedCompany} Reuters ${roleLabel}`,
+        `${quotedCompany} Bloomberg ${roleLabel}`,
+        `${quotedCompany} official leadership page`
+    ].filter(Boolean)));
 }
 
 function normalizeSearchTopic(text) {
@@ -158,7 +271,7 @@ function normalizeSources(results) {
         .filter((item) => item.url);
 }
 
-function buildRagContext(sources, originalQuestion) {
+function buildRagContext(sources, originalQuestion, options = {}) {
     if (!Array.isArray(sources) || !sources.length) return '';
 
     const lines = [
@@ -166,9 +279,15 @@ function buildRagContext(sources, originalQuestion) {
         '',
         'Use the following web results as evidence.',
         'Prefer higher quality sources when multiple results overlap.',
-        'If the evidence is weak or mixed, say so clearly.',
-        ''
+        'If the evidence is weak or mixed, say so clearly.'
     ];
+
+    if (options.strictCurrentRoleLookup) {
+        lines.push('This is a strict current leadership lookup. Prefer official leadership, investor relations, annual report, or regulatory filing evidence before general summaries.');
+        lines.push('If the sources clearly identify the role holder, answer directly and do not add generic uncertainty.');
+    }
+
+    lines.push('');
 
     sources.slice(0, 6).forEach((source, index) => {
         lines.push(
@@ -205,6 +324,8 @@ When web context is provided:
 - Answer using the retrieved context first.
 - Do not invent facts beyond the provided evidence.
 - If sources disagree or look weak, say that clearly.
+- For current company leadership questions, prefer official company leadership, investor relations, annual report, or regulatory filing evidence first, then major business outlets.
+- Do not add fallback uncertainty like "I couldn't find recent information" when the sources clearly identify the role holder.
 - Keep the answer direct and useful.
 - When referring to sources, use the titles or domains from the provided sources list.
 - Do not output markdown tables.
