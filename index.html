@@ -9329,6 +9329,20 @@ async function buildFutureYearResponse(intent) {
     });
 }
 
+function isStrictCurrentRoleLookup(text) {
+    const raw = String(text || '').trim();
+    const lower = raw.toLowerCase();
+    if (!raw) return false;
+
+    const explicitRoleLookup = /\b(?:who is|who was|what is)\s+(?:the\s+)?(?:current\s+)?(ceo|cfo|cto|coo|founder|president|prime minister|captain|coach|chairman|chairperson|owner|managing director|md|director|governor|mayor)\s+of\s+.+/i;
+    const compactRoleLookup = /\b(?:current\s+)?(ceo|cfo|cto|coo|founder|president|prime minister|captain|coach|chairman|chairperson|owner|managing director|md|director|governor|mayor)\s+of\s+.+/i;
+    const freshnessTerms = /\b(current|currently|latest|today|right now|as of now|present)\b/;
+    const roleTerms = /\b(ceo|cfo|cto|coo|founder|president|prime minister|captain|coach|chairman|chairperson|owner|managing director|md|director|governor|mayor)\b/;
+    const ofEntityPattern = /\bof\s+.+/i;
+
+    return explicitRoleLookup.test(raw) || compactRoleLookup.test(raw) || (freshnessTerms.test(lower) && roleTerms.test(lower) && ofEntityPattern.test(raw));
+}
+
 function isCurrentInfoQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -9460,6 +9474,7 @@ function decideAnswerPath(classification) {
     if (!classification || !classification.raw) return 'default_model';
 
     const flags = classification.flags || {};
+    const forceCurrentRoleLookup = isStrictCurrentRoleLookup(classification.raw);
 
     if (flags.inappropriate) return 'moderation';
     if (flags.stableBiography) return 'default_model';
@@ -9472,6 +9487,7 @@ function decideAnswerPath(classification) {
     if (flags.medicalAdvice) return 'medical_advice';
     if (flags.mentalHealth) return 'mental_health';
 
+    if (forceCurrentRoleLookup && flags.universalEntityFact) return 'entity_fact';
     if (flags.currentInfo) return 'current_info';
     if (flags.universalEntityFact) return 'entity_fact';
 
@@ -9557,6 +9573,12 @@ const ROUTING_REGRESSION_CASES = [
         prompt: "Tell me about Nvidia's latest earnings",
         expectedPath: 'current_info',
         expectedMode: 'answer_then_cite'
+    },
+    {
+        name: 'Current company CEO lookup',
+        prompt: 'Who is the current CEO of TaskUs?',
+        expectedPath: 'entity_fact',
+        expectedMode: 'verify_first'
     },
     {
         name: 'Recipe route',
@@ -10486,7 +10508,9 @@ function requiresStrictLiveVerification(userText, liveIntent = null, entityInten
 
     if (entity.relationType === 'role') {
         const politicalOffice = /\b(president|prime minister|governor|mayor|minister|chief minister)\b/.test(lower);
-        if ((entity.timeframe === 'current' || hasExplicitFreshnessLanguage(text)) && politicalOffice) {
+        const businessRole = /\b(ceo|cfo|cto|coo|chairman|chairperson|founder|owner|managing director|md|director|president)\b/.test(lower);
+        const isCurrentRoleLookup = isStrictCurrentRoleLookup(text);
+        if ((entity.timeframe === 'current' || hasExplicitFreshnessLanguage(text) || isCurrentRoleLookup) && (politicalOffice || businessRole)) {
             return true;
         }
     }
@@ -10519,6 +10543,7 @@ async function fetchHybridCitationSources(userText, intent, controller) {
                     signal: controller?.signal,
                     body: JSON.stringify({ query: q, maxResults: 5 })
                 });
+                console.log('API PATH USED:', '/api/search', 'query:', q);
                 if (!response.ok) return [];
                 const data = await response.json();
                 return Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
@@ -10643,6 +10668,7 @@ async function retrieveUniversalEntitySources(pipeline, controller) {
                     signal: controller.signal,
                     body: JSON.stringify({ query: q, maxResults: 6 })
                 });
+                console.log('API PATH USED:', '/api/search', 'query:', q);
                 if (!response.ok) return [];
                 const data = await response.json();
                 return Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
@@ -11179,7 +11205,11 @@ ${snippets}`
 
             updateTopicMemory(cleanText);
             const classification = classifyUserMessage(cleanText);
+            const forcedCurrentRoleLookup = isStrictCurrentRoleLookup(cleanText);
             const answerPath = decideAnswerPath(classification);
+            console.log('QUESTION:', cleanText);
+            console.log('FORCED CURRENT ROLE LOOKUP:', forcedCurrentRoleLookup);
+            console.log('FINAL ROUTE:', answerPath);
             console.log('ROUTER answerPath:', answerPath, 'for:', cleanText);
             const hybridMode = decideHybridResponseMode(classification);
             const fallbackEntityIntent = classification.entityIntent || classifyUniversalEntityIntent(cleanText, classification.liveIntent);
@@ -15018,6 +15048,5 @@ window.validatePlaces = function(aiText, allowedPlaces) {
     return true;
 };
 </script>
-
 </body>
 </html>
