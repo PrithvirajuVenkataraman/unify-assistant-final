@@ -1,4 +1,4 @@
-import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './live-search.js';
+import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './_lib/live-search.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -23,7 +23,12 @@ export default async function handler(req, res) {
             return res.status(413).json({ error: 'query is too long' });
         }
 
+        const strictCurrentRoleLookup = isCurrentRoleLookup(query);
         const liveQueries = buildSearchQueries(query);
+        console.log('SEARCH QUESTION:', query);
+        console.log('SEARCH FORCE CURRENT ROLE LOOKUP:', strictCurrentRoleLookup);
+        console.log('SEARCH QUERY VARIANTS:', liveQueries);
+
         const verified = await runVerifiedWebSearch(liveQueries, {
             maxResultsPerQuery: Math.min(maxResults, 6),
             limit: maxResults
@@ -36,6 +41,7 @@ export default async function handler(req, res) {
             queryVariants: liveQueries,
             distinctDomainCount: verified.distinctDomains?.length || 0,
             trustedCount: verified.trustedCount || 0,
+            forcedCurrentRoleLookup: strictCurrentRoleLookup,
             results
         });
     } catch (error) {
@@ -45,6 +51,7 @@ export default async function handler(req, res) {
             queryVariants: [],
             distinctDomainCount: 0,
             trustedCount: 0,
+            forcedCurrentRoleLookup: false,
             results: [],
             error: 'search_unavailable',
             details: String(error?.message || error)
@@ -55,13 +62,20 @@ export default async function handler(req, res) {
 function buildSearchQueries(query) {
     const raw = String(query || '').trim();
     if (!raw) return [];
+
     const topic = extractSearchTopic(raw) || raw;
     const out = [topic];
     const aliasedTopic = normalizeSearchTopic(topic);
     const domain = detectQueryDomain(raw);
+
+    if (isCurrentRoleLookup(raw)) {
+        return buildCurrentRoleQueries(raw, aliasedTopic || topic);
+    }
+
     if (aliasedTopic && aliasedTopic.toLowerCase() !== topic.toLowerCase()) {
         out.push(aliasedTopic);
     }
+
     const dynamicVariants = buildDynamicQueryVariants(raw, aliasedTopic || topic, domain);
     out.push(...dynamicVariants);
 
@@ -90,6 +104,109 @@ function buildSearchQueries(query) {
 function isTimeSensitiveQuery(text) {
     const t = String(text || '').toLowerCase();
     return /\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update|status|price now|rate today|winner|won|champion|score|scores|live score|stats|standings|points table|ranking|rankings|record|qualified|eliminated|ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup|nasa|isro|esa|jaxa|cern|bjp|aap|dmk|aiadmk|tdp|ysrcp|bjd|rbi|sebi|imf|nato|eu|tcs|ibm|amd|ai|ml|llm|agi|gpu|cpu)\b/.test(t);
+}
+
+function isCurrentRoleLookup(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+
+    const hasRole = /\b(ceo|chief executive officer|cfo|chief financial officer|cto|chief technology officer|coo|chief operating officer|chief product officer|chief revenue officer|founder|co-founder|owner|president|chairman|chairperson|chair|managing director|director|executive director|general manager|md)\b/i.test(t);
+    const hasFreshness = /\b(current|latest|now|right now|as of now|today|present)\b/i.test(t);
+    const hasLookupPattern = /\bwho(?:'s| is)?\b/i.test(t) || /\bname of\b/i.test(t) || /\bwho heads\b/i.test(t) || /\bwho leads\b/i.test(t);
+    const hasOrgCue = /\b(of|at|for)\b/i.test(t) || /\bcompany\b/i.test(t) || /\bcorp\b/i.test(t) || /\bltd\b/i.test(t) || /\binc\b/i.test(t) || /\bllc\b/i.test(t) || /\bplc\b/i.test(t);
+
+    return hasRole && (hasFreshness || hasLookupPattern || hasOrgCue);
+}
+
+function extractRoleFromQuery(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+
+    const roles = [
+        ['chief executive officer', 'CEO'],
+        ['ceo', 'CEO'],
+        ['chief financial officer', 'CFO'],
+        ['cfo', 'CFO'],
+        ['chief technology officer', 'CTO'],
+        ['cto', 'CTO'],
+        ['chief operating officer', 'COO'],
+        ['coo', 'COO'],
+        ['chief product officer', 'Chief Product Officer'],
+        ['chief revenue officer', 'Chief Revenue Officer'],
+        ['co-founder', 'Co-Founder'],
+        ['founder', 'Founder'],
+        ['chairperson', 'Chairperson'],
+        ['chairman', 'Chairman'],
+        ['chair', 'Chair'],
+        ['owner', 'Owner'],
+        ['president', 'President'],
+        ['managing director', 'Managing Director'],
+        ['executive director', 'Executive Director'],
+        ['director', 'Director'],
+        ['general manager', 'General Manager'],
+        ['md', 'Managing Director']
+    ];
+
+    const lowered = raw.toLowerCase();
+    for (const [needle, normalized] of roles) {
+        if (lowered.includes(needle)) return normalized;
+    }
+
+    return '';
+}
+
+function extractOrganizationFromRoleQuery(text, roleLabel = '') {
+    let raw = String(text || '').trim();
+    if (!raw) return '';
+
+    const escapedRole = roleLabel
+        ? roleLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        : '';
+
+    const patterns = [
+        escapedRole ? new RegExp(`\\b(?:who(?:'s| is)?\\s+the\\s+)?(?:current|latest|present)?\\s*${escapedRole}\\s+(?:of|at|for)\\s+(.+)$`, 'i') : null,
+        escapedRole ? new RegExp(`\\b${escapedRole}\\s+(?:of|at|for)\\s+(.+)$`, 'i') : null,
+        /\b(?:who heads|who leads|who runs)\s+(.+)$/i,
+        /\b(?:leadership|executive team|management team)\s+(?:of|at|for)\s+(.+)$/i
+    ].filter(Boolean);
+
+    for (const pattern of patterns) {
+        const match = raw.match(pattern);
+        if (match?.[1]) {
+            raw = match[1];
+            break;
+        }
+    }
+
+    return normalizeSearchTopic(
+        raw
+            .replace(/^(?:the\s+)?(?:company\s+)?/i, '')
+            .replace(/\b(current|latest|present|right now|today|now)\b/gi, ' ')
+            .replace(/\b(ceo|chief executive officer|cfo|chief financial officer|cto|chief technology officer|coo|chief operating officer|chief product officer|chief revenue officer|founder|co-founder|owner|president|chairman|chairperson|chair|managing director|director|executive director|general manager|md)\b/gi, ' ')
+            .replace(/^of\s+/i, '')
+            .replace(/[?]+$/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+    );
+}
+
+function buildCurrentRoleQueries(rawQuery, cleanTopic) {
+    const roleLabel = extractRoleFromQuery(rawQuery) || 'leadership';
+    const company = extractOrganizationFromRoleQuery(rawQuery, roleLabel) || cleanTopic;
+    const quotedCompany = company.includes(' ') ? `"${company}"` : company;
+
+    return Array.from(new Set([
+        `${quotedCompany} ${roleLabel} official site`,
+        `${quotedCompany} ${roleLabel} investor relations`,
+        `${quotedCompany} leadership team official`,
+        `${quotedCompany} management team official`,
+        `${quotedCompany} board of directors official`,
+        `${quotedCompany} annual report ${roleLabel}`,
+        `${quotedCompany} SEC filing ${roleLabel}`,
+        `${quotedCompany} Reuters ${roleLabel}`,
+        `${quotedCompany} Bloomberg ${roleLabel}`,
+        `${quotedCompany} official leadership page`
+    ].filter(Boolean)));
 }
 
 function buildDynamicQueryVariants(rawQuery, topic, domain) {
@@ -145,7 +262,7 @@ function extractAcronymCandidates(text) {
 
     const matches = raw.match(/\b[a-zA-Z0-9&.-]{2,10}\b/g) || [];
     return Array.from(new Set(
-        matches.filter(token => isLikelyAcronymToken(token)).map(token => token.toUpperCase())
+        matches.filter((token) => isLikelyAcronymToken(token)).map((token) => token.toUpperCase())
     ));
 }
 
