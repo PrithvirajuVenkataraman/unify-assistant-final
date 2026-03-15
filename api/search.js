@@ -1,4 +1,4 @@
-import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './_lib/live-search.js';
+import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './live-search.js';
 
 const MAX_QUERY_LENGTH = 500;
 const DEFAULT_MAX_RESULTS = 8;
