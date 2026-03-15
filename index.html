@@ -2147,6 +2147,12 @@
                     class="flex-1 bg-transparent outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm font-medium"
                     onkeypress="if(event.key === 'Enter') sendTextInput()"
                     oninput="toggleSendButton()"
+                    spellcheck="true"
+                    autocorrect="on"
+                    autocapitalize="sentences"
+                    autocomplete="off"
+                    lang="en"
+                    title="Browser spellcheck is enabled. Right-click a misspelled word to see suggestions."
                 />
 
                 <!-- Voice-to-text + Converse/Send controls -->
@@ -2259,7 +2265,8 @@ const RESPONSE_LENGTH_HINTS = {
 const RESPONSE_FORMAT_HINTS = {
     paragraph: 'Prefer short paragraphs with clear flow.',
     bullet: 'Prefer concise bullet points when possible.',
-    steps: 'Prefer numbered step-by-step structure when possible.'
+    steps: 'Prefer numbered step-by-step structure when possible.',
+    structured: 'Use clear section headers and grouped blocks. For itineraries, use Day 1 / Day 2 with Morning, Lunch, Afternoon, and Evening sections.'
 };
 
 function detectRequestedResponseLength(text) {
@@ -2314,28 +2321,71 @@ function normalizeIntentTypos(text) {
         'calendar', 'budget', 'sync'
     ];
 
+    const aliases = {
+        whats: 'what',
+        pic: 'picture',
+        pics: 'picture',
+        foto: 'photo',
+        wheather: 'weather',
+        wether: 'weather',
+        forcast: 'forecast',
+        resturant: 'restaurants',
+        resturants: 'restaurants',
+        restaurent: 'restaurants',
+        translte: 'translate',
+        traslate: 'translate',
+        translater: 'translator',
+        calender: 'calendar',
+        groccery: 'grocery',
+        grosery: 'grocery',
+        itenary: 'itinerary',
+        itinirary: 'itinerary',
+        buget: 'budget'
+    };
+
     const tokens = raw.split(/(\s+)/);
     const firstWordIndex = tokens.findIndex(token => /^[a-zA-Z']+$/.test(token));
     if (firstWordIndex === -1) return raw;
 
-    const token = tokens[firstWordIndex];
-    const lower = token.toLowerCase();
-    if (dictionary.includes(lower) || lower.length < 3) return raw;
+    const originalToken = tokens[firstWordIndex];
+    const lower = originalToken.toLowerCase();
+    if (dictionary.includes(lower) || lower.length < 4) return raw;
 
-    let best = lower;
-    let min = Infinity;
+    const applyCase = (template, replacement) => {
+        if (template === template.toUpperCase()) return replacement.toUpperCase();
+        if (template[0] === template[0].toUpperCase()) {
+            return replacement.charAt(0).toUpperCase() + replacement.slice(1);
+        }
+        return replacement;
+    };
+
+    if (aliases[lower]) {
+        tokens[firstWordIndex] = applyCase(originalToken, aliases[lower]);
+        return tokens.join('');
+    }
+
+    let best = null;
+    let bestDistance = Infinity;
+    let secondBestDistance = Infinity;
+
     for (const word of dictionary) {
         if (word[0] !== lower[0]) continue;
-        const d = levenshteinDistance(lower, word);
-        if (d < min) {
-            min = d;
+        const distance = levenshteinDistance(lower, word);
+        if (distance < bestDistance) {
+            secondBestDistance = bestDistance;
+            bestDistance = distance;
             best = word;
+        } else if (distance < secondBestDistance) {
+            secondBestDistance = distance;
         }
     }
 
-    const MAX_DISTANCE = 1;
-    if (min <= MAX_DISTANCE && best !== lower) {
-        tokens[firstWordIndex] = best;
+    const maxDistance = lower.length <= 5 ? 1 : 2;
+    const hasClearWinner = secondBestDistance - bestDistance >= 1;
+    const isIntentLike = /^(w|wh|wha|what|who|tel|tell|def|define|mea|meaning|sho|show|ima|image|pic|photo|loo|look|wea|weather|for|forecast|new|news|rem|reminder|sho|shop|shopping|gro|grocery|iti|itinerary|hot|hotel|res|restaurant|resta|restaurants|tra|trans|translate|translator|jok|joke|cal|calendar|bud|budget|syn|sync)/.test(lower);
+
+    if (best && bestDistance <= maxDistance && hasClearWinner && isIntentLike) {
+        tokens[firstWordIndex] = applyCase(originalToken, best);
         return tokens.join('');
     }
 
@@ -4827,9 +4877,9 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
 
         window.__lastUserMessage = normalizedUserMessage;  
  
-        const responseMode = detectRequestedResponseLength(normalizedUserMessage); 
+        const responseMode = options?.responseMode || detectRequestedResponseLength(normalizedUserMessage); 
         const responseHint = RESPONSE_LENGTH_HINTS[responseMode] || RESPONSE_LENGTH_HINTS.normal; 
-        const formatMode = window.responseFormat || responseFormat || 'paragraph'; 
+        const formatMode = options?.formatMode || window.responseFormat || responseFormat || 'paragraph'; 
         const formatHint = RESPONSE_FORMAT_HINTS[formatMode] || RESPONSE_FORMAT_HINTS.paragraph; 
         const conciseFactHint = isConciseDirectFactQuery(normalizedUserMessage)
             ? 'This is a direct fact query. Answer in 1-2 sentences max. Give the fact immediately. Do not add generic extra explanation or follow-up offers unless the user asks.'
@@ -4853,7 +4903,13 @@ ${normalizedUserMessage}
 ${teachingInstructions}Response length: ${responseMode}. ${responseHint}
 Response format: ${formatMode}. ${formatHint}
 ${conciseFactHint}`.trim();
-        const effectiveMessage = prompt;
+        const effectiveMessage = options?.rawPrompt
+            ? `${normalizedUserMessage}
+
+Response length: ${responseMode}. ${responseHint}
+Response format: ${formatMode}. ${formatHint}
+${conciseFactHint}`.trim()
+            : prompt;
 
         console.log("RAW USER MESSAGE:", rawUserMessage);
         console.log("NORMALIZED MESSAGE:", normalizedUserMessage);
@@ -7742,12 +7798,26 @@ function isHighRiskMentalHealth(text) {
 
 function isMedicalAdviceIntent(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(symptom|symptoms|fever|cold|cough|headache|migraine|stomach ache|stomach pain|vomit|vomiting|nausea|diarrhea|constipation|rash|allergy|pain|sore throat|flu|infection|medicine|medication|dose|dosage|tablet|capsule|paracetamol|acetaminophen|ibuprofen|doctor|clinic|urgent care|blood pressure|diabetes|blood sugar|sprain|cut|burn|injury|first aid|medical advice|health advice)\b/.test(t);
+    return /\b(symptom|symptoms|fever|cold|cough|headache|migraine|stomach ache|stomach pain|vomit|vomiting|nausea|diarrhea|constipation|rash|allergy|pain|sore throat|flu|infection|medicine|medication|dose|dosage|tablet|capsule|paracetamol|acetaminophen|ibuprofen|doctor|clinic|urgent care|blood pressure|diabetes|blood sugar|sprain|cut|burn|injury|first aid|medical advice|health advice|bruise|swelling|hit my head|head injury|banged my head|concussion)\b/.test(t);
 }
 
 function isMedicalEmergencyIntent(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(chest pain|trouble breathing|difficulty breathing|shortness of breath|stroke|face drooping|slurred speech|seizure|passed out|fainted|unconscious|heavy bleeding|severe bleeding|severe burn|poison|overdose|anaphylaxis|allergic reaction.*breath|cannot breathe|can't breathe|heart attack)\b/.test(t);
+    return /\b(chest pain|trouble breathing|difficulty breathing|shortness of breath|stroke|face drooping|slurred speech|seizure|passed out|fainted|unconscious|heavy bleeding|severe bleeding|severe burn|poison|overdose|anaphylaxis|allergic reaction.*breath|cannot breathe|can't breathe|heart attack|head injury.*vomit|head injury.*vomiting|head injury.*blurred vision|head injury.*passed out|banged my head.*vomit|banged my head.*vomiting|hit my head.*vomit|hit my head.*vomiting)\b/.test(t);
+}
+
+function isPersonalSituationMessage(text) {
+    const raw = String(text || '').trim();
+    const t = raw.toLowerCase();
+    if (!t) return false;
+
+    if (/^(who is|who was|what is|what are|when is|when was|where is|where was|which|how many|current\s+|latest\s+|news\b)/.test(t)) {
+        return false;
+    }
+
+    const personalSignals = /\b(i|i'm|i’ve|i've|my|me|we|our|us)\b/;
+    const eventSignals = /\b(hit|banged|hurt|injured|fell|slipped|cut|burned|burnt|dropped|lost|broke|forgot|missed|need help|can you help|should i|what should i do|what do i do)\b/;
+    return personalSignals.test(t) && eventSignals.test(t);
 }
 
 function buildMedicalGuidancePrompt(text) {
@@ -9269,9 +9339,11 @@ function isCurrentInfoQuery(text) {
 
     const freshnessTerms = /\b(latest|recent|current|today|right now|as of now|live|just now|this year|2025|2026|2027)\b/;
     const resultTerms = /\b(who won|winner|won|result|results|score|scores|what happened|what's happening|status|update|updates|headline|headlines|breaking)\b/;
-    const unstableEntityTerms = /\b(president|prime minister|ceo|chairman|captain|coach|champion|title holder|world cup|tournament|final|match|war|conflict|ceasefire|attack|election)\b/;
+    const unstableEntityTerms = /\b(president|prime minister|ceo|chairman|chairperson|captain|coach|governor|mayor|founder|title holder|world cup|tournament|final|match|war|conflict|ceasefire|attack|election)\b/;
     const businessEventTerms = /\b(layoff|layoffs|firing|firings|job cuts|cuts|restructuring|reorganization|earnings|results|merger|acquisition|recall|bankruptcy|probe|investigation|antitrust|strike|walkout)\b/;
+    const roleLookupPattern = /\b(who is|what is)\s+(?:the\s+)?(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor)\s+of\s+.+/;
 
+    if (roleLookupPattern.test(t)) return true;
     if (freshnessTerms.test(t) && unstableEntityTerms.test(t)) return true;
     if (resultTerms.test(t) && unstableEntityTerms.test(t)) return true;
     if (businessEventTerms.test(t) && freshnessTerms.test(t)) return true;
@@ -9392,8 +9464,16 @@ function decideAnswerPath(classification) {
     if (flags.inappropriate) return 'moderation';
     if (flags.stableBiography) return 'default_model';
 
-    if (flags.universalEntityFact) return 'entity_fact';
+    if (flags.highRiskMentalHealth) return 'high_risk_mental_health';
+    if (flags.supportExit) return 'support_exit';
+    if (flags.supportRequest) return 'support_intro';
+    if (flags.medicalEmergency) return 'medical_emergency';
+    if (flags.supportContinuation) return 'support_continue';
+    if (flags.medicalAdvice) return 'medical_advice';
+    if (flags.mentalHealth) return 'mental_health';
+
     if (flags.currentInfo) return 'current_info';
+    if (flags.universalEntityFact) return 'entity_fact';
 
     if (flags.vagueAdvice) return 'vague_advice';
     if (flags.songMoodGame) return 'song_mood_game';
@@ -9405,14 +9485,6 @@ function decideAnswerPath(classification) {
     if (flags.tamilJoke) return 'tamil_joke';
     if (flags.recipe) return 'recipe';
     if (flags.artistSong) return 'artist_song';
-
-    if (flags.highRiskMentalHealth) return 'high_risk_mental_health';
-    if (flags.supportExit) return 'support_exit';
-    if (flags.supportRequest) return 'support_intro';
-    if (flags.medicalEmergency) return 'medical_emergency';
-    if (flags.supportContinuation) return 'support_continue';
-    if (flags.medicalAdvice) return 'medical_advice';
-    if (flags.mentalHealth) return 'mental_health';
     if (flags.debate) return 'debate';
 
     return 'default_model';
@@ -10143,7 +10215,13 @@ function classifyUniversalEntityIntent(text, liveIntent = null) {
     const hasDomainSignal = Boolean(domainPack && (domainPack.keywords.test(lower) || domainPack.entityHints.test(lower)));
     const hasRelationSignal = record.relationType !== 'general';
     const subjectLooksReal = Boolean(record.subject && record.subject !== record.raw && record.subject.split(/\s+/).length <= 12);
+    const personalSituation = isPersonalSituationMessage(text);
+    const medicalLike = isMedicalAdviceIntent(text) || isMedicalEmergencyIntent(text);
+    const genericTableOnly = /\btable\b/.test(lower) && !/\b(points table|table tennis|league table|standings|ranking|rankings)\b/.test(lower);
     record.isEntityFact = Boolean(
+        !personalSituation &&
+        !medicalLike &&
+        !genericTableOnly &&
         record.directFact &&
         hasRelationSignal &&
         (hasDomainSignal || subjectLooksReal || record.domain !== 'general')
@@ -12088,7 +12166,11 @@ STRICTLY AVOID:
 If the user asks for 1 day, return only Day 1.
 If user asks for 2 days, provide both days with balanced pacing.`;
                 
-                const aiResponse = await callAIWithTyping(itineraryPrompt, '[Plan] Planning your itinerary...');
+                const aiResponse = await callAIWithTyping(itineraryPrompt, '[Plan] Planning your itinerary...', {
+                    responseMode: 'detailed',
+                    formatMode: 'structured',
+                    rawPrompt: true
+                });
                 if (aiResponse?.aborted) return;
                 await publishResolvedModelMessage(text, aiResponse.response, {
                     label: 'Model answer',
@@ -14936,5 +15018,6 @@ window.validatePlaces = function(aiText, allowedPlaces) {
     return true;
 };
 </script>
+
 </body>
 </html>
