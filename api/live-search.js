@@ -147,38 +147,24 @@ const TRAILING_QUERY_PATTERNS = [
     /\b(?:please|for me|per se)\b/gi
 ];
 
+const PROVIDER_TIMEOUT_MS = 6000;
+const MAX_RESULTS_PER_SEARCH = 10;
+const MAX_VERIFIED_RESULTS = 15;
+
 export async function searchWeb(query, maxResults = 8) {
     const searchQuery = extractSearchTopic(query) || String(query || '').trim();
-    const normalizedMax = Math.min(Math.max(Number(maxResults || 8), 1), 10);
-    const serperKey = process.env.SERPER_API_KEY;
-    const braveKey = process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY;
-    const attempts = [];
+    if (!searchQuery) return [];
 
-    if (serperKey) {
-        attempts.push(() => searchWithSerper(searchQuery, normalizedMax, serperKey));
-    }
-    if (braveKey) {
-        attempts.push(() => searchWithBrave(searchQuery, normalizedMax, braveKey));
-    }
-    attempts.push(() => searchWithDuckDuckGoHtml(searchQuery, normalizedMax));
-    attempts.push(() => searchWithDuckDuckGo(searchQuery, normalizedMax));
-    if (isLikelyNewsQuery(query)) {
-        attempts.push(() => searchWithGoogleNewsRss(searchQuery, normalizedMax));
-    }
-
+    const normalizedMax = clampNumber(maxResults, 1, MAX_RESULTS_PER_SEARCH, 8);
+    const attempts = buildSearchProviders(searchQuery, normalizedMax, query);
     const merged = [];
     const seen = new Set();
+
     for (const run of attempts) {
         try {
-            const current = await run();
-            if (!Array.isArray(current) || !current.length) continue;
-            for (const item of current) {
-                const url = String(item?.url || '').trim();
-                if (!url || seen.has(url)) continue;
-                seen.add(url);
-                merged.push(item);
-            }
-        } catch (e) {
+            const current = normalizeSearchResults(await withTimeout(run(), PROVIDER_TIMEOUT_MS));
+            mergeUniqueResults(merged, current, seen);
+        } catch (error) {
             // Try next provider.
         }
     }
@@ -188,22 +174,28 @@ export async function searchWeb(query, maxResults = 8) {
 }
 
 export async function runVerifiedWebSearch(queries, options = {}) {
-    const maxResultsPerQuery = Math.min(Math.max(Number(options.maxResultsPerQuery || 6), 1), 10);
-    const limit = Math.min(Math.max(Number(options.limit || 10), 1), 15);
-    const queryList = Array.isArray(queries) ? queries.filter(Boolean) : [];
-    const resultSets = await Promise.all(queryList.map(q => searchWeb(q, maxResultsPerQuery)));
+    const maxResultsPerQuery = clampNumber(options.maxResultsPerQuery, 1, MAX_RESULTS_PER_SEARCH, 6);
+    const limit = clampNumber(options.limit, 1, MAX_VERIFIED_RESULTS, 10);
+    const queryList = Array.isArray(queries)
+        ? queries.map(item => String(item || '').trim()).filter(Boolean)
+        : [];
 
+    if (!queryList.length) {
+        return {
+            results: [],
+            distinctDomains: [],
+            trustedCount: 0
+        };
+    }
+
+    const resultSets = await Promise.all(queryList.map(item => searchWeb(item, maxResultsPerQuery)));
     const merged = [];
     const seen = new Set();
-    for (const item of resultSets.flat()) {
-        const url = String(item?.url || '').trim();
-        if (!url || seen.has(url)) continue;
-        seen.add(url);
-        merged.push(item);
-    }
+    mergeUniqueResults(merged, resultSets.flat(), seen);
 
     const reranked = rerankResults(merged, queryList.join(' ')).slice(0, limit);
     const distinctDomains = Array.from(new Set(reranked.map(item => getDomainFromUrl(item.url)).filter(Boolean)));
+
     return {
         results: reranked,
         distinctDomains,
@@ -216,20 +208,28 @@ export function rerankResults(results, query) {
     const queryText = String(query || '').toLowerCase();
     const wantsRecency = /\b(latest|recent|current|today|right now|as of now|breaking|update|news|headlines?)\b/.test(queryText);
     const queryDomain = detectQueryDomain(queryText);
+
     const scored = [...(Array.isArray(results) ? results : [])]
         .map((item, index) => {
-            const title = String(item?.title || '');
-            const description = String(item?.description || '');
+            const normalizedItem = normalizeSearchResult(item);
+            if (!normalizedItem) return null;
+
+            const title = normalizedItem.title;
+            const description = normalizedItem.description;
             const haystack = `${title} ${description}`.toLowerCase();
             const overlap = queryTerms.reduce((acc, term) => acc + (haystack.includes(term) ? 1 : 0), 0);
-            const trustedBoost = scoreSourcePolicy(item?.url, queryDomain);
             const titleBoost = queryTerms.reduce((acc, term) => acc + (title.toLowerCase().includes(term) ? 1 : 0), 0);
-            const recencyBoost = wantsRecency ? scoreRecency(`${title} ${description} ${item?.url || ''}`) : 0;
+            const trustedBoost = scoreSourcePolicy(normalizedItem.url, queryDomain);
+            const recencyBoost = wantsRecency
+                ? scoreRecency(`${title} ${description} ${normalizedItem.url || ''}`)
+                : 0;
+
             return {
-                ...item,
+                ...normalizedItem,
                 __score: trustedBoost + overlap + titleBoost + recencyBoost - (index * 0.01)
             };
         })
+        .filter(Boolean)
         .sort((a, b) => b.__score - a.__score);
 
     return diversifyResults(scored).map(({ __score, ...item }) => item);
@@ -238,7 +238,7 @@ export function rerankResults(results, query) {
 export function getDomainFromUrl(url) {
     try {
         return new URL(String(url || '')).hostname.replace(/^www\./i, '').toLowerCase();
-    } catch (e) {
+    } catch (error) {
         return '';
     }
 }
@@ -272,6 +272,107 @@ export function extractSearchTopic(text) {
         .filter(token => token && !SEARCH_STOP_WORDS.has(token));
 
     return meaningfulTokens.join(' ').trim() || cleaned;
+}
+
+function buildSearchProviders(searchQuery, maxResults, rawQuery) {
+    const serperKey = process.env.SERPER_API_KEY;
+    const braveKey = process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY;
+    const attempts = [];
+
+    if (serperKey) {
+        attempts.push(() => searchWithSerper(searchQuery, maxResults, serperKey));
+    }
+    if (braveKey) {
+        attempts.push(() => searchWithBrave(searchQuery, maxResults, braveKey));
+    }
+
+    attempts.push(() => searchWithDuckDuckGoHtml(searchQuery, maxResults));
+    attempts.push(() => searchWithDuckDuckGo(searchQuery, maxResults));
+
+    if (isLikelyNewsQuery(rawQuery)) {
+        attempts.push(() => searchWithGoogleNewsRss(searchQuery, maxResults));
+    }
+
+    return attempts;
+}
+
+function mergeUniqueResults(target, items, seen) {
+    for (const item of Array.isArray(items) ? items : []) {
+        const normalizedItem = normalizeSearchResult(item);
+        if (!normalizedItem) continue;
+
+        const key = getResultDedupKey(normalizedItem.url);
+        if (!key || seen.has(key)) continue;
+
+        seen.add(key);
+        target.push(normalizedItem);
+    }
+}
+
+function normalizeSearchResults(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map(normalizeSearchResult).filter(Boolean);
+}
+
+function normalizeSearchResult(item) {
+    if (!item || typeof item !== 'object') return null;
+
+    const title = String(item.title || item.name || '').trim();
+    const url = sanitizeExternalUrl(item.url || item.link || '');
+    const description = String(item.description || item.snippet || item.summary || '').trim();
+
+    if (!url || !title) return null;
+
+    return {
+        title,
+        url,
+        description
+    };
+}
+
+function getResultDedupKey(url) {
+    try {
+        const parsed = new URL(String(url || '').trim());
+        if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+
+        parsed.hash = '';
+        const trackingParams = [
+            'utm_source',
+            'utm_medium',
+            'utm_campaign',
+            'utm_term',
+            'utm_content',
+            'gclid',
+            'fbclid'
+        ];
+
+        for (const param of trackingParams) {
+            parsed.searchParams.delete(param);
+        }
+
+        const normalizedPath = parsed.pathname.replace(/\/+$/, '') || '/';
+        return `${parsed.hostname.toLowerCase()}${normalizedPath}${parsed.search}`;
+    } catch (error) {
+        return '';
+    }
+}
+
+function clampNumber(value, min, max, fallback) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(Math.max(parsed, min), max);
+}
+
+function withTimeout(promise, timeoutMs) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => {
+            const timeoutId = setTimeout(() => {
+                clearTimeout(timeoutId);
+                reject(new Error(`Timed out after ${timeoutMs}ms`));
+            }, timeoutMs);
+        })
+    ]);
 }
 
 function tokenize(text) {
@@ -317,7 +418,7 @@ function detectQueryDomain(queryText) {
 }
 
 function domainMatches(domain, list) {
-    return Array.isArray(list) && list.some(d => domain === d || domain.endsWith(`.${d}`));
+    return Array.isArray(list) && list.some(item => domain === item || domain.endsWith(`.${item}`));
 }
 
 function scoreSourcePolicy(url, domain) {
@@ -333,6 +434,7 @@ function scoreSourcePolicy(url, domain) {
 function diversifyResults(results) {
     const out = [];
     const publisherCounts = new Map();
+
     for (const item of results) {
         const publisher = getPublisherKey(item?.url);
         const count = publisherCounts.get(publisher) || 0;
@@ -374,14 +476,17 @@ async function searchWithSerper(query, maxResults, apiKey) {
         },
         body: JSON.stringify({ q: query, num: maxResults })
     });
+
     if (!response.ok) return [];
+
     const data = await response.json();
     const organic = Array.isArray(data?.organic) ? data.organic : [];
+
     return organic.slice(0, maxResults).map(item => ({
         title: item?.title || 'Untitled',
-        url: sanitizeExternalUrl(item?.link || ''),
+        url: item?.link || '',
         description: item?.snippet || ''
-    })).filter(item => item.url);
+    }));
 }
 
 async function searchWithBrave(query, maxResults, apiKey) {
@@ -392,20 +497,24 @@ async function searchWithBrave(query, maxResults, apiKey) {
             'X-Subscription-Token': apiKey
         }
     });
+
     if (!response.ok) return [];
+
     const data = await response.json();
     const list = Array.isArray(data?.web?.results) ? data.web.results : [];
+
     return list.slice(0, maxResults).map(item => ({
         title: item?.title || 'Untitled',
-        url: sanitizeExternalUrl(item?.url || ''),
+        url: item?.url || '',
         description: item?.description || ''
-    })).filter(item => item.url);
+    }));
 }
 
 async function searchWithDuckDuckGo(query, maxResults) {
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
     const response = await fetch(url);
     if (!response.ok) return [];
+
     const data = await response.json();
     const out = [];
 
@@ -423,13 +532,16 @@ async function searchWithDuckDuckGo(query, maxResults) {
 
     const related = Array.isArray(data?.RelatedTopics) ? data.RelatedTopics : [];
     for (const item of related) {
-        if (item?.Topics && Array.isArray(item.Topics)) {
-            for (const sub of item.Topics) pushTopic(sub);
+        if (Array.isArray(item?.Topics)) {
+            for (const sub of item.Topics) {
+                pushTopic(sub);
+            }
         } else {
             pushTopic(item);
         }
         if (out.length >= maxResults) break;
     }
+
     return out.slice(0, maxResults);
 }
 
@@ -439,17 +551,21 @@ async function searchWithDuckDuckGoHtml(query, maxResults) {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: `q=${encodeURIComponent(query)}`
     });
+
     if (!response.ok) return [];
+
     const html = await response.text();
     const out = [];
     const re = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
     let match;
+
     while ((match = re.exec(html)) && out.length < maxResults) {
         const url = sanitizeExternalUrl(decodeHtmlEntities(String(match[1] || '').trim()));
         const title = decodeHtmlEntities(stripTags(String(match[2] || '').trim()));
         if (!url || !title) continue;
         out.push({ title, url, description: title });
     }
+
     return out;
 }
 
@@ -460,12 +576,14 @@ async function searchWithGoogleNewsRss(query, maxResults) {
             'Accept': 'application/rss+xml, application/xml, text/xml'
         }
     });
+
     if (!response.ok) return [];
 
     const xml = await response.text();
     const out = [];
     const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
     let match;
+
     while ((match = itemRegex.exec(xml)) && out.length < maxResults) {
         const block = match[1];
         const title = cleanGoogleNewsTitle(decodeXml(getTag(block, 'title')));
@@ -478,6 +596,7 @@ async function searchWithGoogleNewsRss(query, maxResults) {
             description: description || title
         });
     }
+
     return out;
 }
 
