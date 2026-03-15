@@ -1,4 +1,4 @@
-import { runVerifiedWebSearch, searchWeb } from './live-search.js';
+import { searchWeb } from './live-search.js';
 import {
     buildSearchQueries,
     isCurrentRoleLookup,
@@ -50,35 +50,41 @@ export default async function handler(req, res) {
         let ragContext = '';
         let searchMeta = buildDefaultSearchMeta(strictCurrentRoleLookup);
 
+        console.log('ASK QUESTION:', userMessage);
+        console.log('ASK FORCE CURRENT ROLE LOOKUP:', strictCurrentRoleLookup);
+        console.log('ASK SHOULD SEARCH:', shouldSearch);
+
         if (shouldSearch) {
             const liveQueries = buildSearchQueries(userMessage);
-            console.log('ASK QUESTION:', userMessage);
-            console.log('ASK FORCE CURRENT ROLE LOOKUP:', strictCurrentRoleLookup);
             console.log('ASK LIVE QUERY VARIANTS:', liveQueries);
 
-            const verified = await runVerifiedWebSearch(liveQueries, {
-                maxResultsPerQuery: Math.min(normalizedMaxResults, 6),
-                limit: normalizedMaxResults
+            const earlySearch = await runSmartSearch({
+                liveQueries,
+                userMessage,
+                normalizedMaxResults,
+                strictCurrentRoleLookup
             });
 
-            const searchResults = verified?.results?.length
-                ? verified.results
-                : await searchWeb(userMessage, normalizedMaxResults);
-
-            sources = normalizeSources(searchResults).slice(0, normalizedMaxResults);
+            sources = normalizeSources(earlySearch.results).slice(0, normalizedMaxResults);
             ragContext = buildRagContext(sources, userMessage, { strictCurrentRoleLookup });
+
+            console.log('ASK FINAL SOURCES COUNT:', sources.length);
+            console.log('ASK DISTINCT DOMAINS:', countDistinctDomains(sources));
+            console.log('ASK RAG CONTEXT LENGTH:', ragContext.length);
 
             searchMeta = {
                 used: true,
                 provider: sources.length ? 'aggregated-search' : 'none',
                 queryVariants: Array.isArray(liveQueries) ? liveQueries : [],
-                distinctDomainCount: Array.isArray(verified?.distinctDomains)
-                    ? verified.distinctDomains.length
-                    : countDistinctDomains(sources),
-                trustedCount: Number(verified?.trustedCount) || 0,
-                forcedCurrentRoleLookup: strictCurrentRoleLookup
+                distinctDomainCount: countDistinctDomains(sources),
+                trustedCount: countTrustedSources(sources),
+                forcedCurrentRoleLookup: strictCurrentRoleLookup,
+                earlyStopped: earlySearch.earlyStopped,
+                winningQuery: earlySearch.winningQuery || null
             };
         }
+
+        console.log('CALLING CHAT MODEL NOW');
 
         const llmResult = await callChatModel({
             message: userMessage,
@@ -87,6 +93,10 @@ export default async function handler(req, res) {
             ragContext,
             systemPrompt: systemPrompt || buildAskSystemPrompt()
         });
+
+        console.log('MODEL PROVIDER:', llmResult.provider || 'none');
+        console.log('MODEL USED:', llmResult.modelUsed || 'none');
+        console.log('MODEL RESPONSE LENGTH:', String(llmResult.response || '').length);
 
         return res.status(200).json({
             success: true,
@@ -99,6 +109,8 @@ export default async function handler(req, res) {
             sources
         });
     } catch (error) {
+        console.error('ASK ROUTE ERROR:', error);
+
         return res.status(200).json({
             success: false,
             intent: 'service_error',
@@ -127,8 +139,93 @@ function buildDefaultSearchMeta(strictCurrentRoleLookup) {
         queryVariants: [],
         distinctDomainCount: 0,
         trustedCount: 0,
-        forcedCurrentRoleLookup: Boolean(strictCurrentRoleLookup)
+        forcedCurrentRoleLookup: Boolean(strictCurrentRoleLookup),
+        earlyStopped: false,
+        winningQuery: null
     };
+}
+
+async function runSmartSearch({ liveQueries, userMessage, normalizedMaxResults, strictCurrentRoleLookup }) {
+    const queries = Array.isArray(liveQueries) ? liveQueries.filter(Boolean).slice(0, 3) : [];
+    const fallbackQuery = normalizeText(userMessage);
+
+    const collected = [];
+    const seen = new Set();
+
+    let earlyStopped = false;
+    let winningQuery = null;
+
+    for (const query of queries) {
+        console.log('API PATH USED: /api/search query:', query);
+
+        let results = [];
+        try {
+            results = await searchWeb(query, Math.min(normalizedMaxResults, 4));
+        } catch (error) {
+            console.error('SEARCH ERROR FOR QUERY:', query, error?.message || error);
+            results = [];
+        }
+
+        console.log('SEARCH RESULTS COUNT FOR QUERY:', query, Array.isArray(results) ? results.length : 0);
+
+        const normalized = normalizeSources(results);
+        mergeUniqueSources(collected, normalized, seen);
+
+        const strong = findStrongSource(normalized, { strictCurrentRoleLookup });
+        if (strong) {
+            earlyStopped = true;
+            winningQuery = query;
+            console.log('EARLY STOP TRIGGERED BY:', query);
+            console.log('STRONG SOURCE URL:', strong.url);
+            break;
+        }
+    }
+
+    if (!collected.length && fallbackQuery) {
+        console.log('RUNNING FALLBACK SEARCH FOR USER MESSAGE');
+        const fallbackResults = await searchWeb(fallbackQuery, normalizedMaxResults).catch((error) => {
+            console.error('FALLBACK SEARCH ERROR:', error?.message || error);
+            return [];
+        });
+
+        const normalizedFallback = normalizeSources(fallbackResults);
+        mergeUniqueSources(collected, normalizedFallback, seen);
+        console.log('FALLBACK SEARCH RESULTS COUNT:', normalizedFallback.length);
+    }
+
+    return {
+        results: collected.slice(0, normalizedMaxResults),
+        earlyStopped,
+        winningQuery
+    };
+}
+
+function findStrongSource(sources, options = {}) {
+    const strictCurrentRoleLookup = Boolean(options.strictCurrentRoleLookup);
+
+    return (Array.isArray(sources) ? sources : []).find((source) => {
+        const url = String(source?.url || '').toLowerCase();
+        const title = String(source?.title || '').toLowerCase();
+
+        if (!url) return false;
+
+        if (strictCurrentRoleLookup) {
+            return /reuters\.com|bloomberg\.com|sec\.gov/.test(url) ||
+                /investor|leadership|management|executive|board|about/.test(url) ||
+                /leadership|management|executive team|board of directors|investor relations/.test(title);
+        }
+
+        return /reuters\.com|apnews\.com|bbc\.com|bloomberg\.com/.test(url);
+    }) || null;
+}
+
+function mergeUniqueSources(target, items, seen) {
+    for (const item of Array.isArray(items) ? items : []) {
+        const key = canonicalizeUrl(item?.url);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        target.push(item);
+    }
 }
 
 function normalizeText(value) {
@@ -224,6 +321,14 @@ function countDistinctDomains(sources) {
     }
 
     return domains.size;
+}
+
+function countTrustedSources(sources) {
+    return (Array.isArray(sources) ? sources : []).filter((source) => {
+        const url = String(source?.url || '').toLowerCase();
+        return /reuters\.com|bloomberg\.com|apnews\.com|bbc\.com|sec\.gov/.test(url) ||
+            /investor|leadership|management|about/.test(url);
+    }).length;
 }
 
 function buildAskSystemPrompt() {
@@ -361,7 +466,11 @@ async function callChatModel({ message, userName, context, ragContext, systemPro
 
         if (response.ok) {
             const data = await response.json();
-            aiText = normalizeText(data?.candidates?.[0]?.content?.parts?.[0]?.text);
+            aiText = normalizeText(
+                data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+                data?.candidates?.[0]?.content?.text ||
+                ''
+            );
             modelUsed = model;
             break;
         }
