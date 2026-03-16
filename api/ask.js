@@ -185,11 +185,11 @@ function looksLikeMedicalSymptomInput(text) {
     const startsLikeCase = /^(patient|pt\.?|doctor|male|female|child|adult|elderly|reports|complains of|presents with)/i.test(value);
     const hasDuration = /\b\d+\s*(day|days|week|weeks|month|months|hour|hours)\b/i.test(value);
 
-    if (matches.length >= 2 && (hasMedicalContext || hasDuration || startsLikeCase)) {
+    if (matches.length >= 2) {
         return true;
     }
 
-    if (hasMedicalContext && matches.length >= 1) {
+    if (matches.length >= 1 && (hasMedicalContext || hasDuration || startsLikeCase)) {
         return true;
     }
 
