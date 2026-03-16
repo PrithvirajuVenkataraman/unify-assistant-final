@@ -1956,18 +1956,86 @@
             border-color: rgba(14, 165, 233, 0.28);
         }
 
+        .medical-summary-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .medical-summary-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            background: rgba(99, 102, 241, 0.08);
+            color: #3730a3;
+            border: 1px solid rgba(99, 102, 241, 0.14);
+        }
+
+        body.dark .medical-summary-pill {
+            background: rgba(99, 102, 241, 0.16);
+            color: #c7d2fe;
+            border-color: rgba(129, 140, 248, 0.22);
+        }
+
+        .medical-conditions-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 6px;
+        }
+
         .medical-condition-item {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: space-between;
             gap: 12px;
-            padding: 8px 0;
+            padding: 10px 0;
             border-bottom: 1px solid rgba(148, 163, 184, 0.16);
         }
 
         .medical-condition-item:last-child {
             border-bottom: none;
             padding-bottom: 0;
+        }
+
+        .medical-condition-main {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .medical-confidence-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            min-width: 116px;
+        }
+
+        .medical-confidence-track {
+            width: 100%;
+            height: 6px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: rgba(148, 163, 184, 0.18);
+        }
+
+        .medical-confidence-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(34, 197, 94, 0.95), rgba(16, 185, 129, 0.95));
+        }
+
+        .medical-confidence-fill.moderate {
+            background: linear-gradient(90deg, rgba(245, 158, 11, 0.95), rgba(251, 191, 36, 0.95));
+        }
+
+        .medical-confidence-fill.low {
+            background: linear-gradient(90deg, rgba(239, 68, 68, 0.95), rgba(248, 113, 113, 0.95));
         }
 
         .medical-confidence-badge {
@@ -8160,22 +8228,40 @@ function extractMedicalAnalysisPayload(rawResponse, originalText = '') {
 function renderMedicalAnalysisCard(payload) {
     if (!payload) return '';
 
+    const topCondition = payload.possible_conditions[0] || null;
+    const topConfidence = topCondition ? normalizeMedicalConfidence(topCondition.confidence) : null;
+
+    const summaryPills = [
+        payload.symptom_chunks.length ? `<span class="medical-summary-pill">Symptoms ${escapeHtml(String(payload.symptom_chunks.length))}</span>` : '',
+        payload.possible_conditions.length ? `<span class="medical-summary-pill">Possible conditions ${escapeHtml(String(payload.possible_conditions.length))}</span>` : '',
+        payload.red_flags.length ? `<span class="medical-summary-pill">Red flags ${escapeHtml(String(payload.red_flags.length))}</span>` : '<span class="medical-summary-pill">No urgent red flags detected</span>',
+        topCondition ? `<span class="medical-summary-pill">Top match ${escapeHtml(topCondition.name)}</span>` : ''
+    ].filter(Boolean).join('');
+
+    const summaryHtml = topCondition
+        ? `<div class="medical-analysis-section"><div class="text-xs uppercase tracking-wide font-bold opacity-70">Clinical summary</div><p class="text-sm mt-2 leading-6">Most likely pattern points to <strong>${escapeHtml(topCondition.name)}</strong>${topConfidence ? ` with <strong>${escapeHtml(topConfidence.pct)}</strong> confidence` : ''}. Treat this as a reference summary only, not a confirmed diagnosis.</p><div class="medical-summary-strip">${summaryPills}</div></div>`
+        : `<div class="medical-analysis-section"><div class="text-xs uppercase tracking-wide font-bold opacity-70">Clinical summary</div><p class="text-sm mt-2 leading-6">Structured symptom analysis is available below. Treat it as a reference summary only, not a confirmed diagnosis.</p><div class="medical-summary-strip">${summaryPills}</div></div>`;
+
     const symptomHtml = payload.symptom_chunks.length
         ? `<div class="medical-chip-list">${payload.symptom_chunks.map(item => `<span class="medical-chip">${escapeHtml(item)}</span>`).join('')}</div>`
         : '<p class="text-sm opacity-80 mt-2">No symptom chunks extracted.</p>';
 
     const conditionsHtml = payload.possible_conditions.length
-        ? payload.possible_conditions.map(item => {
+        ? `<div class="medical-conditions-stack">${payload.possible_conditions.map(item => {
             const conf = normalizeMedicalConfidence(item.confidence);
+            const confidenceClass = conf.level === 'moderate' ? 'moderate' : conf.level === 'low' ? 'low' : '';
             const reasonHtml = item.reason ? `<div class="text-xs opacity-75 mt-1">${escapeHtml(item.reason)}</div>` : '';
             return `<div class="medical-condition-item">
-                <div class="min-w-0 flex-1">
+                <div class="medical-condition-main">
                     <div class="text-sm font-semibold">${escapeHtml(item.name)}</div>
                     ${reasonHtml}
                 </div>
-                <span class="medical-confidence-badge ${conf.level === 'moderate' ? 'moderate' : conf.level === 'low' ? 'low' : ''}">${escapeHtml(conf.label)} · ${escapeHtml(conf.pct)}</span>
+                <div class="medical-confidence-wrap">
+                    <span class="medical-confidence-badge ${confidenceClass}">${escapeHtml(conf.label)} · ${escapeHtml(conf.pct)}</span>
+                    <div class="medical-confidence-track"><div class="medical-confidence-fill ${confidenceClass}" style="width:${escapeHtml(conf.pct)}"></div></div>
+                </div>
             </div>`;
-        }).join('')
+        }).join('')}</div>`
         : '<p class="text-sm opacity-80 mt-2">No possible conditions available.</p>';
 
     const redFlagsHtml = payload.red_flags.length
@@ -8197,8 +8283,9 @@ function renderMedicalAnalysisCard(payload) {
     return `
         <div class="medical-analysis-card">
             <div class="assistant-source-badge model">Medical analysis</div>
-            <div class="text-sm font-semibold">Possible condition analysis</div>
+            <div class="text-sm font-semibold">Clinical symptom summary</div>
             ${inputHtml}
+            ${summaryHtml}
             <div class="medical-analysis-grid">
                 <div class="medical-analysis-section">
                     <div class="text-xs uppercase tracking-wide font-bold opacity-70">Extracted symptoms</div>
