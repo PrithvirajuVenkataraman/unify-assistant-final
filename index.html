@@ -1896,6 +1896,141 @@
             pointer-events: none;
         }
 
+
+
+        .medical-analysis-card {
+            border: 1px solid rgba(244, 114, 182, 0.22);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 241, 242, 0.92));
+            border-radius: 18px;
+            padding: 14px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        body.dark .medical-analysis-card {
+            background: linear-gradient(180deg, rgba(30, 41, 59, 0.96), rgba(69, 10, 10, 0.22));
+            border-color: rgba(251, 113, 133, 0.35);
+            box-shadow: 0 10px 24px rgba(2, 6, 23, 0.3);
+        }
+
+        .medical-analysis-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .medical-analysis-section {
+            border-radius: 14px;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.74);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+        }
+
+        body.dark .medical-analysis-section {
+            background: rgba(15, 23, 42, 0.52);
+            border-color: rgba(100, 116, 139, 0.4);
+        }
+
+        .medical-chip-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .medical-chip {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(14, 165, 233, 0.12);
+            color: #075985;
+            border: 1px solid rgba(14, 165, 233, 0.18);
+        }
+
+        body.dark .medical-chip {
+            background: rgba(14, 165, 233, 0.14);
+            color: #bae6fd;
+            border-color: rgba(14, 165, 233, 0.28);
+        }
+
+        .medical-condition-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+        }
+
+        .medical-condition-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .medical-confidence-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 92px;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            background: rgba(34, 197, 94, 0.14);
+            color: #166534;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .medical-confidence-badge.moderate {
+            background: rgba(245, 158, 11, 0.14);
+            color: #92400e;
+            border-color: rgba(245, 158, 11, 0.22);
+        }
+
+        .medical-confidence-badge.low {
+            background: rgba(239, 68, 68, 0.12);
+            color: #991b1b;
+            border-color: rgba(239, 68, 68, 0.18);
+        }
+
+        body.dark .medical-confidence-badge {
+            color: #dcfce7;
+            background: rgba(34, 197, 94, 0.16);
+            border-color: rgba(34, 197, 94, 0.26);
+        }
+
+        body.dark .medical-confidence-badge.moderate {
+            color: #fde68a;
+            background: rgba(245, 158, 11, 0.16);
+            border-color: rgba(245, 158, 11, 0.28);
+        }
+
+        body.dark .medical-confidence-badge.low {
+            color: #fecaca;
+            background: rgba(239, 68, 68, 0.14);
+            border-color: rgba(239, 68, 68, 0.24);
+        }
+
+        .medical-disclaimer {
+            margin-top: 12px;
+            border-radius: 14px;
+            padding: 12px;
+            background: rgba(254, 242, 242, 0.92);
+            border: 1px solid rgba(248, 113, 113, 0.24);
+            color: #7f1d1d;
+            font-size: 12px;
+            line-height: 1.55;
+        }
+
+        body.dark .medical-disclaimer {
+            background: rgba(69, 10, 10, 0.28);
+            border-color: rgba(248, 113, 113, 0.3);
+            color: #fecaca;
+        }
+
         .side-panel {
             position: fixed;
             top: 0;
@@ -4139,8 +4274,8 @@ Rules:
 - Focus on what is current or recent.
 - If the user asked for latest news or headlines, start with a compact summary of the latest development, then give 3 short bullet points.
 - Do not make up numbers, dates, actors, causes, or outcomes.
-- Only state a fact confidently if it appears in multiple snippets or from a clearly reputable source.
-- If evidence is weak, say so instead of guessing.
+- Only state a fact confidently if it appears in multiple snippets or from a clearly reputable official source. For sports titles and results, prefer official league or top-tier sports sources over Quora, Reddit, Facebook, or similar user-generated pages.
+- If evidence is weak, say so instead of guessing. Ignore stale user-generated claims when a newer official sports source resolves the result.
 - If the question asks for a winner, score, player stat, or latest status, answer that specific fact first before anything else.
 - If the user asks for stats, give the key stats directly instead of a generic summary.
 - Keep it concise and practical.
@@ -7901,6 +8036,174 @@ function isPersonalSituationMessage(text) {
     return personalSignals.test(t) && eventSignals.test(t);
 }
 
+
+function buildMedicalAnalysisPrompt(text) {
+    return `The user entered a symptom sentence for medical analysis: "${text}".
+
+Return STRICT JSON only. No markdown. No code fences. No extra words.
+
+Schema:
+{
+  "input": "<original symptom sentence>",
+  "symptom_chunks": ["<short symptom chunk>", "<short symptom chunk>"],
+  "possible_conditions": [
+    {
+      "name": "<possible condition>",
+      "confidence": <number between 0 and 1>,
+      "reason": "<very short reason>"
+    }
+  ],
+  "red_flags": ["<red flag>", "<red flag>"],
+  "care_advice": ["<short practical step>", "<short practical step>"],
+  "clinical_note": "<brief note>",
+  "disclaimer": "This AI output is for reference only and may be incorrect or incomplete. It is not a medical diagnosis and should not replace professional medical judgment. Please consult a qualified healthcare professional."
+}
+
+Rules:
+1. Do not claim certainty
+2. Do not present a final diagnosis
+3. Use possible_conditions, not diagnosis
+4. Keep everything concise
+5. Confidence must be cautious and realistic
+6. Always include a disclaimer
+7. If emergency signs are implied, include urgent red flags and urgent care advice`;
+}
+
+function normalizeMedicalConfidence(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) {
+        return { score: null, pct: 'N/A', level: 'low', label: 'Unknown' };
+    }
+    const normalized = n > 1 ? Math.max(0, Math.min(100, n)) / 100 : Math.max(0, Math.min(1, n));
+    const pctValue = Math.round(normalized * 100);
+    let level = 'low';
+    let label = 'Low';
+    if (pctValue >= 80) {
+        level = 'high';
+        label = 'High';
+    } else if (pctValue >= 50) {
+        level = 'moderate';
+        label = 'Moderate';
+    }
+    return {
+        score: normalized,
+        pct: `${pctValue}%`,
+        level,
+        label
+    };
+}
+
+function extractMedicalAnalysisPayload(rawResponse, originalText = '') {
+    const raw = String(rawResponse || '').trim();
+    const parsed = extractJsonObject(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const symptomChunks = Array.isArray(parsed.symptom_chunks)
+        ? parsed.symptom_chunks.map(item => String(item || '').trim()).filter(Boolean)
+        : [];
+
+    const possibleConditions = Array.isArray(parsed.possible_conditions)
+        ? parsed.possible_conditions
+            .map(item => ({
+                name: String(item?.name || '').trim(),
+                confidence: item?.confidence,
+                reason: String(item?.reason || '').trim()
+            }))
+            .filter(item => item.name)
+            .slice(0, 4)
+        : [];
+
+    const redFlags = Array.isArray(parsed.red_flags)
+        ? parsed.red_flags.map(item => String(item || '').trim()).filter(Boolean)
+        : [];
+
+    const careAdvice = Array.isArray(parsed.care_advice)
+        ? parsed.care_advice.map(item => String(item || '').trim()).filter(Boolean)
+        : [];
+
+    const disclaimer = String(parsed.disclaimer || '').trim() ||
+        'This AI output is for reference only and may be incorrect or incomplete. It is not a medical diagnosis and should not replace professional medical judgment. Please consult a qualified healthcare professional.';
+
+    if (!symptomChunks.length && !possibleConditions.length && !redFlags.length && !careAdvice.length) {
+        return null;
+    }
+
+    return {
+        input: String(parsed.input || originalText || '').trim(),
+        symptom_chunks: symptomChunks,
+        possible_conditions: possibleConditions,
+        red_flags: redFlags,
+        care_advice: careAdvice,
+        clinical_note: String(parsed.clinical_note || '').trim(),
+        disclaimer
+    };
+}
+
+function renderMedicalAnalysisCard(payload) {
+    if (!payload) return '';
+
+    const symptomHtml = payload.symptom_chunks.length
+        ? `<div class="medical-chip-list">${payload.symptom_chunks.map(item => `<span class="medical-chip">${escapeHtml(item)}</span>`).join('')}</div>`
+        : '<p class="text-sm opacity-80 mt-2">No symptom chunks extracted.</p>';
+
+    const conditionsHtml = payload.possible_conditions.length
+        ? payload.possible_conditions.map(item => {
+            const conf = normalizeMedicalConfidence(item.confidence);
+            const reasonHtml = item.reason ? `<div class="text-xs opacity-75 mt-1">${escapeHtml(item.reason)}</div>` : '';
+            return `<div class="medical-condition-item">
+                <div class="min-w-0 flex-1">
+                    <div class="text-sm font-semibold">${escapeHtml(item.name)}</div>
+                    ${reasonHtml}
+                </div>
+                <span class="medical-confidence-badge ${conf.level === 'moderate' ? 'moderate' : conf.level === 'low' ? 'low' : ''}">${escapeHtml(conf.label)} · ${escapeHtml(conf.pct)}</span>
+            </div>`;
+        }).join('')
+        : '<p class="text-sm opacity-80 mt-2">No possible conditions available.</p>';
+
+    const redFlagsHtml = payload.red_flags.length
+        ? `<ul class="list-disc pl-5 mt-2 text-sm space-y-1">${payload.red_flags.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+        : '<p class="text-sm opacity-80 mt-2">No urgent red flags highlighted.</p>';
+
+    const adviceHtml = payload.care_advice.length
+        ? `<ul class="list-disc pl-5 mt-2 text-sm space-y-1">${payload.care_advice.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+        : '<p class="text-sm opacity-80 mt-2">No self-care advice available.</p>';
+
+    const noteHtml = payload.clinical_note
+        ? `<div class="medical-analysis-section"><div class="text-xs uppercase tracking-wide font-bold opacity-70">Clinical note</div><p class="text-sm mt-2 leading-6">${escapeHtml(payload.clinical_note)}</p></div>`
+        : '';
+
+    const inputHtml = payload.input
+        ? `<p class="text-sm leading-6 mt-2"><strong>Input:</strong> ${escapeHtml(payload.input)}</p>`
+        : '';
+
+    return `
+        <div class="medical-analysis-card">
+            <div class="assistant-source-badge model">Medical analysis</div>
+            <div class="text-sm font-semibold">Possible condition analysis</div>
+            ${inputHtml}
+            <div class="medical-analysis-grid">
+                <div class="medical-analysis-section">
+                    <div class="text-xs uppercase tracking-wide font-bold opacity-70">Extracted symptoms</div>
+                    ${symptomHtml}
+                </div>
+                <div class="medical-analysis-section">
+                    <div class="text-xs uppercase tracking-wide font-bold opacity-70">Possible conditions</div>
+                    <div class="mt-1">${conditionsHtml}</div>
+                </div>
+                <div class="medical-analysis-section">
+                    <div class="text-xs uppercase tracking-wide font-bold opacity-70">Care advice</div>
+                    ${adviceHtml}
+                </div>
+                <div class="medical-analysis-section">
+                    <div class="text-xs uppercase tracking-wide font-bold opacity-70">Urgent red flags</div>
+                    ${redFlagsHtml}
+                </div>
+                ${noteHtml}
+            </div>
+            <div class="medical-disclaimer"><strong>Disclaimer:</strong> ${escapeHtml(payload.disclaimer)}</div>
+        </div>`;
+}
+
 function buildMedicalGuidancePrompt(text) {
     return `The user is asking for medical or symptom advice: "${text}".
 
@@ -10544,6 +10847,105 @@ function extractTitleCountCandidate(result) {
     return '';
 }
 
+
+function hasDefinitiveFirstTitleCue(text) {
+    return /\b(maiden\s+(?:ipl\s+|league\s+|cup\s+|troph(?:y|ies)\s+|championship\s+)?title|first(?:[- ]ever)?\s+(?:ipl\s+|league\s+|cup\s+|troph(?:y|ies)\s+|championship\s+)?title|won\s+(?:their|its)\s+first\s+(?:ipl\s+|league\s+|cup|troph(?:y|ies)|championship)|clinched\s+(?:their|its)\s+first\s+(?:ipl\s+|league\s+|cup|troph(?:y|ies)|championship)|lifted\s+(?:their|its)\s+first\s+(?:ipl\s+|league\s+|cup|troph(?:y|ies)|championship)|won\s+the\s+title\s+for\s+the\s+first\s+time)\b/i.test(String(text || ''));
+}
+
+function hasStaleNoTitleCue(text) {
+    return /\b(never\s+won|has\s+not\s+won|haven't\s+won|yet\s+to\s+win|still\s+seeking\s+(?:their|its)?\s*(?:first|maiden)?\s*(?:title|cup|trophy|championship)|without\s+(?:an?\s+)?(?:ipl\s+|league\s+|cup\s+|troph(?:y|ies)\s+|championship\s+)?title)\b/i.test(String(text || ''));
+}
+
+function hasDefinitiveSportsResultCue(text, relationType) {
+    const value = String(text || '');
+    if (relationType === 'title_count') {
+        return hasDefinitiveFirstTitleCue(value) || /\b(defending champions|sealed the title|clinched the title|lifted the trophy|won the final|became champions|became champion)\b/i.test(value);
+    }
+    if (relationType === 'winner') {
+        return /\b(won the final|beat|defeated|clinched|lifted the trophy|became champions|became champion|crowned champions?)\b/i.test(value);
+    }
+    if (relationType === 'score') {
+        return /\b(\d{1,3}\s*[-/]\s*\d{1,3})\b/.test(value) && /\b(result|score|beat|defeated|won by)\b/i.test(value);
+    }
+    if (relationType === 'standings' || relationType === 'qualification') {
+        return /\b(qualified|eliminated|top of the table|points table|standings|ranking|position)\b/i.test(value);
+    }
+    if (relationType === 'stats') {
+        return /\b(record|stats?|average|runs|goals|wickets|points|assists|podiums|wins)\b/i.test(value);
+    }
+    return false;
+}
+
+function buildAuthoritativeSportsAgreement(results, entityIntent) {
+    if (!Array.isArray(results) || !results.length) return null;
+    if (String(entityIntent?.domain || '').toLowerCase() !== 'sports') return null;
+    const relationType = String(entityIntent?.relationType || '').toLowerCase();
+    if (!['title_count', 'winner', 'score', 'standings', 'qualification', 'stats'].includes(relationType)) {
+        return null;
+    }
+
+    const supports = new Map();
+
+    for (const item of results.slice(0, 8)) {
+        const text = `${item?.title || ''}. ${item?.description || ''}`.replace(/\s+/g, ' ').trim();
+        if (!text) continue;
+
+        const authority = scoreSourcePolicy(item?.url, 'sports');
+        if (authority <= 0) continue;
+
+        let rawCandidate = extractFactCandidate(item, entityIntent);
+        if (!rawCandidate && relationType === 'title_count' && hasDefinitiveFirstTitleCue(text)) {
+            rawCandidate = '1';
+        }
+        const candidate = normalizeAgreementValue(rawCandidate);
+        if (!candidate) continue;
+
+        const staleNoTitle = relationType === 'title_count' && hasStaleNoTitleCue(text) && !hasDefinitiveFirstTitleCue(text);
+        if (staleNoTitle && authority < 7) continue;
+
+        const entry = supports.get(candidate) || {
+            value: String(rawCandidate || '').trim(),
+            sources: [],
+            score: 0,
+            hasPreferred: false,
+            hasTrusted: false,
+            definitive: false
+        };
+
+        const definitive = hasDefinitiveSportsResultCue(text, relationType);
+        entry.sources.push(item);
+        entry.score += authority + (definitive ? 5 : 0);
+        entry.hasPreferred = entry.hasPreferred || authority >= 7;
+        entry.hasTrusted = entry.hasTrusted || authority >= 4;
+        entry.definitive = entry.definitive || definitive;
+
+        supports.set(candidate, entry);
+    }
+
+    const ranked = Array.from(supports.values()).sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if ((b.hasPreferred ? 1 : 0) !== (a.hasPreferred ? 1 : 0)) return (b.hasPreferred ? 1 : 0) - (a.hasPreferred ? 1 : 0);
+        return b.sources.length - a.sources.length;
+    });
+
+    const top = ranked[0];
+    if (!top) return null;
+
+    const authoritativeWin = (top.hasPreferred && (top.definitive || top.sources.length >= 1)) || (top.hasTrusted && top.sources.length >= 2);
+    if (!authoritativeWin) return null;
+
+    return {
+        top: {
+            value: top.value,
+            count: top.sources.length,
+            sources: top.sources
+        },
+        agreed: true,
+        mixed: false,
+        authoritative: true
+    };
+}
+
 function extractFactCandidate(result, entityIntent) { 
     const combined = `${result?.title || ''} ${result?.description || ''}`.replace(/\s+/g, ' ').trim(); 
     if (!combined) return ''; 
@@ -10641,14 +11043,29 @@ function formatConsensusAnswer(entityIntent, agreement) {
     if (!value) return ''; 
     if (entityIntent.relationType === 'title_count') { 
         const subject = String(entityIntent.subject || 'They').trim();
-        const singular = !/\b(and|&|team|club|franchise|super kings|knight riders|indians|lakers|warriors)\b/i.test(subject);
+        const singular = !/(and|&|team|club|franchise|super kings|knight riders|indians|lakers|warriors)/i.test(subject);
         const verb = singular ? 'has' : 'have';
-        const noun = /\b(f1|formula 1|driver|drivers'?)\b/i.test(subject)
-            ? 'Formula 1 World Championships'
-            : entityIntent.entityType === 'team'
-                ? 'titles'
-                : 'titles';
-        return `${subject} ${verb} won ${value} ${noun}.`; 
+        const count = Number(value);
+        const competition = String(entityIntent.competition || '').trim();
+        let nounBase = 'titles';
+        if (/(f1|formula 1|driver|drivers'?)/i.test(subject) || /(f1|formula 1)/i.test(competition)) {
+            nounBase = 'Formula 1 World Championships';
+        } else if (/(ipl|indian premier league)/i.test(subject) || /(ipl|indian premier league)/i.test(competition)) {
+            nounBase = count === 1 ? 'IPL title' : 'IPL titles';
+        } else if (/(world cup)/i.test(competition)) {
+            nounBase = count === 1 ? 'World Cup title' : 'World Cup titles';
+        } else if (/(champions league)/i.test(competition)) {
+            nounBase = count === 1 ? 'Champions League title' : 'Champions League titles';
+        } else if (/(cup)/i.test(competition)) {
+            nounBase = count === 1 ? 'cup title' : 'cup titles';
+        } else if (/(troph(?:y|ies))/i.test(competition)) {
+            nounBase = count === 1 ? 'trophy' : 'trophies';
+        } else if (/(championship)/i.test(competition)) {
+            nounBase = count === 1 ? 'championship' : 'championships';
+        } else if (count === 1) {
+            nounBase = 'title';
+        }
+        return `${subject} ${verb} won ${value} ${nounBase}.`; 
     } 
     if (entityIntent.relationType === 'winner') { 
         return `${value} won ${entityIntent.subject || entityIntent.competition || 'the event'}.`; 
@@ -11035,7 +11452,7 @@ Rules:
 - Answer the exact fact first.
 - Prefer current membership, party, role, office, title count, stats, standings, rankings, or winners depending on the question.
 - Do not make up numbers, teams, players, parties, offices, dates, or organizations.
-- If snippets disagree, say the evidence is mixed.
+- If snippets disagree, prefer newer or more authoritative official sports sources over older forum-style claims. Only say the evidence is mixed when the trusted sources themselves conflict.
 - Keep it concise.
 - Do not repeat the same fact in different wording.
 - Prefer one clean consensus sentence when multiple snippets agree.
@@ -11069,6 +11486,9 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
             if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
             return publishUniversalVerificationFallback(pipeline, 'I could not verify that result right now.');
         } 
+
+        const authoritativeAgreement = buildAuthoritativeSportsAgreement(deduped.slice(0, 6), pipeline.entityIntent);
+        if (await publishUniversalConsensusAnswer(pipeline, authoritativeAgreement)) return true;
 
         const agreement = buildSourceAgreement(deduped.slice(0, 6), pipeline.entityIntent);
         if (await publishUniversalConsensusAnswer(pipeline, agreement)) return true;
@@ -11159,9 +11579,10 @@ async function handleLiveRetrievalQuery(userText) {
         }
 
         if (directFactQuery) {
-            const agreement = buildSourceAgreement(sourcePool.slice(0, 6), extractUniversalEntityIntent(query, intent));
+            const entityIntent = extractUniversalEntityIntent(query, intent);
+            const authoritativeAgreement = buildAuthoritativeSportsAgreement(sourcePool.slice(0, 6), entityIntent);
+            const agreement = authoritativeAgreement || buildSourceAgreement(sourcePool.slice(0, 6), entityIntent);
             if (agreement.agreed && agreement.top) {
-                const entityIntent = extractUniversalEntityIntent(query, intent);
                 const directAnswer = formatConsensusAnswer(entityIntent, agreement);
                 if (directAnswer) {
                     const sourceLines = agreement.top.sources
@@ -11204,8 +11625,8 @@ Confidence: <High/Medium/Low based only on source agreement>
 Rules:
 - Focus on what is current or recent.
 - Do not make up numbers, dates, actors, or causes.
-- Only state a fact confidently if it appears in multiple snippets or from a clearly reputable source.
-- If evidence is weak, say so instead of guessing.
+- Only state a fact confidently if it appears in multiple snippets or from a clearly reputable official source. For sports titles and results, prefer official league or top-tier sports sources over Quora, Reddit, Facebook, or similar user-generated pages.
+- If evidence is weak, say so instead of guessing. Ignore stale user-generated claims when a newer official sports source resolves the result.
 - If the question asks for a winner, score, or player stat, answer that specific fact first before anything else.
 - If the user asks for stats, give the key stats directly instead of a generic summary.
 - Keep it concise and practical.
@@ -11745,22 +12166,23 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
             }
 
             if (answerPath === 'medical_advice') {
-                const medicalPrompt = `The user is asking for medical or symptom advice: "${text}".
+                if (medicalMode) {
+                    const medicalAnalysisPrompt = buildMedicalAnalysisPrompt(text);
+                    const medicalAnalysisResponse = await callAIWithTyping(medicalAnalysisPrompt, 'Analyzing symptoms carefully...');
+                    if (medicalAnalysisResponse?.aborted) return;
 
-Respond with these rules:
-1. Clearly state you are not a doctor and this is general guidance only
-2. Do not give a diagnosis or claim certainty
-3. Give safe, practical self-care steps that are commonly appropriate
-4. Mention red-flag symptoms that mean they should seek urgent medical care
-5. If the request is about medicine, dosing, pregnancy, infants, severe symptoms, or multiple conditions, tell them to confirm with a licensed clinician or pharmacist
-6. Keep the tone calm, direct, and concise
-7. Do not invent prescriptions, dosages, or treatment plans
+                    const parsedMedicalAnalysis = extractMedicalAnalysisPayload(medicalAnalysisResponse?.response, text);
+                    if (parsedMedicalAnalysis) {
+                        const medicalCardHtml = renderMedicalAnalysisCard(parsedMedicalAnalysis);
+                        addModelAssistantMessage(medicalCardHtml, 'Medical analysis');
+                        await speakApiReply('medical_analysis_ready', {}, 'Here is the symptom analysis with confidence and disclaimer.');
+                        saveToHistory(text, medicalCardHtml);
+                        addFeedbackButtons(text, medicalCardHtml);
+                        return;
+                    }
+                }
 
-Format:
-- What it might mean: <brief, cautious statement>
-- What you can do now: <2-4 practical steps>
-- Get urgent help if: <red flags>
-- Safer next step: <when to contact a doctor/pharmacist>`;
+                const medicalPrompt = buildMedicalGuidancePrompt(text);
                 const medicalResponse = await callAIWithTyping(medicalPrompt, 'Preparing safe medical guidance...');
                 if (medicalResponse?.aborted) return;
                 await publishResolvedModelMessage(text, medicalResponse.response, {
