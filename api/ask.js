@@ -12,6 +12,8 @@ const MAX_CONTEXT_TURNS = 12;
 const MAX_SOURCE_SNIPPET_LENGTH = 300;
 const MAX_RAG_SOURCES = 6;
 const SEARCH_TRIGGER_PATTERN = /\b(latest|recent|current|today|tonight|this week|right now|news|headline|update|updates|best|top|compare|comparison|review|reviews|price|pricing|cost|rate|rates|score|scores|standings|ranking|rankings|result|results|winner|won|weather|forecast|traffic|train|flight|flights|where should i|what should i buy|recommend|recommendation|recommendations|ceo|cfo|cto|coo|chairman|chairperson|founder|owner|president|managing director|executive team|leadership)\b/i;
+const MEDICAL_TRIGGER_PATTERN = /\b(fever|cough|cold|flu|pain|ache|headache|migraine|nausea|vomiting|diarrhea|constipation|rash|itching|fatigue|weakness|dizziness|vertigo|shortness of breath|breathlessness|wheezing|sore throat|chest pain|abdominal pain|stomach pain|back pain|joint pain|swelling|inflammation|bleeding|infection|burning|chills|sweating|palpitations|tachycardia|hypertension|hypotension|blood pressure|oxygen|spo2|congestion|runny nose|sneezing|ear pain|sinus|loss of smell|loss of taste|dehydration|seizure|fainting|syncope|numbness|tingling|blurred vision|anxiety|insomnia|depression)\b/gi;
+const MEDICAL_CONTEXT_PATTERN = /\b(patient|pt\.?|doctor|diagnosis|diagnose|differential|symptom|symptoms|complains of|complaining of|presents with|presenting with|history of|hx of|reports|reporting|suffers from|clinical|condition|disease)\b/i;
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -33,7 +35,9 @@ export default async function handler(req, res) {
             context,
             forceSearch = false,
             maxResults = DEFAULT_MAX_RESULTS,
-            systemPrompt
+            systemPrompt,
+            mode,
+            medical = false
         } = req.body || {};
 
         const userMessage = normalizeText(message);
@@ -41,6 +45,41 @@ export default async function handler(req, res) {
 
         if (!userMessage) {
             return res.status(400).json({ error: 'message is required' });
+        }
+
+        const medicalMode = shouldUseMedicalMode({
+            body: req.body,
+            userMessage,
+            explicitMode: mode,
+            medical
+        });
+
+        if (medicalMode) {
+            console.log('MEDICAL MODE ACTIVATED');
+
+            const medicalResult = await callChatModel({
+                message: userMessage,
+                userName,
+                context,
+                ragContext: '',
+                systemPrompt: systemPrompt || buildMedicalSystemPrompt()
+            });
+
+            return res.status(200).json({
+                success: true,
+                intent: medicalResult.intent || 'medical_analysis',
+                response: medicalResult.response || medicalResult.advice || '',
+                action: medicalResult.action || null,
+                symptoms: Array.isArray(medicalResult.symptoms) ? medicalResult.symptoms : [],
+                conditions: Array.isArray(medicalResult.conditions) ? medicalResult.conditions : [],
+                red_flags: Array.isArray(medicalResult.red_flags) ? medicalResult.red_flags : [],
+                advice: normalizeText(medicalResult.advice),
+                disclaimer: normalizeText(medicalResult.disclaimer) || defaultMedicalDisclaimer(),
+                provider: medicalResult.provider || 'none',
+                modelUsed: medicalResult.modelUsed || null,
+                search: buildDefaultSearchMeta(false),
+                sources: []
+            });
         }
 
         const strictCurrentRoleLookup = isCurrentRoleLookup(userMessage);
@@ -122,6 +161,39 @@ export default async function handler(req, res) {
             search: buildDefaultSearchMeta(false)
         });
     }
+}
+
+function isMedicalMode(body) {
+    return body?.mode === 'medical' || body?.medical === true;
+}
+
+function shouldUseMedicalMode({ body, userMessage, explicitMode, medical }) {
+    if (isMedicalMode(body) || explicitMode === 'medical' || medical === true) {
+        return true;
+    }
+
+    return looksLikeMedicalSymptomInput(userMessage);
+}
+
+function looksLikeMedicalSymptomInput(text) {
+    const value = normalizeText(text);
+    if (!value) return false;
+
+    const lowered = value.toLowerCase();
+    const matches = lowered.match(MEDICAL_TRIGGER_PATTERN) || [];
+    const hasMedicalContext = MEDICAL_CONTEXT_PATTERN.test(lowered);
+    const startsLikeCase = /^(patient|pt\.?|doctor|male|female|child|adult|elderly|reports|complains of|presents with)/i.test(value);
+    const hasDuration = /\b\d+\s*(day|days|week|weeks|month|months|hour|hours)\b/i.test(value);
+
+    if (matches.length >= 2 && (hasMedicalContext || hasDuration || startsLikeCase)) {
+        return true;
+    }
+
+    if (hasMedicalContext && matches.length >= 1) {
+        return true;
+    }
+
+    return false;
 }
 
 function needsLiveSearch(text) {
@@ -360,6 +432,40 @@ When no web context is provided:
 }`;
 }
 
+function buildMedicalSystemPrompt() {
+    return `You are Unify, a careful clinical symptom analysis assistant.
+
+The input may be a doctor's short note, a plain sentence of symptoms, or a symptom description.
+
+Your job:
+- Extract concise symptom chunks from the input.
+- Identify 1 to 4 possible conditions, not a final diagnosis.
+- Provide a confidence score from 0 to 1 for each possible condition.
+- Identify urgent red flags if present.
+- Provide short, careful care advice.
+- Always include a disclaimer.
+- Never claim certainty.
+- Never say this is a confirmed diagnosis.
+
+Return JSON only in this exact format:
+{
+  "intent": "medical_analysis",
+  "response": "A short summary of the likely possibilities.",
+  "action": null,
+  "symptoms": ["symptom 1", "symptom 2"],
+  "conditions": [
+    { "name": "Possible condition name", "confidence": 0.74 }
+  ],
+  "red_flags": ["red flag 1"],
+  "advice": "Short practical advice.",
+  "disclaimer": "${defaultMedicalDisclaimer()}"
+}`;
+}
+
+function defaultMedicalDisclaimer() {
+    return 'This AI output is for reference only and may be incorrect or incomplete. It is not a medical diagnosis and should not replace professional medical judgment. Please consult a qualified healthcare professional.';
+}
+
 async function callChatModel({ message, userName, context, ragContext, systemPrompt }) {
     const finalPrompt = buildFinalPrompt({
         systemPrompt,
@@ -516,13 +622,52 @@ function safeParseAssistantJson(text) {
         return {
             intent: parsed?.intent || 'casual_chat',
             response: normalizeText(parsed?.response),
-            action: parsed?.action || null
+            action: parsed?.action || null,
+            symptoms: normalizeStringArray(parsed?.symptoms),
+            conditions: normalizeConditions(parsed?.conditions),
+            red_flags: normalizeStringArray(parsed?.red_flags),
+            advice: normalizeText(parsed?.advice),
+            disclaimer: normalizeText(parsed?.disclaimer)
         };
     } catch (_) {
         return {
             intent: 'casual_chat',
             response: normalizeText(text),
-            action: null
+            action: null,
+            symptoms: [],
+            conditions: [],
+            red_flags: [],
+            advice: '',
+            disclaimer: ''
         };
     }
+}
+
+function normalizeStringArray(value) {
+    if (!Array.isArray(value)) return [];
+
+    return value
+        .map((item) => normalizeText(item))
+        .filter(Boolean)
+        .slice(0, 10);
+}
+
+function normalizeConditions(value) {
+    if (!Array.isArray(value)) return [];
+
+    return value
+        .map((item) => ({
+            name: normalizeText(item?.name),
+            confidence: normalizeConfidence(item?.confidence)
+        }))
+        .filter((item) => item.name)
+        .slice(0, 6);
+}
+
+function normalizeConfidence(value) {
+    const numeric = Number.parseFloat(value);
+    if (!Number.isFinite(numeric)) return null;
+    if (numeric < 0) return 0;
+    if (numeric > 1) return 1;
+    return Number(numeric.toFixed(2));
 }
