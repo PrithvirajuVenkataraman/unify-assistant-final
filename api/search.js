@@ -508,6 +508,7 @@ function buildRoleAnswer(query, evidence) {
     return cleanupAnswerText(sentence);
 }
 
+// Keep final numeric answers concise: one grounded sentence only.
 function buildNumericConsensusAnswer(query, evidence, domain = 'general') {
     if (!/\b(how many|total|number of)\b/i.test(query)) return '';
 
@@ -559,11 +560,6 @@ function buildNumericConsensusAnswer(query, evidence, domain = 'general') {
         parts[0] += ` ${qualifier}`;
     }
 
-    const example = cleanupAnswerText(examples.get(topValue) || '');
-    if (example && !parts[0].toLowerCase().includes(example.toLowerCase())) {
-        return `${parts[0]}. ${example}`;
-    }
-
     return `${parts[0]}.`;
 }
 
@@ -581,6 +577,7 @@ function buildNumericQueryContext(query, domain) {
     };
 }
 
+// Sports fallback should also stay concise and avoid extra interpretation.
 function buildSportsAchievementFallback(query, evidence, queryContext) {
     const rankedSentences = [];
 
@@ -614,7 +611,7 @@ function buildSportsAchievementFallback(query, evidence, queryContext) {
         ? `${subject} ${measure ? `has ${measure}` : 'has'} ${normalizedValue}`
         : `The answer appears to be ${normalizedValue}`;
 
-    return `${base}${qualifier ? ` ${qualifier}` : ''}. ${cleanupAnswerText(best.sentence)}`;
+    return `${base}${qualifier ? ` ${qualifier}` : ''}.`;
 }
 
 function buildDirectDescriptiveAnswer(query, evidence) {
