@@ -38,6 +38,33 @@ const CURRENT_ROLE_CLEANUP_PATTERN = new RegExp(`\\b(${ROLE_LABELS.map(([label])
 const TIME_SENSITIVE_PATTERN = /\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update|updates|status|price now|rate today|winner|won|champion|score|scores|live score|stats|standings|points table|ranking|rankings|record|qualified|eliminated|ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup|nasa|isro|esa|jaxa|cern|bjp|aap|dmk|aiadmk|tdp|ysrcp|bjd|rbi|sebi|imf|nato|eu|tcs|ibm|amd|ai|ml|llm|agi|gpu|cpu)\b/i;
 const TIME_SENSITIVE_STRIP_PATTERN = /\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update(?:s)? on|status of|winner|won|champion|score|scores|stats|standings|points table|ranking|rankings|record|qualified|eliminated)\b/gi;
 
+const COMMON_COMPETITION_EXPANSIONS = {
+    f1: ['Formula 1'],
+    formula1: ['Formula 1'],
+    ipl: ['Indian Premier League'],
+    psl: ['Pakistan Super League'],
+    bbl: ['Big Bash League'],
+    cpl: ['Caribbean Premier League'],
+    isl: ['Indian Super League'],
+    pkl: ['Pro Kabaddi League'],
+    ucl: ['UEFA Champions League'],
+    uel: ['UEFA Europa League'],
+    epl: ['English Premier League'],
+    nba: ['National Basketball Association'],
+    nfl: ['National Football League'],
+    mlb: ['Major League Baseball'],
+    nhl: ['National Hockey League'],
+    atp: ['ATP tennis'],
+    wta: ['WTA tennis'],
+    fifa: ['FIFA football'],
+    uefa: ['UEFA football'],
+    motogp: ['MotoGP motorcycle racing']
+};
+
+const SPORTS_ACHIEVEMENT_PATTERN = /\b(how many|total|number of)\b.*\b(cups|titles|trophies|championships|wins|races|grand prix|victories|rings|medals)\b/i;
+const SPORTS_ENTITY_QUESTION_PATTERN = /\b(how many|total|number of|who won|who is|what is|when did)\b/i;
+const AWKWARD_WIN_GRAMMAR_PATTERN = /\bdid\s+(.+?)\s+won\b/gi;
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -118,6 +145,7 @@ export function buildSearchQueries(query) {
     }
 
     const variants = [];
+    pushUnique(variants, raw);
     pushUnique(variants, topic);
     pushUnique(variants, cleanTopic);
     pushUnique(variants, aliasedTopic);
@@ -252,11 +280,158 @@ export function buildDynamicQueryVariants(rawQuery, topic, domain) {
         pushUnique(out, `${cleanTopic} ${domainHints.context}`);
     }
 
+    pushUniqueMany(out, buildSemanticQueryVariants(rawQuery, cleanTopic, domain));
+
     return out;
 }
 
 export function expandCriticalQueryAliases(text) {
-    return normalizeSearchTopic(text);
+    const normalized = normalizeSearchTopic(text);
+    if (!normalized) return '';
+
+    let value = rewriteAwkwardQuestionGrammar(normalized);
+    value = expandCommonCompetitionAliases(value);
+    value = rewriteGenericAchievementTerms(value);
+    value = simplifyHistoryPhrases(value);
+
+    return normalizeSearchTopic(value);
+}
+
+function buildSemanticQueryVariants(rawQuery, topic, domain) {
+    const out = [];
+    const cleanRaw = normalizeQuery(rawQuery);
+    const cleanTopic = normalizeSearchTopic(topic || rawQuery);
+    const aliasedRaw = expandCriticalQueryAliases(cleanRaw);
+
+    if (aliasedRaw && aliasedRaw.toLowerCase() !== cleanTopic.toLowerCase()) {
+        pushUnique(out, aliasedRaw);
+    }
+
+    const competitionVariants = extractCompetitionVariants(cleanRaw);
+    if (competitionVariants.length) {
+        for (const item of competitionVariants) {
+            if (cleanTopic && !cleanTopic.toLowerCase().includes(item.toLowerCase())) {
+                pushUnique(out, `${cleanTopic} ${item}`);
+            }
+        }
+    }
+
+    if (domain === 'sports' && isSportsAchievementQuery(cleanRaw)) {
+        const parts = extractSportsAchievementParts(cleanRaw);
+        const entity = normalizeSearchTopic(parts.entity || cleanTopic);
+        const competition = normalizeSearchTopic(parts.competition || competitionVariants[0] || '');
+        const achievement = normalizeSearchTopic(parts.achievement || 'titles');
+        const officialContext = competition || 'official record';
+
+        pushUnique(out, `${entity} total ${achievement} ${competition}`);
+        pushUnique(out, `${entity} total championships ${competition}`);
+        pushUnique(out, `${entity} all time record ${competition}`);
+        pushUnique(out, `${entity} official record ${officialContext}`);
+        pushUnique(out, `${entity} stats ${competition}`);
+    }
+
+    if (domain === 'sports' && SPORTS_ENTITY_QUESTION_PATTERN.test(cleanRaw)) {
+        const normalizedQuestion = rewriteAwkwardQuestionGrammar(expandCommonCompetitionAliases(cleanRaw));
+        if (normalizedQuestion && normalizedQuestion.toLowerCase() !== cleanTopic.toLowerCase()) {
+            pushUnique(out, normalizedQuestion);
+        }
+    }
+
+    return out.filter(Boolean);
+}
+
+function isSportsAchievementQuery(text) {
+    const value = String(text || '').trim();
+    return SPORTS_ACHIEVEMENT_PATTERN.test(value) || /\b(record|champion|titles|trophies|championships|wins|grand prix)\b/i.test(value);
+}
+
+function extractSportsAchievementParts(text) {
+    const raw = normalizeQuery(text);
+    const simplified = rewriteAwkwardQuestionGrammar(expandCommonCompetitionAliases(raw));
+    const patterns = [
+        /how many\s+(?<achievement>cups|titles|trophies|championships|wins|races|grand prix|victories|rings|medals)\s+did\s+(?<entity>.+?)\s+win(?:\s+(?:in|at|for)\s+(?<competition>.+))?$/i,
+        /how many\s+(?<achievement>cups|titles|trophies|championships|wins|races|grand prix|victories|rings|medals)\s+has\s+(?<entity>.+?)(?:\s+won)?(?:\s+(?:in|at|for)\s+(?<competition>.+))?$/i,
+        /(?<entity>.+?)\s+total\s+(?<achievement>titles|trophies|championships|wins|races|grand prix|victories|rings|medals)(?:\s+(?:in|at|for)\s+(?<competition>.+))?$/i
+    ];
+
+    for (const pattern of patterns) {
+        const match = simplified.match(pattern);
+        if (match?.groups) {
+            return {
+                entity: normalizeSearchTopic(match.groups.entity || ''),
+                achievement: normalizeAchievementLabel(match.groups.achievement || ''),
+                competition: normalizeCompetitionLabel(match.groups.competition || '')
+            };
+        }
+    }
+
+    return {
+        entity: '',
+        achievement: '',
+        competition: normalizeCompetitionLabel(extractCompetitionVariants(simplified)[0] || '')
+    };
+}
+
+function extractCompetitionVariants(text) {
+    const raw = String(text || '');
+    if (!raw) return [];
+
+    const variants = [];
+    const tokens = raw.match(/\b[a-zA-Z0-9&.-]{2,20}\b/g) || [];
+    for (const token of tokens) {
+        const mapped = COMMON_COMPETITION_EXPANSIONS[token.toLowerCase()];
+        if (Array.isArray(mapped)) {
+            for (const item of mapped) {
+                pushUnique(variants, item);
+            }
+        }
+    }
+
+    return variants;
+}
+
+function expandCommonCompetitionAliases(text) {
+    let value = String(text || '');
+    for (const [token, expansions] of Object.entries(COMMON_COMPETITION_EXPANSIONS)) {
+        if (!expansions.length) continue;
+        const pattern = new RegExp(`\\b${escapeRegExp(token)}\\b`, 'gi');
+        value = value.replace(pattern, expansions[0]);
+    }
+    return value;
+}
+
+function rewriteAwkwardQuestionGrammar(text) {
+    return String(text || '')
+        .replace(AWKWARD_WIN_GRAMMAR_PATTERN, 'did $1 win')
+        .replace(/\bwho won in\b/gi, 'who won')
+        .replace(/\bhow many cups did\b/gi, 'how many titles did')
+        .replace(/\bhow many cups has\b/gi, 'how many titles has');
+}
+
+function rewriteGenericAchievementTerms(text) {
+    return String(text || '')
+        .replace(/\bcups\b/gi, 'titles')
+        .replace(/\bgrand prix wins\b/gi, 'grand prix victories');
+}
+
+function simplifyHistoryPhrases(text) {
+    return String(text || '')
+        .replace(/\bin\s+history\b/gi, '')
+        .replace(/\bhistory\b/gi, 'all time')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeAchievementLabel(value) {
+    const text = String(value || '').toLowerCase().trim();
+    if (!text) return '';
+    if (text === 'cups') return 'titles';
+    if (text === 'races') return 'race wins';
+    return text;
+}
+
+function normalizeCompetitionLabel(value) {
+    return normalizeSearchTopic(expandCommonCompetitionAliases(String(value || '').replace(/\b(history|all time)\b/gi, ' ')));
 }
 
 export function normalizeSearchTopic(text) {
