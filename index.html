@@ -4094,8 +4094,28 @@ function dedupeAnswerSentences(text) {
     return unique.join(' ').replace(/\s+/g, ' ').trim();
 }
 
-function cleanLiveAnswerText(text) {
-    const cleaned = String(text || '')
+function repairNumericTailPhrases(text) {
+    return String(text || '').replace(
+        /\b(has\s+won|have\s+won|won|wins|has|have|had|recorded|records|scored|scores|posted|posts|earned|earns|holds|hold|hit|hits|reached|reaches)\s+([a-z][a-z'\/-]*(?:\s+[a-z][a-z'\/-]*){0,4})\s+(\d+(?:\.\d+)?)\b/gi,
+        (match, verb, phrase, number) => {
+            const nounPhrase = String(phrase || '').trim();
+            if (!nounPhrase) return match;
+            if (/^(?:in|on|at|by|for|from|with|to|of|and|or)$/i.test(nounPhrase)) return match;
+            if (/\b(?:today|yesterday|tomorrow)\b/i.test(nounPhrase)) return match;
+            return `${verb} ${number} ${nounPhrase}`;
+        }
+    );
+}
+
+function sanitizeAssistantAnswer(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+
+    const parts = raw.split(/\n\nSources:\n/i);
+    const body = parts.shift() || '';
+    const sourcesBlock = parts.length ? `\n\nSources:\n${parts.join('\n\nSources:\n')}` : '';
+
+    const cleanedBody = String(body || '')
         .replace(/^\s*(?:\*\*)?Direct answer:(?:\*\*)?\s*/i, '')
         .replace(/\n\s*Confidence:\s*[^\n]*/gi, '')
         .replace(/\n\s*Verified sources checked:\s*[^\n]*/gi, '')
@@ -4103,10 +4123,17 @@ function cleanLiveAnswerText(text) {
         .replace(/\n\s*[-•]\s*/g, '\n')
         .replace(/\bhas won (\d+) in total\b/gi, 'has won $1 times in total')
         .replace(/\bwon (\d+) in total\b/gi, 'won $1 times in total')
+        .replace(/\b(titles?|championships?|wins?|losses?|points?|goals?|podiums?|poles?|medals?|seats?|awards?|albums?|episodes?|employees?|stores?|branches?|offices?|users?|customers?|subscribers?|downloads?|views?|followers?|years?)\s+(\d+(?:\.\d+)?)\b/gi, '$2 $1')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 
-    return dedupeAnswerSentences(cleaned);
+    const repairedBody = repairNumericTailPhrases(cleanedBody);
+    const dedupedBody = dedupeAnswerSentences(repairedBody);
+    return `${dedupedBody}${sourcesBlock}`.trim();
+}
+
+function cleanLiveAnswerText(text) {
+    return sanitizeAssistantAnswer(text);
 }
 
 async function buildDirectLiveAnswer(question, items, signal) {
@@ -6429,9 +6456,10 @@ function normalizeUiTokens(text) {
         function formatVerifiedSourceBadge(label = 'Verified live sources') {
             return `<div class="assistant-source-badge web">${escapeHtml(label)}</div>`;
         }
-
         function addVerifiedAssistantMessage(text, label = 'Verified live sources') {
-            const html = `${formatVerifiedSourceBadge(label)}\n${text}`;
+            const sanitizedText = sanitizeAssistantAnswer(text);
+            const html = `${formatVerifiedSourceBadge(label)}
+${sanitizedText}`;
             addChatMessage(html, false, false);
         }
 
@@ -6440,7 +6468,7 @@ function normalizeUiTokens(text) {
         }
 
         function addModelAssistantMessage(text, label = 'Model answer') {
-            addChatMessage(text, false, false);
+            addChatMessage(sanitizeAssistantAnswer(text), false, false);
         }
 
         function isSafeAssistantUrl(url) {
@@ -15338,18 +15366,18 @@ function extractUnifiedAssistantText(data) {
         (typeof data.message === 'string' && data.message.trim()) ? data.message.trim() :
         '';
 
-    if (direct) return direct;
+    if (direct) return sanitizeAssistantAnswer(direct);
 
     if (Array.isArray(data.results) && data.results.length) {
         const firstWithDescription = data.results.find(item =>
             item && typeof item.description === 'string' && item.description.trim()
         );
-        if (firstWithDescription) return firstWithDescription.description.trim();
+        if (firstWithDescription) return sanitizeAssistantAnswer(firstWithDescription.description.trim());
 
         const firstWithTitle = data.results.find(item =>
             item && typeof item.title === 'string' && item.title.trim()
         );
-        if (firstWithTitle) return firstWithTitle.title.trim();
+        if (firstWithTitle) return sanitizeAssistantAnswer(firstWithTitle.title.trim());
     }
 
     return '';
@@ -15358,9 +15386,11 @@ function extractUnifiedAssistantText(data) {
 function normalizeAssistantPayload(data, fallbackText = "Sorry, I couldn't generate a response.") {
     const normalized = (data && typeof data === 'object') ? { ...data } : {};
     const text = extractUnifiedAssistantText(normalized);
+    const finalText = sanitizeAssistantAnswer(text || fallbackText);
 
-    normalized.response = text || fallbackText;
-    normalized.text = normalized.response;
+    normalized.answer = finalText;
+    normalized.response = finalText;
+    normalized.text = finalText;
 
     if (!Array.isArray(normalized.sources)) {
         normalized.sources = [];
@@ -15369,6 +15399,5 @@ function normalizeAssistantPayload(data, fallbackText = "Sorry, I couldn't gener
     return normalized;
 }
 </script>
-
 </body>
 </html>
