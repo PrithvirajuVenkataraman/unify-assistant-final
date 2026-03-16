@@ -65,6 +65,9 @@ const SPORTS_ACHIEVEMENT_PATTERN = /\b(how many|total|number of)\b.*\b(cups|titl
 const SPORTS_ENTITY_QUESTION_PATTERN = /\b(how many|total|number of|who won|who is|what is|when did)\b/i;
 const AWKWARD_WIN_GRAMMAR_PATTERN = /\bdid\s+(.+?)\s+won\b/gi;
 const SENTENCE_SPLIT_PATTERN = /(?<=[.!?])\s+/;
+const ACHIEVEMENT_KEYWORD_PATTERN = /\b(cups|titles|trophies|championships|wins|won|races|grand prix|victories|rings|medals|trophy)\b/i;
+const ZERO_ACHIEVEMENT_PATTERN = /\b(never won|has never won|have never won|no titles?|no trophies?|no championships?|without a title|without any titles?|titleless|yet to win|hasn'?t won|haven'?t won)\b/i;
+const YEAR_NUMBER_PATTERN = /^(19|20)\d{2}$/;
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -453,12 +456,14 @@ function buildGroundedAnswer({ query, results, strictCurrentRoleLookup }) {
     const evidence = buildEvidenceUnits(results);
     if (!evidence.length) return '';
 
+    const domain = detectQueryDomain(cleanQuery);
+
     if (strictCurrentRoleLookup) {
         const roleAnswer = buildRoleAnswer(cleanQuery, evidence);
         if (roleAnswer) return roleAnswer;
     }
 
-    const numericAnswer = buildNumericConsensusAnswer(cleanQuery, evidence);
+    const numericAnswer = buildNumericConsensusAnswer(cleanQuery, evidence, domain);
     if (numericAnswer) return numericAnswer;
 
     const directAnswer = buildDirectDescriptiveAnswer(cleanQuery, evidence);
@@ -477,6 +482,7 @@ function buildEvidenceUnits(results) {
             const summary = [title, description].filter(Boolean).join('. ');
             const sentences = splitSentences([title, description].filter(Boolean).join('. '));
             const bestSentence = sentences.find(Boolean) || summary;
+
             return {
                 title,
                 description,
@@ -502,19 +508,19 @@ function buildRoleAnswer(query, evidence) {
     return cleanupAnswerText(sentence);
 }
 
-function buildNumericConsensusAnswer(query, evidence) {
+function buildNumericConsensusAnswer(query, evidence, domain = 'general') {
     if (!/\b(how many|total|number of)\b/i.test(query)) return '';
 
     const counts = new Map();
     const examples = new Map();
+    const queryContext = buildNumericQueryContext(query, domain);
 
-    for (const item of evidence.slice(0, 5)) {
-        const joined = item.summary;
-        const normalizedNumbers = extractCandidateNumbers(joined);
+    for (const item of evidence.slice(0, 6)) {
+        const normalizedNumbers = extractCandidateNumbers(item.summary, queryContext);
         for (const entry of normalizedNumbers) {
             const key = String(entry.value);
             counts.set(key, (counts.get(key) || 0) + entry.weight);
-            if (!examples.has(key)) {
+            if (!examples.has(key) || entry.weight > 2) {
                 examples.set(key, entry.sentence || item.bestSentence);
             }
         }
@@ -526,8 +532,13 @@ function buildNumericConsensusAnswer(query, evidence) {
     const [topValue, topScore] = ranked[0];
     const secondScore = ranked[1]?.[1] || 0;
 
-    if (topScore < 2 || topScore < secondScore * 1.2) {
-        return '';
+    const threshold = queryContext.domain === 'sports' ? 1.5 : 2;
+    const ratioThreshold = queryContext.domain === 'sports' ? 1.05 : 1.2;
+
+    if (topScore < threshold || topScore < secondScore * ratioThreshold) {
+        return queryContext.domain === 'sports'
+            ? buildSportsAchievementFallback(query, evidence, queryContext)
+            : '';
     }
 
     const subject = deriveQuerySubject(query);
@@ -554,6 +565,56 @@ function buildNumericConsensusAnswer(query, evidence) {
     }
 
     return `${parts[0]}.`;
+}
+
+function buildNumericQueryContext(query, domain) {
+    const normalizedQuery = normalizeQuery(query);
+    const subjectTokens = tokenizeMeaningfulWords(query);
+    const measureMatch = normalizedQuery.match(/\b(cups|titles|trophies|championships|wins|races|grand prix|victories|rings|medals)\b/i);
+
+    return {
+        domain,
+        query: normalizedQuery,
+        subjectTokens,
+        targetMeasure: measureMatch ? normalizeAchievementLabel(measureMatch[1]) : '',
+        prefersAchievementCount: domain === 'sports' || SPORTS_ACHIEVEMENT_PATTERN.test(normalizedQuery)
+    };
+}
+
+function buildSportsAchievementFallback(query, evidence, queryContext) {
+    const rankedSentences = [];
+
+    for (const item of evidence.slice(0, 6)) {
+        for (const sentence of item.sentences) {
+            const extracted = extractCandidateNumbers(sentence, queryContext);
+            if (!extracted.length) continue;
+
+            const score =
+                extracted.reduce((acc, entry) => acc + entry.weight, 0) +
+                scoreSentenceAgainstQuery(sentence, queryContext.subjectTokens);
+
+            rankedSentences.push({
+                sentence,
+                score,
+                value: extracted.sort((a, b) => b.weight - a.weight)[0]?.value
+            });
+        }
+    }
+
+    rankedSentences.sort((a, b) => b.score - a.score);
+    const best = rankedSentences[0];
+    if (!best || best.score < 1.5 || best.value == null) return '';
+
+    const subject = deriveQuerySubject(query);
+    const measure = deriveMeasureFromQuery(query);
+    const qualifier = deriveContextFromQuery(query);
+    const normalizedValue = normalizeNumericPhrase(best.value);
+
+    const base = subject
+        ? `${subject} ${measure ? `has ${measure}` : 'has'} ${normalizedValue}`
+        : `The answer appears to be ${normalizedValue}`;
+
+    return `${base}${qualifier ? ` ${qualifier}` : ''}. ${cleanupAnswerText(best.sentence)}`;
 }
 
 function buildDirectDescriptiveAnswer(query, evidence) {
@@ -588,28 +649,64 @@ function buildDirectDescriptiveAnswer(query, evidence) {
     return cleanupAnswerText(best);
 }
 
-function extractCandidateNumbers(text) {
+function extractCandidateNumbers(text, options = {}) {
     const sentences = splitSentences(text);
     const out = [];
 
     for (const sentence of sentences) {
-        const numericMatches = sentence.match(/\b\d+(?:,\d{3})*(?:\.\d+)?\b/g) || [];
-        for (const match of numericMatches) {
+        const lowerSentence = sentence.toLowerCase();
+        const hasAchievementSignal =
+            ACHIEVEMENT_KEYWORD_PATTERN.test(lowerSentence) ||
+            (options.targetMeasure && lowerSentence.includes(options.targetMeasure.toLowerCase()));
+
+        if (options.prefersAchievementCount && ZERO_ACHIEVEMENT_PATTERN.test(lowerSentence)) {
             out.push({
-                value: match.replace(/,/g, ''),
+                value: '0',
                 sentence,
-                weight: /\b(total|times|titles|trophies|championships|wins|seasons|cups|races|victories|episodes|years)\b/i.test(sentence) ? 2 : 1
+                weight: hasAchievementSignal ? 4 : 3
             });
         }
 
-        const wordNumberMatches = sentence.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b(?:[-\s]time)?/gi) || [];
+        const numericMatches = sentence.match(/\b\d+(?:,\d{3})*(?:\.\d+)?\b/g) || [];
+        for (const match of numericMatches) {
+            const cleanValue = match.replace(/,/g, '');
+            let weight = /\b(total|times|titles|trophies|championships|wins|seasons|cups|races|victories|episodes|years|medals|rings|trophy)\b/i.test(sentence) ? 2 : 1;
+
+            if (options.prefersAchievementCount && hasAchievementSignal) {
+                weight += 2;
+            }
+
+            if (options.prefersAchievementCount && YEAR_NUMBER_PATTERN.test(cleanValue)) {
+                weight -= 2;
+            }
+
+            if (options.prefersAchievementCount && /\b(final|finals|runner-up|season|edition)\b/i.test(sentence) && !hasAchievementSignal) {
+                weight -= 1;
+            }
+
+            if (weight <= 0) continue;
+
+            out.push({
+                value: cleanValue,
+                sentence,
+                weight
+            });
+        }
+
+        const wordNumberMatches = sentence.match(/\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b(?:[-\s]time)?/gi) || [];
         for (const match of wordNumberMatches) {
             const parsed = wordToNumber(match);
             if (parsed != null) {
+                let weight = /\b(total|times|titles|trophies|championships|wins|seasons|cups|races|victories|episodes|years|medals|rings|trophy)\b/i.test(sentence) ? 2 : 1;
+
+                if (options.prefersAchievementCount && hasAchievementSignal) {
+                    weight += 2;
+                }
+
                 out.push({
                     value: String(parsed),
                     sentence,
-                    weight: /\b(total|times|titles|trophies|championships|wins|seasons|cups|races|victories|episodes|years)\b/i.test(sentence) ? 2 : 1
+                    weight
                 });
             }
         }
@@ -649,8 +746,7 @@ function deriveContextFromQuery(query) {
 }
 
 function normalizeNumericPhrase(value) {
-    const text = String(value || '').trim();
-    return text;
+    return String(value || '').trim();
 }
 
 function tokenizeMeaningfulWords(text) {
@@ -699,6 +795,7 @@ function extractDomainFromUrl(url) {
 
 function wordToNumber(value) {
     const map = {
+        zero: 0,
         one: 1,
         two: 2,
         three: 3,
