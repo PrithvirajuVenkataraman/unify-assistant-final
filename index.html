@@ -8669,6 +8669,7 @@ User text:
     };
 }
 
+
 async function buildSongListFromAIFallback(artist, requestedCount) {
     const prompt = `Return top songs for the artist/composer below as strict JSON only.
 
@@ -8707,9 +8708,9 @@ Rules:
     if (!songs.length) throw new Error('ai fallback returned empty songs');
 
     const items = [];
-    for (const rawItem of songs.slice(0, requestedCount)) {
+    for (const rawItem of songs.slice(0, requestedCount * 2)) {
         const song = String(rawItem?.song || '').trim();
-        const work = String(rawItem?.work || '').trim() || 'Unknown work';
+        const work = String(rawItem?.work || '').trim() || '';
         const reason = String(rawItem?.reason || '').trim();
         if (!song) continue;
         items.push({
@@ -8723,41 +8724,204 @@ Rules:
     return items;
 }
 
-async function fetchSongsFromVerifiedSources(artist, requestedCount) {
+function normalizeMusicEntityName(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/\b(official|video|audio|lyrics|lyric video|from|remastered|live|version|full song|hd)\b/g, ' ')
+        .replace(/\(.*?\)/g, ' ')
+        .replace(/\[.*?\]/g, ' ')
+        .replace(/[|:]/g, ' ')
+        .replace(/\s+-\s+from.*$/i, ' ')
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeTrackName(value) {
+    return normalizeMusicEntityName(value)
+        .replace(/\b(song|track|single|theme|ost|soundtrack)\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeArtistNameLoose(value) {
+    return normalizeMusicEntityName(value)
+        .replace(/\b(music|songs|tracks|hits|best|top|composer|singer|band|artist)\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function getDomainFromUrl(url) {
+    try {
+        return new URL(String(url || '')).hostname.replace(/^www\./i, '').toLowerCase();
+    } catch {
+        return '';
+    }
+}
+
+function getMusicSourceWeight(url) {
+    const domain = getDomainFromUrl(url);
+    if (!domain) return 0;
+    if (/spotify\.com$/.test(domain)) return 8;
+    if (/music\.apple\.com$/.test(domain) || /apple\.com$/.test(domain)) return 7;
+    if (/youtube\.com$/.test(domain) || /youtu\.be$/.test(domain)) return 6;
+    if (/allmusic\.com$/.test(domain)) return 6;
+    if (/wikipedia\.org$/.test(domain)) return 5;
+    if (/genius\.com$/.test(domain)) return 5;
+    if (/jiosaavn\.com$/.test(domain) || /saavn\.com$/.test(domain)) return 5;
+    if (/gaana\.com$/.test(domain) || /wynk\.in$/.test(domain) || /amazon\.com$/.test(domain)) return 4;
+    if (/soundcloud\.com$/.test(domain)) return 3;
+    if (/reddit\.com$/.test(domain) || /quora\.com$/.test(domain) || /tiktok\.com$/.test(domain) || /facebook\.com$/.test(domain)) return 0;
+    return 2;
+}
+
+function isWeakMusicSource(url) {
+    return getMusicSourceWeight(url) <= 0;
+}
+
+function looksLikeMusicIndexPage(text) {
+    const t = normalizeMusicEntityName(text);
+    if (!t) return false;
+    return /\b(discography|songs albums reviews|albums reviews bio|bio|top tracks|best songs|playlist|jukebox|hits|albums|songs|reviews|artist page|music page)\b/.test(t);
+}
+
+function looksLikeNonTrackEntity(name, meta = {}) {
+    const raw = `${name || ''} ${meta?.title || ''} ${meta?.description || ''}`.toLowerCase();
+    if (!raw.trim()) return true;
+    if (/\b(artist|composer|singer|band)\b/.test(raw) && /\b(bio|discography|albums|reviews|top tracks)\b/.test(raw)) return true;
+    if (/\b(movie|film|discography|album review|artist page|top \d+ songs|best songs|playlist|jukebox|albums reviews bio)\b/.test(raw)) return true;
+    return false;
+}
+
+function isLikelyBadSongName(name, artist) {
+    const raw = String(name || '').trim();
+    if (!raw) return true;
+    if (raw.length < 2 || raw.length > 120) return true;
+    if (/^unknown\b/i.test(raw)) return true;
+    if (/\b(song|songs|track|tracks|playlist|discography|albums?|reviews?|bio|top\s*\d+|best songs|jukebox|hits)\b/i.test(raw) && raw.split(/\s+/).length > 3) return true;
+    const normalized = normalizeTrackName(raw);
+    const artistNorm = normalizeArtistNameLoose(artist);
+    if (!normalized) return true;
+    if (artistNorm && normalized === artistNorm) return true;
+    return false;
+}
+
+function songAppearsInEvidence(song, evidenceItems) {
+    const target = normalizeTrackName(song);
+    if (!target) return false;
+    return (Array.isArray(evidenceItems) ? evidenceItems : []).some(item => {
+        const corpus = normalizeMusicEntityName(`${item?.title || ''} ${item?.description || ''}`);
+        return corpus.includes(target);
+    });
+}
+
+function artistAppearsInEvidence(artist, evidenceItems) {
+    const target = normalizeArtistNameLoose(artist);
+    if (!target) return false;
+    return (Array.isArray(evidenceItems) ? evidenceItems : []).some(item => {
+        const corpus = normalizeMusicEntityName(`${item?.title || ''} ${item?.description || ''} ${item?.url || ''}`);
+        return corpus.includes(target);
+    });
+}
+
+function workAppearsInEvidence(work, evidenceItems) {
+    const target = normalizeMusicEntityName(work);
+    if (!target) return false;
+    return (Array.isArray(evidenceItems) ? evidenceItems : []).some(item => {
+        const corpus = normalizeMusicEntityName(`${item?.title || ''} ${item?.description || ''}`);
+        return corpus.includes(target);
+    });
+}
+
+function scoreMusicCandidate(candidate, artist) {
+    const evidence = Array.isArray(candidate?.evidence) ? candidate.evidence : [];
+    let score = 0;
+    score += evidence.reduce((sum, item) => sum + Math.max(0, getMusicSourceWeight(item?.url)), 0);
+    score += Math.min(evidence.length, 4) * 2;
+    if (artistAppearsInEvidence(artist, evidence)) score += 4;
+    if (songAppearsInEvidence(candidate?.song, evidence)) score += 3;
+    if (candidate?.work && workAppearsInEvidence(candidate.work, evidence)) score += 1;
+    return score;
+}
+
+function dedupeAndRankMusicCandidates(items, artist, requestedCount) {
+    const bySong = new Map();
+    for (const item of Array.isArray(items) ? items : []) {
+        const song = String(item?.song || '').trim();
+        if (isLikelyBadSongName(song, artist)) continue;
+        const key = normalizeTrackName(song);
+        if (!key) continue;
+        const existing = bySong.get(key);
+        const score = scoreMusicCandidate(item, artist);
+        const normalizedItem = {
+            song,
+            work: String(item?.work || '').trim(),
+            workVerified: !!item?.work && workAppearsInEvidence(item.work, item.evidence || []),
+            reason: String(item?.reason || '').trim(),
+            evidence: Array.isArray(item?.evidence) ? item.evidence : [],
+            score
+        };
+        if (!existing || score > existing.score || (score === existing.score && normalizedItem.song.length < existing.song.length)) {
+            bySong.set(key, normalizedItem);
+        }
+    }
+
+    return [...bySong.values()]
+        .sort((a, b) => b.score - a.score || a.song.localeCompare(b.song))
+        .slice(0, requestedCount);
+}
+
+async function fetchUniversalArtistSongs(artist, requestedCount) {
     const safeArtist = String(artist || '').trim();
     if (!safeArtist) return { items: [], sources: [] };
 
-    const searchResponse = await fetch('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            query: `${safeArtist} best songs top tracks official discography reviews`,
-            maxResults: 7
-        })
-    });
+    const queries = [
+        `${safeArtist} top songs popular tracks official artist`,
+        `${safeArtist} best songs allmusic spotify wikipedia`,
+        `${safeArtist} essential tracks official audio`
+    ];
 
-    if (!searchResponse.ok) {
-        throw new Error('verified music search failed');
+    const aggregated = [];
+    const seenUrl = new Set();
+
+    for (const query of queries) {
+        try {
+            const response = await fetch('/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query, maxResults: 8 })
+            });
+            if (!response.ok) continue;
+            const data = await response.json();
+            const results = Array.isArray(data?.results) ? data.results : [];
+            for (const r of results) {
+                const title = String(r?.title || '').trim();
+                const url = String(r?.url || '').trim();
+                const description = String(r?.description || '').trim();
+                if (!title || !/^https?:\/\//i.test(url) || !description) continue;
+                if (seenUrl.has(url)) continue;
+                seenUrl.add(url);
+                aggregated.push({ title, url, description });
+            }
+        } catch {
+            // Keep going.
+        }
     }
 
-    const searchData = await searchResponse.json();
-    const snippets = (Array.isArray(searchData?.results) ? searchData.results : [])
-        .filter(r => {
-            const title = String(r?.title || '').trim();
-            const url = String(r?.url || '').trim();
-            return !!title && /^https?:\/\//i.test(url);
-        })
-        .slice(0, 7);
+    const filtered = aggregated.filter(item => !isWeakMusicSource(item.url));
+    const sources = (filtered.length ? filtered : aggregated)
+        .filter(item => !looksLikeMusicIndexPage(item.title) || getMusicSourceWeight(item.url) >= 5)
+        .slice(0, 12);
 
-    if (snippets.length < 4) {
-        throw new Error('not enough verification sources');
+    if (sources.length < 3) {
+        throw new Error('not enough music sources');
     }
 
-    const snippetsBlock = snippets
+    const snippetsBlock = sources
         .map((r, idx) => `${idx + 1}. TITLE: ${r.title}\nURL: ${r.url}\nSNIPPET: ${r.description}`)
         .join('\n\n');
 
-    const verifyPrompt = `You are verifying popular songs for an artist using multiple web sources.
+    const verifyPrompt = `You are building a trusted song recommendation list for any artist in the world.
 
 Artist: "${safeArtist}"
 
@@ -8766,8 +8930,8 @@ Return strict JSON only in this schema:
   "artist": "<artist>",
   "songs": [
     {
-      "song": "<song name>",
-      "work": "<album, film, or single>",
+      "song": "<track title>",
+      "work": "<album, film, soundtrack, or single if grounded>",
       "reason": "<short grounded reason>",
       "evidenceIds": [1,2]
     }
@@ -8775,11 +8939,12 @@ Return strict JSON only in this schema:
 }
 
 Rules:
-- Give up to ${requestedCount} songs.
+- Return up to ${Math.max(requestedCount * 2, 12)} songs so weak ones can be filtered later.
+- Include SONGS or TRACKS only. Do not output artist pages, albums, movies, playlists, or discography pages as songs.
+- Reject entries where the title is unknown or where the item looks like a page heading instead of a song.
 - Use only the sources below.
-- Every song must have at least one evidence id.
-- Prefer songs that are widely recognized across multiple sources.
-- Do not invent titles, albums, or evidence ids.
+- Each song must have 1 or more evidence IDs.
+- Prefer songs supported by multiple strong sources.
 - Output valid JSON only.
 
 Sources:
@@ -8790,60 +8955,63 @@ ${snippetsBlock}`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             message: verifyPrompt,
-            systemPrompt: 'You are a strict fact verifier. Output valid JSON only.'
+            systemPrompt: 'You are a strict music fact extractor. Output valid JSON only.'
         })
     });
 
     if (!verifyResponse.ok) {
-        throw new Error('verified song extraction failed');
+        throw new Error('music extraction failed');
     }
 
     const verifyData = await verifyResponse.json();
     const parsed = extractJsonObject(verifyData?.response || verifyData?.text || '');
     const songs = Array.isArray(parsed?.songs) ? parsed.songs : [];
     if (!songs.length) {
-        throw new Error('verified song extraction returned no songs');
+        throw new Error('music extraction returned no songs');
     }
 
-    const items = [];
-    for (const rawItem of songs.slice(0, requestedCount)) {
+    const candidates = [];
+    for (const rawItem of songs) {
         const song = String(rawItem?.song || '').trim();
         const work = String(rawItem?.work || '').trim();
         const reason = String(rawItem?.reason || '').trim();
         const ids = Array.isArray(rawItem?.evidenceIds) ? rawItem.evidenceIds : [];
-        if (!song) continue;
+        if (isLikelyBadSongName(song, safeArtist)) continue;
 
-        const mapped = ids
+        const evidence = ids
             .map(id => Number(id))
-            .filter(n => Number.isFinite(n) && n >= 1 && n <= snippets.length)
-            .map(n => snippets[n - 1]);
+            .filter(n => Number.isFinite(n) && n >= 1 && n <= sources.length)
+            .map(n => sources[n - 1]);
 
-        if (!mapped.length) continue;
+        if (!evidence.length) continue;
+        if (!artistAppearsInEvidence(safeArtist, evidence)) continue;
+        if (!songAppearsInEvidence(song, evidence) && looksLikeNonTrackEntity(song, { title: evidence[0]?.title, description: evidence[0]?.description })) continue;
 
-        items.push({
+        candidates.push({
             song,
             work,
-            workVerified: !!work && isWorkMentionedInEvidence(work, mapped),
-            reason
+            reason,
+            evidence
         });
     }
 
+    const items = dedupeAndRankMusicCandidates(candidates, safeArtist, requestedCount);
     if (!items.length) {
-        throw new Error('verified songs could not be grounded');
+        throw new Error('no valid songs after validation');
     }
 
-    return { items, sources: snippets };
+    return { items, sources };
 }
 
 function formatMusicSongReply(artist, requestedCount, items, fallback = false) {
     const safeArtist = String(artist || 'Unknown artist').trim();
     const count = clampSongCount(requestedCount, 5);
     const fixedNotes = [
-        'Hit single',
-        'Popular track',
-        'Classic song',
-        'Melodic tune',
-        'Fan-favorite'
+        'Popular pick',
+        'Well-known track',
+        'Fan favorite',
+        'Essential listen',
+        'Strong recommendation'
     ];
 
     const lines = [`[Music] Top ${count} songs for ${safeArtist}`, ''];
@@ -8852,29 +9020,24 @@ function formatMusicSongReply(artist, requestedCount, items, fallback = false) {
         const work = String(item?.work || '').trim();
         const workVerified = item?.workVerified !== false && !!work;
         if (!song) return;
-        const reason = fixedNotes[index % fixedNotes.length];
+        const reason = String(item?.reason || '').trim() || fixedNotes[index % fixedNotes.length];
         lines.push(workVerified ? `• ${song} - ${work}` : `• ${song}`);
         lines.push(`Note: ${reason}`);
     });
 
-    if (fallback) {
-        lines.push('');
-        lines.push('Note: This list is generated from model knowledge because live web retrieval was unavailable.');
+    if (!items.length) {
+        lines.push('No grounded songs found yet.');
     }
 
-    return lines.join('\n');
-}
+    if (fallback) {
+        lines.push('', 'Tip: Ask for a specific vibe like melodies, hits, romantic songs, or underrated tracks.');
+    }
 
-function toCompactLower(input) {
-    return String(input || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+    return lines.join('\n').trim();
 }
 
 function isWorkMentionedInEvidence(work, evidenceItems) {
-    const candidate = toCompactLower(work);
+    const candidate = normalizeMusicEntityName(work);
     if (!candidate) return false;
     const corpus = (Array.isArray(evidenceItems) ? evidenceItems : [])
         .map(item => `${item?.title || ''} ${item?.description || ''} ${item?.url || ''}`)
@@ -8909,9 +9072,9 @@ async function handleArtistSongRequest(text) {
     }
 
     try {
-        const verifiedSongs = await fetchSongsFromVerifiedSources(artist, requestedCount);
+        const verifiedSongs = await fetchUniversalArtistSongs(artist, requestedCount);
         if (verifiedSongs.items.length) {
-            const sourceLines = formatLiveSourceLinks(verifiedSongs.sources, 7);
+            const sourceLines = formatLiveSourceLinks(verifiedSongs.sources, Math.min(verifiedSongs.sources.length, 8));
             const catalogMsg = `${formatMusicSongReply(artist, requestedCount, verifiedSongs.items, false)}\n\nSources:\n${sourceLines}`;
             addVerifiedAssistantMessage(catalogMsg, 'Verified music sources');
             const catalogSpeech = await composeApiReply('artist_song_verified', {
@@ -8924,148 +9087,38 @@ async function handleArtistSongRequest(text) {
             return;
         }
     } catch (catalogError) {
-        // Fall through to web-search and AI fallbacks.
+        // Fall through to AI fallback.
     }
 
     showThinkingIndicator(`[Music] Finding songs for ${artist}...`);
     try {
-        const searchResponse = await fetch('/api/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: `${artist} best songs soundtrack composer singer`,
-                maxResults: 10
-            })
-        });
-
-        if (!searchResponse.ok) throw new Error('web search failed');
-        const searchData = await searchResponse.json();
-        const rawSnippets = Array.isArray(searchData?.results) ? searchData.results : [];
-        if (!rawSnippets.length) throw new Error('no web snippets found');
-
-        // Use all retrieved sources for RAG, while keeping only valid entries.
-        const snippets = rawSnippets.filter(r => {
-            const title = String(r?.title || '').trim();
-            const url = String(r?.url || '').trim();
-            return !!title && /^https?:\/\//i.test(url);
-        });
-        if (!snippets.length) throw new Error('no valid web snippets found');
-
-        const snippetsBlock = snippets
-            .map((r, idx) => {
-                const i = idx + 1;
-                return `${i}. TITLE: ${r.title}\nURL: ${r.url}\nSNIPPET: ${r.description}`;
-            })
-            .join('\n\n');
-
-        const verifyPrompt = `You are doing Retrieval-Augmented Generation (RAG) for song recommendations.
-
-Artist: "${artist}"
-
-Return strict JSON only in this schema:
-{
-  "artist": "<artist>",
-  "songs": [
-    {
-      "song": "<song name>",
-      "work": "<film or album>",
-      "reason": "<short reason grounded in snippets>",
-      "evidenceIds": [1,2]
-    }
-  ]
-}
-
-Rules:
-- Give up to ${requestedCount} songs.
-- Use ONLY evidence from snippet IDs below.
-- Do not include songs without evidence IDs.
-- Do not invent evidence IDs.
-- Do not output markdown, only valid JSON.
-
-Snippets:
-${snippetsBlock}`;
-
-        const verifyResponse = await fetch('/api/chat-groq', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: verifyPrompt,
-                systemPrompt: 'You are a strict fact verifier. Output valid JSON only.'
-            })
-        });
-
-        if (!verifyResponse.ok) throw new Error('song verification request failed');
-        const verifyData = await verifyResponse.json();
-        const parsed = extractJsonObject(verifyData?.response || verifyData?.text || '');
-        const items = Array.isArray(parsed?.songs) ? parsed.songs : [];
-
-        if (!items.length) {
-            throw new Error('verification returned no songs');
+        const aiFallbackItems = await buildSongListFromAIFallback(artist, requestedCount * 2);
+        const normalizedFallback = dedupeAndRankMusicCandidates(
+            aiFallbackItems.map(item => ({ ...item, evidence: [] })),
+            artist,
+            requestedCount
+        );
+        if (!normalizedFallback.length) {
+            throw new Error('ai fallback returned no usable songs');
         }
-
-        const formattedItems = [];
-        for (const rawItem of items.slice(0, requestedCount)) {
-            const song = String(rawItem?.song || '').trim();
-            const work = String(rawItem?.work || '').trim() || 'Unknown work';
-            const reason = String(rawItem?.reason || '').trim();
-            const ids = Array.isArray(rawItem?.evidenceIds) ? rawItem.evidenceIds : [];
-
-            if (!song) continue;
-
-            const mapped = ids
-                .map(id => Number(id))
-                .filter(n => Number.isFinite(n) && n >= 1 && n <= snippets.length)
-                .map(n => snippets[n - 1]);
-
-            if (!mapped.length) continue;
-
-            const workVerified = work !== 'Unknown work' && isWorkMentionedInEvidence(work, mapped);
-
-            formattedItems.push({
-                song,
-                work: workVerified ? work : '',
-                workVerified,
-                reason
-            });
-        }
-
-        if (!formattedItems.length) {
-            throw new Error('verification returned no grounded songs');
-        }
-
-        const msg = formatMusicSongReply(artist, requestedCount, formattedItems, false);
-
-        addChatMessage(msg, false);
-        const groundedSpeech = await composeApiReply('artist_song_grounded', {
+        const fallbackReply = formatMusicSongReply(artist, requestedCount, normalizedFallback, true);
+        addChatMessage(fallbackReply, false);
+        const fallbackSpeech = await composeApiReply('artist_song_general', {
             artist
         }, {
-            fallbackText: `Here are grounded song suggestions for ${artist}.`
+            fallbackText: `Here are song suggestions for ${artist}.`
         });
-        speak(groundedSpeech || `Here are grounded song suggestions for ${artist}.`);
-        saveToHistory(text, msg);
-    } catch (error) {
-        try {
-            const aiFallbackItems = await buildSongListFromAIFallback(artist, requestedCount);
-            const fallbackReply = formatMusicSongReply(artist, requestedCount, aiFallbackItems, true);
-            addChatMessage(fallbackReply, false);
-            const fallbackSpeech = await composeApiReply('artist_song_general', {
-                artist
-            }, {
-                fallbackText: `Here are song suggestions for ${artist}.`
-            });
-            speak(fallbackSpeech || `Here are song suggestions for ${artist}.`);
-            saveToHistory(text, fallbackReply);
-        } catch (fallbackError) {
-            await deliverApiReply('artist_song_fallback', {
-                artist,
-                fallbackUrl: `https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')}`
-            }, { historyKey: text });
-        }
+        speak(fallbackSpeech || `Here are song suggestions for ${artist}.`);
+        saveToHistory(text, fallbackReply);
+    } catch (fallbackError) {
+        await deliverApiReply('artist_song_fallback', {
+            artist,
+            fallbackUrl: `https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')}`
+        }, { historyKey: text });
     } finally {
         hideThinkingIndicator();
     }
 }
-
 function isPoliticalQuery(text) {
     const t = String(text || '').toLowerCase();
     if (!t.trim()) return false;
