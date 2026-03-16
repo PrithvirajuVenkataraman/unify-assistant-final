@@ -4094,28 +4094,8 @@ function dedupeAnswerSentences(text) {
     return unique.join(' ').replace(/\s+/g, ' ').trim();
 }
 
-function repairNumericTailPhrases(text) {
-    return String(text || '').replace(
-        /\b(has\s+won|have\s+won|won|wins|has|have|had|recorded|records|scored|scores|posted|posts|earned|earns|holds|hold|hit|hits|reached|reaches)\s+([a-z][a-z'\/-]*(?:\s+[a-z][a-z'\/-]*){0,4})\s+(\d+(?:\.\d+)?)\b/gi,
-        (match, verb, phrase, number) => {
-            const nounPhrase = String(phrase || '').trim();
-            if (!nounPhrase) return match;
-            if (/^(?:in|on|at|by|for|from|with|to|of|and|or)$/i.test(nounPhrase)) return match;
-            if (/\b(?:today|yesterday|tomorrow)\b/i.test(nounPhrase)) return match;
-            return `${verb} ${number} ${nounPhrase}`;
-        }
-    );
-}
-
-function sanitizeAssistantAnswer(text) {
-    const raw = String(text || '').trim();
-    if (!raw) return '';
-
-    const parts = raw.split(/\n\nSources:\n/i);
-    const body = parts.shift() || '';
-    const sourcesBlock = parts.length ? `\n\nSources:\n${parts.join('\n\nSources:\n')}` : '';
-
-    const cleanedBody = String(body || '')
+function cleanLiveAnswerText(text) {
+    const cleaned = String(text || '')
         .replace(/^\s*(?:\*\*)?Direct answer:(?:\*\*)?\s*/i, '')
         .replace(/\n\s*Confidence:\s*[^\n]*/gi, '')
         .replace(/\n\s*Verified sources checked:\s*[^\n]*/gi, '')
@@ -4123,137 +4103,10 @@ function sanitizeAssistantAnswer(text) {
         .replace(/\n\s*[-•]\s*/g, '\n')
         .replace(/\bhas won (\d+) in total\b/gi, 'has won $1 times in total')
         .replace(/\bwon (\d+) in total\b/gi, 'won $1 times in total')
-        .replace(/\b(titles?|championships?|wins?|losses?|points?|goals?|podiums?|poles?|medals?|seats?|awards?|albums?|episodes?|employees?|stores?|branches?|offices?|users?|customers?|subscribers?|downloads?|views?|followers?|years?)\s+(\d+(?:\.\d+)?)\b/gi, '$2 $1')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 
-    const repairedBody = repairNumericTailPhrases(cleanedBody);
-    const dedupedBody = dedupeAnswerSentences(repairedBody);
-    return `${dedupedBody}${sourcesBlock}`.trim();
-}
-
-function normalizeLooseComparisonText(text) {
-    return String(text || '')
-        .toLowerCase()
-        .replace(/\s+-\s+[a-z0-9 .&']+$/i, '')
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function escapeRegex(text) {
-    return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function isTitleLikeAnswer(text, results = []) {
-    const raw = String(text || '').trim();
-    if (!raw) return false;
-    const normalized = normalizeLooseComparisonText(raw);
-    if (!normalized) return false;
-
-    if (Array.isArray(results) && results.some(item => normalizeLooseComparisonText(item?.title || '') === normalized)) {
-        return true;
-    }
-
-    const wordCount = raw.split(/\s+/).filter(Boolean).length;
-    const hasSiteSuffix = /\s+-\s+(espn|bbc|reuters|ap|wikipedia|facebook|instagram|x|twitter|youtube|formula ?1|motorsport|autosport|sky sports|red bull racing)\.?$/i.test(raw);
-    const isFragment = !/[.!?]/.test(raw.replace(/[.!?]+$/g, ''));
-    const hasDirectFactVerb = /\b(is|are|was|were|has|have|had|won|wins|holds|hold|scored|score|costs?|priced?|launched|released|founded|born|died|located)\b/i.test(raw);
-
-    return hasSiteSuffix || (wordCount <= 16 && isFragment && !hasDirectFactVerb);
-}
-
-function scoreResultAnswerCandidate(candidate, query) {
-    const text = String(candidate || '').trim();
-    if (!text) return -999;
-
-    let score = 0;
-    const normalizedQuery = String(query || '').toLowerCase();
-    const queryTokens = normalizedQuery
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .split(/\s+/)
-        .filter(token => token && !['how','many','what','who','when','where','why','is','are','was','were','has','have','had','the','a','an','of','in','on','for','to','won','title','titles'].includes(token));
-
-    const normalizedText = normalizeLooseComparisonText(text);
-    const tokenHits = queryTokens.filter(token => normalizedText.includes(token)).length;
-    score += tokenHits * 3;
-
-    if (/\b\d+(?:\.\d+)?\b/.test(text)) score += 4;
-    if (/\b(19|20)\d{2}\b/.test(text)) score += 2;
-    if (/\b(has|have|had|is|are|was|were|won|wins|holds|hold|became|become|sealed|named|ranked|finished|recorded|launched|released|founded)\b/i.test(text)) score += 3;
-    if (/\b(champion|championship|title|titles|wins|podiums|points|goals|score|record|records|world champion)\b/i.test(text)) score += 3;
-    if (/^from web sources:/i.test(text)) score -= 1;
-    if (isTitleLikeAnswer(text)) score -= 8;
-    if (/\b(espn|reuters|bbc|wikipedia|facebook|instagram|youtube)\b/i.test(text) && !/\b(has|have|won|is|are|was|were|\d)\b/i.test(text)) score -= 5;
-    if (text.length < 20) score -= 2;
-    if (text.length > 240) score -= 2;
-
-    return score;
-}
-
-function buildQueryAwareAnswerFromResults(query, results = []) {
-    const items = Array.isArray(results) ? results.filter(Boolean) : [];
-    if (!items.length) return '';
-
-    const rawQuery = String(query || '').trim();
-    const queryLower = rawQuery.toLowerCase();
-    const howManyMatch = rawQuery.match(/how\s+many\s+(.+?)\s+has\s+(.+?)\s+won\??$/i);
-    const quantityTarget = howManyMatch?.[1] ? howManyMatch[1].trim() : '';
-    const quantitySubject = howManyMatch?.[2] ? howManyMatch[2].trim() : '';
-
-    const candidates = [];
-    for (const item of items) {
-        const description = String(item?.description || '').trim();
-        const title = String(item?.title || '').trim();
-        if (description) candidates.push(description);
-        if (title && !isTitleLikeAnswer(title, items)) candidates.push(title);
-    }
-
-    if (quantitySubject && quantityTarget) {
-        const subjectPattern = new RegExp(`^${escapeRegex(quantitySubject)}\\s*:\\s*(\\d+(?:\\.\\d+)?)\\b`, 'i');
-        for (const candidate of candidates) {
-            const match = String(candidate).match(subjectPattern);
-            if (match?.[1]) {
-                const target = quantityTarget.replace(/^formula\s+one\b/i, 'Formula 1').replace(/^f1\b/i, 'F1');
-                return sanitizeAssistantAnswer(`${quantitySubject} has won ${match[1]} ${target}.`);
-            }
-        }
-    }
-
-    const ranked = candidates
-        .map(candidate => ({ candidate, score: scoreResultAnswerCandidate(candidate, rawQuery) }))
-        .sort((a, b) => b.score - a.score);
-
-    const best = ranked.find(entry => entry.score > -2)?.candidate || '';
-    if (!best) return '';
-
-    if (quantitySubject && quantityTarget) {
-        const numberMatch = String(best).match(/\b(\d+(?:\.\d+)?)\b/);
-        if (numberMatch?.[1]) {
-            const target = quantityTarget.replace(/^formula\s+one\b/i, 'Formula 1').replace(/^f1\b/i, 'F1');
-            return sanitizeAssistantAnswer(`${quantitySubject} has won ${numberMatch[1]} ${target}.`);
-        }
-    }
-
-    if (/\bhow\s+many\b/i.test(queryLower)) {
-        const numberMatch = String(best).match(/\b(\d+(?:\.\d+)?)\b/);
-        if (numberMatch?.[1]) {
-            const subjectGuess = rawQuery
-                .replace(/how\s+many\s+/i, '')
-                .replace(/\?+$/g, '')
-                .trim();
-            if (subjectGuess) {
-                return sanitizeAssistantAnswer(`${subjectGuess}: ${numberMatch[1]}.`);
-            }
-        }
-    }
-
-    return sanitizeAssistantAnswer(best);
-}
-
-
-function cleanLiveAnswerText(text) {
-    return sanitizeAssistantAnswer(text);
+    return dedupeAnswerSentences(cleaned);
 }
 
 async function buildDirectLiveAnswer(question, items, signal) {
@@ -4702,17 +4555,11 @@ function resolveKnowledgeFollowupQuery(text) {
 }
 
 function extractAssistantResponseText(payload) {
-    if (typeof payload?.answer === 'string' && payload.answer.trim()) {
-        return payload.answer.trim();
-    }
     if (typeof payload?.response === 'string' && payload.response.trim()) {
         return payload.response.trim();
     }
     if (typeof payload?.text === 'string' && payload.text.trim()) {
         return payload.text.trim();
-    }
-    if (typeof payload?.message === 'string' && payload.message.trim()) {
-        return payload.message.trim();
     }
 
     const candidateText = payload?.candidates?.[0]?.content?.parts
@@ -4757,15 +4604,15 @@ async function buildSearchFallbackAnswer(userMessage) {
         const data = await response.json();
         const results = Array.isArray(data?.results) ? data.results : [];
         if (results.length) {
-            const synthesizedAnswer = buildQueryAwareAnswerFromResults(query, results)
-                || sanitizeAssistantAnswer(String(data?.answer || data?.response || data?.text || '').trim());
+            const top = results[0];
+            const topSnippet = String(top?.description || '').trim();
             const lines = results
                 .slice(0, 3)
                 .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
                 .join('\n');
 
-            const lead = synthesizedAnswer
-                ? synthesizedAnswer
+            const lead = topSnippet
+                ? `From web sources: ${topSnippet}`
                 : `I found reliable web sources about ${query}.`;
 
             return `${lead}\n\nSources:\n${lines}`;
@@ -4879,8 +4726,6 @@ function isDirectExplainerQuery(text) {
 function isLowSignalModelAnswer(text) {
     const t = String(text || '').trim().toLowerCase();
     if (!t) return true;
-
-    if (isTitleLikeAnswer(t)) return true;
 
     return [
         /keep going a little more/,
@@ -6584,10 +6429,9 @@ function normalizeUiTokens(text) {
         function formatVerifiedSourceBadge(label = 'Verified live sources') {
             return `<div class="assistant-source-badge web">${escapeHtml(label)}</div>`;
         }
+
         function addVerifiedAssistantMessage(text, label = 'Verified live sources') {
-            const sanitizedText = sanitizeAssistantAnswer(text);
-            const html = `${formatVerifiedSourceBadge(label)}
-${sanitizedText}`;
+            const html = `${formatVerifiedSourceBadge(label)}\n${text}`;
             addChatMessage(html, false, false);
         }
 
@@ -6596,7 +6440,7 @@ ${sanitizedText}`;
         }
 
         function addModelAssistantMessage(text, label = 'Model answer') {
-            addChatMessage(sanitizeAssistantAnswer(text), false, false);
+            addChatMessage(text, false, false);
         }
 
         function isSafeAssistantUrl(url) {
@@ -11071,9 +10915,7 @@ ${snippets}`
     const summaryData = await summaryResponse.json();
     const answer = cleanLiveAnswerText(String(summaryData?.response || summaryData?.text || '').trim());
     const sourceLines = results.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
-    const fallbackSummary = buildQueryAwareAnswerFromResults(pipeline.userText, results)
-        || cleanLiveAnswerText(`Direct answer: ${results[0].description || results[0].title}${results[0].description && results[0].title ? `\n\nKey points:\n- ${results[0].title}` : ''}`);
-    const finalAnswer = answer || fallbackSummary;
+    const finalAnswer = answer || cleanLiveAnswerText(`Direct answer: ${results[0].title}${results[0].description ? `\n\nKey points:\n- ${results[0].description}` : ''}`);
     const finalMsg = `${finalAnswer}\n\nSources:\n${sourceLines}`;
     addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
     await speakApiReply('verified_answer_found', {}, 'I checked verified sources and found the answer.');
@@ -11090,17 +10932,17 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         const deduped = await retrieveUniversalEntitySources(pipeline, controller);
 
         if (!deduped.length) { 
-            if (publishUniversalKnownFact(pipeline)) return true;
+            if (await publishUniversalKnownFact(pipeline)) return true;
             if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
             return publishUniversalVerificationFallback(pipeline, 'I could not verify that result right now.');
         } 
 
         const agreement = buildSourceAgreement(deduped.slice(0, 6), pipeline.entityIntent);
-        if (publishUniversalConsensusAnswer(pipeline, agreement)) return true;
+        if (await publishUniversalConsensusAnswer(pipeline, agreement)) return true;
 
         if (pipeline.entityIntent.directFact && agreement.mixed) {
             if (pipeline.knownFact && pipeline.entityIntent.relationType === 'title_count') {
-                return publishUniversalKnownFact(pipeline);
+                return await publishUniversalKnownFact(pipeline);
             }
             if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) {
                 return true;
@@ -11111,7 +10953,7 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         return await summarizeUniversalEntitySources(pipeline, deduped, controller);
     } catch (error) { 
         if (isAbortError(error)) return true; 
-        if (publishUniversalKnownFact(pipeline)) return true;
+        if (await publishUniversalKnownFact(pipeline)) return true;
         if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
         return publishUniversalVerificationFallback(pipeline);
     } finally { 
@@ -11253,8 +11095,7 @@ ${snippets}`
                 await fetchAndDisplayNews(userText);
                 return true;
             }
-            const fallbackAnswer = buildQueryAwareAnswerFromResults(query, sourcePool)
-                || `Direct answer: ${top.description || top.title}${top.description && top.title ? `\n\nKey points:\n- ${top.title}` : ''}`;
+            const fallbackAnswer = `Direct answer: ${top.title}${top.description ? `\n\nKey points:\n- ${top.description}` : ''}`;
             const sourceLines = sourcePool.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
             const cleanedFallbackAnswer = cleanLiveAnswerText(fallbackAnswer);
             const conciseFallbackAnswer = cleanedFallbackAnswer
@@ -15490,7 +15331,6 @@ window.validatePlaces = function(aiText, allowedPlaces) {
 function extractUnifiedAssistantText(data) {
     if (!data || typeof data !== 'object') return '';
 
-    const results = Array.isArray(data.results) ? data.results.filter(Boolean) : [];
     const direct =
         (typeof data.answer === 'string' && data.answer.trim()) ? data.answer.trim() :
         (typeof data.response === 'string' && data.response.trim()) ? data.response.trim() :
@@ -15498,26 +15338,18 @@ function extractUnifiedAssistantText(data) {
         (typeof data.message === 'string' && data.message.trim()) ? data.message.trim() :
         '';
 
-    if (direct && !isTitleLikeAnswer(direct, results)) {
-        return sanitizeAssistantAnswer(direct);
-    }
+    if (direct) return direct;
 
-    const queryHint = String(data.query || data.userQuery || data.originalQuery || '').trim();
-    const resultBasedAnswer = buildQueryAwareAnswerFromResults(queryHint, results);
-    if (resultBasedAnswer) return sanitizeAssistantAnswer(resultBasedAnswer);
-
-    if (direct) return sanitizeAssistantAnswer(direct);
-
-    if (results.length) {
-        const firstWithDescription = results.find(item =>
+    if (Array.isArray(data.results) && data.results.length) {
+        const firstWithDescription = data.results.find(item =>
             item && typeof item.description === 'string' && item.description.trim()
         );
-        if (firstWithDescription) return sanitizeAssistantAnswer(firstWithDescription.description.trim());
+        if (firstWithDescription) return firstWithDescription.description.trim();
 
-        const firstWithTitle = results.find(item =>
+        const firstWithTitle = data.results.find(item =>
             item && typeof item.title === 'string' && item.title.trim()
         );
-        if (firstWithTitle) return sanitizeAssistantAnswer(firstWithTitle.title.trim());
+        if (firstWithTitle) return firstWithTitle.title.trim();
     }
 
     return '';
@@ -15526,11 +15358,9 @@ function extractUnifiedAssistantText(data) {
 function normalizeAssistantPayload(data, fallbackText = "Sorry, I couldn't generate a response.") {
     const normalized = (data && typeof data === 'object') ? { ...data } : {};
     const text = extractUnifiedAssistantText(normalized);
-    const finalText = sanitizeAssistantAnswer(text || fallbackText);
 
-    normalized.answer = finalText;
-    normalized.response = finalText;
-    normalized.text = finalText;
+    normalized.response = text || fallbackText;
+    normalized.text = normalized.response;
 
     if (!Array.isArray(normalized.sources)) {
         normalized.sources = [];
@@ -15538,7 +15368,7 @@ function normalizeAssistantPayload(data, fallbackText = "Sorry, I couldn't gener
 
     return normalized;
 }
-    
 </script>
+
 </body>
 </html>
