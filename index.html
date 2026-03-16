@@ -10416,13 +10416,87 @@ function normalizeAgreementValue(value) {
     return normalizeEntitySearchText(value).replace(/\b(the|a|an)\b/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+
+const NUMBER_WORD_VALUES = {
+    zero: 0,
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    thirteen: 13,
+    fourteen: 14,
+    fifteen: 15,
+    sixteen: 16,
+    seventeen: 17,
+    eighteen: 18,
+    nineteen: 19,
+    twenty: 20
+};
+
+function wordToCountValue(word) {
+    return NUMBER_WORD_VALUES[String(word || '').toLowerCase()] ?? null;
+}
+
+function looksLikeYearNumber(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return false;
+    return num >= 1900 && num <= 2100;
+}
+
+function extractTitleCountCandidate(result) {
+    const text = `${result?.title || ''}. ${result?.description || ''}`.replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+
+    const patterns = [
+        /\bhas\s+won\s+(\d{1,2})\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies)|championships?)\b/i,
+        /\bwon\s+(\d{1,2})\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies)|championships?)\b/i,
+        /\b(\d{1,2})\s*[- ]time\s+(?:world\s+)?champion\b/i,
+        /\b(\d{1,2})\s+(?:Formula\s*1\s+|F1\s+|world\s+)?(?:drivers'?\s+|constructors'?\s+)?championships?\b/i,
+        /\b(\d{1,2})\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies))\b/i,
+        /\btotal(?:\s+of)?\s+(\d{1,2})\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies)|championships?)\b/i,
+        /\b(?:with|has)\s+(\d{1,2})\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies)|championships?)\b/i
+    ];
+
+    for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match?.[1] && !looksLikeYearNumber(match[1])) return match[1];
+    }
+
+    const wordPatterns = [
+        /\b([a-z]+)\s*[- ]time\s+(?:world\s+)?champion\b/i,
+        /\bhas\s+won\s+([a-z]+)\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies)|championships?)\b/i,
+        /\bwon\s+([a-z]+)\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies)|championships?)\b/i,
+        /\b([a-z]+)\s+(?:Formula\s*1\s+|F1\s+|world\s+)?(?:drivers'?\s+|constructors'?\s+)?championships?\b/i
+    ];
+
+    for (const pattern of wordPatterns) {
+        const match = text.match(pattern);
+        const value = wordToCountValue(match?.[1]);
+        if (value !== null) return String(value);
+    }
+
+    const fallbackMatches = Array.from(text.matchAll(/\b(\d{1,2})\b(?=[^.!?]{0,30}\b(?:titles?|cups?|troph(?:y|ies)|championships?)\b)/gi));
+    for (const match of fallbackMatches) {
+        if (match?.[1] && !looksLikeYearNumber(match[1])) return match[1];
+    }
+
+    return '';
+}
+
 function extractFactCandidate(result, entityIntent) { 
     const combined = `${result?.title || ''} ${result?.description || ''}`.replace(/\s+/g, ' ').trim(); 
     if (!combined) return ''; 
  
     if (entityIntent.relationType === 'title_count') { 
-        const countMatch = combined.match(/\b(\d+)\b[^\n.]{0,35}\b(titles?|cups?|troph(?:y|ies)|championships?)\b/i); 
-        return countMatch ? countMatch[1] : ''; 
+        return extractTitleCountCandidate(result); 
     } 
  
     if (entityIntent.relationType === 'winner') { 
@@ -10513,9 +10587,15 @@ function formatConsensusAnswer(entityIntent, agreement) {
     const value = agreement?.top?.value || ''; 
     if (!value) return ''; 
     if (entityIntent.relationType === 'title_count') { 
-        const noun = entityIntent.entityType === 'team' ? 'titles' : 'major titles'; 
-        const verb = /\b(he|she|it|[A-Z][a-z]+)\b/.test(entityIntent.subject) && !/\b(s|x|z|sh|ch)\b/i.test(entityIntent.subject) ? 'has' : 'have';
-        return `${entityIntent.subject} ${verb} won ${value} ${noun} in total.`; 
+        const subject = String(entityIntent.subject || 'They').trim();
+        const singular = !/\b(and|&|team|club|franchise|super kings|knight riders|indians|lakers|warriors)\b/i.test(subject);
+        const verb = singular ? 'has' : 'have';
+        const noun = /\b(f1|formula 1|driver|drivers'?)\b/i.test(subject)
+            ? 'Formula 1 World Championships'
+            : entityIntent.entityType === 'team'
+                ? 'titles'
+                : 'titles';
+        return `${subject} ${verb} won ${value} ${noun}.`; 
     } 
     if (entityIntent.relationType === 'winner') { 
         return `${value} won ${entityIntent.subject || entityIntent.competition || 'the event'}.`; 
