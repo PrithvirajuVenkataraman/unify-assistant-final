@@ -13573,7 +13573,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         function isCurrentLocationQuestion(text) {
             const t = String(text || '').toLowerCase().trim();
             if (!t) return false;
-            return /\b(where am i|where am i right now|where am i currently|what(?:'s| is) my current location|what(?:'s| is) my location|tell me my current location|tell me where i am|where is my current location|where i am right now)\b/.test(t);
+            return /\b(where am i|what(?:'s| is) my current location|what(?:'s| is) my location|tell me my current location|tell me where i am|where is my current location|where i am right now)\b/.test(t);
         }
 
         async function answerCurrentLocation() {
@@ -15246,5 +15246,49 @@ window.validatePlaces = function(aiText, allowedPlaces) {
     return true;
 };
 </script>
+
+<script>
+function extractUnifiedAssistantText(data) {
+    if (!data || typeof data !== 'object') return '';
+
+    const direct =
+        (typeof data.answer === 'string' && data.answer.trim()) ? data.answer.trim() :
+        (typeof data.response === 'string' && data.response.trim()) ? data.response.trim() :
+        (typeof data.text === 'string' && data.text.trim()) ? data.text.trim() :
+        (typeof data.message === 'string' && data.message.trim()) ? data.message.trim() :
+        '';
+
+    if (direct) return direct;
+
+    if (Array.isArray(data.results) && data.results.length) {
+        const firstWithDescription = data.results.find(item =>
+            item && typeof item.description === 'string' && item.description.trim()
+        );
+        if (firstWithDescription) return firstWithDescription.description.trim();
+
+        const firstWithTitle = data.results.find(item =>
+            item && typeof item.title === 'string' && item.title.trim()
+        );
+        if (firstWithTitle) return firstWithTitle.title.trim();
+    }
+
+    return '';
+}
+
+function normalizeAssistantPayload(data, fallbackText = "Sorry, I couldn't generate a response.") {
+    const normalized = (data && typeof data === 'object') ? { ...data } : {};
+    const text = extractUnifiedAssistantText(normalized);
+
+    normalized.response = text || fallbackText;
+    normalized.text = normalized.response;
+
+    if (!Array.isArray(normalized.sources)) {
+        normalized.sources = [];
+    }
+
+    return normalized;
+}
+</script>
+
 </body>
 </html>
