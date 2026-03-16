@@ -2020,7 +2020,11 @@
                                 </div>
                             </div>
                             <p id="temperature" class="text-5xl font-bold mb-2 text-white relative z-10">--&#176;F / --&#176;C</p>
-                            <p id="weather-advice" class="text-white/90 text-lg relative z-10"></p>
+                            <div class="relative z-10 mt-3 space-y-2">
+                                <p id="aqi-summary" class="text-white/90 text-base font-medium">AQI: --</p>
+                                <p id="aqi-details" class="text-white/75 text-sm">PM2.5: -- μg/m³</p>
+                            </div>
+                            <p id="weather-advice" class="text-white/90 text-lg relative z-10 mt-3"></p>
                         </div>
 
                         <!-- Reminders List -->
@@ -2286,7 +2290,12 @@ function getUserIntent(text) {
 
 function isWeatherIntentText(text) {
     const t = (text || '').toLowerCase();
-    return /\b(weather|climate|temperature|forecast|humidity|humid|rain|raining|drizzle|snow|snowing|hot|cold|wind|windy|sunny|cloudy|overcast|storm|thunder|heat|chilly|freezing|degrees?)\b/.test(t);
+    return /\b(weather|climate|temperature|forecast|humidity|humid|rain|raining|drizzle|snow|snowing|hot|cold|wind|windy|sunny|cloudy|overcast|storm|thunder|heat|chilly|freezing|degrees?|aqi|air quality|pollution|pm2\.5|pm10)\b/.test(t);
+}
+
+function isAirQualityIntentText(text) {
+    const t = (text || '').toLowerCase();
+    return /\b(aqi|air quality|pollution|pm2\.5|pm10|smog)\b/.test(t);
 }
 
 function isTamilJokeRequest(text) {
@@ -7846,21 +7855,21 @@ function isArtistSongRequest(text) {
     if (!t) return false;
 
     const directSongPatterns = [
-        /(?:best|top)\s+\d*\s*songs?\s+(?:of|by|from)\s+.+/i,
-        /(?:recommend|suggest)\s+(?:me\s+)?(?:some\s+)?songs?\s+(?:of|by|from)\s+.+/i,
-        /(?:songs?|tracks?)\s+(?:of|by|from)\s+.+/i,
-        /.+\s+(?:best|top)\s+songs?/i,
-        /.+\s+songs?/i
+        /\b(?:best|top)\s+\d*\s*songs?\s+(?:of|by|from)\s+.+/i,
+        /\b(?:recommend|suggest)\s+(?:me\s+)?(?:some\s+)?songs?\s+(?:of|by|from)\s+.+/i,
+        /\b(?:songs?|tracks?)\s+(?:of|by|from)\s+.+/i,
+        /\b.+\s+(?:best|top)\s+songs?\b/i,
+        /\b.+\s+songs?\b/i
     ];
 
     const hasDirectSongPattern = directSongPatterns.some((regex) => regex.test(raw));
     if (!hasDirectSongPattern) return false;
 
-    const knownMusicTerms = /(song|songs|track|tracks|music|playlist|album|albums|discography|hit|hits|singer|composer|artist|band)/i.test(raw);
+    const knownMusicTerms = /\b(song|songs|track|tracks|music|playlist|album|albums|discography|hit|hits|singer|composer|artist|band)\b/i.test(raw);
     if (!knownMusicTerms) return false;
 
-    const obviousNonMusicTravelContext = /(kyoto|tokyo|japan|trip|travel|itinerary|temple|shrines?|hotel|stay|weather|visa|route|map|photo|photos|picture|pictures|image|images|places to visit|things to do)/i.test(raw);
-    const explicitArtistMarkers = /(?:artist|singer|composer|band|musician|album|discography)/i.test(raw) || /(?:songs?|tracks?)\s+(?:of|by|from)/i.test(raw);
+    const obviousNonMusicTravelContext = /\b(kyoto|tokyo|japan|trip|travel|itinerary|temple|shrines?|hotel|stay|weather|visa|route|map|photo|photos|picture|pictures|image|images|places to visit|things to do)\b/i.test(raw);
+    const explicitArtistMarkers = /\b(?:artist|singer|composer|band|musician|album|discography)\b/i.test(raw) || /\b(?:songs?|tracks?)\s+(?:of|by|from)\b/i.test(raw);
 
     if (obviousNonMusicTravelContext && !explicitArtistMarkers) {
         return false;
@@ -11895,28 +11904,28 @@ Do not use repetitive filler or generic wording.`;
             }
 
             
-            else if (isWeatherIntentText(cleanText)) {
+            else if (isWeatherIntentText(cleanText) || isAirQualityIntentText(cleanText)) {
                 const location = extractLocationFromSentence(cleanText);
-                const weatherNeedsCurrentLocation = /\b(my location|current location|my current location|here|around here|where i am|my area|this location)\b/i.test(cleanText);
+                const weatherNeedsCurrentLocation = /\b(my location|current location|my current location|here|around here|where i am|my area|this location|where am i)\b/i.test(cleanText);
                 
                 if (location) {
                     
-                    getWeatherByCity(location);
-                } else if (weatherNeedsCurrentLocation) {
+                    await getWeatherByCity(location);
+                } else if (weatherNeedsCurrentLocation || isAirQualityIntentText(cleanText)) {
                     try {
                         showThinkingIndicator();
                         const position = await getCurrentPositionAsync({ enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 });
                         const lat = position.coords.latitude;
                         const lon = position.coords.longitude;
                         const resolved = await reverseGeocodeCurrentPosition(lat, lon);
-                        await fetchWeather(lat, lon, resolved?.locationName || 'your current location');
+                        await fetchWeather(lat, lon, resolved?.locationName || 'your current location', cleanText);
                     } catch (error) {
                         hideThinkingIndicator();
                         await deliverApiReply('location_manual_prompt', {
                             reason: 'geolocation_error',
-                            detail: 'I could not detect your location for weather. Please allow location access or tell me your city.'
+                            detail: 'I could not detect your location for weather or AQI. Please allow location access or tell me your city.'
                         }, {
-                            fallbackText: 'I could not detect your location for weather. Please allow location access or tell me your city.'
+                            fallbackText: 'I could not detect your location for weather or AQI. Please allow location access or tell me your city.'
                         });
                         waitingForLocation = true;
                     }
@@ -12808,40 +12817,53 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             hideThinkingIndicator(); 
             showLoading('Checking weather');
             try {
-                const weatherResponse = await fetch(
-                    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,precipitation&timezone=auto`
-                );
+                const [weatherResponse, airQualityResponse] = await Promise.all([
+                    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,precipitation&timezone=auto`),
+                    fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,ozone&timezone=auto`).catch(() => null)
+                ]);
+
                 weather = await weatherResponse.json();
+                const airQuality = airQualityResponse && airQualityResponse.ok ? await airQualityResponse.json() : null;
+                if (weather?.current) {
+                    weather.airQuality = airQuality?.current || null;
+                }
                 
                 const celsius = Math.round(weather.current.temperature_2m);
                 const fahrenheit = Math.round((celsius * 9/5) + 32);
                 const advice = await getWeatherAdvice(weather);
-                
+                const aqiInfo = formatAirQualityInfo(airQuality?.current || null);
                 
                 createWeatherEffect(weather.current.weather_code, celsius);
-                
-                
                 
                 let displayLocation = resolvedLocation;
                 
                 document.getElementById('weather-card').classList.remove('hidden');
                 document.getElementById('location-name').textContent = displayLocation;
-                document.getElementById('temperature').textContent = `${fahrenheit}\u00B0F / ${celsius}\u00B0C`;
+                document.getElementById('temperature').textContent = `${fahrenheit}°F / ${celsius}°C`;
+                document.getElementById('aqi-summary').textContent = aqiInfo.summary;
+                document.getElementById('aqi-details').textContent = aqiInfo.details;
                 document.getElementById('weather-advice').textContent = advice;
 
-                // Hide "Try asking me" while weather card is active.
                 const suggestionsPanel = document.getElementById('initial-suggestions');
                 if (suggestionsPanel && !suggestionsPanel.classList.contains('hidden')) {
                     suggestionsPanel.classList.add('hidden');
                 }
                 
                 hideLoading();
+                const fallbackText = `${displayLocation}: ${fahrenheit}°F (${celsius}°C). ${aqiInfo.summary}. ${advice}`;
                 await deliverApiReply('weather_result', {
                     location: displayLocation,
                     fahrenheit,
                     celsius,
                     advice,
-                    weatherCode: weather?.current?.weather_code
+                    weatherCode: weather?.current?.weather_code,
+                    aqi: aqiInfo.aqiValue,
+                    aqiCategory: aqiInfo.category,
+                    aqiSummary: aqiInfo.summary,
+                    aqiDetails: aqiInfo.details,
+                    userQuery: originalQuery || ''
+                }, {
+                    fallbackText
                 });
                 
             } catch (error) {
@@ -12850,6 +12872,41 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     error: String(error?.message || '')
                 });
             }
+        }
+
+        function getUsAqiCategory(aqi) {
+            if (aqi == null || Number.isNaN(aqi)) return 'Unavailable';
+            if (aqi <= 50) return 'Good';
+            if (aqi <= 100) return 'Moderate';
+            if (aqi <= 150) return 'Unhealthy for sensitive groups';
+            if (aqi <= 200) return 'Unhealthy';
+            if (aqi <= 300) return 'Very unhealthy';
+            return 'Hazardous';
+        }
+
+        function formatAirQualityInfo(currentAirQuality) {
+            const aqiValue = Number(currentAirQuality?.us_aqi);
+            const pm25 = currentAirQuality?.pm2_5;
+            const pm10 = currentAirQuality?.pm10;
+            if (!Number.isFinite(aqiValue)) {
+                return {
+                    aqiValue: null,
+                    category: 'Unavailable',
+                    summary: 'AQI: unavailable',
+                    details: Number.isFinite(pm25) ? `PM2.5: ${Math.round(pm25)} μg/m³` : 'Air quality details are unavailable right now.'
+                };
+            }
+            const roundedAqi = Math.round(aqiValue);
+            const category = getUsAqiCategory(roundedAqi);
+            const detailParts = [];
+            if (Number.isFinite(pm25)) detailParts.push(`PM2.5: ${Math.round(pm25)} μg/m³`);
+            if (Number.isFinite(pm10)) detailParts.push(`PM10: ${Math.round(pm10)} μg/m³`);
+            return {
+                aqiValue: roundedAqi,
+                category,
+                summary: `AQI: ${roundedAqi} (${category})`,
+                details: detailParts.join(' • ') || 'Air quality details are unavailable right now.'
+            };
         }
 
         async function getWeatherAdvice(weatherData) {
@@ -13529,10 +13586,11 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 hideThinkingIndicator();
 
                 const locationLabel = resolved?.locationName || 'your current location';
-                const mapsUrl = `https://maps.google.com/?q=${lat},${lon}`;
-                const response = `You're near ${locationLabel}. Here is your map link: ${mapsUrl}`;
+                const roundedLat = Number(lat).toFixed(4);
+                const roundedLon = Number(lon).toFixed(4);
+                const response = `You are near ${locationLabel}. Coordinates: ${roundedLat}, ${roundedLon}.`;
                 addChatMessage(response, false);
-                speak(`You're near ${locationLabel}`);
+                speak(`You are near ${locationLabel}`);
                 saveToHistory('current location', response);
                 return true;
             } catch (error) {
