@@ -4026,13 +4026,87 @@ function formatLiveSourceLinks(items, limit = 5) {
         .join('\n');
 }
 
+function normalizeAnswerSentenceForDedupe(sentence) {
+    return String(sentence || '')
+        .toLowerCase()
+        .replace(/\b(a|an|the)\b/g, ' ')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\b(ipl|indian premier league)\b/g, ' indian premier league ')
+        .replace(/\bwon\b/g, ' has won ')
+        .replace(/\btimes in total\b/g, ' times ')
+        .replace(/\bin total\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function chooseBetterAnswerSentence(currentBest, candidate) {
+    const a = String(currentBest || '').trim();
+    const b = String(candidate || '').trim();
+    if (!a) return b;
+    if (!b) return a;
+
+    const score = (sentence) => {
+        const s = String(sentence || '').trim();
+        let value = 0;
+        if (/\b\d+\b/.test(s)) value += 3;
+        if (/\b(20\d{2}|19\d{2})\b/.test(s)) value += 2;
+        if (/\b(times|won|wins|titles?|seasons?|score|scored|rank|ranking|price|founded|launched|released)\b/i.test(s)) value += 2;
+        if (!/^it\b/i.test(s)) value += 1;
+        if (s.length <= 140) value += 1;
+        if (s.length < 18) value -= 2;
+        return value;
+    };
+
+    const aScore = score(a);
+    const bScore = score(b);
+    if (bScore !== aScore) return bScore > aScore ? b : a;
+    return b.length < a.length ? b : a;
+}
+
+function dedupeAnswerSentences(text) {
+    const sentences = String(text || '')
+        .split(/(?<=[.!?])\s+|\n+/)
+        .map(s => s.trim())
+        .filter(Boolean);
+
+    const unique = [];
+    for (const sentence of sentences) {
+        const normalized = normalizeAnswerSentenceForDedupe(sentence);
+        if (!normalized) continue;
+
+        let merged = false;
+        for (let i = 0; i < unique.length; i += 1) {
+            const existingNormalized = normalizeAnswerSentenceForDedupe(unique[i]);
+            const overlaps = existingNormalized === normalized
+                || existingNormalized.includes(normalized)
+                || normalized.includes(existingNormalized);
+
+            if (overlaps) {
+                unique[i] = chooseBetterAnswerSentence(unique[i], sentence);
+                merged = true;
+                break;
+            }
+        }
+
+        if (!merged) unique.push(sentence);
+    }
+
+    return unique.join(' ').replace(/\s+/g, ' ').trim();
+}
+
 function cleanLiveAnswerText(text) {
-    return String(text || '')
+    const cleaned = String(text || '')
         .replace(/^\s*(?:\*\*)?Direct answer:(?:\*\*)?\s*/i, '')
         .replace(/\n\s*Confidence:\s*[^\n]*/gi, '')
         .replace(/\n\s*Verified sources checked:\s*[^\n]*/gi, '')
+        .replace(/\n\s*Key points:\s*/gi, '\n')
+        .replace(/\n\s*[-•]\s*/g, '\n')
+        .replace(/\bhas won (\d+) in total\b/gi, 'has won $1 times in total')
+        .replace(/\bwon (\d+) in total\b/gi, 'won $1 times in total')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
+
+    return dedupeAnswerSentences(cleaned);
 }
 
 async function buildDirectLiveAnswer(question, items, signal) {
@@ -4048,7 +4122,7 @@ async function buildDirectLiveAnswer(question, items, signal) {
         headers: { 'Content-Type': 'application/json' },
         signal,
         body: JSON.stringify({
-            systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly.',
+            systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly. Avoid repeated facts, near-duplicate sentences, and awkward restatements. Prefer one clean consensus sentence over two similar sentences.',
             message: `Answer the user's question using ONLY the snippets below.
 
 User question: "${question}"
@@ -4070,6 +4144,8 @@ Rules:
 - If the question asks for a winner, score, player stat, or latest status, answer that specific fact first before anything else.
 - If the user asks for stats, give the key stats directly instead of a generic summary.
 - Keep it concise and practical.
+- Do not repeat the same fact in different wording.
+- Prefer a single clean consensus sentence when multiple snippets say the same thing.
 
 Snippets:
 ${snippets}`
@@ -10603,7 +10679,7 @@ async function fetchHybridCitationSources(userText, intent, controller) {
 }
 
 function buildHybridAnswerWithSources(answer, sources) {
-    const cleanAnswer = String(answer || '').trim();
+    const cleanAnswer = cleanLiveAnswerText(String(answer || '').trim());
     if (!cleanAnswer) return '';
     return cleanAnswer;
 }
@@ -10803,7 +10879,7 @@ async function summarizeUniversalEntitySources(pipeline, results, controller) {
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-            systemPrompt: 'You summarize direct factual answers only from supplied snippets. Do not invent facts. If evidence conflicts or is weak, say so plainly.',
+            systemPrompt: 'You summarize direct factual answers only from supplied snippets. Do not invent facts. If evidence conflicts or is weak, say so plainly. Avoid repeated facts, near-duplicate sentences, and awkward restatements. Prefer one clean consensus sentence.',
             message: `Answer the entity question using ONLY the snippets below.
 
 User question: "${pipeline.userText}"
@@ -10828,6 +10904,8 @@ Rules:
 - Do not make up numbers, teams, players, parties, offices, dates, or organizations.
 - If snippets disagree, say the evidence is mixed.
 - Keep it concise.
+- Do not repeat the same fact in different wording.
+- Prefer one clean consensus sentence when multiple snippets agree.
 
 Snippets:
 ${snippets}`
@@ -10977,7 +11055,7 @@ async function handleLiveRetrievalQuery(userText) {
             headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,
             body: JSON.stringify({
-                systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly.',
+                systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly. Avoid repeated facts, near-duplicate sentences, and awkward restatements. Prefer one clean consensus sentence over two similar sentences.',
                 message: `Answer the user's question using ONLY the snippets below.
 
 User question: "${query}"
@@ -10998,6 +11076,8 @@ Rules:
 - If the question asks for a winner, score, or player stat, answer that specific fact first before anything else.
 - If the user asks for stats, give the key stats directly instead of a generic summary.
 - Keep it concise and practical.
+- Do not repeat the same fact in different wording.
+- Prefer a single clean consensus sentence when multiple snippets say the same thing.
 
 Snippets:
 ${snippets}`
