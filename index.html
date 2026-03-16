@@ -5126,24 +5126,36 @@ Response length: ${responseMode}. ${responseHint}
 Response format: ${formatMode}. ${formatHint}
 ${conciseFactHint}`.trim()
             : prompt;
+        const requestMessage = typeof options?.requestMessage === 'string'
+            ? String(options.requestMessage).trim()
+            : effectiveMessage;
+        const requestSystemPrompt = typeof options?.forceSystemPrompt === 'string' && options.forceSystemPrompt.trim()
+            ? options.forceSystemPrompt.trim()
+            : systemPromptWithTopic;
+        const requestMode = typeof options?.mode === 'string' ? options.mode.trim() : '';
 
         console.log("RAW USER MESSAGE:", rawUserMessage);
         console.log("NORMALIZED MESSAGE:", normalizedUserMessage);
         console.log("PROMPT SENT TO GEMINI:", prompt);
-        console.log("SYSTEM PROMPT:", systemPromptWithTopic);
+        console.log("SYSTEM PROMPT:", requestSystemPrompt);
         console.log("INTENT:", intent);
         console.log("RESPONSE MODE:", responseMode);
-        console.log("FORMAT MODE:", formatMode); 
-        const response = await fetch('/api/ask', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
+        console.log("FORMAT MODE:", formatMode);
+        console.log("REQUEST MODE:", requestMode || 'default');
+        const requestBody = {
+            message: requestMessage,
+            systemPrompt: requestSystemPrompt,
+            userName: userName
+        };
+        if (requestMode) {
+            requestBody.mode = requestMode;
+        }
+        const response = await fetch('/api/ask', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,
-            body: JSON.stringify({ 
-                message: effectiveMessage, 
-                systemPrompt: systemPromptWithTopic,
-                userName: userName 
-            }) 
-        }); 
+            body: JSON.stringify(requestBody)
+        });
         
         
         if (!response.ok) { 
@@ -5198,6 +5210,7 @@ ${conciseFactHint}`.trim()
 
         conversationContext.push({ role: 'assistant', text: data.response });
         window.__pendingAssistantSources = [];
+        data.apiData = data;
         return data;
     } catch (error) {
         if (isAbortError(error)) {
@@ -8037,8 +8050,8 @@ function isPersonalSituationMessage(text) {
 }
 
 
-function buildMedicalAnalysisPrompt(text) {
-    return `The user entered a symptom sentence for medical analysis: "${text}".
+function buildMedicalAnalysisSystemPrompt() {
+    return `You are a careful clinical symptom analysis assistant.
 
 Return STRICT JSON only. No markdown. No code fences. No extra words.
 
@@ -8069,6 +8082,10 @@ Rules:
 7. If emergency signs are implied, include urgent red flags and urgent care advice`;
 }
 
+function buildMedicalAnalysisPrompt(text) {
+    return `The user entered a symptom sentence for medical analysis: "${text}".`;
+}
+
 function normalizeMedicalConfidence(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) {
@@ -8094,8 +8111,9 @@ function normalizeMedicalConfidence(value) {
 }
 
 function extractMedicalAnalysisPayload(rawResponse, originalText = '') {
-    const raw = String(rawResponse || '').trim();
-    const parsed = extractJsonObject(raw);
+    const parsed = rawResponse && typeof rawResponse === 'object'
+        ? rawResponse
+        : extractJsonObject(String(rawResponse || '').trim());
     if (!parsed || typeof parsed !== 'object') return null;
 
     const symptomChunks = Array.isArray(parsed.symptom_chunks)
@@ -12168,10 +12186,17 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
             if (answerPath === 'medical_advice') {
                 if (medicalMode) {
                     const medicalAnalysisPrompt = buildMedicalAnalysisPrompt(text);
-                    const medicalAnalysisResponse = await callAIWithTyping(medicalAnalysisPrompt, 'Analyzing symptoms carefully...');
+                    const medicalAnalysisResponse = await callAIWithTyping(medicalAnalysisPrompt, 'Analyzing symptoms carefully...', {
+                        mode: 'medical',
+                        requestMessage: text,
+                        forceSystemPrompt: buildMedicalAnalysisSystemPrompt()
+                    });
                     if (medicalAnalysisResponse?.aborted) return;
 
-                    const parsedMedicalAnalysis = extractMedicalAnalysisPayload(medicalAnalysisResponse?.response, text);
+                    const parsedMedicalAnalysis = extractMedicalAnalysisPayload(
+                        medicalAnalysisResponse?.data || medicalAnalysisResponse?.apiData || medicalAnalysisResponse?.response,
+                        text
+                    );
                     if (parsedMedicalAnalysis) {
                         const medicalCardHtml = renderMedicalAnalysisCard(parsedMedicalAnalysis);
                         addModelAssistantMessage(medicalCardHtml, 'Medical analysis');
