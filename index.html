@@ -13573,7 +13573,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         function isCurrentLocationQuestion(text) {
             const t = String(text || '').toLowerCase().trim();
             if (!t) return false;
-            return /\b(where am i|what(?:'s| is) my current location|what(?:'s| is) my location|tell me my current location|tell me where i am|where is my current location|where i am right now)\b/.test(t);
+            return /\b(where am i|where am i right now|where am i currently|what(?:'s| is) my current location|what(?:'s| is) my location|tell me my current location|tell me where i am|where is my current location|where i am right now)\b/.test(t);
         }
 
         async function answerCurrentLocation() {
