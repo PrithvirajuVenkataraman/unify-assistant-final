@@ -4947,7 +4947,7 @@ async function handleNameCorrection(text) {
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                                 <p><strong>Explain & Teach Anything:</strong> "What is AI?", "Explain inflation like I'm 12", "Teach me probability basics"</p>
                                 <p><strong>Current Answers with Sources:</strong> "Who won the T20 World Cup 2026?", "What happened in the Middle East?", "What is the latest on Ukraine?"</p>
-                                <p><strong>Scores, Stats, and Results:</strong> "What was India's score?", "What are Virat Kohli's latest stats?", "Who is the current CEO of X?"</p>
+                                <p><strong>Scores, Stats, Results, and Upcoming Events:</strong> "What was India's score?", "What are Virat Kohli's latest stats?", "What is Barcelona's next match?", "What is the next public holiday in Japan?", "What is A.R. Rahman's upcoming project?"</p>
                                 <p><strong>Travel Planning:</strong> "Plan a 3-day trip to Tokyo"</p>
                                 <p><strong>Food Recommendations:</strong> "Best restaurants in Rome"</p>
                                 <p><strong>Recipes:</strong> "How to prepare Andhra style chicken biryani", "Recipe for pasta", "How do I make tomato soup?"</p>
@@ -4970,7 +4970,7 @@ async function handleNameCorrection(text) {
                                 <p><strong>Use place + goal + constraints:</strong> City, dates, budget, food preference, mobility needs.</p>
                                 <p><strong>Strong example:</strong> "Plan 2 days in Boston under $500, kid-friendly, near public transport."</p>
                                 <p><strong>Weak example:</strong> "Plan Boston trip."</p>
-                                <p><strong>For current info:</strong> Ask directly. Example: "Who won the T20 World Cup 2026?" or "What happened in the Middle East today?"</p>
+                                <p><strong>For current or upcoming info:</strong> Ask directly. Example: "Who won the T20 World Cup 2026?", "What happened in the Middle East today?", "What is Liverpool's next match?", or "What is the next holiday in Canada?"</p>
                                 <p><strong>For news lists:</strong> Ask for "latest headlines" or "breaking news" if you want a headline-style response.</p>
                                 <p><strong>For recipes:</strong> Include the dish and style. Example: "How to make Andhra chicken biryani" or "Recipe for veg fried rice".</p>
                                 <p><strong>For reminders:</strong> Include task and time in one line when possible.</p>
@@ -8740,6 +8740,9 @@ function isLiveRetrievalQuery(text) {
         /\btoday\b/,
         /\bright now\b/,
         /\bas of now\b/,
+        /\bupcoming\b/,
+        /\bfuture\b/,
+        /\bnext\b.*\b(match|game|fixture|film|movie|release|project|holiday|album|song|show|series)\b/,
         /\bupdate(?:s)? on\b/,
         /\bstatus of\b/,
         /\bnews about\b/,
@@ -8750,9 +8753,19 @@ function isLiveRetrievalQuery(text) {
 
     if (liveSignals.some(rx => rx.test(t))) return true;
 
+    if (/\b(upcoming|future|next)\b/.test(t) &&
+        /\b(movie|film|release|project|song|album|single|show|series|match|game|fixture|schedule|holiday|festival)\b/.test(t)) {
+        return true;
+    }
+
+    if (/\b(upcoming|future|next)\b/.test(t) &&
+        /\b(team|club|country|nation|composer|music director|singer|artist|director|actor|actress|producer)\b/.test(t)) {
+        return true;
+    }
+
     return /\b(what(?:'s| is)|tell me|give me|brief me|update me)\b/.test(t) &&
            /\b(in|about|on)\b/.test(t) &&
-           /\b(middle[\s-]?east|ukraine|russia|israel|gaza|iran|syria|oil market|stock market|economy|inflation|forex|usd|inr|bitcoin|crypto)\b/.test(t);
+           /\b(middle[\s-]?east|ukraine|russia|israel|gaza|iran|syria|oil market|stock market|economy|inflation|forex|usd|inr|bitcoin|crypto|holiday calendar|release schedule|match schedule)\b/.test(t);
 }
 
 function isSportsLiveResultQuery(text) {
@@ -8763,8 +8776,8 @@ function isSportsLiveResultQuery(text) {
     const competitionCodeTerms = /\b(ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|mls|nba|wnba|nfl|mlb|nhl|ufc|wwe|atp|wta|icc|fifa|uefa|afc|fiba|pga|bwf|f1|motogp|nascar|indycar)\b/;
     const teamCodeTerms = /\b(csk|mi|rcb|kkr|srh|dc|pbks|gt|rr|lsg|pk|bcci|ict|ind|aus|eng|pak|nz|sa)\b/;
     const sportsEntityTerms = /\b(team|teams|player|players|club|clubs|driver|drivers|rider|riders|fighter|fighters|athlete|athletes|captain|coach)\b/;
-    const resultTerms = /\b(who won|winner|won|champion|champions|result|results|score|scores|scored|stat|stats|standing|standings|table|points table|rank|ranking|rankings|medal|medals|title|titles|lifted|beat|defeated|lost to|qualified|eliminated|record|records|how many)\b/;
-    const timeTerms = /\b(latest|recent|current|today|tonight|live|now|this year|this season|2025|2026|2027)\b/;
+    const resultTerms = /\b(who won|winner|won|champion|champions|result|results|score|scores|scored|stat|stats|standing|standings|table|points table|rank|ranking|rankings|medal|medals|title|titles|lifted|beat|defeated|lost to|qualified|eliminated|record|records|how many|next match|next game|upcoming match|upcoming fixture|fixture|fixtures|schedule|opponent)\b/;
+    const timeTerms = /\b(latest|recent|current|today|tonight|live|now|this year|this season|2025|2026|2027|upcoming|next|tomorrow)\b/;
 
     const hasSportsContext = sportsContextTerms.test(t) || competitionCodeTerms.test(t) || teamCodeTerms.test(t) || (sportsEntityTerms.test(t) && resultTerms.test(t));
     return hasSportsContext && (resultTerms.test(t) || timeTerms.test(t));
@@ -8814,15 +8827,19 @@ function extractLiveQueryIntent(text) {
         domain = 'finance';
     } else if (isSportsLiveResultQuery(t)) {
         domain = 'sports';
-    } else if (/\b(actor|actress|movie|film|films|cinema|director|producer|singer|song|songs|album|albums|show|series|web series|filmography|discography|imdb|release)\b/.test(t)) {
+    } else if (/\b(actor|actress|movie|film|films|cinema|director|producer|singer|composer|music director|song|songs|album|albums|show|series|web series|filmography|discography|imdb|release|project)\b/.test(t)) {
         domain = 'entertainment';
     } else if (shouldUseNewsEndpointForCurrentQuery(t) || isNewsworthyLiveTopic(t)) {
         domain = 'news';
     }
 
     let factType = 'general';
-    if (/\b(latest|recent|new|newest|most recent|current|upcoming)\b.*\b(movie|film|release|song|album|single|show|series)\b|\b(movie|film|release|song|album|single|show|series)\b.*\b(latest|recent|new|newest|most recent|current|upcoming)\b/.test(t)) {
+    if (/\b(latest|recent|new|newest|most recent|current|upcoming|future)\b.*\b(movie|film|release|song|album|single|show|series|project)\b|\b(movie|film|release|song|album|single|show|series|project)\b.*\b(latest|recent|new|newest|most recent|current|upcoming|future)\b/.test(t)) {
         factType = 'latest_work';
+    } else if (/\b(next|upcoming)\b.*\b(match|game|fixture|opponent|schedule)\b|\b(match|game|fixture|schedule)\b.*\b(next|upcoming)\b/.test(t)) {
+        factType = 'schedule';
+    } else if (/\b(next|upcoming)\b.*\b(holiday|festival|public holiday|bank holiday)\b|\b(holiday|festival|public holiday|bank holiday)\b.*\b(next|upcoming)\b/.test(t)) {
+        factType = 'holiday';
     } else if (/\b(stat|stats|record|records|how many|total titles?|total cups?|how many cups?|how many titles?)\b/.test(t)) {
         factType = 'stats';
     } else if (/\b(score|scores|scored|final result|result|results)\b/.test(t)) {
@@ -8841,7 +8858,7 @@ function extractLiveQueryIntent(text) {
 
     const normalizedTopic = normalizeLiveTopic(raw);
     const topic = normalizedTopic || raw;
-    const directFact = ['winner', 'score', 'stats', 'standings', 'qualification', 'latest_work'].includes(factType) || isDirectFactLiveQuery(raw);
+    const directFact = ['winner', 'score', 'stats', 'standings', 'qualification', 'latest_work', 'schedule', 'holiday'].includes(factType) || isDirectFactLiveQuery(raw);
 
     return {
         raw,
@@ -8877,9 +8894,9 @@ function isCurrentInfoQuery(text) {
         return true;
     }
 
-    const freshnessTerms = /\b(latest|recent|current|today|right now|as of now|live|just now|this year|2025|2026|2027)\b/;
-    const resultTerms = /\b(who won|winner|won|result|results|score|scores|what happened|what's happening|status|update|updates|headline|headlines|breaking)\b/;
-    const unstableEntityTerms = /\b(president|prime minister|ceo|chairman|captain|coach|champion|title holder|world cup|tournament|final|match|war|conflict|ceasefire|attack|election)\b/;
+    const freshnessTerms = /\b(latest|recent|current|today|right now|as of now|live|just now|this year|2025|2026|2027|upcoming|future|next)\b/;
+    const resultTerms = /\b(who won|winner|won|result|results|score|scores|what happened|what's happening|status|update|updates|headline|headlines|breaking|next match|upcoming fixture|upcoming holiday|next holiday|upcoming project)\b/;
+    const unstableEntityTerms = /\b(president|prime minister|ceo|chairman|captain|coach|champion|title holder|world cup|tournament|final|match|fixture|schedule|holiday|festival|war|conflict|ceasefire|attack|election|release|project|album|film|movie|song)\b/;
     const businessEventTerms = /\b(layoff|layoffs|firing|firings|job cuts|cuts|restructuring|reorganization|earnings|results|merger|acquisition|recall|bankruptcy|probe|investigation|antitrust|strike|walkout)\b/;
 
     if (freshnessTerms.test(t) && unstableEntityTerms.test(t)) return true;
@@ -8913,7 +8930,7 @@ function shouldUseNewsEndpointForCurrentQuery(text) {
 function isDirectFactLiveQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    return /\b(who won|who lost|winner|won|lost|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated|ceo|president|prime minister|captain|coach|price|rate|latest movie|latest film|latest song|latest album|most recent film|most recent movie)\b/.test(t);
+    return /\b(who won|who lost|winner|won|lost|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated|ceo|president|prime minister|captain|coach|price|rate|latest movie|latest film|latest song|latest album|most recent film|most recent movie|upcoming film|upcoming movie|upcoming project|next match|upcoming match|upcoming fixture|next holiday|upcoming holiday)\b/.test(t);
 }
 
 function isConciseDirectFactQuery(text) {
@@ -9605,14 +9622,14 @@ const UNIVERSAL_ENTITY_DOMAIN_PACKS = {
         entityHints: /\b(nasdaq|nyse|sensex|nifty|s&p|dow jones|reserve bank|federal reserve)\b/
     },
     entertainment: {
-        keywords: /\b(actor|actress|movie|film|films|cinema|director|producer|singer|song|songs|album|albums|show|series|web series|filmography|discography|release|box office|imdb)\b/,
+        keywords: /\b(actor|actress|movie|film|films|cinema|director|producer|singer|composer|music director|song|songs|album|albums|show|series|web series|filmography|discography|release|project|box office|imdb)\b/,
         entityHints: /\b(netflix|prime video|amazon prime|disney|hotstar|zee5|sonyliv|kollywood|bollywood|hollywood|tollywood)\b/
     }
 };
 
 const UNIVERSAL_ENTITY_RELATION_PATTERNS = [
     { type: 'title_count', test: (t) => /\b(how many|number of|total|all[- ]time)\b.*\b(titles|cups|trophies|championships|wins|medals)\b|\b(titles|cups|trophies|championships|wins|medals)\b.*\b(how many|number of|total)\b/.test(t) },
-    { type: 'latest_work', test: (t) => /\b(latest|recent|new|newest|most recent|current|upcoming)\b.*\b(movie|film|release|song|album|single|show|series)\b|\b(movie|film|release|song|album|single|show|series)\b.*\b(latest|recent|new|newest|most recent|current|upcoming)\b/.test(t) },
+    { type: 'latest_work', test: (t) => /\b(latest|recent|new|newest|most recent|current|upcoming|future)\b.*\b(movie|film|release|song|album|single|show|series|project)\b|\b(movie|film|release|song|album|single|show|series|project)\b.*\b(latest|recent|new|newest|most recent|current|upcoming|future)\b/.test(t) },
     { type: 'team_membership', test: (t) => /\b(plays? for|play for|current team|which team|belongs to which team|signed for|signed with|joined)\b/.test(t) },
     { type: 'party_membership', test: (t) => /\b(belongs to which party|party affiliation|which party|current party|member of which party|political party)\b/.test(t) },
     { type: 'role', test: (t) => /\b(who is|who was|current ceo|ceo of|founder of|president of|prime minister of|captain of|coach of|role|position|office|designation|profession|job|what does .+ do|astronaut|scientist)\b/.test(t) },
@@ -9702,6 +9719,7 @@ function detectLatestWorkMedium(text) {
     if (/\b(song|single)\b/.test(lower)) return 'song';
     if (/\balbum|ep\b/.test(lower)) return 'album';
     if (/\bshow|series|web series\b/.test(lower)) return 'show';
+    if (/\bproject|work\b/.test(lower)) return 'project';
     return 'movie';
 }
 
@@ -9710,18 +9728,18 @@ function extractLatestWorkSubject(text) {
     if (!raw) return '';
 
     const patterns = [
-        /\b(?:what is|which is|tell me|show me)\s+(?:the\s+)?(?:latest|recent|new|newest|most recent|current|upcoming)\s+(?:movie|film|release|song|album|single|show|series)\s+(?:of|from|by)\s+(?:actor|actress|director|producer|singer)?\s*([^?.!,]+)$/i,
-        /\b(?:latest|recent|new|newest|most recent|current|upcoming)\s+(?:movie|film|release|song|album|single|show|series)\s+(?:of|from|by)\s+(?:actor|actress|director|producer|singer)?\s*([^?.!,]+)$/i,
-        /\b(?:actor|actress|director|producer|singer)\s+([^?.!,]+?)\s+(?:latest|recent|new|newest|most recent|current|upcoming)\s+(?:movie|film|release|song|album|single|show|series)\b/i,
-        /\b(?:what is|which is|tell me|show me)\s+(?:the\s+)?(?:latest|recent|new|newest|most recent|current|upcoming)\s+([^?.!,]+?)\s+(?:movie|film|release|song|album|single|show|series)\b/i,
-        /\b(?:latest|recent|new|newest|most recent|current|upcoming)\s+([^?.!,]+?)\s+(?:movie|film|release|song|album|single|show|series)\b/i
+        /\b(?:what is|which is|tell me|show me)\s+(?:the\s+)?(?:latest|recent|new|newest|most recent|current|upcoming|future)\s+(?:movie|film|release|song|album|single|show|series|project)\s+(?:of|from|by)\s+(?:actor|actress|director|producer|singer|composer|music director)?\s*([^?.!,]+)$/i,
+        /\b(?:latest|recent|new|newest|most recent|current|upcoming|future)\s+(?:movie|film|release|song|album|single|show|series|project)\s+(?:of|from|by)\s+(?:actor|actress|director|producer|singer|composer|music director)?\s*([^?.!,]+)$/i,
+        /\b(?:actor|actress|director|producer|singer|composer|music director)\s+([^?.!,]+?)\s+(?:latest|recent|new|newest|most recent|current|upcoming|future)\s+(?:movie|film|release|song|album|single|show|series|project)\b/i,
+        /\b(?:what is|which is|tell me|show me)\s+(?:the\s+)?(?:latest|recent|new|newest|most recent|current|upcoming|future)\s+([^?.!,]+?)\s+(?:movie|film|release|song|album|single|show|series|project)\b/i,
+        /\b(?:latest|recent|new|newest|most recent|current|upcoming|future)\s+([^?.!,]+?)\s+(?:movie|film|release|song|album|single|show|series|project)\b/i
     ];
 
     for (const pattern of patterns) {
         const match = raw.match(pattern);
         if (match?.[1]) {
             return match[1]
-                .replace(/\b(actor|actress|director|producer|singer)\b/gi, ' ')
+                .replace(/\b(actor|actress|director|producer|singer|composer|music director)\b/gi, ' ')
                 .replace(/[?.!,;]+$/g, '')
                 .replace(/\s+/g, ' ')
                 .trim();
@@ -9916,7 +9934,7 @@ function extractFactCandidate(result, entityIntent) {
         const subject = normalizeEntitySearchText(entityIntent.subject);
         const titleFirstPatterns = [
             /^(?:watch\s+)?([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})\s+(?:\(|-|\|)/,
-            /\b(?:latest|recent|new|upcoming|current)\s+(?:movie|film|release|song|album|single|show|series)\s+(?:is|was|:)\s*([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})/i,
+            /\b(?:latest|recent|new|upcoming|current|future)\s+(?:movie|film|release|song|album|single|show|series|project)\s+(?:is|was|:)\s*([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})/i,
             /\b(?:starring|stars in|release of)\s+([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})/i
         ];
         for (const pattern of titleFirstPatterns) {
@@ -9926,7 +9944,7 @@ function extractFactCandidate(result, entityIntent) {
                 if (!subject || !normalizeEntitySearchText(candidate).includes(subject)) return candidate;
             }
         }
-        const subjectLeadPattern = new RegExp(`\\b${subject.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\b[^.]{0,40}\\b(?:latest|recent|new|current|upcoming)\\s+(?:movie|film|release|song|album|single|show|series)\\b[^A-Za-z0-9]{0,10}([A-Z][A-Za-z0-9:&'().,\\-]+(?:\\s+[A-Z0-9][A-Za-z0-9:&'().,\\-]+){0,6})`, 'i');
+        const subjectLeadPattern = new RegExp(`\\b${subject.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\b[^.]{0,40}\\b(?:latest|recent|new|current|upcoming|future)\\s+(?:movie|film|release|song|album|single|show|series|project)\\b[^A-Za-z0-9]{0,10}([A-Z][A-Za-z0-9:&'().,\\-]+(?:\\s+[A-Z0-9][A-Za-z0-9:&'().,\\-]+){0,6})`, 'i');
         const subjectLeadMatch = combined.match(subjectLeadPattern);
         return subjectLeadMatch?.[1] ? subjectLeadMatch[1].trim() : '';
     }
@@ -10025,7 +10043,7 @@ function formatConsensusAnswer(entityIntent, agreement) {
     } 
     if (entityIntent.relationType === 'latest_work') {
         const medium = detectLatestWorkMedium(entityIntent.raw || '');
-        const label = medium === 'song' ? 'latest song' : medium === 'album' ? 'latest album' : medium === 'show' ? 'latest show' : 'latest film';
+        const label = medium === 'song' ? 'latest song' : medium === 'album' ? 'latest album' : medium === 'show' ? 'latest show' : medium === 'project' ? 'upcoming project' : 'latest film';
         return `${entityIntent.subject}'s ${label} is ${value}.`;
     }
     if (entityIntent.relationType === 'winner') { 
