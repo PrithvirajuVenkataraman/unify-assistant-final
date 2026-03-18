@@ -5878,10 +5878,10 @@ async function handleNameCorrection(text) {
                     let charIndex = 0;
                     
                     function getHumanTypingDelay(ch) {
-                        if (/[.!?]/.test(ch)) return 130;
-                        if (/[,;:]/.test(ch)) return 95;
-                        if (/\s/.test(ch)) return 25;
-                        return 20 + Math.floor(Math.random() * 30);
+                        if (/[.!?]/.test(ch)) return 115;
+                        if (/[,;:]/.test(ch)) return 85;
+                        if (/\s/.test(ch)) return 18;
+                        return 14 + Math.floor(Math.random() * 22);
                     }
                     
                     function typeCharacter() {
@@ -7322,9 +7322,127 @@ function isDebateIntent(text) {
     return /\b(debate|argue|argument|counterargument|counterpoint|rebut|prove|defend|criticize|disagree)\b/.test(t);
 }
 
-function isMentalHealthConversation(text) {
+function isMentalHealthConversation(text) { 
+    const t = String(text || '').toLowerCase(); 
+    return /\b(sad|depress|depressed|anxious|anxiety|panic|lonely|hopeless|overwhelmed|stressed|burnout|mental health|not okay|feeling low|empty|worthless)\b/.test(t); 
+} 
+
+function isMotivationStoryRequest(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(sad|depress|depressed|anxious|anxiety|panic|lonely|hopeless|overwhelmed|stressed|burnout|mental health|not okay|feeling low|empty|worthless)\b/.test(t);
+    if (!t) return false;
+    const motivationSignals = /\b(motivat(e|ion|ional)|inspir(e|ing|ation)|uplift|encourage|cheer me up|success story|real life story|role model)\b/;
+    const storySignals = /\b(story|journey|example|case study|real person|person who)\b/;
+    const lowMoodSignals = /\b(sad|down|low|hopeless|stressed|burnout|not okay|lost|discouraged|tired)\b/;
+    return motivationSignals.test(t) || (storySignals.test(t) && lowMoodSignals.test(t));
+}
+
+function extractMotivationStoryProfile(text) {
+    const t = String(text || '').toLowerCase();
+    let category = 'general';
+    if (/\b(scientist|science|inventor|invention|researcher)\b/.test(t)) {
+        category = 'scientist';
+    } else if (/\b(founder|startup|entrepreneur|business|company|ceo)\b/.test(t)) {
+        category = 'business';
+    } else if (/\b(athlete|sports|player)\b/.test(t)) {
+        category = 'athlete';
+    } else if (/\b(actor|artist|musician|singer|writer)\b/.test(t)) {
+        category = 'creative';
+    }
+
+    const requestedDeadPerson = /\b(dead|deceased|late|historical)\b/.test(t);
+    const requestedFinancials = /\b(earning|earnings|salary|net worth|worth|income|revenue|turnover|valuation)\b/.test(t);
+    return {
+        category,
+        requestedDeadPerson,
+        requestedFinancials
+    };
+}
+
+async function buildMotivationStoryFromWeb(userText) {
+    const profile = extractMotivationStoryProfile(userText);
+    const queryByCategory = {
+        scientist: 'real life motivational scientist story invention impact',
+        business: 'real life motivational founder story company revenue turnover',
+        athlete: 'real life motivational athlete comeback story earnings',
+        creative: 'real life motivational artist story success journey earnings',
+        general: 'real life motivational success story verified profile net worth or company revenue'
+    };
+    const primaryQuery = `${queryByCategory[profile.category]} ${String(userText || '').trim()}`.trim();
+    const secondaryQuery = queryByCategory[profile.category];
+
+    const collected = [];
+    async function fetchSearchResults(query) {
+        const res = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, maxResults: 10 })
+        });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
+    }
+
+    const first = await fetchSearchResults(primaryQuery);
+    collected.push(...first);
+    if (collected.length < 5) {
+        const second = await fetchSearchResults(secondaryQuery);
+        collected.push(...second);
+    }
+
+    const deduped = [];
+    const seen = new Set();
+    for (const item of collected) {
+        const key = String(item?.url || '').trim().toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(item);
+        if (deduped.length >= 8) break;
+    }
+    if (!deduped.length) return '';
+
+    const snippetBlock = deduped
+        .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}`)
+        .join('\n\n');
+
+    const prompt = `Create ONE real-life motivation story from the snippets below for a user who feels down.
+
+Output format:
+Who: <person name and role>
+What happened: <struggle or challenge>
+What they did: <actions and turning point>
+Outcome: <achievement>
+Numbers now: <if alive business/founder include current earnings/net worth/company turnover or revenue if present in sources; if unavailable say "Not clearly reported in the cited snippets". If deceased/scientist, include measurable impact and key invention/discovery instead of current earnings.>
+Lesson: <short motivating takeaway>
+
+Rules:
+- Use ONLY facts supported by snippets.
+- Do not invent numbers, companies, dates, or titles.
+- Prefer one concrete person over generic advice.
+- Keep it concise and practical.
+
+User request: "${String(userText || '').trim()}"
+Requested category: ${profile.category}
+Requested deceased profile: ${profile.requestedDeadPerson ? 'yes' : 'no'}
+Requested financial stats: ${profile.requestedFinancials ? 'yes' : 'no'}
+
+Snippets:
+${snippetBlock}`;
+
+    const response = await fetch('/api/chat-groq', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            systemPrompt: 'You are a strict evidence-based summarizer. Never fabricate facts or numbers.',
+            message: prompt
+        })
+    });
+    if (!response.ok) return '';
+    const data = await response.json();
+    const story = cleanLiveAnswerText(String(data?.response || data?.text || '').trim());
+    if (!story) return '';
+
+    const sources = formatLiveSourceLinks(deduped, 4);
+    return `${story}\n\nSources:\n${sources}`;
 }
 
 function isSupportConversationRequest(text) {
@@ -7421,6 +7539,61 @@ function isArtistSongRequest(text) {
 
     return /\b(songs?\s+(of|by|from)|tracks?\s+(of|by|from)|recommend|suggest|best|top)\b/.test(t) ||
            /\b[a-z][a-z0-9.'&\-\s]{2,}\s+songs?\b/.test(t);
+}
+
+function isClassicSongDiscoveryRequest(text) {
+    const t = String(text || '').toLowerCase();
+    if (!t.trim()) return false;
+    const hasClassicSignal = /\b(classic|classics|old|oldies|evergreen|golden|vintage|retro|timeless)\b/.test(t);
+    const hasMusicSignal = /\b(song|songs|track|tracks|music|playlist|recommend|suggest|discover|find|list)\b/.test(t);
+    return hasClassicSignal && hasMusicSignal;
+}
+
+function parseClassicSongDiscoveryIntent(text) {
+    const t = String(text || '').toLowerCase();
+    const requestedCount = extractRequestedSongCount(t);
+    const languages = [];
+    const unsupported = [];
+    let hasAnyLanguageMention = false;
+
+    if (/\b(tamil|tamizh)\b/.test(t)) {
+        hasAnyLanguageMention = true;
+        languages.push('tamil');
+    }
+    if (/\b(hindi|bollywood)\b/.test(t)) {
+        hasAnyLanguageMention = true;
+        languages.push('hindi');
+    }
+    if (/\b(telugu|tollywood)\b/.test(t)) {
+        hasAnyLanguageMention = true;
+        languages.push('telugu');
+    }
+    if (/\b(english|western|international)\b/.test(t)) {
+        hasAnyLanguageMention = true;
+        languages.push('english');
+    }
+
+    const unsupportedMap = [
+        { key: 'kannada', pattern: /\b(kannada)\b/ },
+        { key: 'malayalam', pattern: /\b(malayalam)\b/ },
+        { key: 'spanish', pattern: /\b(spanish)\b/ }
+    ];
+    unsupportedMap.forEach(item => {
+        if (item.pattern.test(t)) {
+            hasAnyLanguageMention = true;
+            unsupported.push(item.key);
+        }
+    });
+
+    if (!languages.length && !hasAnyLanguageMention) {
+        languages.push('tamil', 'english', 'hindi', 'telugu');
+    }
+
+    return {
+        requestedCount: clampSongCount(requestedCount, 8),
+        languages: Array.from(new Set(languages)),
+        unsupported: Array.from(new Set(unsupported))
+    };
 }
 
 function isEraLanguageHitsBlendRequest(text) {
@@ -7873,6 +8046,139 @@ function clampSongCount(value, fallback = 5) {
     const n = Number(value);
     if (!Number.isFinite(n)) return Math.max(1, Math.min(12, fallback));
     return Math.max(1, Math.min(12, n));
+}
+
+function getCuratedClassicSongs(language) {
+    const key = String(language || '').toLowerCase().trim();
+    const classics = {
+        tamil: [
+            { song: 'Ilaya Nila', artist: 'SP Balasubrahmanyam', work: 'Payanangal Mudivathillai' },
+            { song: 'Thenpandi Cheemayile', artist: 'Ilaiyaraaja', work: 'Nayakan' },
+            { song: 'Sundari Neeyum', artist: 'SP Balasubrahmanyam, S. Janaki', work: 'Michael Madana Kama Rajan' },
+            { song: 'Poongatru Puthithanathu', artist: 'K. J. Yesudas', work: 'Moondram Pirai' },
+            { song: 'Kanne Kalaimaane', artist: 'K. J. Yesudas', work: 'Moondram Pirai' },
+            { song: 'Nila Kaigirathu', artist: 'Hariharan', work: 'Indira' },
+            { song: 'Anjali Anjali', artist: 'SP Balasubrahmanyam, K. S. Chithra', work: 'Duet' },
+            { song: 'En Iniya Pon Nilave', artist: 'K. J. Yesudas', work: 'Moodu Pani' },
+            { song: 'Valaiyosai', artist: 'SP Balasubrahmanyam, Lata Mangeshkar', work: 'Sathya' },
+            { song: 'Mandram Vandha', artist: 'SP Balasubrahmanyam', work: 'Mouna Ragam' },
+            { song: 'Ooru Sanam', artist: 'SP Balasubrahmanyam, S. Janaki', work: 'Mella Thiranthathu Kadhavu' },
+            { song: 'Rakkamma Kaiya Thattu', artist: 'SP Balasubrahmanyam, Swarnalatha', work: 'Thalapathi' }
+        ],
+        hindi: [
+            { song: 'Lag Ja Gale', artist: 'Lata Mangeshkar', work: 'Woh Kaun Thi?' },
+            { song: 'Ajeeb Dastan Hai Yeh', artist: 'Lata Mangeshkar', work: 'Dil Apna Aur Preet Parai' },
+            { song: 'Pal Pal Dil Ke Paas', artist: 'Kishore Kumar', work: 'Blackmail' },
+            { song: 'Kya Hua Tera Wada', artist: 'Mohammed Rafi', work: 'Hum Kisise Kum Naheen' },
+            { song: 'Chura Liya Hai Tumne Jo Dil Ko', artist: 'Asha Bhosle, Mohammed Rafi', work: 'Yaadon Ki Baaraat' },
+            { song: 'Mere Sapno Ki Rani', artist: 'Kishore Kumar', work: 'Aradhana' },
+            { song: 'Tere Bina Zindagi Se', artist: 'Lata Mangeshkar, Kishore Kumar', work: 'Aandhi' },
+            { song: 'Ek Ajnabee Haseena Se', artist: 'Kishore Kumar', work: 'Ajnabee' },
+            { song: 'Pyaar Deewana Hota Hai', artist: 'Kishore Kumar', work: 'Kati Patang' },
+            { song: 'Yeh Shaam Mastani', artist: 'Kishore Kumar', work: 'Kati Patang' },
+            { song: 'Kabhi Kabhie Mere Dil Mein', artist: 'Mukesh', work: 'Kabhi Kabhie' },
+            { song: 'Aanewala Pal Janewala Hai', artist: 'Kishore Kumar', work: 'Gol Maal' }
+        ],
+        telugu: [
+            { song: 'Aaresukoboyi Paresukunnanu', artist: 'Ghantasala, P. Susheela', work: 'Adavi Ramudu' },
+            { song: 'Sankara Nada Sareera Para', artist: 'S. P. Balasubrahmanyam', work: 'Sankarabharanam' },
+            { song: 'Vedam Anuvanuvuna', artist: 'S. P. Balasubrahmanyam', work: 'Sagara Sangamam' },
+            { song: 'Priya Raagale', artist: 'S. P. Balasubrahmanyam, S. Janaki', work: 'Hello Brother' },
+            { song: 'Ee Velalo Neevu', artist: 'Udit Narayan, Sujatha', work: 'Gulabi' },
+            { song: 'Abbanee Teeyani Debba', artist: 'S. P. Balasubrahmanyam, K. S. Chithra', work: 'Jagadeka Veerudu Athiloka Sundari' },
+            { song: 'Jilibili Palukula', artist: 'S. P. Balasubrahmanyam', work: 'Sitaara' },
+            { song: 'Mounamelanoyi', artist: 'S. P. Balasubrahmanyam, S. Janaki', work: 'Sagara Sangamam' },
+            { song: 'Andamaina Premarani', artist: 'S. P. Balasubrahmanyam, K. S. Chithra', work: 'Premikudu' },
+            { song: 'Keeravani', artist: 'S. P. Balasubrahmanyam, S. Janaki', work: 'Anveshana' },
+            { song: 'Manasuna Mallela', artist: 'S. P. Balasubrahmanyam', work: 'Mallepoovu' },
+            { song: 'Yamaho Nee Yama Yama Andam', artist: 'S. P. Balasubrahmanyam, S. Janaki', work: 'Jagadeka Veerudu Athiloka Sundari' }
+        ],
+        english: [
+            { song: 'Bohemian Rhapsody', artist: 'Queen', work: 'A Night at the Opera' },
+            { song: 'Hotel California', artist: 'Eagles', work: 'Hotel California' },
+            { song: 'Imagine', artist: 'John Lennon', work: 'Imagine' },
+            { song: 'Let It Be', artist: 'The Beatles', work: 'Let It Be' },
+            { song: 'Hey Jude', artist: 'The Beatles', work: 'Single' },
+            { song: 'Billie Jean', artist: 'Michael Jackson', work: 'Thriller' },
+            { song: 'Smells Like Teen Spirit', artist: 'Nirvana', work: 'Nevermind' },
+            { song: 'Sweet Child O Mine', artist: "Guns N' Roses", work: 'Appetite for Destruction' },
+            { song: 'Stairway to Heaven', artist: 'Led Zeppelin', work: 'Led Zeppelin IV' },
+            { song: 'Take On Me', artist: 'a-ha', work: 'Hunting High and Low' },
+            { song: 'Yesterday', artist: 'The Beatles', work: 'Help!' },
+            { song: 'Dancing Queen', artist: 'ABBA', work: 'Arrival' }
+        ]
+    };
+    return Array.isArray(classics[key]) ? classics[key].map(item => ({ ...item })) : [];
+}
+
+function pickClassicSongsForDiscovery(language, count) {
+    const list = getCuratedClassicSongs(language);
+    if (!list.length) return [];
+    const shuffled = list
+        .map(item => ({ sortKey: Math.random(), item }))
+        .sort((a, b) => a.sortKey - b.sortKey)
+        .map(entry => entry.item);
+    return shuffled.slice(0, Math.max(1, Math.min(count, shuffled.length)));
+}
+
+function formatClassicSongsDiscoveryReply(intent, grouped) {
+    const langTitle = intent.languages.map(lang => lang[0].toUpperCase() + lang.slice(1)).join(' + ');
+    const lines = [`[Music] Classic songs discovery (${langTitle})`, ''];
+
+    if (intent.unsupported.length && !intent.languages.length) {
+        lines.push('For now, classic discovery supports English, Tamil, Hindi, and Telugu.');
+        lines.push('');
+    } else if (intent.unsupported.length) {
+        lines.push(`Note: For now, I support only English, Tamil, Hindi, and Telugu classics. Ignoring: ${intent.unsupported.join(', ')}.`);
+        lines.push('');
+    }
+
+    intent.languages.forEach(language => {
+        const items = grouped[language] || [];
+        if (!items.length) return;
+        lines.push(`${language[0].toUpperCase() + language.slice(1)} classics:`);
+        items.forEach(song => {
+            const title = String(song.song || '').trim();
+            const artist = String(song.artist || '').trim();
+            const work = String(song.work || '').trim();
+            if (!title) return;
+            const detail = [artist, work].filter(Boolean).join(' | ');
+            lines.push(detail ? `• ${title} - ${detail}` : `• ${title}`);
+        });
+        lines.push('');
+    });
+
+    lines.push('Try: "more tamil classic songs", "hindi old classics", or "telugu evergreen playlist".');
+    return lines.join('\n').trim();
+}
+
+async function handleClassicSongDiscoveryRequest(text) {
+    const intent = parseClassicSongDiscoveryIntent(text);
+    const requestedCount = clampSongCount(intent.requestedCount, 8);
+
+    if (intent.unsupported.length && !intent.languages.length) {
+        const msg = 'For now, classic song discovery supports English, Tamil, Hindi, and Telugu.';
+        addModelAssistantMessage(msg, 'Classic discovery');
+        speak(msg);
+        saveToHistory(text, msg);
+        return;
+    }
+
+    const grouped = {};
+    intent.languages.forEach(language => {
+        grouped[language] = pickClassicSongsForDiscovery(language, requestedCount);
+    });
+
+    const reply = formatClassicSongsDiscoveryReply(intent, grouped);
+    addModelAssistantMessage(reply, 'Classic discovery');
+    const speech = await composeApiReply('classic_song_discovery', {
+        languages: intent.languages,
+        requestedCount
+    }, {
+        fallbackText: 'Here are some classic songs you can discover.'
+    });
+    speak(speech || 'Here are some classic songs you can discover.');
+    saveToHistory(text, reply);
 }
 
 function getCuratedSongsForArtist(artist) {
@@ -9012,18 +9318,20 @@ function classifyUserMessage(text) {
             liveRetrieval: isLiveRetrievalQuery(raw),
             tamilJoke: isTamilJokeRequest(raw),
             recipe: isRecipeRequest(raw),
+            classicSongs: isClassicSongDiscoveryRequest(raw),
             artistSong: isArtistSongRequest(raw),
             highRiskMentalHealth: isHighRiskMentalHealth(raw),
             supportExit: isSupportConversationExit(raw),
             supportRequest: isSupportConversationRequest(raw),
             supportContinuation: shouldUseSupportConversationMode(raw),
-            medicalEmergency: isMedicalEmergencyIntent(raw),
-            medicalAdvice: isMedicalAdviceIntent(raw),
-            mentalHealth: isMentalHealthConversation(raw),
-            debate: isDebateIntent(raw)
-        }
-    };
-}
+            medicalEmergency: isMedicalEmergencyIntent(raw), 
+            medicalAdvice: isMedicalAdviceIntent(raw), 
+            mentalHealth: isMentalHealthConversation(raw), 
+            motivationStory: isMotivationStoryRequest(raw),
+            debate: isDebateIntent(raw) 
+        } 
+    }; 
+} 
 
 function decideAnswerPath(classification) {
     if (!classification || !classification.raw) return 'default_model';
@@ -9045,11 +9353,13 @@ function decideAnswerPath(classification) {
     if (flags.liveRetrieval) return 'live_retrieval';
     if (flags.tamilJoke) return 'tamil_joke';
     if (flags.recipe) return 'recipe';
-    if (flags.artistSong) return 'artist_song';
-
-    if (flags.highRiskMentalHealth) return 'high_risk_mental_health';
-    if (flags.supportExit) return 'support_exit';
-    if (flags.supportRequest) return 'support_intro';
+    if (flags.classicSongs) return 'classic_songs'; 
+    if (flags.artistSong) return 'artist_song'; 
+ 
+    if (flags.highRiskMentalHealth) return 'high_risk_mental_health'; 
+    if (flags.motivationStory) return 'motivation_story';
+    if (flags.supportExit) return 'support_exit'; 
+    if (flags.supportRequest) return 'support_intro'; 
     if (flags.medicalEmergency) return 'medical_emergency';
     if (flags.supportContinuation) return 'support_continue';
     if (flags.medicalAdvice) return 'medical_advice';
@@ -11094,6 +11404,11 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
                 return;
             }
 
+            if (answerPath === 'classic_songs') {
+                await handleClassicSongDiscoveryRequest(cleanText);
+                return;
+            }
+
             if (isEraLanguageHitsBlendRequest(cleanText)) {
                 await handleEraLanguageHitsBlendRequest(cleanText);
                 return;
@@ -11161,10 +11476,10 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
                 return;
             }
 
-            if (answerPath === 'medical_advice') {
-                const medicalPrompt = `The user is asking for medical or symptom advice: "${text}".
-
-Respond with these rules:
+            if (answerPath === 'medical_advice') { 
+                const medicalPrompt = `The user is asking for medical or symptom advice: "${text}". 
+ 
+Respond with these rules: 
 1. Clearly state you are not a doctor and this is general guidance only
 2. Do not give a diagnosis or claim certainty
 3. Give safe, practical self-care steps that are commonly appropriate
@@ -11183,14 +11498,37 @@ Format:
                 await publishResolvedModelMessage(text, medicalResponse.response, {
                     label: 'Model answer',
                     speechText: "Here is some general medical guidance."
-                });
+                }); 
+                return; 
+            } 
+
+            if (answerPath === 'motivation_story') {
+                showThinkingIndicator('Finding a real-life motivation story...');
+                try {
+                    const story = await buildMotivationStoryFromWeb(text);
+                    if (!story) {
+                        await deliverApiReply('motivation_story_unavailable', {
+                            userMessage: cleanText
+                        }, {
+                            fallbackText: "I couldn't verify a good real-life story right now. Ask again with a type like 'scientist motivation story' or 'founder motivation story'.",
+                            historyKey: text
+                        });
+                        return;
+                    }
+
+                    addVerifiedAssistantMessage(story, 'Verified motivation story');
+                    await speakApiReply('motivation_story_ready', {}, 'Here is one real-life story for motivation.');
+                    saveToHistory(text, story);
+                } finally {
+                    hideThinkingIndicator();
+                }
                 return;
             }
-
-            if (answerPath === 'mental_health') {
-                const mhPrompt = `The user is sharing a mental-health related message: "${text}".
-
-Respond with:
+ 
+            if (answerPath === 'mental_health') { 
+                const mhPrompt = `The user is sharing a mental-health related message: "${text}". 
+ 
+Respond with: 
 1) Warm validation and empathy (no judgment)
 2) Short, practical coping steps for right now
 3) Motivating, supportive tone
