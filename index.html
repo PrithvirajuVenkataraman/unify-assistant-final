@@ -3574,6 +3574,8 @@ function speakInLanguage(text, langCode) {
 let conversationContext = []; 
 let lastDiscussedEntity = '';
 let activeConversationTopic = null;
+let conversationTopicTimeline = [];
+let initialConversationTopicKey = '';
 
 const TOPIC_PROFILES = {
     dating: {
@@ -3592,6 +3594,91 @@ function tokenizeTopicText(text) {
         .replace(/[^a-z0-9\s]/g, ' ')
         .split(/\s+/)
         .filter(Boolean);
+}
+
+function normalizeTopicLabel(label) {
+    return String(label || '')
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function extractTopicCandidatesFromText(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return [];
+    const out = [];
+
+    const subject = normalizeTopicLabel(extractKnowledgeSubject(raw));
+    if (subject && subject.split(' ').length <= 7 && !isGenericNonEntity(subject)) {
+        out.push(subject);
+    }
+
+    const entity = normalizeTopicLabel(extractEntityCandidate(raw));
+    if (entity && entity.split(' ').length <= 7 && !isGenericNonEntity(entity)) {
+        out.push(entity);
+    }
+
+    const aboutMatch = raw.match(/\b(?:about|regarding|on|for)\s+([a-z0-9][a-z0-9\s'-]{2,90})/i);
+    if (aboutMatch && aboutMatch[1]) {
+        const around = normalizeTopicLabel(aboutMatch[1]);
+        if (around && around.split(' ').length <= 7 && !isGenericNonEntity(around)) {
+            out.push(around);
+        }
+    }
+
+    return Array.from(new Set(out)).slice(0, 3);
+}
+
+function upsertConversationTopic(topicLabel, sourceText) {
+    const normalized = normalizeTopicLabel(topicLabel);
+    if (!normalized) return null;
+
+    const now = Date.now();
+    const existing = conversationTopicTimeline.find(
+        item => item && normalizeTopicLabel(item.label) === normalized
+    );
+
+    if (existing) {
+        existing.updatedAt = now;
+        existing.hits = (existing.hits || 1) + 1;
+        if (sourceText) existing.lastSource = String(sourceText).trim();
+        return existing;
+    }
+
+    const created = {
+        key: normalized,
+        label: normalized,
+        updatedAt: now,
+        hits: 1,
+        lastSource: String(sourceText || '').trim()
+    };
+    conversationTopicTimeline.push(created);
+    if (conversationTopicTimeline.length > 14) {
+        conversationTopicTimeline.sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
+        conversationTopicTimeline = conversationTopicTimeline.slice(-14);
+    }
+    return created;
+}
+
+function findStoredTopicMention(text) {
+    const raw = normalizeTopicLabel(text);
+    if (!raw || !conversationTopicTimeline.length) return null;
+    const tokens = tokenizeTopicText(raw);
+    if (!tokens.length) return null;
+
+    let best = null;
+    let score = 0;
+    for (const topic of conversationTopicTimeline) {
+        const labelTokens = tokenizeTopicText(topic.label);
+        if (!labelTokens.length) continue;
+        const overlap = labelTokens.filter(token => tokens.includes(token)).length;
+        if (overlap > score && overlap >= Math.min(2, labelTokens.length)) {
+            best = topic;
+            score = overlap;
+        }
+    }
+    return best;
 }
 
 function detectTopicProfile(text) {
@@ -3635,14 +3722,21 @@ function clearActiveTopic() {
 
 function setActiveTopic(topicKey, sourceText) {
     const profile = TOPIC_PROFILES[topicKey];
-    if (!profile) return;
+    const baseKey = normalizeTopicLabel(topicKey);
+    if (!baseKey) return;
+
+    const stored = upsertConversationTopic(profile ? profile.label : baseKey, sourceText);
     activeConversationTopic = {
-        key: topicKey,
-        label: profile.label,
-        keywords: profile.keywords.slice(),
+        key: profile ? topicKey : baseKey,
+        label: profile ? profile.label : (stored?.label || baseKey),
+        keywords: profile ? profile.keywords.slice() : tokenizeTopicText(stored?.label || baseKey).slice(0, 8),
         source: String(sourceText || '').trim(),
         updatedAt: Date.now()
     };
+
+    if (!initialConversationTopicKey) {
+        initialConversationTopicKey = normalizeTopicLabel(activeConversationTopic.label);
+    }
 }
 
 function updateTopicMemory(userText) {
@@ -3652,7 +3746,12 @@ function updateTopicMemory(userText) {
     if (detectExplicitTopicSteer(text)) {
         clearActiveTopic();
         const explicitTopic = detectTopicProfile(text);
-        if (explicitTopic) setActiveTopic(explicitTopic, text);
+        if (explicitTopic) {
+            setActiveTopic(explicitTopic, text);
+            return;
+        }
+        const explicitCandidates = extractTopicCandidatesFromText(text);
+        if (explicitCandidates.length) setActiveTopic(explicitCandidates[0], text);
         return;
     }
 
@@ -3662,8 +3761,27 @@ function updateTopicMemory(userText) {
         return;
     }
 
+    const revisited = findStoredTopicMention(text);
+    if (revisited && normalizeTopicLabel(activeConversationTopic?.label) !== normalizeTopicLabel(revisited.label)) {
+        setActiveTopic(revisited.label, text);
+        return;
+    }
+
+    const candidates = extractTopicCandidatesFromText(text);
+    if (candidates.length) {
+        const best = candidates[0];
+        if (normalizeTopicLabel(activeConversationTopic?.label) !== normalizeTopicLabel(best)) {
+            setActiveTopic(best, text);
+        } else {
+            upsertConversationTopic(best, text);
+            activeConversationTopic.updatedAt = Date.now();
+        }
+        return;
+    }
+
     // Keep sticky topic memory unless the user explicitly steers to a new topic.
     if (!activeConversationTopic) return;
+    activeConversationTopic.updatedAt = Date.now();
 }
 
 function getTopicMemoryHint(userText) {
@@ -3674,10 +3792,20 @@ function getTopicMemoryHint(userText) {
     const tokens = tokenizeTopicText(text);
     const overlap = activeConversationTopic.keywords.reduce((acc, kw) => acc + (tokens.includes(kw) ? 1 : 0), 0);
     const followupSignal = isShortTopicFollowup(text) || /\b(what if|how about|and if|in that case|then)\b/i.test(text);
-    const shouldAnchor = overlap > 0 || followupSignal;
+    const mentionStoredTopic = Boolean(findStoredTopicMention(text));
+    const shouldAnchor = overlap > 0 || followupSignal || mentionStoredTopic;
 
     if (!shouldAnchor) return '';
-    return `Active topic: ${activeConversationTopic.label}. Treat this as a follow-up unless user explicitly changes topic.`;
+    const recentTopics = conversationTopicTimeline
+        .slice()
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        .slice(0, 4)
+        .map(item => item.label)
+        .join(', ');
+    const initialHint = initialConversationTopicKey
+        ? ` Initial conversation topic: ${initialConversationTopicKey}.`
+        : '';
+    return `Active topic: ${activeConversationTopic.label}. Keep continuity for this thread. If user switches topic, follow the new topic. If user references an earlier topic, resume that thread.${initialHint} Recent known topics: ${recentTopics || activeConversationTopic.label}.`;
 }
 
 async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
@@ -4478,8 +4606,8 @@ async function askGeminiAI(userMessage) {
         const topicHint = getTopicMemoryHint(normalizedUserMessage);
 
         conversationContext.push({ role: 'user', text: normalizedUserMessage }); 
-        if (conversationContext.length > 6) { 
-            conversationContext = conversationContext.slice(-6); 
+        if (conversationContext.length > 20) { 
+            conversationContext = conversationContext.slice(-20); 
         } 
         
         const contextMessages = conversationContext.map(msg => 
