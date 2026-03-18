@@ -1992,21 +1992,8 @@
             <div id="main-card" class="glass-card rounded-3xl p-8 mb-6 card-hover">
                 <!-- Two-column layout: Suggestions left, Chat right -->
                 <div class="flex flex-col gap-6">
-                    <!-- Left Column: Suggestions -->
+                    <!-- Left Column -->
                     <div class="w-full order-2">
-                        <!-- Suggestion Buttons - Disabled per request -->
-                        <!--
-                        <div id="initial-suggestions" class="suggestions-container">
-                            <h3 class="font-semibold text-black dark:text-white mb-4 flex items-center gap-2">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-purple-500">
-                                    <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
-                                </svg>
-                                Try asking me:
-                            </h3>
-                            <div id="suggestion-grid" class="grid grid-cols-1 gap-3">
-                            </div>
-                        </div>
-                        -->
 
                         <!-- Weather Card -->
                         <div id="weather-card" class="hidden weather-card-enhanced text-white p-6 shadow-lg mt-6">
@@ -2283,7 +2270,10 @@ function getUserIntent(text) {
 
 function isWeatherIntentText(text) {
     const t = (text || '').toLowerCase();
-    return /\b(weather|climate|temperature|forecast|humidity|humid|rain|raining|drizzle|snow|snowing|hot|cold|wind|windy|sunny|cloudy|overcast|storm|thunder|heat|chilly|freezing|degrees?)\b/.test(t);
+    return /\b(weather|climate|temperature|forecast|humidity|humid|rain|raining|drizzle|snow|snowing|hot|cold|wind|windy|sunny|cloudy|overcast|storm|thunder|heat|chilly|freezing|degrees?|umbrella|jacket)\b/.test(t) ||
+        /\b(how'?s?\s+it\s+(?:outside|out(?:side)?|where\s+i\s+am)|what'?s?\s+it\s+like\s+(?:outside|where\s+i\s+am)|is\s+it\s+(?:raining|snowing|hot|cold|windy|sunny|cloudy|humid)\b)\b/.test(t) ||
+        /\b(?:outside|here|around me|near me|my current location|current location|my location|where i am|my area|my place)\b/.test(t) &&
+        /\b(?:forecast|temperature|rain|snow|hot|cold|wind|sunny|cloudy|humid|weather)\b/.test(t);
 }
 
 function isTamilJokeRequest(text) {
@@ -2736,193 +2726,6 @@ function hideLoading() {
     }
 }
 
-function showQuickReplies(suggestions) {
-    
-}
-
-function getRegionalFood(context) {
-    const lower = context.toLowerCase();
-    
-    
-    if (lower.includes('tamil nadu') || lower.includes('chidambaram') || lower.includes('chennai') ||
-        lower.includes('bangalore') || lower.includes('bengaluru') || lower.includes('hyderabad') ||
-        lower.includes('mysore') || lower.includes('coimbatore') || lower.includes('madurai') ||
-        lower.includes('kochi') || lower.includes('kerala') || lower.includes('andhra') || lower.includes('karnataka')) {
-        return [
-            { icon: '\u{1F35B}', text: 'Best Biryani spots' },
-            { icon: '\u2615', text: 'Filter coffee places' },
-            { icon: '\u{1F959}', text: 'Dosa & Idli spots' }
-        ];
-    }
-    
-    if (lower.includes('delhi') || lower.includes('mumbai') || lower.includes('jaipur') ||
-        lower.includes('agra') || lower.includes('kolkata') || lower.includes('punjab') ||
-        lower.includes('rajasthan')) {
-        return [
-            { icon: '\u{1F35B}', text: 'Butter chicken spots' },
-            { icon: '\u{1FAD3}', text: 'Naan & Tandoor' },
-            { icon: '\u{1F959}', text: 'Street chaat' }
-        ];
-    }
-    
-    if (lower.includes('india')) {
-        return [
-            { icon: '\u{1F35B}', text: 'Biryani near me' },
-            { icon: '\u{1F372}', text: 'Curry places' },
-            { icon: '\u2615', text: 'Chai shops' }
-        ];
-    }
-    
-    if (lower.includes('italy') || lower.includes('rome') || lower.includes('milan') ||
-        lower.includes('florence') || lower.includes('venice') || lower.includes('naples')) {
-        return [
-            { icon: '\u{1F35D}', text: 'Authentic Pasta' },
-            { icon: '\u{1F355}', text: 'Best Pizzerias' },
-            { icon: '\u{1F368}', text: 'Gelato shops' }
-        ];
-    }
-    
-    if (lower.includes('new york') || lower.includes('nyc') || lower.includes('manhattan') ||
-        lower.includes('brooklyn')) {
-        return [
-            { icon: '\u{1F355}', text: 'Classic NYC Pizza' },
-            { icon: '\u{1F96F}', text: 'Best Bagels' },
-            { icon: '\u{1F32D}', text: 'Hot dog stands' }
-        ];
-    }
-    
-    if (lower.includes('mexico') || lower.includes('cancun') || lower.includes('cabo') ||
-        lower.includes('guadalajara')) {
-        return [
-            { icon: '\u{1F32E}', text: 'Best Tacos' },
-            { icon: '\u{1FAD4}', text: 'Street food' },
-            { icon: '\u{1F32F}', text: 'Burrito spots' }
-        ];
-    }
-    
-    if (lower.includes('japan') || lower.includes('tokyo') || lower.includes('kyoto') ||
-        lower.includes('osaka')) {
-        return [
-            { icon: '\u{1F363}', text: 'Sushi spots' },
-            { icon: '\u{1F35C}', text: 'Ramen shops' },
-            { icon: '\u{1F95F}', text: 'Izakaya' }
-        ];
-    }
-    
-    if (lower.includes('france') || lower.includes('paris') || lower.includes('lyon') ||
-        lower.includes('nice')) {
-        return [
-            { icon: '\u{1F950}', text: 'Best Croissants' },
-            { icon: '\u{1F9C0}', text: 'Cheese & Wine' },
-            { icon: '\u{1F956}', text: 'Boulangeries' }
-        ];
-    }
-    
-    if (lower.includes('ohio') || lower.includes('texas') || lower.includes('california') || 
-        lower.includes('mason') || lower.includes('chicago') || lower.includes('boston') ||
-        lower.includes('seattle') || lower.includes('los angeles') || lower.includes('long beach')) {
-        return [
-            { icon: '\u{1F354}', text: 'Best Burgers' },
-            { icon: '\u{1F356}', text: 'BBQ spots' },
-            { icon: '\u2615', text: 'Coffee shops' }
-        ];
-    }
-    
-    return [
-        { icon: '\u{1F37D}\uFE0F', text: 'Local restaurants' },
-        { icon: '\u2615', text: 'Coffee shops' },
-        { icon: '\u{1F370}', text: 'Dessert places' }
-    ];
-}
-
-function showInitialSuggestions() {
-    const suggestions = [
-        { icon: '\u2600\uFE0F', text: "What's the weather?", query: "What's the weather like today?" },
-        { icon: '\u23F0', text: 'Remind me', query: 'Remind me' },
-        { icon: '\u{1F310}', text: 'Translate to Tamil', query: 'Speak in Tamil' },
-        { icon: '\u2708\uFE0F', text: 'Plan a trip to Paris', query: 'Plan a weekend trip to Paris' }
-    ];
-    
-    updateSuggestionBox(suggestions);
-}
-
-function updateSuggestionBox(suggestions) {
-    const grid = document.getElementById('suggestion-grid');
-    if (!grid) return;
-
-    grid.innerHTML = suggestions.map(s => `
-        <button type="button"
-                data-query="${encodeURIComponent(String(s.query || ''))}"
-                onclick="processSuggestionFromElement(this)"
-                class="suggestion-chip text-left flex items-center gap-2 group">
-            <span class="text-base group-hover:scale-110 transition-transform">${escapeHtml(String(s.icon || ''))}</span>
-            <span class="text-xs font-medium text-black dark:text-white">${escapeHtml(String(s.text || ''))}</span>
-        </button>
-    `).join('');
-}
-
-function updateContextualSuggestions(context) {
-    const lower = context.toLowerCase();
-    let suggestions = [];
-    
-    
-    
-    if (lower.includes('itinerary') || 
-        lower.includes('day 1') || 
-        lower.includes('day 2') ||
-        lower.includes('enjoy exploring') || 
-        lower.includes('things to do') ||
-        (lower.includes('duration') && lower.includes('hours'))) {
-        const city = extractCityFromText(context);
-        suggestions = [
-            { icon: '\u{1F3E8}', text: `Hotels in ${city || 'this area'}`, query: `Hotels in ${city || 'the area'}` },
-            { icon: '\u{1F37D}\uFE0F', text: 'Best restaurants', query: `Best restaurants in ${city || 'the area'}` },
-            { icon: '\u{1F3AC}', text: 'Things to do at night', query: `Things to do at night in ${city || 'the area'}` },
-            { icon: '\u{1F4F8}', text: 'Best photo spots', query: `Best photo spots in ${city || 'the area'}` },
-            { icon: '\u{1F68C}', text: 'How to get around', query: `Transport in ${city || 'the area'}` },
-            { icon: '\u{1F6CD}\uFE0F', text: 'Shopping areas', query: `Shopping areas in ${city || 'the area'}` }
-        ];
-    }
-    
-    else if ((lower.includes('\u{1F3E8}') || lower.includes('hotel')) && lower.includes('food:')) {
-        const city = extractCityFromText(context);
-        suggestions = [
-            { icon: '\u{1F37D}\uFE0F', text: 'Restaurants nearby', query: `Best restaurants in ${city || 'the area'}` },
-            { icon: '\u{1F5FA}\uFE0F', text: 'Things to do', query: `Things to do in ${city || 'the area'}` },
-            { icon: '\u{1F68C}', text: 'Transport info', query: `How to get around ${city || 'the area'}` },
-            { icon: '\u2615', text: 'Coffee shops', query: `Coffee shops in ${city || 'the area'}` },
-            { icon: '\u{1F6CD}\uFE0F', text: 'Shopping areas', query: `Shopping in ${city || 'the area'}` },
-            { icon: '\u{1F3AC}', text: 'Nightlife', query: `Things to do at night in ${city || 'the area'}` }
-        ];
-    }
-    
-    else if (lower.includes('restaurant') || lower.includes('food:')) {
-        const city = extractCityFromText(context);
-        suggestions = [
-            { icon: '\u{1F3E8}', text: 'Hotels nearby', query: `Hotels in ${city || 'the area'}` },
-            { icon: '\u{1F5FA}\uFE0F', text: 'Create itinerary', query: `Plan a day in ${city || 'the area'}` },
-            { icon: '\u2615', text: 'Coffee & desserts', query: `Best coffee and dessert places in ${city || 'the area'}` },
-            { icon: '\u{1F68C}', text: 'Transport', query: `Transport in ${city || 'the area'}` },
-            { icon: '\u{1F354}', text: 'Fast food', query: 'Fast food near me' },
-            { icon: '\u{1F4F8}', text: 'Photo spots', query: `Photo spots in ${city || 'the area'}` }
-        ];
-    }
-    
-    else {
-        suggestions = [
-            { icon: '\u2600\uFE0F', text: "What's the weather?", query: "What's the weather?" },
-            { icon: '\u2708\uFE0F', text: 'Plan a trip', query: 'Plan a trip to Paris' },
-            { icon: '\u23F0', text: 'Remind me', query: 'Remind me' },
-            { icon: '\u{1F310}', text: 'Translator', query: 'Speak in Tamil' }
-        ];
-    }
-    
-    if (suggestions.length > 0) {
-        updateSuggestionBox(suggestions);
-    } else {
-    }
-}
-
 function extractCityFromText(text) {
     
     const patterns = [
@@ -2990,67 +2793,19 @@ function isStructuredItineraryResponse(text) {
 }
 
 function suggestQuickReplies(context) {
-    const suggestions = [];
-    let lastResponse = context;
-
-    // Check for itinerary first (most specific)
     if (isStructuredItineraryResponse(context)) {
-        const regionalFood = getRegionalFood(context);
-        suggestions.push(
-            { icon: '\u{1F3E8}', text: 'Hotels nearby' },
-            { icon: '\u{1F37D}\uFE0F', text: 'Restaurants nearby' },
-            ...regionalFood.slice(0, 1),
-            { icon: '\u{1F3AC}', text: 'Things to do at night' },
-            { icon: '\u{1F4F8}', text: 'Best photo spots' }
-        );
-
         addShareButton(context, 'itinerary');
+        return;
     }
-    // Check for actual hotel listings (not just mentions of "hotel")
-    else if (isHotelListing(context)) {
-        const regionalFood = getRegionalFood(context);
-        suggestions.push(
-            { icon: '\u{1F37D}\uFE0F', text: 'Restaurants nearby' },
-            { icon: '\u{1F5FA}\uFE0F', text: 'Plan activities' },
-            ...regionalFood.slice(0, 1),
-            { icon: '\u{1F6CD}\uFE0F', text: 'Shopping areas' },
-            { icon: '\u2615', text: 'Coffee shops' }
-        );
 
+    if (isHotelListing(context)) {
         addShareButton(context, 'hotels');
+        return;
     }
-    // Check for actual restaurant listings
-    else if (isRestaurantListing(context)) {
-        const regionalFood = getRegionalFood(context);
-        suggestions.push(
-            { icon: '\u{1F3E8}', text: 'Hotels nearby' },
-            { icon: '\u{1F5FA}\uFE0F', text: 'Things to do' },
-            ...regionalFood.slice(0, 2),
-            { icon: '\u{1F370}', text: 'Dessert places' }
-        );
 
+    if (isRestaurantListing(context)) {
         addShareButton(context, 'restaurants');
     }
-    // Weather responses
-    else if (context.includes('weather') || context.includes('temperature') || context.includes('\u00B0')) {
-        suggestions.push(
-            { icon: '\u{1F3E8}', text: 'Hotels nearby' },
-            { icon: '\u{1F37D}\uFE0F', text: 'Best restaurants' },
-            { icon: '\u{1F5FA}\uFE0F', text: 'Things to do' }
-        );
-    }
-    // Default suggestions
-    else {
-        suggestions.push(
-            { icon: '\u{1F324}\uFE0F', text: 'Weather' },
-            { icon: '\u{1F5FA}\uFE0F', text: 'Plan a trip' }
-        );
-    }
-
-    showQuickReplies(suggestions);
-
-
-    updateContextualSuggestions(context);
 }
 
 function addShareButton(content, type) {
@@ -5044,11 +4799,6 @@ async function handleNameCorrection(text) {
             renderTripCard();
             renderSafetyCard();
             
-            
-            // Always show suggestions for all users
-            showInitialSuggestions();
-            
-            
             await deliverApiReply('welcome_message', {
                 userName: userName || '',
                 assistantName: 'JARVIS'
@@ -5299,32 +5049,32 @@ async function handleNameCorrection(text) {
                                 <div>
                                     <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Reply style</p>
                                     <div class="flex gap-2 flex-wrap">
-                                        <button onclick="setSupportModeLock('balanced')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${supportModeLock === 'balanced' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Balanced</button>
-                                        <button onclick="setSupportModeLock('supportive')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${supportModeLock === 'supportive' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Supportive</button>
-                                        <button onclick="setSupportModeLock('debate')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${supportModeLock === 'debate' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Debate</button>
+                                        <button onclick="setSupportModeLock('balanced')" data-mode-group="support-mode" data-mode-value="balanced" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${supportModeLock === 'balanced' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Balanced</button>
+                                        <button onclick="setSupportModeLock('supportive')" data-mode-group="support-mode" data-mode-value="supportive" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${supportModeLock === 'supportive' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Supportive</button>
+                                        <button onclick="setSupportModeLock('debate')" data-mode-group="support-mode" data-mode-value="debate" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${supportModeLock === 'debate' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Debate</button>
                                     </div>
                                 </div>
                                 <div>
                                     <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Response length</p>
                                     <div class="flex gap-2 flex-wrap">
-                                        <button onclick="setResponseLength('short')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseLength === 'short' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Short</button>
-                                        <button onclick="setResponseLength('normal')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseLength === 'normal' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Normal</button>
-                                        <button onclick="setResponseLength('detailed')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseLength === 'detailed' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Detailed</button>
+                                        <button onclick="setResponseLength('short')" data-mode-group="response-length" data-mode-value="short" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseLength === 'short' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Short</button>
+                                        <button onclick="setResponseLength('normal')" data-mode-group="response-length" data-mode-value="normal" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseLength === 'normal' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Normal</button>
+                                        <button onclick="setResponseLength('detailed')" data-mode-group="response-length" data-mode-value="detailed" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseLength === 'detailed' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Detailed</button>
                                     </div>
                                 </div>
                                 <div>
                                     <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Response format</p>
                                     <div class="flex gap-2 flex-wrap">
-                                        <button onclick="setResponseFormat('paragraph')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'paragraph' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Paragraph</button>
-                                        <button onclick="setResponseFormat('bullet')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'bullet' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Bullet points</button>
-                                        <button onclick="setResponseFormat('steps')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'steps' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Step-by-step</button>
+                                        <button onclick="setResponseFormat('paragraph')" data-mode-group="response-format" data-mode-value="paragraph" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'paragraph' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Paragraph</button>
+                                        <button onclick="setResponseFormat('bullet')" data-mode-group="response-format" data-mode-value="bullet" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'bullet' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Bullet points</button>
+                                        <button onclick="setResponseFormat('steps')" data-mode-group="response-format" data-mode-value="steps" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'steps' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Step-by-step</button>
                                     </div>
                                 </div>
                                 <div>
                                     <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Medical mode</p>
                                     <div class="flex gap-2 flex-wrap">
-                                        <button onclick="setMedicalMode(true)" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${medicalMode ? 'bg-rose-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">On</button>
-                                        <button onclick="setMedicalMode(false)" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${!medicalMode ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Off</button>
+                                        <button onclick="setMedicalMode(true)" data-mode-group="medical-mode" data-mode-value="on" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-rose-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${medicalMode ? 'bg-rose-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">On</button>
+                                        <button onclick="setMedicalMode(false)" data-mode-group="medical-mode" data-mode-value="off" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${!medicalMode ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Off</button>
                                     </div>
                                 </div>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">Voice commands: "set support mode supportive", "set response length detailed", "set response format bullet points", or "turn medical mode on".</p>
@@ -5383,6 +5133,7 @@ async function handleNameCorrection(text) {
             `;
 
             document.body.appendChild(modal);
+            syncHelpModalModeButtons();
         }
 
         // Noise filter toggle functions
@@ -5659,6 +5410,27 @@ async function handleNameCorrection(text) {
         function updateAssistantModeUI() {
             updateConverseIndicator();
             toggleSendButton();
+            syncHelpModalModeButtons();
+        }
+
+        function updateModeButtonGroup(group, selectedValue) {
+            const modal = document.getElementById('help-modal');
+            if (!modal) return;
+
+            const buttons = modal.querySelectorAll(`[data-mode-group="${group}"]`);
+            buttons.forEach(button => {
+                const isActive = button.dataset.modeValue === selectedValue;
+                const activeClass = button.dataset.activeClass || 'bg-purple-600 text-white';
+                const inactiveClass = button.dataset.inactiveClass || 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300';
+                button.className = `${button.dataset.baseClass || ''} ${isActive ? activeClass : inactiveClass}`.trim();
+            });
+        }
+
+        function syncHelpModalModeButtons() {
+            updateModeButtonGroup('support-mode', supportModeLock);
+            updateModeButtonGroup('response-length', responseLength);
+            updateModeButtonGroup('response-format', responseFormat);
+            updateModeButtonGroup('medical-mode', medicalMode ? 'on' : 'off');
         }
 
         function loadAssistantModes() {
@@ -5998,14 +5770,6 @@ async function handleNameCorrection(text) {
             window.open(formUrl, '_blank', 'noopener,noreferrer');
         }
 
-        
-        function hideInitialSuggestions() {
-            const suggestionsPanel = document.getElementById('initial-suggestions');
-            if (suggestionsPanel && !suggestionsPanel.classList.contains('hidden')) {
-                suggestionsPanel.classList.add('hidden');
-            }
-        }
-
         function addChatMessage(text, isUser = true, typewriter = null) {
             const chatContainer = document.getElementById('chat-container');
             if (!chatContainer) return;
@@ -6015,8 +5779,6 @@ async function handleNameCorrection(text) {
             messageDiv.dataset.role = isUser ? 'user' : 'assistant';
 
             if (isUser) {
-                hideInitialSuggestions();
-
                 const formattedText = escapeHtml(displayText).replace(/\n/g, '<br>');
                 messageDiv.innerHTML = `
                     <div class="chat-bubble-user text-white px-4 py-3 max-w-md relative group">
@@ -6707,7 +6469,6 @@ async function handleMarketLookup(text) {
                 const confidence = result[0].confidence || 0;
 
                 if (!text) return;
-                hideInitialSuggestions();
 
                 // Noise filter - filter out low confidence or short random noise
                 if (noiseFilterEnabled && result.isFinal) {
@@ -6862,7 +6623,6 @@ async function handleMarketLookup(text) {
                 stopSpeaking();
                 listeningRequested = true;
                 isListening = true; 
-                hideInitialSuggestions();
                 continuousRecognition.start(); 
 
                 // Update voice button to listening state
@@ -11040,11 +10800,6 @@ ${snippets}`
                     weatherCard.classList.add('hidden');
                 }
 
-                // Suggestions are disabled; keep this no-op if panel is absent.
-                const suggestionsPanel = document.getElementById('initial-suggestions');
-                if (suggestionsPanel && suggestionsPanel.classList.contains('hidden')) {
-                    suggestionsPanel.classList.remove('hidden');
-                }
             }
             
             if (!isReminderQuery) {
@@ -12462,7 +12217,12 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const lower = text.toLowerCase();
             
             
-            const currentLocationKeywords = ['my location', 'current location', 'my current location', 'here', 'over here', 'around here', 'nearby', 'outside', 'where i am', 'my area', 'this location'];
+            const currentLocationKeywords = [
+                'my location', 'current location', 'my current location', 'here', 'over here',
+                'around here', 'nearby', 'outside', 'outside now', 'outside right now',
+                'where i am', "where i'm at", 'where im at', 'my area', 'this location',
+                'my place', 'current place', 'around me', 'near me', 'for me'
+            ];
             for (const keyword of currentLocationKeywords) {
                 if (lower.includes(keyword)) {
                     return null; 
@@ -12480,6 +12240,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 /(?:weather|climate|temperature|humidity|rain|snow|hot|cold|forecast|conditions?|wind|windy)\s+(?:in|at|for|around|near)\s+([^?]+)/i,
                 /(?:in|at|around|near)\s+([^?]+?)\s*(?:weather|climate|temperature|humidity|rain|snow|hot|cold|forecast|conditions?|wind|windy)/i,
                 /(?:how'?s?|what'?s?|how is|what is)\s+(?:the\s+)?(?:weather|climate|temperature|humidity|forecast|conditions?)\s+(?:in|at|for|around|near)\s+([^?]+)/i,
+                /(?:forecast|temperature|weather)\s+(?:for)\s+([^?]+)/i,
             ];
             
             for (const pattern of patterns) {
@@ -12631,12 +12392,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 document.getElementById('temperature').textContent = `${fahrenheit}\u00B0F / ${celsius}\u00B0C`;
                 document.getElementById('weather-advice').textContent = advice;
 
-                // Hide "Try asking me" while weather card is active.
-                const suggestionsPanel = document.getElementById('initial-suggestions');
-                if (suggestionsPanel && !suggestionsPanel.classList.contains('hidden')) {
-                    suggestionsPanel.classList.add('hidden');
-                }
-                
                 hideLoading();
                 await deliverApiReply('weather_result', {
                     location: displayLocation,
