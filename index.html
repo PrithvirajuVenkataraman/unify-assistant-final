@@ -5035,7 +5035,7 @@ async function handleNameCorrection(text) {
                                 <p><strong>Web Search:</strong> I can enrich recommendations with live search context.</p>
                                 <p><strong>Location-Aware:</strong> I adapt transport suggestions by city type.</p>
                                 <p><strong>Regional Food:</strong> I suggest cuisine ideas by destination.</p>
-                                <p><strong>Recipe Help:</strong> I can generate ingredients and step-by-step cooking instructions for many dishes and styles.</p>
+                                <p><strong>Recipe Help:</strong> I can generate ingredients and step-by-step cooking instructions for many dishes and styles. For obscure or highly regional dishes, I may give a best-effort version and say when it is approximate.</p>
                                 <p><strong>Converse Mode:</strong> Hands-free conversation with auto speaking.</p>
                                 <p><strong>Foreground Live Trip:</strong> I can track your trip, ETA drift, "you are close", and possible off-route movement while this website stays open.</p>
                                 <p><strong>Traffic-Aware Leave Estimate:</strong> I can use a route API for live leave-time estimates when configured, with a fallback estimate if not.</p>
@@ -10274,10 +10274,30 @@ function extractRequestedDish(text) {
     return raw.replace(/[?.!,;]+$/g, '').trim();
 }
 
+function extractRecipeStylePreference(text) {
+    const raw = String(text || '').toLowerCase();
+    if (!raw.trim()) return '';
+
+    const stylePatterns = [
+        { key: 'traditional', pattern: /\btraditional|authentic|classic|original\b/ },
+        { key: 'home-style', pattern: /\bhome[\s-]?style|homestyle|ghar[\s-]?ka\b/ },
+        { key: 'quick', pattern: /\bquick|fast|easy|simple|30[\s-]?minute|15[\s-]?minute\b/ },
+        { key: 'restaurant-style', pattern: /\brestaurant[\s-]?style|dhaba[\s-]?style\b/ }
+    ];
+
+    for (const style of stylePatterns) {
+        if (style.pattern.test(raw)) return style.key;
+    }
+
+    const regionalMatch = raw.match(/\b(andhra|hyderabadi|tamil|chettinad|kerala|punjabi|mughlai|bengali|goan|korean|japanese|thai|italian|mexican|french|turkish|arabic)\b/);
+    return regionalMatch ? regionalMatch[1] : '';
+}
+
 async function buildOfflineRecipeFallback(text) {
     const dish = extractRequestedDish(text);
     return await composeApiReply('recipe_fallback', {
         dish: dish || '',
+        styleHint: extractRecipeStylePreference(text) || '',
         userMessage: String(text || '').trim()
     });
 }
@@ -10976,17 +10996,28 @@ ${snippets}`
             }
 
             if (answerPath === 'recipe') {
+                const requestedDish = extractRequestedDish(text) || 'the requested dish';
+                const styleHint = extractRecipeStylePreference(text) || 'not specified';
                 const recipePrompt = `${userName ? `The user's name is ${userName}.` : ''} Answer this cooking request: "${text}"
+
+Dish request: ${requestedDish}
+Requested style hint: ${styleHint}
 
 Rules:
 - Give a practical recipe for the dish the user asked for.
 - If the dish has regional variants, follow the requested style if specified.
 - Keep ingredients realistic and common.
 - Do not invent unusual ingredients or fake steps.
-- If exact authenticity varies by household/region, say that briefly.
+- If exact authenticity varies by household or region, say that briefly.
+- If the dish is obscure, highly regional, or ambiguous, do not pretend the recipe is fully verified or universally authentic.
+- For ambiguous or obscure dishes, label the style as "Approximate common-style version" or "Traditional-style approximation" instead of claiming certainty.
+- Only label a recipe "Traditional" when the style is clear and confidence is reasonably high.
+- If the user asked for quick, easy, or home-style, respect that directly.
+- If the user did not specify a style and multiple major variants exist, choose a practical common version and say so in the style line or notes.
 
 Format:
 Recipe: <dish name>
+Style: <Traditional | Home-style | Quick | Restaurant-style | Approximate common-style version | Traditional-style approximation>
 Serves: <number>
 Prep time: <time>
 Cook time: <time>
