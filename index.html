@@ -4799,14 +4799,11 @@ async function handleNameCorrection(text) {
             renderTripCard();
             renderSafetyCard();
             
-            await deliverApiReply('welcome_message', {
-                userName: userName || '',
-                assistantName: 'JARVIS'
-            }, {
-                fallbackText: userName
-                    ? `Hi ${userName}! How can I help you today?`
-                    : "Hi! I'm JARVIS, your personal assistant. How can I help you today?"
-            });
+            const welcomeMessage = userName
+                ? `Hi ${userName}. How can I help you today?`
+                : 'How can I help you today?';
+            addChatMessage(welcomeMessage, false);
+            speak(welcomeMessage);
             
             
         };
