@@ -9,6 +9,10 @@
     <title>JARVIS - Just A Rather Very Intelligent System</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js?key=jQZ2zpcE"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
     <style>
         :root {
             --jarvis-radius-md: 12px;
@@ -1896,209 +1900,6 @@
             pointer-events: none;
         }
 
-
-
-        .medical-analysis-card {
-            border: 1px solid rgba(244, 114, 182, 0.22);
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 241, 242, 0.92));
-            border-radius: 18px;
-            padding: 14px;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-        }
-
-        body.dark .medical-analysis-card {
-            background: linear-gradient(180deg, rgba(30, 41, 59, 0.96), rgba(69, 10, 10, 0.22));
-            border-color: rgba(251, 113, 133, 0.35);
-            box-shadow: 0 10px 24px rgba(2, 6, 23, 0.3);
-        }
-
-        .medical-analysis-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 10px;
-            margin-top: 12px;
-        }
-
-        .medical-analysis-section {
-            border-radius: 14px;
-            padding: 10px 12px;
-            background: rgba(255, 255, 255, 0.74);
-            border: 1px solid rgba(148, 163, 184, 0.22);
-        }
-
-        body.dark .medical-analysis-section {
-            background: rgba(15, 23, 42, 0.52);
-            border-color: rgba(100, 116, 139, 0.4);
-        }
-
-        .medical-chip-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 8px;
-        }
-
-        .medical-chip {
-            display: inline-flex;
-            align-items: center;
-            border-radius: 999px;
-            padding: 5px 10px;
-            font-size: 12px;
-            font-weight: 600;
-            background: rgba(14, 165, 233, 0.12);
-            color: #075985;
-            border: 1px solid rgba(14, 165, 233, 0.18);
-        }
-
-        body.dark .medical-chip {
-            background: rgba(14, 165, 233, 0.14);
-            color: #bae6fd;
-            border-color: rgba(14, 165, 233, 0.28);
-        }
-
-        .medical-summary-strip {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .medical-summary-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            border-radius: 999px;
-            padding: 6px 10px;
-            font-size: 12px;
-            font-weight: 700;
-            background: rgba(99, 102, 241, 0.08);
-            color: #3730a3;
-            border: 1px solid rgba(99, 102, 241, 0.14);
-        }
-
-        body.dark .medical-summary-pill {
-            background: rgba(99, 102, 241, 0.16);
-            color: #c7d2fe;
-            border-color: rgba(129, 140, 248, 0.22);
-        }
-
-        .medical-conditions-stack {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-top: 6px;
-        }
-
-        .medical-condition-item {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 10px 0;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.16);
-        }
-
-        .medical-condition-item:last-child {
-            border-bottom: none;
-            padding-bottom: 0;
-        }
-
-        .medical-condition-main {
-            min-width: 0;
-            flex: 1;
-        }
-
-        .medical-confidence-wrap {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            gap: 6px;
-            min-width: 116px;
-        }
-
-        .medical-confidence-track {
-            width: 100%;
-            height: 6px;
-            border-radius: 999px;
-            overflow: hidden;
-            background: rgba(148, 163, 184, 0.18);
-        }
-
-        .medical-confidence-fill {
-            height: 100%;
-            border-radius: 999px;
-            background: linear-gradient(90deg, rgba(34, 197, 94, 0.95), rgba(16, 185, 129, 0.95));
-        }
-
-        .medical-confidence-fill.moderate {
-            background: linear-gradient(90deg, rgba(245, 158, 11, 0.95), rgba(251, 191, 36, 0.95));
-        }
-
-        .medical-confidence-fill.low {
-            background: linear-gradient(90deg, rgba(239, 68, 68, 0.95), rgba(248, 113, 113, 0.95));
-        }
-
-        .medical-confidence-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 92px;
-            border-radius: 999px;
-            padding: 4px 10px;
-            font-size: 12px;
-            font-weight: 700;
-            background: rgba(34, 197, 94, 0.14);
-            color: #166534;
-            border: 1px solid rgba(34, 197, 94, 0.2);
-        }
-
-        .medical-confidence-badge.moderate {
-            background: rgba(245, 158, 11, 0.14);
-            color: #92400e;
-            border-color: rgba(245, 158, 11, 0.22);
-        }
-
-        .medical-confidence-badge.low {
-            background: rgba(239, 68, 68, 0.12);
-            color: #991b1b;
-            border-color: rgba(239, 68, 68, 0.18);
-        }
-
-        body.dark .medical-confidence-badge {
-            color: #dcfce7;
-            background: rgba(34, 197, 94, 0.16);
-            border-color: rgba(34, 197, 94, 0.26);
-        }
-
-        body.dark .medical-confidence-badge.moderate {
-            color: #fde68a;
-            background: rgba(245, 158, 11, 0.16);
-            border-color: rgba(245, 158, 11, 0.28);
-        }
-
-        body.dark .medical-confidence-badge.low {
-            color: #fecaca;
-            background: rgba(239, 68, 68, 0.14);
-            border-color: rgba(239, 68, 68, 0.24);
-        }
-
-        .medical-disclaimer {
-            margin-top: 12px;
-            border-radius: 14px;
-            padding: 12px;
-            background: rgba(254, 242, 242, 0.92);
-            border: 1px solid rgba(248, 113, 113, 0.24);
-            color: #7f1d1d;
-            font-size: 12px;
-            line-height: 1.55;
-        }
-
-        body.dark .medical-disclaimer {
-            background: rgba(69, 10, 10, 0.28);
-            border-color: rgba(248, 113, 113, 0.3);
-            color: #fecaca;
-        }
-
         .side-panel {
             position: fixed;
             top: 0;
@@ -2223,11 +2024,7 @@
                                 </div>
                             </div>
                             <p id="temperature" class="text-5xl font-bold mb-2 text-white relative z-10">--&#176;F / --&#176;C</p>
-                            <div class="relative z-10 mt-3 space-y-2">
-                                <p id="aqi-summary" class="text-white/90 text-base font-medium">AQI: --</p>
-                                <p id="aqi-details" class="text-white/75 text-sm">PM2.5: -- μg/m³</p>
-                            </div>
-                            <p id="weather-advice" class="text-white/90 text-lg relative z-10 mt-3"></p>
+                            <p id="weather-advice" class="text-white/90 text-lg relative z-10"></p>
                         </div>
 
                         <!-- Reminders List -->
@@ -2348,14 +2145,8 @@
                     id="text-input"
                     placeholder="Ask JARVIS anything..."
                     class="flex-1 bg-transparent outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm font-medium"
-                    onkeypress="if(event.key === 'Enter') sendTextInput()"
+                    onkeydown="if(event.key === 'Enter'){ event.preventDefault(); sendTextInput(); }"
                     oninput="toggleSendButton()"
-                    spellcheck="true"
-                    autocorrect="on"
-                    autocapitalize="sentences"
-                    autocomplete="off"
-                    lang="en"
-                    title="Browser spellcheck is enabled. Right-click a misspelled word to see suggestions."
                 />
 
                 <!-- Voice-to-text + Converse/Send controls -->
@@ -2468,8 +2259,7 @@ const RESPONSE_LENGTH_HINTS = {
 const RESPONSE_FORMAT_HINTS = {
     paragraph: 'Prefer short paragraphs with clear flow.',
     bullet: 'Prefer concise bullet points when possible.',
-    steps: 'Prefer numbered step-by-step structure when possible.',
-    structured: 'Use clear section headers and grouped blocks. For itineraries, use Day 1 / Day 2 with Morning, Lunch, Afternoon, and Evening sections.'
+    steps: 'Prefer numbered step-by-step structure when possible.'
 };
 
 function detectRequestedResponseLength(text) {
@@ -2493,12 +2283,7 @@ function getUserIntent(text) {
 
 function isWeatherIntentText(text) {
     const t = (text || '').toLowerCase();
-    return /\b(weather|climate|temperature|forecast|humidity|humid|rain|raining|drizzle|snow|snowing|hot|cold|wind|windy|sunny|cloudy|overcast|storm|thunder|heat|chilly|freezing|degrees?|aqi|air quality|pollution|pm2\.5|pm10)\b/.test(t);
-}
-
-function isAirQualityIntentText(text) {
-    const t = (text || '').toLowerCase();
-    return /\b(aqi|air quality|pollution|pm2\.5|pm10|smog)\b/.test(t);
+    return /\b(weather|climate|temperature|forecast|humidity|humid|rain|raining|drizzle|snow|snowing|hot|cold|wind|windy|sunny|cloudy|overcast|storm|thunder|heat|chilly|freezing|degrees?)\b/.test(t);
 }
 
 function isTamilJokeRequest(text) {
@@ -2529,75 +2314,28 @@ function normalizeIntentTypos(text) {
         'calendar', 'budget', 'sync'
     ];
 
-    const aliases = {
-        whats: 'what',
-        pic: 'picture',
-        pics: 'picture',
-        foto: 'photo',
-        wheather: 'weather',
-        wether: 'weather',
-        forcast: 'forecast',
-        resturant: 'restaurants',
-        resturants: 'restaurants',
-        restaurent: 'restaurants',
-        translte: 'translate',
-        traslate: 'translate',
-        translater: 'translator',
-        calender: 'calendar',
-        groccery: 'grocery',
-        grosery: 'grocery',
-        itenary: 'itinerary',
-        itinirary: 'itinerary',
-        buget: 'budget'
-    };
+    return raw
+        .split(/(\s+)/)
+        .map(token => {
+            if (!/^[a-zA-Z']+$/.test(token)) return token;
+            const lower = token.toLowerCase();
+            if (dictionary.includes(lower)) return lower;
+            if (lower.length < 3) return lower;
 
-    const tokens = raw.split(/(\s+)/);
-    const firstWordIndex = tokens.findIndex(token => /^[a-zA-Z']+$/.test(token));
-    if (firstWordIndex === -1) return raw;
+            let best = lower;
+            let min = 99;
+            for (const word of dictionary) {
+                const d = levenshteinDistance(lower, word);
+                if (d < min) {
+                    min = d;
+                    best = word;
+                }
+            }
 
-    const originalToken = tokens[firstWordIndex];
-    const lower = originalToken.toLowerCase();
-    if (dictionary.includes(lower) || lower.length < 4) return raw;
-
-    const applyCase = (template, replacement) => {
-        if (template === template.toUpperCase()) return replacement.toUpperCase();
-        if (template[0] === template[0].toUpperCase()) {
-            return replacement.charAt(0).toUpperCase() + replacement.slice(1);
-        }
-        return replacement;
-    };
-
-    if (aliases[lower]) {
-        tokens[firstWordIndex] = applyCase(originalToken, aliases[lower]);
-        return tokens.join('');
-    }
-
-    let best = null;
-    let bestDistance = Infinity;
-    let secondBestDistance = Infinity;
-
-    for (const word of dictionary) {
-        if (word[0] !== lower[0]) continue;
-        const distance = levenshteinDistance(lower, word);
-        if (distance < bestDistance) {
-            secondBestDistance = bestDistance;
-            bestDistance = distance;
-            best = word;
-        } else if (distance < secondBestDistance) {
-            secondBestDistance = distance;
-        }
-    }
-
-    const maxDistance = lower.length <= 5 ? 1 : 2;
-    const hasClearWinner = secondBestDistance - bestDistance >= 1;
-    const isIntentLike = /^(w|wh|wha|what|who|tel|tell|def|define|mea|meaning|sho|show|ima|image|pic|photo|loo|look|wea|weather|for|forecast|new|news|rem|reminder|sho|shop|shopping|gro|grocery|iti|itinerary|hot|hotel|res|restaurant|resta|restaurants|tra|trans|translate|translator|jok|joke|cal|calendar|bud|budget|syn|sync)/.test(lower);
-
-    if (best && bestDistance <= maxDistance && hasClearWinner && isIntentLike) {
-        tokens[firstWordIndex] = applyCase(originalToken, best);
-        return tokens.join('');
-    }
-
-    return raw;
+            const limit = lower.length <= 4 ? 1 : 2;
+            return min <= limit ? best : lower;
+        })
+        .join('');
 }
 
 function extractReferenceSubject(text) {
@@ -4187,11 +3925,11 @@ function getTopicMemoryHint(userText) {
     return `Active topic: ${activeConversationTopic.label}. Treat this as a follow-up unless user explicitly changes topic.`;
 }
 
-async function callAIWithTyping(message, loadingMessage = 'Thinking...', aiOptions = {}) {
+async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
     
     showThinkingIndicator(loadingMessage);
     try {
-        const responsePromise = askGeminiAI(message, aiOptions);
+        const responsePromise = askGeminiAI(message);
         await Promise.all([
             responsePromise,
             new Promise(resolve => setTimeout(resolve, 2000))
@@ -4229,87 +3967,13 @@ function formatLiveSourceLinks(items, limit = 5) {
         .join('\n');
 }
 
-function normalizeAnswerSentenceForDedupe(sentence) {
-    return String(sentence || '')
-        .toLowerCase()
-        .replace(/\b(a|an|the)\b/g, ' ')
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\b(ipl|indian premier league)\b/g, ' indian premier league ')
-        .replace(/\bwon\b/g, ' has won ')
-        .replace(/\btimes in total\b/g, ' times ')
-        .replace(/\bin total\b/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function chooseBetterAnswerSentence(currentBest, candidate) {
-    const a = String(currentBest || '').trim();
-    const b = String(candidate || '').trim();
-    if (!a) return b;
-    if (!b) return a;
-
-    const score = (sentence) => {
-        const s = String(sentence || '').trim();
-        let value = 0;
-        if (/\b\d+\b/.test(s)) value += 3;
-        if (/\b(20\d{2}|19\d{2})\b/.test(s)) value += 2;
-        if (/\b(times|won|wins|titles?|seasons?|score|scored|rank|ranking|price|founded|launched|released)\b/i.test(s)) value += 2;
-        if (!/^it\b/i.test(s)) value += 1;
-        if (s.length <= 140) value += 1;
-        if (s.length < 18) value -= 2;
-        return value;
-    };
-
-    const aScore = score(a);
-    const bScore = score(b);
-    if (bScore !== aScore) return bScore > aScore ? b : a;
-    return b.length < a.length ? b : a;
-}
-
-function dedupeAnswerSentences(text) {
-    const sentences = String(text || '')
-        .split(/(?<=[.!?])\s+|\n+/)
-        .map(s => s.trim())
-        .filter(Boolean);
-
-    const unique = [];
-    for (const sentence of sentences) {
-        const normalized = normalizeAnswerSentenceForDedupe(sentence);
-        if (!normalized) continue;
-
-        let merged = false;
-        for (let i = 0; i < unique.length; i += 1) {
-            const existingNormalized = normalizeAnswerSentenceForDedupe(unique[i]);
-            const overlaps = existingNormalized === normalized
-                || existingNormalized.includes(normalized)
-                || normalized.includes(existingNormalized);
-
-            if (overlaps) {
-                unique[i] = chooseBetterAnswerSentence(unique[i], sentence);
-                merged = true;
-                break;
-            }
-        }
-
-        if (!merged) unique.push(sentence);
-    }
-
-    return unique.join(' ').replace(/\s+/g, ' ').trim();
-}
-
 function cleanLiveAnswerText(text) {
-    const cleaned = String(text || '')
+    return String(text || '')
         .replace(/^\s*(?:\*\*)?Direct answer:(?:\*\*)?\s*/i, '')
         .replace(/\n\s*Confidence:\s*[^\n]*/gi, '')
         .replace(/\n\s*Verified sources checked:\s*[^\n]*/gi, '')
-        .replace(/\n\s*Key points:\s*/gi, '\n')
-        .replace(/\n\s*[-•]\s*/g, '\n')
-        .replace(/\bhas won (\d+) in total\b/gi, 'has won $1 times in total')
-        .replace(/\bwon (\d+) in total\b/gi, 'won $1 times in total')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
-
-    return dedupeAnswerSentences(cleaned);
 }
 
 async function buildDirectLiveAnswer(question, items, signal) {
@@ -4325,7 +3989,7 @@ async function buildDirectLiveAnswer(question, items, signal) {
         headers: { 'Content-Type': 'application/json' },
         signal,
         body: JSON.stringify({
-            systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly. Avoid repeated facts, near-duplicate sentences, and awkward restatements. Prefer one clean consensus sentence over two similar sentences.',
+            systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly.',
             message: `Answer the user's question using ONLY the snippets below.
 
 User question: "${question}"
@@ -4342,13 +4006,11 @@ Rules:
 - Focus on what is current or recent.
 - If the user asked for latest news or headlines, start with a compact summary of the latest development, then give 3 short bullet points.
 - Do not make up numbers, dates, actors, causes, or outcomes.
-- Only state a fact confidently if it appears in multiple snippets or from a clearly reputable official source. For sports titles and results, prefer official league or top-tier sports sources over Quora, Reddit, Facebook, or similar user-generated pages.
-- If evidence is weak, say so instead of guessing. Ignore stale user-generated claims when a newer official sports source resolves the result.
+- Only state a fact confidently if it appears in multiple snippets or from a clearly reputable source.
+- If evidence is weak, say so instead of guessing.
 - If the question asks for a winner, score, player stat, or latest status, answer that specific fact first before anything else.
 - If the user asks for stats, give the key stats directly instead of a generic summary.
 - Keep it concise and practical.
-- Do not repeat the same fact in different wording.
-- Prefer a single clean consensus sentence when multiple snippets say the same thing.
 
 Snippets:
 ${snippets}`
@@ -4747,38 +4409,7 @@ function resolveKnowledgeFollowupQuery(text) {
     const raw = String(text || '').trim();
     if (!raw || !lastDiscussedEntity) return raw;
     if (!isPronounKnowledgeFollowup(raw)) return raw;
-
-    const pronounPattern = /\b(it|this|that|this one|that one|the company|the person|the topic)(\s+company)?\b/gi;
-    const resolved = raw.replace(pronounPattern, lastDiscussedEntity).trim();
-
-    if (!resolved) return raw;
-    if (resolved === raw) return raw;
-
-    return resolved;
-}
-
-function extractAssistantResponseText(payload) {
-    if (typeof payload?.response === 'string' && payload.response.trim()) {
-        return payload.response.trim();
-    }
-    if (typeof payload?.text === 'string' && payload.text.trim()) {
-        return payload.text.trim();
-    }
-
-    const candidateText = payload?.candidates?.[0]?.content?.parts
-        ?.map(part => typeof part?.text === 'string' ? part.text : '')
-        .join('')
-        .trim();
-    if (candidateText) {
-        return candidateText;
-    }
-
-    const altCandidateText = payload?.candidates?.[0]?.output?.[0]?.content?.[0]?.text;
-    if (typeof altCandidateText === 'string' && altCandidateText.trim()) {
-        return altCandidateText.trim();
-    }
-
-    return '';
+    return raw.replace(/\b(it|this|that|this one|that one|the company|the person|the topic)(\s+company)?\b/gi, lastDiscussedEntity).trim();
 }
 
 function maybeCaptureKnowledgeEntity(text) {
@@ -5062,8 +4693,6 @@ function isLikelyLocationOrTravelQuery(text) {
     return /\b(map|maps|directions?|route|near me|nearby|location|where is|where to|hotel|hotels|restaurant|restaurants|food|trip|travel|itinerary|weather|transport|bus|train|taxi|uber|airport|station)\b/.test(t);
 }
 
-console.log("JARVIS FILE LOADED - TEST 123");
-
 function postProcessAssistantResponse(rawText, userMessage = '') {
     let text = String(rawText || '').trim();
     if (!text) return text;
@@ -5084,15 +4713,11 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
     return text;
 }
 
-async function askGeminiAI(userMessage, options = {}) { 
-    console.log("askGeminiAI CALLED with:", userMessage);
-    const rawUserMessage = String(userMessage || '').trim();
-    let normalizedUserMessage = rawUserMessage;
-    let resolvedUserMessage = rawUserMessage;
+async function askGeminiAI(userMessage) { 
+    let normalizedUserMessage = String(userMessage || '');
     const controller = beginAbortableRequest();
     try { 
-        normalizedUserMessage = String(userMessage || '').trim();
-        resolvedUserMessage = normalizedUserMessage;
+        normalizedUserMessage = resolveKnowledgeFollowupQuery(userMessage);
         maybeCaptureKnowledgeEntity(normalizedUserMessage);
         updateTopicMemory(normalizedUserMessage);
         const topicHint = getTopicMemoryHint(normalizedUserMessage);
@@ -5161,69 +4786,26 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
 
         window.__lastUserMessage = normalizedUserMessage;  
  
-        const responseMode = options?.responseMode || detectRequestedResponseLength(normalizedUserMessage); 
+        const responseMode = detectRequestedResponseLength(normalizedUserMessage); 
         const responseHint = RESPONSE_LENGTH_HINTS[responseMode] || RESPONSE_LENGTH_HINTS.normal; 
-        const formatMode = options?.formatMode || window.responseFormat || responseFormat || 'paragraph'; 
+        const formatMode = window.responseFormat || responseFormat || 'paragraph'; 
         const formatHint = RESPONSE_FORMAT_HINTS[formatMode] || RESPONSE_FORMAT_HINTS.paragraph; 
         const conciseFactHint = isConciseDirectFactQuery(normalizedUserMessage)
             ? 'This is a direct fact query. Answer in 1-2 sentences max. Give the fact immediately. Do not add generic extra explanation or follow-up offers unless the user asks.'
             : '';
-        const teachingInstructions = options?.teachingMode
-            ? `Teach this clearly for a beginner.
+        const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\n${conciseFactHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
 
-Rules:
-- Cover any domain based on the user question.
-- Start with a plain definition.
-- Explain in simple steps with one real-world example.
-- End with a short quick recap.
-- Avoid jargon unless you define it.
-- Keep it accurate and practical.
-
-`
-            : '';
-        const prompt = `User question:
-${normalizedUserMessage}
-
-${teachingInstructions}Response length: ${responseMode}. ${responseHint}
-Response format: ${formatMode}. ${formatHint}
-${conciseFactHint}`.trim();
-        const effectiveMessage = options?.rawPrompt
-            ? `${normalizedUserMessage}
-
-Response length: ${responseMode}. ${responseHint}
-Response format: ${formatMode}. ${formatHint}
-${conciseFactHint}`.trim()
-            : prompt;
-        const requestMessage = typeof options?.requestMessage === 'string'
-            ? String(options.requestMessage).trim()
-            : effectiveMessage;
-        const requestSystemPrompt = typeof options?.forceSystemPrompt === 'string' && options.forceSystemPrompt.trim()
-            ? options.forceSystemPrompt.trim()
-            : systemPromptWithTopic;
-        const requestMode = typeof options?.mode === 'string' ? options.mode.trim() : '';
-
-        console.log("RAW USER MESSAGE:", rawUserMessage);
-        console.log("NORMALIZED MESSAGE:", normalizedUserMessage);
-        console.log("PROMPT SENT TO GEMINI:", prompt);
-        console.log("SYSTEM PROMPT:", requestSystemPrompt);
-        console.log("INTENT:", intent);
-        console.log("RESPONSE MODE:", responseMode);
-        console.log("FORMAT MODE:", formatMode);
-        console.log("REQUEST MODE:", requestMode || 'default');
-        const requestBody = {
-            message: requestMessage,
-            systemPrompt: requestSystemPrompt,
-            userName: userName
-        };
-        if (requestMode) {
-            requestBody.mode = requestMode;
-        }
-        const response = await fetch('/api/ask', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+         
+        const response = await fetch('/api/chat-groq', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
             signal: controller.signal,
-            body: JSON.stringify(requestBody)
-        });
+            body: JSON.stringify({ 
+                message: effectiveMessage, 
+                systemPrompt: systemPromptWithTopic,
+                userName: userName 
+            }) 
+        }); 
         
         
         if (!response.ok) { 
@@ -5244,41 +4826,28 @@ ${conciseFactHint}`.trim()
         } 
         
         const data = await response.json();
-        console.log("RAW API RESPONSE:", data);
-
-        const extractedResponseText = extractAssistantResponseText(data);
-        const processedResponseText = extractedResponseText
-            ? sanitizeWeakModelAnswer(
-                postProcessAssistantResponse(extractedResponseText, normalizedUserMessage),
-                normalizedUserMessage
-            )
-            : '';
-
-        data.response = processedResponseText || "Sorry, I couldn't generate a response.";
-        data.text = data.response;
-
-        const backendSources = Array.isArray(data?.sources) ? data.sources.filter(Boolean) : [];
-        data.sources = Array.isArray(data?.verifiedSources) ? data.verifiedSources.filter(Boolean) : [];
-        if (!data.sources.length && data?.sourcesVerified === true) {
-            data.sources = backendSources;
+        if (typeof data.response === 'string') {
+            data.response = postProcessAssistantResponse(data.response, normalizedUserMessage);
+            data.response = sanitizeWeakModelAnswer(data.response, normalizedUserMessage);
+        }
+        if (!data.response && typeof data.text === 'string') {
+            data.text = postProcessAssistantResponse(data.text, normalizedUserMessage);
+            data.text = sanitizeWeakModelAnswer(data.text, normalizedUserMessage);
         }
 
-        if (isLowSignalModelAnswer(data.response) &&
+        if (isLowSignalModelAnswer(data.response || data.text) &&
             (isDirectExplainerQuery(normalizedUserMessage) || isConciseDirectFactQuery(normalizedUserMessage))) {
-            const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || rawUserMessage);
+            const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || userMessage);
             if (searchFallback) {
                 return {
                     response: searchFallback,
-                    text: searchFallback,
-                    sources: [],
                     intent: 'search_fallback'
                 };
             }
         }
 
-        conversationContext.push({ role: 'assistant', text: data.response });
-        window.__pendingAssistantSources = [];
-        data.apiData = data;
+        conversationContext.push({ role: 'assistant', text: data.response || data.text });
+        
         return data;
     } catch (error) {
         if (isAbortError(error)) {
@@ -6437,7 +6006,7 @@ async function handleNameCorrection(text) {
             }
         }
 
-        function addChatMessage(text, isUser = true, typewriter = null,sources = []) {
+        function addChatMessage(text, isUser = true, typewriter = null) {
             const chatContainer = document.getElementById('chat-container');
             if (!chatContainer) return;
             const displayText = normalizeUiTokens(String(text ?? ''));
@@ -6456,23 +6025,10 @@ async function handleNameCorrection(text) {
                     </div>
                 `;
             } else {
-                const effectiveSources =
-                    Array.isArray(sources) && sources.length
-                        ? sources
-                        : (Array.isArray(window.__pendingAssistantSources) ? window.__pendingAssistantSources : []);
-                const safeRenderedSources = effectiveSources.filter(item =>
-                    item &&
-                    typeof item.url === 'string' &&
-                    /^https?:\/\//i.test(item.url) &&
-                    typeof item.title === 'string' &&
-                    item.title.trim()
-                );
-                window.__pendingAssistantSources = [];
                 const isDarkTheme = document.body.classList.contains('dark');
                 const linkClass = isDarkTheme
                     ? 'text-sky-300 hover:text-sky-200 underline font-medium'
                     : 'text-indigo-700 hover:text-indigo-900 underline font-medium';
-                const sourcesHtml = renderAssistantSources(safeRenderedSources);
 
 
                 const textForSpeech = displayText.replace(/<[^>]*>/g, '');
@@ -6514,7 +6070,7 @@ async function handleNameCorrection(text) {
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
                         <div class="min-w-0 flex-1 overflow-hidden ${hasMap ? 'map-message' : ''}">
                             <div class="${hasMap ? '' : 'chat-bubble-assistant'}">
-                                <div class="assistant-message-text typewriter-text text-sm leading-relaxed text-left"></div>${sourcesHtml}
+                                <div class="assistant-message-text typewriter-text text-sm leading-relaxed text-left"></div>
                             </div>
                         </div>
                         <div class="flex items-center gap-2 pl-1 sm:pl-0 sm:flex-col sm:items-center sm:pt-1">
@@ -6578,54 +6134,12 @@ async function handleNameCorrection(text) {
             chatHistory.push({ text: displayText, isUser });
         }
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
 
-function renderAssistantSources(sources = []) {
-
-    if (!Array.isArray(sources) || !sources.length) {
-        return '';
-    }
-
-    const items = sources
-        .filter(src => src && src.url)
-        .map(src => {
-
-            let domain = src.url;
-            try {
-                domain = new URL(src.url).hostname.replace(/^www\./, '');
-            } catch {}
-
-            const safeTitle = escapeHtml(src.title || domain);
-            const safeUrl = escapeHtml(src.url);
-
-            return `
-                <li class="mt-2">
-                    <a href="${safeUrl}"
-                       target="_blank"
-                       rel="noopener noreferrer"
-                       class="text-sky-600 hover:text-sky-800 underline font-medium text-xs sm:text-sm">
-                        ${safeTitle}
-                    </a>
-                </li>
-            `;
-        })
-        .join('');
-
-    return `
-        <div class="mt-3 pt-3 border-t border-slate-200/70 dark:border-slate-700/70">
-            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300 mb-2">
-                Sources
-            </div>
-            <ul class="pl-4 list-disc">
-                ${items}
-            </ul>
-        </div>
-    `;
-}
 function normalizeUiTokens(text) {
             return String(text || '')
                 .replace(/\[Map\]/g, '\u{1F5FA}\uFE0F')
@@ -6773,6 +6287,8 @@ async function sendTextInput() {
             if (text) {
                 const outgoingText = text;
                 const normalizedOutgoingText = normalizeIntentTypos(outgoingText);
+                input.value = '';
+                toggleSendButton();
                 window.__lastUserMessage = outgoingText;
                 if (text && (!inputHistory.length || inputHistory[inputHistory.length - 1] !== text)) {
                     inputHistory.push(text);
@@ -6809,9 +6325,6 @@ async function sendTextInput() {
                 } else {
                     await processCommand(normalizedOutgoingText);
                 }
-                
-                input.value = '';
-                toggleSendButton(); 
             }
         }
 
@@ -8095,218 +7608,12 @@ function isHighRiskMentalHealth(text) {
 
 function isMedicalAdviceIntent(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(symptom|symptoms|fever|cold|cough|headache|migraine|stomach ache|stomach pain|vomit|vomiting|nausea|diarrhea|constipation|rash|allergy|pain|sore throat|flu|infection|medicine|medication|dose|dosage|tablet|capsule|paracetamol|acetaminophen|ibuprofen|doctor|clinic|urgent care|blood pressure|diabetes|blood sugar|sprain|cut|burn|injury|first aid|medical advice|health advice|bruise|swelling|hit my head|head injury|banged my head|concussion)\b/.test(t);
+    return /\b(symptom|symptoms|fever|cold|cough|headache|migraine|stomach ache|stomach pain|vomit|vomiting|nausea|diarrhea|constipation|rash|allergy|pain|sore throat|flu|infection|medicine|medication|dose|dosage|tablet|capsule|paracetamol|acetaminophen|ibuprofen|doctor|clinic|urgent care|blood pressure|diabetes|blood sugar|sprain|cut|burn|injury|first aid|medical advice|health advice)\b/.test(t);
 }
 
 function isMedicalEmergencyIntent(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(chest pain|trouble breathing|difficulty breathing|shortness of breath|stroke|face drooping|slurred speech|seizure|passed out|fainted|unconscious|heavy bleeding|severe bleeding|severe burn|poison|overdose|anaphylaxis|allergic reaction.*breath|cannot breathe|can't breathe|heart attack|head injury.*vomit|head injury.*vomiting|head injury.*blurred vision|head injury.*passed out|banged my head.*vomit|banged my head.*vomiting|hit my head.*vomit|hit my head.*vomiting)\b/.test(t);
-}
-
-function isPersonalSituationMessage(text) {
-    const raw = String(text || '').trim();
-    const t = raw.toLowerCase();
-    if (!t) return false;
-
-    if (/^(who is|who was|what is|what are|when is|when was|where is|where was|which|how many|current\s+|latest\s+|news\b)/.test(t)) {
-        return false;
-    }
-
-    const personalSignals = /\b(i|i'm|i’ve|i've|my|me|we|our|us)\b/;
-    const eventSignals = /\b(hit|banged|hurt|injured|fell|slipped|cut|burned|burnt|dropped|lost|broke|forgot|missed|need help|can you help|should i|what should i do|what do i do)\b/;
-    return personalSignals.test(t) && eventSignals.test(t);
-}
-
-
-function buildMedicalAnalysisSystemPrompt() {
-    return `You are a careful clinical symptom analysis assistant.
-
-Return STRICT JSON only. No markdown. No code fences. No extra words.
-
-Schema:
-{
-  "input": "<original symptom sentence>",
-  "symptom_chunks": ["<short symptom chunk>", "<short symptom chunk>"],
-  "possible_conditions": [
-    {
-      "name": "<possible condition>",
-      "confidence": <number between 0 and 1>,
-      "reason": "<very short reason>"
-    }
-  ],
-  "red_flags": ["<red flag>", "<red flag>"],
-  "care_advice": ["<short practical step>", "<short practical step>"],
-  "clinical_note": "<brief note>",
-  "disclaimer": "This AI output is for reference only and may be incorrect or incomplete. It is not a medical diagnosis and should not replace professional medical judgment. Please consult a qualified healthcare professional."
-}
-
-Rules:
-1. Do not claim certainty
-2. Do not present a final diagnosis
-3. Use possible_conditions, not diagnosis
-4. Keep everything concise
-5. Confidence must be cautious and realistic
-6. Always include a disclaimer
-7. If emergency signs are implied, include urgent red flags and urgent care advice`;
-}
-
-function buildMedicalAnalysisPrompt(text) {
-    return `The user entered a symptom sentence for medical analysis: "${text}".`;
-}
-
-function normalizeMedicalConfidence(value) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) {
-        return { score: null, pct: 'N/A', level: 'low', label: 'Unknown' };
-    }
-    const normalized = n > 1 ? Math.max(0, Math.min(100, n)) / 100 : Math.max(0, Math.min(1, n));
-    const pctValue = Math.round(normalized * 100);
-    let level = 'low';
-    let label = 'Low';
-    if (pctValue >= 80) {
-        level = 'high';
-        label = 'High';
-    } else if (pctValue >= 50) {
-        level = 'moderate';
-        label = 'Moderate';
-    }
-    return {
-        score: normalized,
-        pct: `${pctValue}%`,
-        level,
-        label
-    };
-}
-
-function extractMedicalAnalysisPayload(rawResponse, originalText = '') {
-    const parsed = rawResponse && typeof rawResponse === 'object'
-        ? rawResponse
-        : extractJsonObject(String(rawResponse || '').trim());
-    if (!parsed || typeof parsed !== 'object') return null;
-
-    const symptomChunks = Array.isArray(parsed.symptom_chunks)
-        ? parsed.symptom_chunks.map(item => String(item || '').trim()).filter(Boolean)
-        : [];
-
-    const possibleConditions = Array.isArray(parsed.possible_conditions)
-        ? parsed.possible_conditions
-            .map(item => ({
-                name: String(item?.name || '').trim(),
-                confidence: item?.confidence,
-                reason: String(item?.reason || '').trim()
-            }))
-            .filter(item => item.name)
-            .slice(0, 4)
-        : [];
-
-    const redFlags = Array.isArray(parsed.red_flags)
-        ? parsed.red_flags.map(item => String(item || '').trim()).filter(Boolean)
-        : [];
-
-    const careAdvice = Array.isArray(parsed.care_advice)
-        ? parsed.care_advice.map(item => String(item || '').trim()).filter(Boolean)
-        : [];
-
-    const disclaimer = String(parsed.disclaimer || '').trim() ||
-        'This AI output is for reference only and may be incorrect or incomplete. It is not a medical diagnosis and should not replace professional medical judgment. Please consult a qualified healthcare professional.';
-
-    if (!symptomChunks.length && !possibleConditions.length && !redFlags.length && !careAdvice.length) {
-        return null;
-    }
-
-    return {
-        input: String(parsed.input || originalText || '').trim(),
-        symptom_chunks: symptomChunks,
-        possible_conditions: possibleConditions,
-        red_flags: redFlags,
-        care_advice: careAdvice,
-        clinical_note: String(parsed.clinical_note || '').trim(),
-        disclaimer
-    };
-}
-
-function renderMedicalAnalysisCard(payload) {
-    if (!payload) return '';
-
-    const topCondition = payload.possible_conditions[0] || null;
-    const topConfidence = topCondition ? normalizeMedicalConfidence(topCondition.confidence) : null;
-
-    const summaryPills = [
-        payload.symptom_chunks.length ? `<span class="medical-summary-pill">Symptoms ${escapeHtml(String(payload.symptom_chunks.length))}</span>` : '',
-        payload.possible_conditions.length ? `<span class="medical-summary-pill">Possible conditions ${escapeHtml(String(payload.possible_conditions.length))}</span>` : '',
-        payload.red_flags.length ? `<span class="medical-summary-pill">Red flags ${escapeHtml(String(payload.red_flags.length))}</span>` : '<span class="medical-summary-pill">No urgent red flags detected</span>',
-        topCondition ? `<span class="medical-summary-pill">Top match ${escapeHtml(topCondition.name)}</span>` : ''
-    ].filter(Boolean).join('');
-
-    const summaryHtml = topCondition
-        ? `<div class="medical-analysis-section"><div class="text-xs uppercase tracking-wide font-bold opacity-70">Clinical summary</div><p class="text-sm mt-2 leading-6">Most likely pattern points to <strong>${escapeHtml(topCondition.name)}</strong>${topConfidence ? ` with <strong>${escapeHtml(topConfidence.pct)}</strong> confidence` : ''}. Treat this as a reference summary only, not a confirmed diagnosis.</p><div class="medical-summary-strip">${summaryPills}</div></div>`
-        : `<div class="medical-analysis-section"><div class="text-xs uppercase tracking-wide font-bold opacity-70">Clinical summary</div><p class="text-sm mt-2 leading-6">Structured symptom analysis is available below. Treat it as a reference summary only, not a confirmed diagnosis.</p><div class="medical-summary-strip">${summaryPills}</div></div>`;
-
-    const symptomHtml = payload.symptom_chunks.length
-        ? `<div class="medical-chip-list">${payload.symptom_chunks.map(item => `<span class="medical-chip">${escapeHtml(item)}</span>`).join('')}</div>`
-        : '<p class="text-sm opacity-80 mt-2">No symptom chunks extracted.</p>';
-
-    const conditionsHtml = payload.possible_conditions.length
-        ? `<div class="medical-conditions-stack">${payload.possible_conditions.map(item => {
-            const conf = normalizeMedicalConfidence(item.confidence);
-            const confidenceClass = conf.level === 'moderate' ? 'moderate' : conf.level === 'low' ? 'low' : '';
-            const reasonHtml = item.reason ? `<div class="text-xs opacity-75 mt-1">${escapeHtml(item.reason)}</div>` : '';
-            return `<div class="medical-condition-item">
-                <div class="medical-condition-main">
-                    <div class="text-sm font-semibold">${escapeHtml(item.name)}</div>
-                    ${reasonHtml}
-                </div>
-                <div class="medical-confidence-wrap">
-                    <span class="medical-confidence-badge ${confidenceClass}">${escapeHtml(conf.label)} · ${escapeHtml(conf.pct)}</span>
-                    <div class="medical-confidence-track"><div class="medical-confidence-fill ${confidenceClass}" style="width:${escapeHtml(conf.pct)}"></div></div>
-                </div>
-            </div>`;
-        }).join('')}</div>`
-        : '<p class="text-sm opacity-80 mt-2">No possible conditions available.</p>';
-
-    const redFlagsHtml = payload.red_flags.length
-        ? `<ul class="list-disc pl-5 mt-2 text-sm space-y-1">${payload.red_flags.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
-        : '<p class="text-sm opacity-80 mt-2">No urgent red flags highlighted.</p>';
-
-    const adviceHtml = payload.care_advice.length
-        ? `<ul class="list-disc pl-5 mt-2 text-sm space-y-1">${payload.care_advice.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
-        : '<p class="text-sm opacity-80 mt-2">No self-care advice available.</p>';
-
-    const noteHtml = payload.clinical_note
-        ? `<div class="medical-analysis-section"><div class="text-xs uppercase tracking-wide font-bold opacity-70">Clinical note</div><p class="text-sm mt-2 leading-6">${escapeHtml(payload.clinical_note)}</p></div>`
-        : '';
-
-    const inputHtml = payload.input
-        ? `<p class="text-sm leading-6 mt-2"><strong>Input:</strong> ${escapeHtml(payload.input)}</p>`
-        : '';
-
-    return `
-        <div class="medical-analysis-card">
-            <div class="assistant-source-badge model">Medical analysis</div>
-            <div class="text-sm font-semibold">Clinical symptom summary</div>
-            ${inputHtml}
-            ${summaryHtml}
-            <div class="medical-analysis-grid">
-                <div class="medical-analysis-section">
-                    <div class="text-xs uppercase tracking-wide font-bold opacity-70">Extracted symptoms</div>
-                    ${symptomHtml}
-                </div>
-                <div class="medical-analysis-section">
-                    <div class="text-xs uppercase tracking-wide font-bold opacity-70">Possible conditions</div>
-                    <div class="mt-1">${conditionsHtml}</div>
-                </div>
-                <div class="medical-analysis-section">
-                    <div class="text-xs uppercase tracking-wide font-bold opacity-70">Care advice</div>
-                    ${adviceHtml}
-                </div>
-                <div class="medical-analysis-section">
-                    <div class="text-xs uppercase tracking-wide font-bold opacity-70">Urgent red flags</div>
-                    ${redFlagsHtml}
-                </div>
-                ${noteHtml}
-            </div>
-            <div class="medical-disclaimer"><strong>Disclaimer:</strong> ${escapeHtml(payload.disclaimer)}</div>
-        </div>`;
+    return /\b(chest pain|trouble breathing|difficulty breathing|shortness of breath|stroke|face drooping|slurred speech|seizure|passed out|fainted|unconscious|heavy bleeding|severe bleeding|severe burn|poison|overdose|anaphylaxis|allergic reaction.*breath|cannot breathe|can't breathe|heart attack)\b/.test(t);
 }
 
 function buildMedicalGuidancePrompt(text) {
@@ -8334,32 +7641,12 @@ function isLearningIntent(text) {
 }
 
 function isArtistSongRequest(text) {
-    const raw = String(text || '').trim();
-    const t = raw.toLowerCase();
-    if (!t) return false;
+    const t = String(text || '').toLowerCase();
+    const hasMusicAsk = /\b(song|songs|track|tracks|music|playlist|recommend|suggest|best|top|hit|hits|melody|melodies)\b/.test(t);
+    if (!hasMusicAsk) return false;
 
-    const directSongPatterns = [
-        /\b(?:best|top)\s+\d*\s*songs?\s+(?:of|by|from)\s+.+/i,
-        /\b(?:recommend|suggest)\s+(?:me\s+)?(?:some\s+)?songs?\s+(?:of|by|from)\s+.+/i,
-        /\b(?:songs?|tracks?)\s+(?:of|by|from)\s+.+/i,
-        /\b.+\s+(?:best|top)\s+songs?\b/i,
-        /\b.+\s+songs?\b/i
-    ];
-
-    const hasDirectSongPattern = directSongPatterns.some((regex) => regex.test(raw));
-    if (!hasDirectSongPattern) return false;
-
-    const knownMusicTerms = /\b(song|songs|track|tracks|music|playlist|album|albums|discography|hit|hits|singer|composer|artist|band)\b/i.test(raw);
-    if (!knownMusicTerms) return false;
-
-    const obviousNonMusicTravelContext = /\b(kyoto|tokyo|japan|trip|travel|itinerary|temple|shrines?|hotel|stay|weather|visa|route|map|photo|photos|picture|pictures|image|images|places to visit|things to do)\b/i.test(raw);
-    const explicitArtistMarkers = /\b(?:artist|singer|composer|band|musician|album|discography)\b/i.test(raw) || /\b(?:songs?|tracks?)\s+(?:of|by|from)\b/i.test(raw);
-
-    if (obviousNonMusicTravelContext && !explicitArtistMarkers) {
-        return false;
-    }
-
-    return true;
+    return /\b(songs?\s+(of|by|from)|tracks?\s+(of|by|from)|recommend|suggest|best|top)\b/.test(t) ||
+           /\b[a-z][a-z0-9.'&\-\s]{2,}\s+songs?\b/.test(t);
 }
 
 function isEraLanguageHitsBlendRequest(text) {
@@ -9077,7 +8364,6 @@ User text:
     };
 }
 
-
 async function buildSongListFromAIFallback(artist, requestedCount) {
     const prompt = `Return top songs for the artist/composer below as strict JSON only.
 
@@ -9116,9 +8402,9 @@ Rules:
     if (!songs.length) throw new Error('ai fallback returned empty songs');
 
     const items = [];
-    for (const rawItem of songs.slice(0, requestedCount * 2)) {
+    for (const rawItem of songs.slice(0, requestedCount)) {
         const song = String(rawItem?.song || '').trim();
-        const work = String(rawItem?.work || '').trim() || '';
+        const work = String(rawItem?.work || '').trim() || 'Unknown work';
         const reason = String(rawItem?.reason || '').trim();
         if (!song) continue;
         items.push({
@@ -9132,204 +8418,41 @@ Rules:
     return items;
 }
 
-function normalizeMusicEntityName(value) {
-    return String(value || '')
-        .toLowerCase()
-        .replace(/\b(official|video|audio|lyrics|lyric video|from|remastered|live|version|full song|hd)\b/g, ' ')
-        .replace(/\(.*?\)/g, ' ')
-        .replace(/\[.*?\]/g, ' ')
-        .replace(/[|:]/g, ' ')
-        .replace(/\s+-\s+from.*$/i, ' ')
-        .replace(/[^\w\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function normalizeTrackName(value) {
-    return normalizeMusicEntityName(value)
-        .replace(/\b(song|track|single|theme|ost|soundtrack)\b/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function normalizeArtistNameLoose(value) {
-    return normalizeMusicEntityName(value)
-        .replace(/\b(music|songs|tracks|hits|best|top|composer|singer|band|artist)\b/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function getDomainFromUrl(url) {
-    try {
-        return new URL(String(url || '')).hostname.replace(/^www\./i, '').toLowerCase();
-    } catch {
-        return '';
-    }
-}
-
-function getMusicSourceWeight(url) {
-    const domain = getDomainFromUrl(url);
-    if (!domain) return 0;
-    if (/spotify\.com$/.test(domain)) return 8;
-    if (/music\.apple\.com$/.test(domain) || /apple\.com$/.test(domain)) return 7;
-    if (/youtube\.com$/.test(domain) || /youtu\.be$/.test(domain)) return 6;
-    if (/allmusic\.com$/.test(domain)) return 6;
-    if (/wikipedia\.org$/.test(domain)) return 5;
-    if (/genius\.com$/.test(domain)) return 5;
-    if (/jiosaavn\.com$/.test(domain) || /saavn\.com$/.test(domain)) return 5;
-    if (/gaana\.com$/.test(domain) || /wynk\.in$/.test(domain) || /amazon\.com$/.test(domain)) return 4;
-    if (/soundcloud\.com$/.test(domain)) return 3;
-    if (/reddit\.com$/.test(domain) || /quora\.com$/.test(domain) || /tiktok\.com$/.test(domain) || /facebook\.com$/.test(domain)) return 0;
-    return 2;
-}
-
-function isWeakMusicSource(url) {
-    return getMusicSourceWeight(url) <= 0;
-}
-
-function looksLikeMusicIndexPage(text) {
-    const t = normalizeMusicEntityName(text);
-    if (!t) return false;
-    return /\b(discography|songs albums reviews|albums reviews bio|bio|top tracks|best songs|playlist|jukebox|hits|albums|songs|reviews|artist page|music page)\b/.test(t);
-}
-
-function looksLikeNonTrackEntity(name, meta = {}) {
-    const raw = `${name || ''} ${meta?.title || ''} ${meta?.description || ''}`.toLowerCase();
-    if (!raw.trim()) return true;
-    if (/\b(artist|composer|singer|band)\b/.test(raw) && /\b(bio|discography|albums|reviews|top tracks)\b/.test(raw)) return true;
-    if (/\b(movie|film|discography|album review|artist page|top \d+ songs|best songs|playlist|jukebox|albums reviews bio)\b/.test(raw)) return true;
-    return false;
-}
-
-function isLikelyBadSongName(name, artist) {
-    const raw = String(name || '').trim();
-    if (!raw) return true;
-    if (raw.length < 2 || raw.length > 120) return true;
-    if (/^unknown\b/i.test(raw)) return true;
-    if (/\b(song|songs|track|tracks|playlist|discography|albums?|reviews?|bio|top\s*\d+|best songs|jukebox|hits)\b/i.test(raw) && raw.split(/\s+/).length > 3) return true;
-    const normalized = normalizeTrackName(raw);
-    const artistNorm = normalizeArtistNameLoose(artist);
-    if (!normalized) return true;
-    if (artistNorm && normalized === artistNorm) return true;
-    return false;
-}
-
-function songAppearsInEvidence(song, evidenceItems) {
-    const target = normalizeTrackName(song);
-    if (!target) return false;
-    return (Array.isArray(evidenceItems) ? evidenceItems : []).some(item => {
-        const corpus = normalizeMusicEntityName(`${item?.title || ''} ${item?.description || ''}`);
-        return corpus.includes(target);
-    });
-}
-
-function artistAppearsInEvidence(artist, evidenceItems) {
-    const target = normalizeArtistNameLoose(artist);
-    if (!target) return false;
-    return (Array.isArray(evidenceItems) ? evidenceItems : []).some(item => {
-        const corpus = normalizeMusicEntityName(`${item?.title || ''} ${item?.description || ''} ${item?.url || ''}`);
-        return corpus.includes(target);
-    });
-}
-
-function workAppearsInEvidence(work, evidenceItems) {
-    const target = normalizeMusicEntityName(work);
-    if (!target) return false;
-    return (Array.isArray(evidenceItems) ? evidenceItems : []).some(item => {
-        const corpus = normalizeMusicEntityName(`${item?.title || ''} ${item?.description || ''}`);
-        return corpus.includes(target);
-    });
-}
-
-function scoreMusicCandidate(candidate, artist) {
-    const evidence = Array.isArray(candidate?.evidence) ? candidate.evidence : [];
-    let score = 0;
-    score += evidence.reduce((sum, item) => sum + Math.max(0, getMusicSourceWeight(item?.url)), 0);
-    score += Math.min(evidence.length, 4) * 2;
-    if (artistAppearsInEvidence(artist, evidence)) score += 4;
-    if (songAppearsInEvidence(candidate?.song, evidence)) score += 3;
-    if (candidate?.work && workAppearsInEvidence(candidate.work, evidence)) score += 1;
-    return score;
-}
-
-function dedupeAndRankMusicCandidates(items, artist, requestedCount) {
-    const bySong = new Map();
-    for (const item of Array.isArray(items) ? items : []) {
-        const song = String(item?.song || '').trim();
-        if (isLikelyBadSongName(song, artist)) continue;
-        const key = normalizeTrackName(song);
-        if (!key) continue;
-        const existing = bySong.get(key);
-        const score = scoreMusicCandidate(item, artist);
-        const normalizedItem = {
-            song,
-            work: String(item?.work || '').trim(),
-            workVerified: !!item?.work && workAppearsInEvidence(item.work, item.evidence || []),
-            reason: String(item?.reason || '').trim(),
-            evidence: Array.isArray(item?.evidence) ? item.evidence : [],
-            score
-        };
-        if (!existing || score > existing.score || (score === existing.score && normalizedItem.song.length < existing.song.length)) {
-            bySong.set(key, normalizedItem);
-        }
-    }
-
-    return [...bySong.values()]
-        .sort((a, b) => b.score - a.score || a.song.localeCompare(b.song))
-        .slice(0, requestedCount);
-}
-
-async function fetchUniversalArtistSongs(artist, requestedCount) {
+async function fetchSongsFromVerifiedSources(artist, requestedCount) {
     const safeArtist = String(artist || '').trim();
     if (!safeArtist) return { items: [], sources: [] };
 
-    const queries = [
-        `${safeArtist} top songs popular tracks official artist`,
-        `${safeArtist} best songs allmusic spotify wikipedia`,
-        `${safeArtist} essential tracks official audio`
-    ];
+    const searchResponse = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            query: `${safeArtist} best songs top tracks official discography reviews`,
+            maxResults: 7
+        })
+    });
 
-    const aggregated = [];
-    const seenUrl = new Set();
-
-    for (const query of queries) {
-        try {
-            const response = await fetch('/api/search', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query, maxResults: 8 })
-            });
-            if (!response.ok) continue;
-            const data = await response.json();
-            const results = Array.isArray(data?.results) ? data.results : [];
-            for (const r of results) {
-                const title = String(r?.title || '').trim();
-                const url = String(r?.url || '').trim();
-                const description = String(r?.description || '').trim();
-                if (!title || !/^https?:\/\//i.test(url) || !description) continue;
-                if (seenUrl.has(url)) continue;
-                seenUrl.add(url);
-                aggregated.push({ title, url, description });
-            }
-        } catch {
-            // Keep going.
-        }
+    if (!searchResponse.ok) {
+        throw new Error('verified music search failed');
     }
 
-    const filtered = aggregated.filter(item => !isWeakMusicSource(item.url));
-    const sources = (filtered.length ? filtered : aggregated)
-        .filter(item => !looksLikeMusicIndexPage(item.title) || getMusicSourceWeight(item.url) >= 5)
-        .slice(0, 12);
+    const searchData = await searchResponse.json();
+    const snippets = (Array.isArray(searchData?.results) ? searchData.results : [])
+        .filter(r => {
+            const title = String(r?.title || '').trim();
+            const url = String(r?.url || '').trim();
+            return !!title && /^https?:\/\//i.test(url);
+        })
+        .slice(0, 7);
 
-    if (sources.length < 3) {
-        throw new Error('not enough music sources');
+    if (snippets.length < 4) {
+        throw new Error('not enough verification sources');
     }
 
-    const snippetsBlock = sources
+    const snippetsBlock = snippets
         .map((r, idx) => `${idx + 1}. TITLE: ${r.title}\nURL: ${r.url}\nSNIPPET: ${r.description}`)
         .join('\n\n');
 
-    const verifyPrompt = `You are building a trusted song recommendation list for any artist in the world.
+    const verifyPrompt = `You are verifying popular songs for an artist using multiple web sources.
 
 Artist: "${safeArtist}"
 
@@ -9338,8 +8461,8 @@ Return strict JSON only in this schema:
   "artist": "<artist>",
   "songs": [
     {
-      "song": "<track title>",
-      "work": "<album, film, soundtrack, or single if grounded>",
+      "song": "<song name>",
+      "work": "<album, film, or single>",
       "reason": "<short grounded reason>",
       "evidenceIds": [1,2]
     }
@@ -9347,12 +8470,11 @@ Return strict JSON only in this schema:
 }
 
 Rules:
-- Return up to ${Math.max(requestedCount * 2, 12)} songs so weak ones can be filtered later.
-- Include SONGS or TRACKS only. Do not output artist pages, albums, movies, playlists, or discography pages as songs.
-- Reject entries where the title is unknown or where the item looks like a page heading instead of a song.
+- Give up to ${requestedCount} songs.
 - Use only the sources below.
-- Each song must have 1 or more evidence IDs.
-- Prefer songs supported by multiple strong sources.
+- Every song must have at least one evidence id.
+- Prefer songs that are widely recognized across multiple sources.
+- Do not invent titles, albums, or evidence ids.
 - Output valid JSON only.
 
 Sources:
@@ -9363,63 +8485,60 @@ ${snippetsBlock}`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             message: verifyPrompt,
-            systemPrompt: 'You are a strict music fact extractor. Output valid JSON only.'
+            systemPrompt: 'You are a strict fact verifier. Output valid JSON only.'
         })
     });
 
     if (!verifyResponse.ok) {
-        throw new Error('music extraction failed');
+        throw new Error('verified song extraction failed');
     }
 
     const verifyData = await verifyResponse.json();
     const parsed = extractJsonObject(verifyData?.response || verifyData?.text || '');
     const songs = Array.isArray(parsed?.songs) ? parsed.songs : [];
     if (!songs.length) {
-        throw new Error('music extraction returned no songs');
+        throw new Error('verified song extraction returned no songs');
     }
 
-    const candidates = [];
-    for (const rawItem of songs) {
+    const items = [];
+    for (const rawItem of songs.slice(0, requestedCount)) {
         const song = String(rawItem?.song || '').trim();
         const work = String(rawItem?.work || '').trim();
         const reason = String(rawItem?.reason || '').trim();
         const ids = Array.isArray(rawItem?.evidenceIds) ? rawItem.evidenceIds : [];
-        if (isLikelyBadSongName(song, safeArtist)) continue;
+        if (!song) continue;
 
-        const evidence = ids
+        const mapped = ids
             .map(id => Number(id))
-            .filter(n => Number.isFinite(n) && n >= 1 && n <= sources.length)
-            .map(n => sources[n - 1]);
+            .filter(n => Number.isFinite(n) && n >= 1 && n <= snippets.length)
+            .map(n => snippets[n - 1]);
 
-        if (!evidence.length) continue;
-        if (!artistAppearsInEvidence(safeArtist, evidence)) continue;
-        if (!songAppearsInEvidence(song, evidence) && looksLikeNonTrackEntity(song, { title: evidence[0]?.title, description: evidence[0]?.description })) continue;
+        if (!mapped.length) continue;
 
-        candidates.push({
+        items.push({
             song,
             work,
-            reason,
-            evidence
+            workVerified: !!work && isWorkMentionedInEvidence(work, mapped),
+            reason
         });
     }
 
-    const items = dedupeAndRankMusicCandidates(candidates, safeArtist, requestedCount);
     if (!items.length) {
-        throw new Error('no valid songs after validation');
+        throw new Error('verified songs could not be grounded');
     }
 
-    return { items, sources };
+    return { items, sources: snippets };
 }
 
 function formatMusicSongReply(artist, requestedCount, items, fallback = false) {
     const safeArtist = String(artist || 'Unknown artist').trim();
     const count = clampSongCount(requestedCount, 5);
     const fixedNotes = [
-        'Popular pick',
-        'Well-known track',
-        'Fan favorite',
-        'Essential listen',
-        'Strong recommendation'
+        'Hit single',
+        'Popular track',
+        'Classic song',
+        'Melodic tune',
+        'Fan-favorite'
     ];
 
     const lines = [`[Music] Top ${count} songs for ${safeArtist}`, ''];
@@ -9428,24 +8547,29 @@ function formatMusicSongReply(artist, requestedCount, items, fallback = false) {
         const work = String(item?.work || '').trim();
         const workVerified = item?.workVerified !== false && !!work;
         if (!song) return;
-        const reason = String(item?.reason || '').trim() || fixedNotes[index % fixedNotes.length];
+        const reason = fixedNotes[index % fixedNotes.length];
         lines.push(workVerified ? `• ${song} - ${work}` : `• ${song}`);
         lines.push(`Note: ${reason}`);
     });
 
-    if (!items.length) {
-        lines.push('No grounded songs found yet.');
-    }
-
     if (fallback) {
-        lines.push('', 'Tip: Ask for a specific vibe like melodies, hits, romantic songs, or underrated tracks.');
+        lines.push('');
+        lines.push('Note: This list is generated from model knowledge because live web retrieval was unavailable.');
     }
 
-    return lines.join('\n').trim();
+    return lines.join('\n');
+}
+
+function toCompactLower(input) {
+    return String(input || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function isWorkMentionedInEvidence(work, evidenceItems) {
-    const candidate = normalizeMusicEntityName(work);
+    const candidate = toCompactLower(work);
     if (!candidate) return false;
     const corpus = (Array.isArray(evidenceItems) ? evidenceItems : [])
         .map(item => `${item?.title || ''} ${item?.description || ''} ${item?.url || ''}`)
@@ -9480,9 +8604,9 @@ async function handleArtistSongRequest(text) {
     }
 
     try {
-        const verifiedSongs = await fetchUniversalArtistSongs(artist, requestedCount);
+        const verifiedSongs = await fetchSongsFromVerifiedSources(artist, requestedCount);
         if (verifiedSongs.items.length) {
-            const sourceLines = formatLiveSourceLinks(verifiedSongs.sources, Math.min(verifiedSongs.sources.length, 8));
+            const sourceLines = formatLiveSourceLinks(verifiedSongs.sources, 7);
             const catalogMsg = `${formatMusicSongReply(artist, requestedCount, verifiedSongs.items, false)}\n\nSources:\n${sourceLines}`;
             addVerifiedAssistantMessage(catalogMsg, 'Verified music sources');
             const catalogSpeech = await composeApiReply('artist_song_verified', {
@@ -9495,38 +8619,148 @@ async function handleArtistSongRequest(text) {
             return;
         }
     } catch (catalogError) {
-        // Fall through to AI fallback.
+        // Fall through to web-search and AI fallbacks.
     }
 
     showThinkingIndicator(`[Music] Finding songs for ${artist}...`);
     try {
-        const aiFallbackItems = await buildSongListFromAIFallback(artist, requestedCount * 2);
-        const normalizedFallback = dedupeAndRankMusicCandidates(
-            aiFallbackItems.map(item => ({ ...item, evidence: [] })),
-            artist,
-            requestedCount
-        );
-        if (!normalizedFallback.length) {
-            throw new Error('ai fallback returned no usable songs');
+        const searchResponse = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: `${artist} best songs soundtrack composer singer`,
+                maxResults: 10
+            })
+        });
+
+        if (!searchResponse.ok) throw new Error('web search failed');
+        const searchData = await searchResponse.json();
+        const rawSnippets = Array.isArray(searchData?.results) ? searchData.results : [];
+        if (!rawSnippets.length) throw new Error('no web snippets found');
+
+        // Use all retrieved sources for RAG, while keeping only valid entries.
+        const snippets = rawSnippets.filter(r => {
+            const title = String(r?.title || '').trim();
+            const url = String(r?.url || '').trim();
+            return !!title && /^https?:\/\//i.test(url);
+        });
+        if (!snippets.length) throw new Error('no valid web snippets found');
+
+        const snippetsBlock = snippets
+            .map((r, idx) => {
+                const i = idx + 1;
+                return `${i}. TITLE: ${r.title}\nURL: ${r.url}\nSNIPPET: ${r.description}`;
+            })
+            .join('\n\n');
+
+        const verifyPrompt = `You are doing Retrieval-Augmented Generation (RAG) for song recommendations.
+
+Artist: "${artist}"
+
+Return strict JSON only in this schema:
+{
+  "artist": "<artist>",
+  "songs": [
+    {
+      "song": "<song name>",
+      "work": "<film or album>",
+      "reason": "<short reason grounded in snippets>",
+      "evidenceIds": [1,2]
+    }
+  ]
+}
+
+Rules:
+- Give up to ${requestedCount} songs.
+- Use ONLY evidence from snippet IDs below.
+- Do not include songs without evidence IDs.
+- Do not invent evidence IDs.
+- Do not output markdown, only valid JSON.
+
+Snippets:
+${snippetsBlock}`;
+
+        const verifyResponse = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: verifyPrompt,
+                systemPrompt: 'You are a strict fact verifier. Output valid JSON only.'
+            })
+        });
+
+        if (!verifyResponse.ok) throw new Error('song verification request failed');
+        const verifyData = await verifyResponse.json();
+        const parsed = extractJsonObject(verifyData?.response || verifyData?.text || '');
+        const items = Array.isArray(parsed?.songs) ? parsed.songs : [];
+
+        if (!items.length) {
+            throw new Error('verification returned no songs');
         }
-        const fallbackReply = formatMusicSongReply(artist, requestedCount, normalizedFallback, true);
-        addChatMessage(fallbackReply, false);
-        const fallbackSpeech = await composeApiReply('artist_song_general', {
+
+        const formattedItems = [];
+        for (const rawItem of items.slice(0, requestedCount)) {
+            const song = String(rawItem?.song || '').trim();
+            const work = String(rawItem?.work || '').trim() || 'Unknown work';
+            const reason = String(rawItem?.reason || '').trim();
+            const ids = Array.isArray(rawItem?.evidenceIds) ? rawItem.evidenceIds : [];
+
+            if (!song) continue;
+
+            const mapped = ids
+                .map(id => Number(id))
+                .filter(n => Number.isFinite(n) && n >= 1 && n <= snippets.length)
+                .map(n => snippets[n - 1]);
+
+            if (!mapped.length) continue;
+
+            const workVerified = work !== 'Unknown work' && isWorkMentionedInEvidence(work, mapped);
+
+            formattedItems.push({
+                song,
+                work: workVerified ? work : '',
+                workVerified,
+                reason
+            });
+        }
+
+        if (!formattedItems.length) {
+            throw new Error('verification returned no grounded songs');
+        }
+
+        const msg = formatMusicSongReply(artist, requestedCount, formattedItems, false);
+
+        addChatMessage(msg, false);
+        const groundedSpeech = await composeApiReply('artist_song_grounded', {
             artist
         }, {
-            fallbackText: `Here are song suggestions for ${artist}.`
+            fallbackText: `Here are grounded song suggestions for ${artist}.`
         });
-        speak(fallbackSpeech || `Here are song suggestions for ${artist}.`);
-        saveToHistory(text, fallbackReply);
-    } catch (fallbackError) {
-        await deliverApiReply('artist_song_fallback', {
-            artist,
-            fallbackUrl: `https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')}`
-        }, { historyKey: text });
+        speak(groundedSpeech || `Here are grounded song suggestions for ${artist}.`);
+        saveToHistory(text, msg);
+    } catch (error) {
+        try {
+            const aiFallbackItems = await buildSongListFromAIFallback(artist, requestedCount);
+            const fallbackReply = formatMusicSongReply(artist, requestedCount, aiFallbackItems, true);
+            addChatMessage(fallbackReply, false);
+            const fallbackSpeech = await composeApiReply('artist_song_general', {
+                artist
+            }, {
+                fallbackText: `Here are song suggestions for ${artist}.`
+            });
+            speak(fallbackSpeech || `Here are song suggestions for ${artist}.`);
+            saveToHistory(text, fallbackReply);
+        } catch (fallbackError) {
+            await deliverApiReply('artist_song_fallback', {
+                artist,
+                fallbackUrl: `https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')}`
+            }, { historyKey: text });
+        }
     } finally {
         hideThinkingIndicator();
     }
 }
+
 function isPoliticalQuery(text) {
     const t = String(text || '').toLowerCase();
     if (!t.trim()) return false;
@@ -9820,12 +9054,16 @@ function extractLiveQueryIntent(text) {
         domain = 'finance';
     } else if (isSportsLiveResultQuery(t)) {
         domain = 'sports';
+    } else if (/\b(actor|actress|movie|film|films|cinema|director|producer|singer|song|songs|album|albums|show|series|web series|filmography|discography|imdb|release)\b/.test(t)) {
+        domain = 'entertainment';
     } else if (shouldUseNewsEndpointForCurrentQuery(t) || isNewsworthyLiveTopic(t)) {
         domain = 'news';
     }
 
     let factType = 'general';
-    if (/\b(stat|stats|record|records|how many|total titles?|total cups?|how many cups?|how many titles?)\b/.test(t)) {
+    if (/\b(latest|recent|new|newest|most recent|current|upcoming)\b.*\b(movie|film|release|song|album|single|show|series)\b|\b(movie|film|release|song|album|single|show|series)\b.*\b(latest|recent|new|newest|most recent|current|upcoming)\b/.test(t)) {
+        factType = 'latest_work';
+    } else if (/\b(stat|stats|record|records|how many|total titles?|total cups?|how many cups?|how many titles?)\b/.test(t)) {
         factType = 'stats';
     } else if (/\b(score|scores|scored|final result|result|results)\b/.test(t)) {
         factType = 'score';
@@ -9843,7 +9081,7 @@ function extractLiveQueryIntent(text) {
 
     const normalizedTopic = normalizeLiveTopic(raw);
     const topic = normalizedTopic || raw;
-    const directFact = ['winner', 'score', 'stats', 'standings', 'qualification'].includes(factType) || isDirectFactLiveQuery(raw);
+    const directFact = ['winner', 'score', 'stats', 'standings', 'qualification', 'latest_work'].includes(factType) || isDirectFactLiveQuery(raw);
 
     return {
         raw,
@@ -9871,76 +9109,24 @@ async function buildFutureYearResponse(intent) {
     });
 }
 
-function isStrictCurrentRoleLookup(text) {
-    const raw = String(text || '').trim();
-    const lower = raw.toLowerCase();
-    if (!raw) return false;
-
-    const explicitRoleLookup = /\b(?:who is|who was|what is)\s+(?:the\s+)?(?:current\s+)?(ceo|cfo|cto|coo|founder|president|prime minister|captain|coach|chairman|chairperson|owner|managing director|md|director|governor|mayor)\s+of\s+.+/i;
-    const compactRoleLookup = /\b(?:current\s+)?(ceo|cfo|cto|coo|founder|president|prime minister|captain|coach|chairman|chairperson|owner|managing director|md|director|governor|mayor)\s+of\s+.+/i;
-    const freshnessTerms = /\b(current|currently|latest|today|right now|as of now|present)\b/;
-    const roleTerms = /\b(ceo|cfo|cto|coo|founder|president|prime minister|captain|coach|chairman|chairperson|owner|managing director|md|director|governor|mayor)\b/;
-    const ofEntityPattern = /\bof\s+.+/i;
-
-    return explicitRoleLookup.test(raw) || compactRoleLookup.test(raw) || (freshnessTerms.test(lower) && roleTerms.test(lower) && ofEntityPattern.test(raw));
-}
-
-function isSportsHistoryQuery(text) {
+function isCurrentInfoQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    const sportTerms = /\b(ipl|cricket|world cup|t20|odi|test cricket|nba|nfl|epl|champions league|ucl|la liga|serie a|bundesliga|mlb|nhl)\b/;
-    const historyTerms = /\b(history|historical|all time|all-time|overall|record|records|total|titles?|cups?|troph(?:y|ies)|wins?|won in total|most wins)\b/;
-    return sportTerms.test(t) && historyTerms.test(t);
-}
-
-function isStableFactQuery(text) {
-    const t = String(text || '').toLowerCase().trim();
-    if (!t) return false;
-
-    if (hasExplicitFreshnessLanguage(t)) return false;
-    if (isStrictCurrentRoleLookup(t)) return false;
-    if (isSportsHistoryQuery(t)) return true;
-
-    const stableFactPatterns = [
-        /\bhow many\s+(titles?|cups?|troph(?:y|ies)|awards?|wins?)\b/,
-        /\bhow many\b.*\b(history|all time|all-time|total|overall|record)\b/,
-        /\bwhen did\b/,
-        /\bwho founded\b/,
-        /\bwho invented\b/,
-        /\bwhat does\b/,
-        /\bwhat is\b.*\b(history|record|total|meaning|definition)\b/,
-        /\bwhich team\b.*\b(history|all time|all-time|total|record)\b/,
-        /\b(total titles?|total cups?|overall record|all-time record)\b/
-    ];
-
-    return stableFactPatterns.some((pattern) => pattern.test(t));
-}
-
-function needsLiveSearch(text) {
-    const t = String(text || '').toLowerCase().trim();
-    if (!t) return false;
-    if (isStableFactQuery(t)) return false;
 
     if (isExchangeRateQuery(t) || isMarketPriceQuery(t) || isLiveRetrievalQuery(t) || isNewsworthyLiveTopic(t) || isSportsLiveResultQuery(t)) {
         return true;
     }
 
-    const freshnessTerms = /\b(latest|recent|today|right now|as of now|live|just now|this week|this month|ongoing|breaking|currently|news)\b/;
-    const unstableEntityTerms = /\b(president|prime minister|ceo|chairman|chairperson|captain|coach|governor|mayor|title holder|world cup|tournament|final|match|war|conflict|ceasefire|attack|election|stock price|market cap|weather)\b/;
-    const businessEventTerms = /\b(layoff|layoffs|firing|firings|job cuts|cuts|restructuring|reorganization|earnings|merger|acquisition|recall|bankruptcy|probe|investigation|antitrust|strike|walkout)\b/;
-    const roleLookupPattern = /\b(who is|what is)\s+(?:the\s+)?(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor)\s+of\s+.+/;
-    const liveResultPattern = /\b(who won|winner|score|scores|what happened|what's happening|status|update|updates|headline|headlines)\b/;
+    const freshnessTerms = /\b(latest|recent|current|today|right now|as of now|live|just now|this year|2025|2026|2027)\b/;
+    const resultTerms = /\b(who won|winner|won|result|results|score|scores|what happened|what's happening|status|update|updates|headline|headlines|breaking)\b/;
+    const unstableEntityTerms = /\b(president|prime minister|ceo|chairman|captain|coach|champion|title holder|world cup|tournament|final|match|war|conflict|ceasefire|attack|election)\b/;
+    const businessEventTerms = /\b(layoff|layoffs|firing|firings|job cuts|cuts|restructuring|reorganization|earnings|results|merger|acquisition|recall|bankruptcy|probe|investigation|antitrust|strike|walkout)\b/;
 
-    if (roleLookupPattern.test(t)) return true;
     if (freshnessTerms.test(t) && unstableEntityTerms.test(t)) return true;
-    if (freshnessTerms.test(t) && businessEventTerms.test(t)) return true;
-    if (liveResultPattern.test(t) && /\b(today|live|latest|recent|current|ongoing|this week|this month)\b/.test(t)) return true;
+    if (resultTerms.test(t) && unstableEntityTerms.test(t)) return true;
+    if (businessEventTerms.test(t) && freshnessTerms.test(t)) return true;
 
     return false;
-}
-
-function isCurrentInfoQuery(text) {
-    return needsLiveSearch(text);
 }
 
 function hasExplicitFreshnessLanguage(text) {
@@ -9967,13 +9153,13 @@ function shouldUseNewsEndpointForCurrentQuery(text) {
 function isDirectFactLiveQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    return /\b(who won|who lost|winner|won|lost|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated|ceo|president|prime minister|captain|coach|price|rate)\b/.test(t);
+    return /\b(who won|who lost|winner|won|lost|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated|ceo|president|prime minister|captain|coach|price|rate|latest movie|latest film|latest song|latest album|most recent film|most recent movie)\b/.test(t);
 }
 
 function isConciseDirectFactQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    const directFactSignals = /\b(how many|who is|who was|who won|who lost|winner|won|lost|what is the current|what is the latest|latest|current|ceo|president|prime minister|captain|coach|price|rate|score|scores|stats?|record|ranking|standings|titles?|cups?|won in total|total titles?|total cups?|qualified|eliminated|result|results)\b/;
+    const directFactSignals = /\b(how many|who is|who was|who won|who lost|winner|won|lost|what is the current|what is the latest|latest|current|ceo|president|prime minister|captain|coach|price|rate|score|scores|stats?|record|ranking|standings|titles?|cups?|won in total|total titles?|total cups?|qualified|eliminated|result|results|movie|film|song|album|release)\b/;
     const strictBinarySignal = isStrictYesNoRequest(t);
     const binaryQuestionStarter = /^(is|are|am|was|were|do|does|did|can|could|should|would|will|has|have|had)\b/.test(t) &&
         !/\b(explain|help|advise|suggest|recommend|walk me through|how to)\b/.test(t);
@@ -10052,25 +9238,12 @@ function decideAnswerPath(classification) {
     if (!classification || !classification.raw) return 'default_model';
 
     const flags = classification.flags || {};
-    const raw = String(classification.raw || '').trim();
-    const forceCurrentRoleLookup = isStrictCurrentRoleLookup(raw);
-    const stableFact = isStableFactQuery(raw) || isSportsHistoryQuery(raw);
 
     if (flags.inappropriate) return 'moderation';
     if (flags.stableBiography) return 'default_model';
 
-    if (flags.highRiskMentalHealth) return 'high_risk_mental_health';
-    if (flags.supportExit) return 'support_exit';
-    if (flags.supportRequest) return 'support_intro';
-    if (flags.medicalEmergency) return 'medical_emergency';
-    if (flags.supportContinuation) return 'support_continue';
-    if (flags.medicalAdvice) return 'medical_advice';
-    if (flags.mentalHealth) return 'mental_health';
-
-    if (forceCurrentRoleLookup && flags.universalEntityFact) return 'entity_fact';
-    if (stableFact) return 'default_model';
-    if (flags.currentInfo) return 'current_info';
     if (flags.universalEntityFact) return 'entity_fact';
+    if (flags.currentInfo) return 'current_info';
 
     if (flags.vagueAdvice) return 'vague_advice';
     if (flags.songMoodGame) return 'song_mood_game';
@@ -10082,6 +9255,14 @@ function decideAnswerPath(classification) {
     if (flags.tamilJoke) return 'tamil_joke';
     if (flags.recipe) return 'recipe';
     if (flags.artistSong) return 'artist_song';
+
+    if (flags.highRiskMentalHealth) return 'high_risk_mental_health';
+    if (flags.supportExit) return 'support_exit';
+    if (flags.supportRequest) return 'support_intro';
+    if (flags.medicalEmergency) return 'medical_emergency';
+    if (flags.supportContinuation) return 'support_continue';
+    if (flags.medicalAdvice) return 'medical_advice';
+    if (flags.mentalHealth) return 'mental_health';
     if (flags.debate) return 'debate';
 
     return 'default_model';
@@ -10154,12 +9335,6 @@ const ROUTING_REGRESSION_CASES = [
         prompt: "Tell me about Nvidia's latest earnings",
         expectedPath: 'current_info',
         expectedMode: 'answer_then_cite'
-    },
-    {
-        name: 'Current company CEO lookup',
-        prompt: 'Who is the current CEO of TaskUs?',
-        expectedPath: 'entity_fact',
-        expectedMode: 'verify_first'
     },
     {
         name: 'Recipe route',
@@ -10390,6 +9565,30 @@ const DOMAIN_SOURCE_POLICIES = {
             'ibm.com'
         ]
     },
+    entertainment: {
+        trustedDomains: [
+            'imdb.com',
+            'wikipedia.org',
+            'rottentomatoes.com',
+            'metacritic.com',
+            'netflix.com',
+            'primevideo.com',
+            'disneyplus.com',
+            'hotstar.com',
+            'zee5.com',
+            'sonyliv.com',
+            'reuters.com',
+            'bbc.com'
+        ],
+        preferredDomains: [
+            'imdb.com',
+            'wikipedia.org',
+            'rottentomatoes.com',
+            'netflix.com',
+            'primevideo.com',
+            'disneyplus.com'
+        ]
+    },
     space_science: {
         trustedDomains: [
             'nasa.gov',
@@ -10444,7 +9643,8 @@ function getDomainSourcePolicy(domain) {
         finance: 'companies_finance',
         tech: 'companies_finance',
         science: 'space_science',
-        space: 'space_science'
+        space: 'space_science',
+        entertainment: 'entertainment'
     };
     const key = aliases[String(domain || 'general').toLowerCase()] || String(domain || 'general').toLowerCase();
     return DOMAIN_SOURCE_POLICIES[key] || DOMAIN_SOURCE_POLICIES.general;
@@ -10521,6 +9721,25 @@ function buildLiveSearchQueries(userText, intent = null) {
             `${topic} official ${factHints}`.replace(/\s+/g, ' ').trim(),
             expandedTopic && expandedTopic.toLowerCase() !== topic.toLowerCase() ? `${expandedTopic} ${seasonHint} ${factHints}`.replace(/\s+/g, ' ').trim() : '',
             expandedTopic && expandedTopic.toLowerCase() !== topic.toLowerCase() ? `${expandedTopic} official ${factHints}`.replace(/\s+/g, ' ').trim() : ''
+        ].filter(Boolean)));
+    }
+
+    if (liveIntent.domain === 'entertainment' && liveIntent.factType === 'latest_work') {
+        const subject = extractLatestWorkSubject(raw) || topic;
+        const medium = detectLatestWorkMedium(raw);
+        const latestHint = medium === 'song'
+            ? 'latest song latest release discography'
+            : medium === 'album'
+                ? 'latest album latest release discography'
+                : 'latest film latest movie most recent release filmography';
+        return Array.from(new Set([
+            raw,
+            `${subject} ${latestHint}`.replace(/\s+/g, ' ').trim(),
+            `${subject} imdb ${latestHint}`.replace(/\s+/g, ' ').trim(),
+            `${subject} wikipedia ${medium === 'movie' ? 'filmography' : 'discography'}`.replace(/\s+/g, ' ').trim(),
+            expandedTopic && expandedTopic.toLowerCase() !== topic.toLowerCase()
+                ? `${expandedTopic} ${latestHint}`.replace(/\s+/g, ' ').trim()
+                : ''
         ].filter(Boolean)));
     }
 
@@ -10624,11 +9843,16 @@ const UNIVERSAL_ENTITY_DOMAIN_PACKS = {
     companies_finance: {
         keywords: /\b(company|companies|corporation|startup|firm|ceo|founder|chairman|chairperson|stock|share|shares|market cap|repo rate|interest rate|bank|rbi|sebi|nasdaq|dow|ipo|earnings|revenue|profit|valuation|openai|google|alphabet|microsoft|apple|nvidia|amd|tesla|tcs|ibm)\b/,
         entityHints: /\b(nasdaq|nyse|sensex|nifty|s&p|dow jones|reserve bank|federal reserve)\b/
+    },
+    entertainment: {
+        keywords: /\b(actor|actress|movie|film|films|cinema|director|producer|singer|song|songs|album|albums|show|series|web series|filmography|discography|release|box office|imdb)\b/,
+        entityHints: /\b(netflix|prime video|amazon prime|disney|hotstar|zee5|sonyliv|kollywood|bollywood|hollywood|tollywood)\b/
     }
 };
 
 const UNIVERSAL_ENTITY_RELATION_PATTERNS = [
     { type: 'title_count', test: (t) => /\b(how many|number of|total|all[- ]time)\b.*\b(titles|cups|trophies|championships|wins|medals)\b|\b(titles|cups|trophies|championships|wins|medals)\b.*\b(how many|number of|total)\b/.test(t) },
+    { type: 'latest_work', test: (t) => /\b(latest|recent|new|newest|most recent|current|upcoming)\b.*\b(movie|film|release|song|album|single|show|series)\b|\b(movie|film|release|song|album|single|show|series)\b.*\b(latest|recent|new|newest|most recent|current|upcoming)\b/.test(t) },
     { type: 'team_membership', test: (t) => /\b(plays? for|play for|current team|which team|belongs to which team|signed for|signed with|joined)\b/.test(t) },
     { type: 'party_membership', test: (t) => /\b(belongs to which party|party affiliation|which party|current party|member of which party|political party)\b/.test(t) },
     { type: 'role', test: (t) => /\b(who is|who was|current ceo|ceo of|founder of|president of|prime minister of|captain of|coach of|role|position|office|designation|profession|job|what does .+ do|astronaut|scientist)\b/.test(t) },
@@ -10673,6 +9897,7 @@ function detectNormalizedEntityDomain(text, relationType, liveIntent = null) {
     if (liveIntent?.domain === 'sports') return 'sports';
     if (liveIntent?.domain === 'finance') return 'companies_finance';
     if (liveIntent?.domain === 'tech') return 'companies_finance';
+    if (liveIntent?.domain === 'entertainment') return 'entertainment';
     const lower = normalizeEntitySearchText(text);
     for (const [domainKey, pack] of Object.entries(UNIVERSAL_ENTITY_DOMAIN_PACKS)) {
         if (pack.keywords.test(lower) || pack.entityHints.test(lower)) {
@@ -10682,6 +9907,7 @@ function detectNormalizedEntityDomain(text, relationType, liveIntent = null) {
     if (relationType === 'party_membership') return 'politics';
     if (relationType === 'team_membership' || relationType === 'title_count' || relationType === 'winner' || relationType === 'score' || relationType === 'standings' || relationType === 'qualification') return 'sports';
     if (relationType === 'price') return 'companies_finance';
+    if (relationType === 'latest_work') return 'entertainment';
     return 'general';
 }
 
@@ -10705,10 +9931,45 @@ function detectEntityType(text, relationType, domain) {
     if (/\b(astronaut|cosmonaut|taikonaut|scientist|researcher|physicist|chemist)\b/.test(lower)) return 'science_person';
     if (/\b(player|batsman|bowler|footballer|striker|goalkeeper|quarterback|driver|fighter|boxer|captain|coach)\b/.test(lower)) return 'player'; 
     if (domain === 'sports' || relationType === 'title_count' || relationType === 'winner' || /\b(team|club|franchise|fc|united|city|kings|super kings|knight riders|indians)\b/.test(lower)) return 'team';
+    if (domain === 'entertainment' || relationType === 'latest_work') return 'profession_person';
     if (/\b(company|startup|firm|corporation)\b/.test(lower)) return 'company';
     if (/\b(ceo|founder|actor|actress|singer|director|engineer|doctor|lawyer|author|writer)\b/.test(lower)) return 'profession_person'; 
     return 'entity'; 
 } 
+
+function detectLatestWorkMedium(text) {
+    const lower = normalizeEntitySearchText(text);
+    if (/\b(song|single)\b/.test(lower)) return 'song';
+    if (/\balbum|ep\b/.test(lower)) return 'album';
+    if (/\bshow|series|web series\b/.test(lower)) return 'show';
+    return 'movie';
+}
+
+function extractLatestWorkSubject(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+
+    const patterns = [
+        /\b(?:what is|which is|tell me|show me)\s+(?:the\s+)?(?:latest|recent|new|newest|most recent|current|upcoming)\s+(?:movie|film|release|song|album|single|show|series)\s+(?:of|from|by)\s+(?:actor|actress|director|producer|singer)?\s*([^?.!,]+)$/i,
+        /\b(?:latest|recent|new|newest|most recent|current|upcoming)\s+(?:movie|film|release|song|album|single|show|series)\s+(?:of|from|by)\s+(?:actor|actress|director|producer|singer)?\s*([^?.!,]+)$/i,
+        /\b(?:actor|actress|director|producer|singer)\s+([^?.!,]+?)\s+(?:latest|recent|new|newest|most recent|current|upcoming)\s+(?:movie|film|release|song|album|single|show|series)\b/i,
+        /\b(?:what is|which is|tell me|show me)\s+(?:the\s+)?(?:latest|recent|new|newest|most recent|current|upcoming)\s+([^?.!,]+?)\s+(?:movie|film|release|song|album|single|show|series)\b/i,
+        /\b(?:latest|recent|new|newest|most recent|current|upcoming)\s+([^?.!,]+?)\s+(?:movie|film|release|song|album|single|show|series)\b/i
+    ];
+
+    for (const pattern of patterns) {
+        const match = raw.match(pattern);
+        if (match?.[1]) {
+            return match[1]
+                .replace(/\b(actor|actress|director|producer|singer)\b/gi, ' ')
+                .replace(/[?.!,;]+$/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+    }
+
+    return '';
+}
 
 function extractRoleQueryParts(text) {
     const raw = String(text || '').trim();
@@ -10743,6 +10004,8 @@ function extractEntitySubject(text, relationType, liveIntent = null) {
     }
     const patterns = [
         /\bhow many\b[\w\s]*?\b(?:titles|cups|trophies|championships|wins)\b\s+(?:did|do|has|have)\s+(.+?)\s+(?:win|won|have|has)\b/i,
+        /\b(?:what is|which is|tell me|show me)\s+(?:the\s+)?(?:latest|recent|new|newest|most recent|current|upcoming)\s+(?:movie|film|release|song|album|single|show|series)\s+(?:of|from|by)\s+(?:actor|actress|director|producer|singer)?\s*([^?.!,]+)\??$/i,
+        /\b(?:latest|recent|new|newest|most recent|current|upcoming)\s+(?:movie|film|release|song|album|single|show|series)\s+(?:of|from|by)\s+(?:actor|actress|director|producer|singer)?\s*([^?.!,]+)\??$/i,
         /\bwho is\b\s+(.+?)\s*\??$/i,
         /\bwho was\b\s+(.+?)\s*\??$/i,
         /\bwhat is\b\s+(.+?)\s*\??$/i,
@@ -10765,7 +10028,7 @@ function extractEntitySubject(text, relationType, liveIntent = null) {
 
     let subject = raw
         .replace(/\b(who|what|which|how many|tell me|show me|give me|do you know|can you tell me|could you tell me|would you tell me)\b/gi, ' ')
-        .replace(/\b(current|latest|total|number of|how many|won|win|wins|titles?|cups?|troph(?:y|ies)|championships?|stats?|record|records|score|scores|standings|rankings?|table|points|party|affiliation|team|role|position|office|profession|player|players|politician|politicians|astronaut|astronauts|scientist|scientists|ceo|founder|president|prime minister|for|in|of|the|a|an|which|does|did|has|have|is|was)\b/gi, ' ')
+        .replace(/\b(current|latest|recent|new|newest|most recent|upcoming|total|number of|how many|won|win|wins|titles?|cups?|troph(?:y|ies)|championships?|stats?|record|records|score|scores|standings|rankings?|table|points|party|affiliation|team|role|position|office|profession|player|players|politician|politicians|astronaut|astronauts|scientist|scientists|ceo|founder|president|prime minister|movie|film|release|song|album|single|show|series|actor|actress|director|producer|singer|for|in|of|the|a|an|which|does|did|has|have|is|was)\b/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
@@ -10818,13 +10081,7 @@ function classifyUniversalEntityIntent(text, liveIntent = null) {
     const hasDomainSignal = Boolean(domainPack && (domainPack.keywords.test(lower) || domainPack.entityHints.test(lower)));
     const hasRelationSignal = record.relationType !== 'general';
     const subjectLooksReal = Boolean(record.subject && record.subject !== record.raw && record.subject.split(/\s+/).length <= 12);
-    const personalSituation = isPersonalSituationMessage(text);
-    const medicalLike = isMedicalAdviceIntent(text) || isMedicalEmergencyIntent(text);
-    const genericTableOnly = /\btable\b/.test(lower) && !/\b(points table|table tennis|league table|standings|ranking|rankings)\b/.test(lower);
     record.isEntityFact = Boolean(
-        !personalSituation &&
-        !medicalLike &&
-        !genericTableOnly &&
         record.directFact &&
         hasRelationSignal &&
         (hasDomainSignal || subjectLooksReal || record.domain !== 'general')
@@ -10848,6 +10105,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
     const expandedSubjectWithCompetition = [expandedSubject, competitionExpanded || competition, entityIntent.year].filter(Boolean).join(' ').trim();
     const relationHints = { 
         title_count: 'total titles total cups total trophies championships all time record', 
+        latest_work: 'latest film latest movie most recent release filmography imdb wikipedia',
         team_membership: 'current team club franchise belongs to plays for', 
         party_membership: 'current party political party affiliation belongs to party', 
         role: 'current role position office profession designation', 
@@ -10862,14 +10120,22 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
     const sourceBias = getDomainSourcePolicy(entityIntent.domain).preferredDomains.join(' ') || 'official Reuters AP BBC'; 
     const politicalRole = entityIntent.relationType === 'role' && /\b(president|prime minister|governor|mayor|minister|chief minister)\b/.test(roleLabel);
  
-    return Array.from(new Set([
-        userText,
+    return Array.from(new Set([ 
+        userText, 
+        entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleLabel} of ${roleTarget}` : '',
+        entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} ${roleLabel}` : '',
         entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} current ${roleLabel} official` : '',
         politicalRole && entityIntent.targetEntity ? `${roleTarget} official government ${roleLabel}` : '',
-        `${subjectWithCompetition} ${relationHint}`.replace(/\s+/g, ' ').trim(),
-        expandedSubject && expandedSubject.toLowerCase() !== subject.toLowerCase()
-            ? `${expandedSubjectWithCompetition} ${relationHint}`.replace(/\s+/g, ' ').trim()
-            : ''
+        politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} site:gov.in OR site:pmindia.gov.in OR site:india.gov.in` : '',
+        politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} Reuters OR AP OR BBC` : '',
+        `${subjectWithCompetition} ${relationHint}`.replace(/\s+/g, ' ').trim(), 
+        `${subjectWithCompetition} ${entityIntent.timeframe || ''} ${relationHint} ${sourceBias}`.replace(/\s+/g, ' ').trim(), 
+        expandedSubject && expandedSubject.toLowerCase() !== subject.toLowerCase() 
+            ? `${expandedSubjectWithCompetition} ${relationHint}`.replace(/\s+/g, ' ').trim() 
+            : '', 
+        expandedSubject && expandedSubject.toLowerCase() !== subject.toLowerCase() 
+            ? `${expandedSubjectWithCompetition} ${entityIntent.timeframe || ''} ${relationHint} ${sourceBias}`.replace(/\s+/g, ' ').trim() 
+            : '' 
     ].filter(Boolean))); 
 } 
 
@@ -10877,187 +10143,33 @@ function normalizeAgreementValue(value) {
     return normalizeEntitySearchText(value).replace(/\b(the|a|an)\b/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-
-const NUMBER_WORD_VALUES = {
-    zero: 0,
-    one: 1,
-    two: 2,
-    three: 3,
-    four: 4,
-    five: 5,
-    six: 6,
-    seven: 7,
-    eight: 8,
-    nine: 9,
-    ten: 10,
-    eleven: 11,
-    twelve: 12,
-    thirteen: 13,
-    fourteen: 14,
-    fifteen: 15,
-    sixteen: 16,
-    seventeen: 17,
-    eighteen: 18,
-    nineteen: 19,
-    twenty: 20
-};
-
-function wordToCountValue(word) {
-    return NUMBER_WORD_VALUES[String(word || '').toLowerCase()] ?? null;
-}
-
-function looksLikeYearNumber(value) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return false;
-    return num >= 1900 && num <= 2100;
-}
-
-function extractTitleCountCandidate(result) {
-    const text = `${result?.title || ''}. ${result?.description || ''}`.replace(/\s+/g, ' ').trim();
-    if (!text) return '';
-
-    const patterns = [
-        /\bhas\s+won\s+(\d{1,2})\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies)|championships?)\b/i,
-        /\bwon\s+(\d{1,2})\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies)|championships?)\b/i,
-        /\b(\d{1,2})\s*[- ]time\s+(?:world\s+)?champion\b/i,
-        /\b(\d{1,2})\s+(?:Formula\s*1\s+|F1\s+|world\s+)?(?:drivers'?\s+|constructors'?\s+)?championships?\b/i,
-        /\b(\d{1,2})\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies))\b/i,
-        /\btotal(?:\s+of)?\s+(\d{1,2})\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies)|championships?)\b/i,
-        /\b(?:with|has)\s+(\d{1,2})\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies)|championships?)\b/i
-    ];
-
-    for (const pattern of patterns) {
-        const match = text.match(pattern);
-        if (match?.[1] && !looksLikeYearNumber(match[1])) return match[1];
-    }
-
-    const wordPatterns = [
-        /\b([a-z]+)\s*[- ]time\s+(?:world\s+)?champion\b/i,
-        /\bhas\s+won\s+([a-z]+)\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies)|championships?)\b/i,
-        /\bwon\s+([a-z]+)\s+(?:major\s+|world\s+)?(?:titles?|cups?|troph(?:y|ies)|championships?)\b/i,
-        /\b([a-z]+)\s+(?:Formula\s*1\s+|F1\s+|world\s+)?(?:drivers'?\s+|constructors'?\s+)?championships?\b/i
-    ];
-
-    for (const pattern of wordPatterns) {
-        const match = text.match(pattern);
-        const value = wordToCountValue(match?.[1]);
-        if (value !== null) return String(value);
-    }
-
-    const fallbackMatches = Array.from(text.matchAll(/\b(\d{1,2})\b(?=[^.!?]{0,30}\b(?:titles?|cups?|troph(?:y|ies)|championships?)\b)/gi));
-    for (const match of fallbackMatches) {
-        if (match?.[1] && !looksLikeYearNumber(match[1])) return match[1];
-    }
-
-    return '';
-}
-
-
-function hasDefinitiveFirstTitleCue(text) {
-    return /\b(maiden\s+(?:ipl\s+|league\s+|cup\s+|troph(?:y|ies)\s+|championship\s+)?title|first(?:[- ]ever)?\s+(?:ipl\s+|league\s+|cup\s+|troph(?:y|ies)\s+|championship\s+)?title|won\s+(?:their|its)\s+first\s+(?:ipl\s+|league\s+|cup|troph(?:y|ies)|championship)|clinched\s+(?:their|its)\s+first\s+(?:ipl\s+|league\s+|cup|troph(?:y|ies)|championship)|lifted\s+(?:their|its)\s+first\s+(?:ipl\s+|league\s+|cup|troph(?:y|ies)|championship)|won\s+the\s+title\s+for\s+the\s+first\s+time)\b/i.test(String(text || ''));
-}
-
-function hasStaleNoTitleCue(text) {
-    return /\b(never\s+won|has\s+not\s+won|haven't\s+won|yet\s+to\s+win|still\s+seeking\s+(?:their|its)?\s*(?:first|maiden)?\s*(?:title|cup|trophy|championship)|without\s+(?:an?\s+)?(?:ipl\s+|league\s+|cup\s+|troph(?:y|ies)\s+|championship\s+)?title)\b/i.test(String(text || ''));
-}
-
-function hasDefinitiveSportsResultCue(text, relationType) {
-    const value = String(text || '');
-    if (relationType === 'title_count') {
-        return hasDefinitiveFirstTitleCue(value) || /\b(defending champions|sealed the title|clinched the title|lifted the trophy|won the final|became champions|became champion)\b/i.test(value);
-    }
-    if (relationType === 'winner') {
-        return /\b(won the final|beat|defeated|clinched|lifted the trophy|became champions|became champion|crowned champions?)\b/i.test(value);
-    }
-    if (relationType === 'score') {
-        return /\b(\d{1,3}\s*[-/]\s*\d{1,3})\b/.test(value) && /\b(result|score|beat|defeated|won by)\b/i.test(value);
-    }
-    if (relationType === 'standings' || relationType === 'qualification') {
-        return /\b(qualified|eliminated|top of the table|points table|standings|ranking|position)\b/i.test(value);
-    }
-    if (relationType === 'stats') {
-        return /\b(record|stats?|average|runs|goals|wickets|points|assists|podiums|wins)\b/i.test(value);
-    }
-    return false;
-}
-
-function buildAuthoritativeSportsAgreement(results, entityIntent) {
-    if (!Array.isArray(results) || !results.length) return null;
-    if (String(entityIntent?.domain || '').toLowerCase() !== 'sports') return null;
-    const relationType = String(entityIntent?.relationType || '').toLowerCase();
-    if (!['title_count', 'winner', 'score', 'standings', 'qualification', 'stats'].includes(relationType)) {
-        return null;
-    }
-
-    const supports = new Map();
-
-    for (const item of results.slice(0, 8)) {
-        const text = `${item?.title || ''}. ${item?.description || ''}`.replace(/\s+/g, ' ').trim();
-        if (!text) continue;
-
-        const authority = scoreSourcePolicy(item?.url, 'sports');
-        if (authority <= 0) continue;
-
-        let rawCandidate = extractFactCandidate(item, entityIntent);
-        if (!rawCandidate && relationType === 'title_count' && hasDefinitiveFirstTitleCue(text)) {
-            rawCandidate = '1';
-        }
-        const candidate = normalizeAgreementValue(rawCandidate);
-        if (!candidate) continue;
-
-        const staleNoTitle = relationType === 'title_count' && hasStaleNoTitleCue(text) && !hasDefinitiveFirstTitleCue(text);
-        if (staleNoTitle && authority < 7) continue;
-
-        const entry = supports.get(candidate) || {
-            value: String(rawCandidate || '').trim(),
-            sources: [],
-            score: 0,
-            hasPreferred: false,
-            hasTrusted: false,
-            definitive: false
-        };
-
-        const definitive = hasDefinitiveSportsResultCue(text, relationType);
-        entry.sources.push(item);
-        entry.score += authority + (definitive ? 5 : 0);
-        entry.hasPreferred = entry.hasPreferred || authority >= 7;
-        entry.hasTrusted = entry.hasTrusted || authority >= 4;
-        entry.definitive = entry.definitive || definitive;
-
-        supports.set(candidate, entry);
-    }
-
-    const ranked = Array.from(supports.values()).sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        if ((b.hasPreferred ? 1 : 0) !== (a.hasPreferred ? 1 : 0)) return (b.hasPreferred ? 1 : 0) - (a.hasPreferred ? 1 : 0);
-        return b.sources.length - a.sources.length;
-    });
-
-    const top = ranked[0];
-    if (!top) return null;
-
-    const authoritativeWin = (top.hasPreferred && (top.definitive || top.sources.length >= 1)) || (top.hasTrusted && top.sources.length >= 2);
-    if (!authoritativeWin) return null;
-
-    return {
-        top: {
-            value: top.value,
-            count: top.sources.length,
-            sources: top.sources
-        },
-        agreed: true,
-        mixed: false,
-        authoritative: true
-    };
-}
-
 function extractFactCandidate(result, entityIntent) { 
     const combined = `${result?.title || ''} ${result?.description || ''}`.replace(/\s+/g, ' ').trim(); 
     if (!combined) return ''; 
  
     if (entityIntent.relationType === 'title_count') { 
-        return extractTitleCountCandidate(result); 
+        const countMatch = combined.match(/\b(\d+)\b[^\n.]{0,35}\b(titles?|cups?|troph(?:y|ies)|championships?)\b/i); 
+        return countMatch ? countMatch[1] : ''; 
     } 
+
+    if (entityIntent.relationType === 'latest_work') {
+        const subject = normalizeEntitySearchText(entityIntent.subject);
+        const titleFirstPatterns = [
+            /^(?:watch\s+)?([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})\s+(?:\(|-|\|)/,
+            /\b(?:latest|recent|new|upcoming|current)\s+(?:movie|film|release|song|album|single|show|series)\s+(?:is|was|:)\s*([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})/i,
+            /\b(?:starring|stars in|release of)\s+([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})/i
+        ];
+        for (const pattern of titleFirstPatterns) {
+            const match = combined.match(pattern);
+            if (match?.[1]) {
+                const candidate = match[1].trim();
+                if (!subject || !normalizeEntitySearchText(candidate).includes(subject)) return candidate;
+            }
+        }
+        const subjectLeadPattern = new RegExp(`\\b${subject.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\b[^.]{0,40}\\b(?:latest|recent|new|current|upcoming)\\s+(?:movie|film|release|song|album|single|show|series)\\b[^A-Za-z0-9]{0,10}([A-Z][A-Za-z0-9:&'().,\\-]+(?:\\s+[A-Z0-9][A-Za-z0-9:&'().,\\-]+){0,6})`, 'i');
+        const subjectLeadMatch = combined.match(subjectLeadPattern);
+        return subjectLeadMatch?.[1] ? subjectLeadMatch[1].trim() : '';
+    }
  
     if (entityIntent.relationType === 'winner') { 
         const winnerMatch = combined.match(/\b([A-Z][A-Za-z0-9&.\-\s]{2,60})\b\s+(?:won|wins|beat|beats|defeated|defeats|are champions|is champion|clinched|lifted)/); 
@@ -11147,31 +10259,15 @@ function formatConsensusAnswer(entityIntent, agreement) {
     const value = agreement?.top?.value || ''; 
     if (!value) return ''; 
     if (entityIntent.relationType === 'title_count') { 
-        const subject = String(entityIntent.subject || 'They').trim();
-        const singular = !/(and|&|team|club|franchise|super kings|knight riders|indians|lakers|warriors)/i.test(subject);
-        const verb = singular ? 'has' : 'have';
-        const count = Number(value);
-        const competition = String(entityIntent.competition || '').trim();
-        let nounBase = 'titles';
-        if (/(f1|formula 1|driver|drivers'?)/i.test(subject) || /(f1|formula 1)/i.test(competition)) {
-            nounBase = 'Formula 1 World Championships';
-        } else if (/(ipl|indian premier league)/i.test(subject) || /(ipl|indian premier league)/i.test(competition)) {
-            nounBase = count === 1 ? 'IPL title' : 'IPL titles';
-        } else if (/(world cup)/i.test(competition)) {
-            nounBase = count === 1 ? 'World Cup title' : 'World Cup titles';
-        } else if (/(champions league)/i.test(competition)) {
-            nounBase = count === 1 ? 'Champions League title' : 'Champions League titles';
-        } else if (/(cup)/i.test(competition)) {
-            nounBase = count === 1 ? 'cup title' : 'cup titles';
-        } else if (/(troph(?:y|ies))/i.test(competition)) {
-            nounBase = count === 1 ? 'trophy' : 'trophies';
-        } else if (/(championship)/i.test(competition)) {
-            nounBase = count === 1 ? 'championship' : 'championships';
-        } else if (count === 1) {
-            nounBase = 'title';
-        }
-        return `${subject} ${verb} won ${value} ${nounBase}.`; 
+        const noun = entityIntent.entityType === 'team' ? 'titles' : 'major titles'; 
+        const verb = /\b(he|she|it|[A-Z][a-z]+)\b/.test(entityIntent.subject) && !/\b(s|x|z|sh|ch)\b/i.test(entityIntent.subject) ? 'has' : 'have';
+        return `${entityIntent.subject} ${verb} won ${value} ${noun} in total.`; 
     } 
+    if (entityIntent.relationType === 'latest_work') {
+        const medium = detectLatestWorkMedium(entityIntent.raw || '');
+        const label = medium === 'song' ? 'latest song' : medium === 'album' ? 'latest album' : medium === 'show' ? 'latest show' : 'latest film';
+        return `${entityIntent.subject}'s ${label} is ${value}.`;
+    }
     if (entityIntent.relationType === 'winner') { 
         return `${value} won ${entityIntent.subject || entityIntent.competition || 'the event'}.`; 
     } 
@@ -11269,15 +10365,13 @@ function requiresStrictLiveVerification(userText, liveIntent = null, entityInten
         return true;
     }
 
-    if (['team_membership', 'party_membership'].includes(entity.relationType)) {
+    if (['team_membership', 'party_membership', 'latest_work'].includes(entity.relationType)) {
         return true;
     }
 
     if (entity.relationType === 'role') {
         const politicalOffice = /\b(president|prime minister|governor|mayor|minister|chief minister)\b/.test(lower);
-        const businessRole = /\b(ceo|cfo|cto|coo|chairman|chairperson|founder|owner|managing director|md|director|president)\b/.test(lower);
-        const isCurrentRoleLookup = isStrictCurrentRoleLookup(text);
-        if ((entity.timeframe === 'current' || hasExplicitFreshnessLanguage(text) || isCurrentRoleLookup) && (politicalOffice || businessRole)) {
+        if ((entity.timeframe === 'current' || hasExplicitFreshnessLanguage(text)) && politicalOffice) {
             return true;
         }
     }
@@ -11310,7 +10404,6 @@ async function fetchHybridCitationSources(userText, intent, controller) {
                     signal: controller?.signal,
                     body: JSON.stringify({ query: q, maxResults: 5 })
                 });
-                console.log('API PATH USED:', '/api/search', 'query:', q);
                 if (!response.ok) return [];
                 const data = await response.json();
                 return Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
@@ -11334,9 +10427,14 @@ async function fetchHybridCitationSources(userText, intent, controller) {
 }
 
 function buildHybridAnswerWithSources(answer, sources) {
-    const cleanAnswer = cleanLiveAnswerText(String(answer || '').trim());
+    const cleanAnswer = String(answer || '').trim();
     if (!cleanAnswer) return '';
-    return cleanAnswer;
+    const sourceLines = (Array.isArray(sources) ? sources : [])
+        .slice(0, 4)
+        .map((item, index) => `${index + 1}. [${item.title}](${item.url})`)
+        .join('\n');
+    if (!sourceLines) return cleanAnswer;
+    return `${cleanAnswer}\n\nSources:\n${sourceLines}`;
 }
 
 async function handleAnswerThenCiteQuery(userText, classification) {
@@ -11356,7 +10454,7 @@ async function handleAnswerThenCiteQuery(userText, classification) {
         const sources = await fetchHybridCitationSources(query, classification?.liveIntent, controller);
         const finalMsg = buildHybridAnswerWithSources(answer, sources);
         if (sources.length) {
-            addVerifiedAssistantMessage(finalMsg, 'Model answer');
+            addVerifiedAssistantMessage(finalMsg, 'Answer with sources');
             speak(answer);
             saveToHistory(query, finalMsg || answer);
         } else {
@@ -11398,23 +10496,6 @@ async function handleChatFirstCurrentQuery(userText, classification) {
     return await handleLiveRetrievalQuery(query);
 }
 
-async function handleEntityFactAskFirst(userText, classification) {
-    const query = String(userText || '').trim();
-    if (!query) return false;
-
-    console.log('Calling ASK API for entity fact');
-    const ai = await askGeminiAI(query, { responseMode: 'concise' });
-    if (ai?.aborted) return true;
-
-    const answer = String(ai?.response || ai?.text || '').trim();
-    if (answer && ai?.intent !== 'soft_fallback') {
-        await publishResolvedModelMessage(query, answer, { label: 'Model answer' });
-        return true;
-    }
-
-    return await handleUniversalEntityFactQuery(query, classification?.liveIntent || null);
-}
-
 function extractRequestedDish(text) {
     const raw = String(text || '').trim();
     if (!raw) return '';
@@ -11452,7 +10533,6 @@ async function retrieveUniversalEntitySources(pipeline, controller) {
                     signal: controller.signal,
                     body: JSON.stringify({ query: q, maxResults: 6 })
                 });
-                console.log('API PATH USED:', '/api/search', 'query:', q);
                 if (!response.ok) return [];
                 const data = await response.json();
                 return Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
@@ -11534,7 +10614,7 @@ async function summarizeUniversalEntitySources(pipeline, results, controller) {
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-            systemPrompt: 'You summarize direct factual answers only from supplied snippets. Do not invent facts. If evidence conflicts or is weak, say so plainly. Avoid repeated facts, near-duplicate sentences, and awkward restatements. Prefer one clean consensus sentence.',
+            systemPrompt: 'You summarize direct factual answers only from supplied snippets. Do not invent facts. If evidence conflicts or is weak, say so plainly.',
             message: `Answer the entity question using ONLY the snippets below.
 
 User question: "${pipeline.userText}"
@@ -11557,10 +10637,8 @@ Rules:
 - Answer the exact fact first.
 - Prefer current membership, party, role, office, title count, stats, standings, rankings, or winners depending on the question.
 - Do not make up numbers, teams, players, parties, offices, dates, or organizations.
-- If snippets disagree, prefer newer or more authoritative official sports sources over older forum-style claims. Only say the evidence is mixed when the trusted sources themselves conflict.
+- If snippets disagree, say the evidence is mixed.
 - Keep it concise.
-- Do not repeat the same fact in different wording.
-- Prefer one clean consensus sentence when multiple snippets agree.
 
 Snippets:
 ${snippets}`
@@ -11587,20 +10665,17 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         const deduped = await retrieveUniversalEntitySources(pipeline, controller);
 
         if (!deduped.length) { 
-            if (await publishUniversalKnownFact(pipeline)) return true;
+            if (publishUniversalKnownFact(pipeline)) return true;
             if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
             return publishUniversalVerificationFallback(pipeline, 'I could not verify that result right now.');
         } 
 
-        const authoritativeAgreement = buildAuthoritativeSportsAgreement(deduped.slice(0, 6), pipeline.entityIntent);
-        if (await publishUniversalConsensusAnswer(pipeline, authoritativeAgreement)) return true;
-
         const agreement = buildSourceAgreement(deduped.slice(0, 6), pipeline.entityIntent);
-        if (await publishUniversalConsensusAnswer(pipeline, agreement)) return true;
+        if (publishUniversalConsensusAnswer(pipeline, agreement)) return true;
 
         if (pipeline.entityIntent.directFact && agreement.mixed) {
             if (pipeline.knownFact && pipeline.entityIntent.relationType === 'title_count') {
-                return await publishUniversalKnownFact(pipeline);
+                return publishUniversalKnownFact(pipeline);
             }
             if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) {
                 return true;
@@ -11611,7 +10686,7 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         return await summarizeUniversalEntitySources(pipeline, deduped, controller);
     } catch (error) { 
         if (isAbortError(error)) return true; 
-        if (await publishUniversalKnownFact(pipeline)) return true;
+        if (publishUniversalKnownFact(pipeline)) return true;
         if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
         return publishUniversalVerificationFallback(pipeline);
     } finally { 
@@ -11684,10 +10759,9 @@ async function handleLiveRetrievalQuery(userText) {
         }
 
         if (directFactQuery) {
-            const entityIntent = extractUniversalEntityIntent(query, intent);
-            const authoritativeAgreement = buildAuthoritativeSportsAgreement(sourcePool.slice(0, 6), entityIntent);
-            const agreement = authoritativeAgreement || buildSourceAgreement(sourcePool.slice(0, 6), entityIntent);
+            const agreement = buildSourceAgreement(sourcePool.slice(0, 6), extractUniversalEntityIntent(query, intent));
             if (agreement.agreed && agreement.top) {
+                const entityIntent = extractUniversalEntityIntent(query, intent);
                 const directAnswer = formatConsensusAnswer(entityIntent, agreement);
                 if (directAnswer) {
                     const sourceLines = agreement.top.sources
@@ -11714,7 +10788,7 @@ async function handleLiveRetrievalQuery(userText) {
             headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,
             body: JSON.stringify({
-                systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly. Avoid repeated facts, near-duplicate sentences, and awkward restatements. Prefer one clean consensus sentence over two similar sentences.',
+                systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly.',
                 message: `Answer the user's question using ONLY the snippets below.
 
 User question: "${query}"
@@ -11730,13 +10804,11 @@ Confidence: <High/Medium/Low based only on source agreement>
 Rules:
 - Focus on what is current or recent.
 - Do not make up numbers, dates, actors, or causes.
-- Only state a fact confidently if it appears in multiple snippets or from a clearly reputable official source. For sports titles and results, prefer official league or top-tier sports sources over Quora, Reddit, Facebook, or similar user-generated pages.
-- If evidence is weak, say so instead of guessing. Ignore stale user-generated claims when a newer official sports source resolves the result.
+- Only state a fact confidently if it appears in multiple snippets or from a clearly reputable source.
+- If evidence is weak, say so instead of guessing.
 - If the question asks for a winner, score, or player stat, answer that specific fact first before anything else.
 - If the user asks for stats, give the key stats directly instead of a generic summary.
 - Keep it concise and practical.
-- Do not repeat the same fact in different wording.
-- Prefer a single clean consensus sentence when multiple snippets say the same thing.
 
 Snippets:
 ${snippets}`
@@ -11997,12 +11069,7 @@ ${snippets}`
 
             updateTopicMemory(cleanText);
             const classification = classifyUserMessage(cleanText);
-            const forcedCurrentRoleLookup = isStrictCurrentRoleLookup(cleanText);
             const answerPath = decideAnswerPath(classification);
-            console.log('QUESTION:', cleanText);
-            console.log('FORCED CURRENT ROLE LOOKUP:', forcedCurrentRoleLookup);
-            console.log('FINAL ROUTE:', answerPath);
-            console.log('ROUTER answerPath:', answerPath, 'for:', cleanText);
             const hybridMode = decideHybridResponseMode(classification);
             const fallbackEntityIntent = classification.entityIntent || classifyUniversalEntityIntent(cleanText, classification.liveIntent);
             const immediateKnowledgeFallback = buildDirectKnowledgeFallback(cleanText);
@@ -12023,6 +11090,7 @@ ${snippets}`
                 addFeedbackButtons(text, immediateKnowledgeFallback);
                 return;
             }
+
             if (answerPath === 'entity_fact') {
                 const entityFactIntent = classification.liveIntent;
 
@@ -12039,7 +11107,12 @@ ${snippets}`
                     if (handled) return;
                 }
 
-                const handled = await handleEntityFactAskFirst(cleanText, classification);
+                if (hybridMode === 'chat_first') {
+                    const handled = await handleChatFirstCurrentQuery(cleanText, classification);
+                    if (handled) return;
+                }
+
+                const handled = await handleUniversalEntityFactQuery(cleanText, entityFactIntent);
                 if (handled) return;
             }
 
@@ -12271,30 +11344,22 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
             }
 
             if (answerPath === 'medical_advice') {
-                if (medicalMode) {
-                    const medicalAnalysisPrompt = buildMedicalAnalysisPrompt(text);
-                    const medicalAnalysisResponse = await callAIWithTyping(medicalAnalysisPrompt, 'Analyzing symptoms carefully...', {
-                        mode: 'medical',
-                        requestMessage: text,
-                        forceSystemPrompt: buildMedicalAnalysisSystemPrompt()
-                    });
-                    if (medicalAnalysisResponse?.aborted) return;
+                const medicalPrompt = `The user is asking for medical or symptom advice: "${text}".
 
-                    const parsedMedicalAnalysis = extractMedicalAnalysisPayload(
-                        medicalAnalysisResponse?.data || medicalAnalysisResponse?.apiData || medicalAnalysisResponse?.response,
-                        text
-                    );
-                    if (parsedMedicalAnalysis) {
-                        const medicalCardHtml = renderMedicalAnalysisCard(parsedMedicalAnalysis);
-                        addModelAssistantMessage(medicalCardHtml, 'Medical analysis');
-                        await speakApiReply('medical_analysis_ready', {}, 'Here is the symptom analysis with confidence and disclaimer.');
-                        saveToHistory(text, medicalCardHtml);
-                        addFeedbackButtons(text, medicalCardHtml);
-                        return;
-                    }
-                }
+Respond with these rules:
+1. Clearly state you are not a doctor and this is general guidance only
+2. Do not give a diagnosis or claim certainty
+3. Give safe, practical self-care steps that are commonly appropriate
+4. Mention red-flag symptoms that mean they should seek urgent medical care
+5. If the request is about medicine, dosing, pregnancy, infants, severe symptoms, or multiple conditions, tell them to confirm with a licensed clinician or pharmacist
+6. Keep the tone calm, direct, and concise
+7. Do not invent prescriptions, dosages, or treatment plans
 
-                const medicalPrompt = buildMedicalGuidancePrompt(text);
+Format:
+- What it might mean: <brief, cautious statement>
+- What you can do now: <2-4 practical steps>
+- Get urgent help if: <red flags>
+- Safer next step: <when to contact a doctor/pharmacist>`;
                 const medicalResponse = await callAIWithTyping(medicalPrompt, 'Preparing safe medical guidance...');
                 if (medicalResponse?.aborted) return;
                 await publishResolvedModelMessage(text, medicalResponse.response, {
@@ -12346,9 +11411,19 @@ Do not use repetitive filler or generic wording.`;
             }
 
             if (isLearningIntent(cleanText)) {
-                const learningResponse = await callAIWithTyping(text, 'Preparing a clear explanation...', {
-                    teachingMode: true
-                });
+                const learningPrompt = `User asked: "${text}"
+
+Teach this clearly for a beginner.
+
+Rules:
+- Cover any domain (tech, science, finance, history, life skills, etc.) based on user question.
+- Start with a plain definition.
+- Explain in simple steps with one real-world example.
+- End with a short "quick recap".
+- If useful, add "next thing to learn" in one line.
+- Avoid jargon unless you define it immediately.
+- Keep it accurate and practical.`;
+                const learningResponse = await callAIWithTyping(learningPrompt, 'Preparing a clear explanation...');
                 if (learningResponse?.aborted) return;
                 await publishResolvedModelMessage(text, learningResponse.response, {
                     label: 'Model answer',
@@ -12626,12 +11701,6 @@ Do not use repetitive filler or generic wording.`;
             }
             
             
-
-            if (isCurrentLocationQuestion(cleanText)) {
-                await answerCurrentLocation();
-                return;
-            }
-
             if (lower.match(/^(my name is|i'm|call me)\s+/i)) {
                 await handleNameInput(cleanText);
                 return;
@@ -12651,31 +11720,12 @@ Do not use repetitive filler or generic wording.`;
             }
 
             
-            else if (isWeatherIntentText(cleanText) || isAirQualityIntentText(cleanText)) {
+            else if (isWeatherIntentText(cleanText)) {
                 const location = extractLocationFromSentence(cleanText);
-                const weatherNeedsCurrentLocation = /\b(my location|current location|my current location|here|around here|where i am|my area|this location|where am i)\b/i.test(cleanText);
                 
                 if (location) {
                     
-                    await getWeatherByCity(location);
-                } else if (weatherNeedsCurrentLocation || isAirQualityIntentText(cleanText)) {
-                    try {
-                        showThinkingIndicator();
-                        const position = await getCurrentPositionAsync({ enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 });
-                        const lat = position.coords.latitude;
-                        const lon = position.coords.longitude;
-                        const resolved = await reverseGeocodeCurrentPosition(lat, lon);
-                        await fetchWeather(lat, lon, resolved?.locationName || 'your current location', cleanText);
-                    } catch (error) {
-                        hideThinkingIndicator();
-                        await deliverApiReply('location_manual_prompt', {
-                            reason: 'geolocation_error',
-                            detail: 'I could not detect your location for weather or AQI. Please allow location access or tell me your city.'
-                        }, {
-                            fallbackText: 'I could not detect your location for weather or AQI. Please allow location access or tell me your city.'
-                        });
-                        waitingForLocation = true;
-                    }
+                    getWeatherByCity(location);
                 } else if (weather && weather.current) {
                     
                     
@@ -13015,11 +12065,7 @@ STRICTLY AVOID:
 If the user asks for 1 day, return only Day 1.
 If user asks for 2 days, provide both days with balanced pacing.`;
                 
-                const aiResponse = await callAIWithTyping(itineraryPrompt, '[Plan] Planning your itinerary...', {
-                    responseMode: 'detailed',
-                    formatMode: 'structured',
-                    rawPrompt: true
-                });
+                const aiResponse = await callAIWithTyping(itineraryPrompt, '[Plan] Planning your itinerary...');
                 if (aiResponse?.aborted) return;
                 await publishResolvedModelMessage(text, aiResponse.response, {
                     label: 'Model answer',
@@ -13564,53 +12610,40 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             hideThinkingIndicator(); 
             showLoading('Checking weather');
             try {
-                const [weatherResponse, airQualityResponse] = await Promise.all([
-                    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,precipitation&timezone=auto`),
-                    fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi,pm2_5,pm10,carbon_monoxide,nitrogen_dioxide,ozone&timezone=auto`).catch(() => null)
-                ]);
-
+                const weatherResponse = await fetch(
+                    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,precipitation&timezone=auto`
+                );
                 weather = await weatherResponse.json();
-                const airQuality = airQualityResponse && airQualityResponse.ok ? await airQualityResponse.json() : null;
-                if (weather?.current) {
-                    weather.airQuality = airQuality?.current || null;
-                }
                 
                 const celsius = Math.round(weather.current.temperature_2m);
                 const fahrenheit = Math.round((celsius * 9/5) + 32);
                 const advice = await getWeatherAdvice(weather);
-                const aqiInfo = formatAirQualityInfo(airQuality?.current || null);
+                
                 
                 createWeatherEffect(weather.current.weather_code, celsius);
+                
+                
                 
                 let displayLocation = resolvedLocation;
                 
                 document.getElementById('weather-card').classList.remove('hidden');
                 document.getElementById('location-name').textContent = displayLocation;
-                document.getElementById('temperature').textContent = `${fahrenheit}°F / ${celsius}°C`;
-                document.getElementById('aqi-summary').textContent = aqiInfo.summary;
-                document.getElementById('aqi-details').textContent = aqiInfo.details;
+                document.getElementById('temperature').textContent = `${fahrenheit}\u00B0F / ${celsius}\u00B0C`;
                 document.getElementById('weather-advice').textContent = advice;
 
+                // Hide "Try asking me" while weather card is active.
                 const suggestionsPanel = document.getElementById('initial-suggestions');
                 if (suggestionsPanel && !suggestionsPanel.classList.contains('hidden')) {
                     suggestionsPanel.classList.add('hidden');
                 }
                 
                 hideLoading();
-                const fallbackText = `${displayLocation}: ${fahrenheit}°F (${celsius}°C). ${aqiInfo.summary}. ${advice}`;
                 await deliverApiReply('weather_result', {
                     location: displayLocation,
                     fahrenheit,
                     celsius,
                     advice,
-                    weatherCode: weather?.current?.weather_code,
-                    aqi: aqiInfo.aqiValue,
-                    aqiCategory: aqiInfo.category,
-                    aqiSummary: aqiInfo.summary,
-                    aqiDetails: aqiInfo.details,
-                    userQuery: originalQuery || ''
-                }, {
-                    fallbackText
+                    weatherCode: weather?.current?.weather_code
                 });
                 
             } catch (error) {
@@ -13619,41 +12652,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     error: String(error?.message || '')
                 });
             }
-        }
-
-        function getUsAqiCategory(aqi) {
-            if (aqi == null || Number.isNaN(aqi)) return 'Unavailable';
-            if (aqi <= 50) return 'Good';
-            if (aqi <= 100) return 'Moderate';
-            if (aqi <= 150) return 'Unhealthy for sensitive groups';
-            if (aqi <= 200) return 'Unhealthy';
-            if (aqi <= 300) return 'Very unhealthy';
-            return 'Hazardous';
-        }
-
-        function formatAirQualityInfo(currentAirQuality) {
-            const aqiValue = Number(currentAirQuality?.us_aqi);
-            const pm25 = currentAirQuality?.pm2_5;
-            const pm10 = currentAirQuality?.pm10;
-            if (!Number.isFinite(aqiValue)) {
-                return {
-                    aqiValue: null,
-                    category: 'Unavailable',
-                    summary: 'AQI: unavailable',
-                    details: Number.isFinite(pm25) ? `PM2.5: ${Math.round(pm25)} μg/m³` : 'Air quality details are unavailable right now.'
-                };
-            }
-            const roundedAqi = Math.round(aqiValue);
-            const category = getUsAqiCategory(roundedAqi);
-            const detailParts = [];
-            if (Number.isFinite(pm25)) detailParts.push(`PM2.5: ${Math.round(pm25)} μg/m³`);
-            if (Number.isFinite(pm10)) detailParts.push(`PM10: ${Math.round(pm10)} μg/m³`);
-            return {
-                aqiValue: roundedAqi,
-                category,
-                summary: `AQI: ${roundedAqi} (${category})`,
-                details: detailParts.join(' • ') || 'Air quality details are unavailable right now.'
-            };
         }
 
         async function getWeatherAdvice(weatherData) {
@@ -14272,84 +13270,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const first = Array.isArray(data) ? data[0] : null;
             if (!first) return null;
             return { lat: parseFloat(first.lat), lon: parseFloat(first.lon), label: first.display_name || query };
-        }
-
-        async function reverseGeocodeCurrentPosition(lat, lon) {
-            try {
-                const response = await fetch(
-                    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`,
-                    { headers: { 'User-Agent': 'JARVISVoiceAssistant/1.0' } }
-                );
-                if (!response.ok) return null;
-                const data = await response.json();
-                const addr = data?.address || {};
-                let locationName = addr.city ||
-                    addr.town ||
-                    addr.municipality ||
-                    addr.county ||
-                    addr.village ||
-                    addr.hamlet ||
-                    addr.suburb ||
-                    addr.neighbourhood ||
-                    addr.state_district ||
-                    null;
-
-                if (locationName) {
-                    if (addr.country_code === 'us' && addr.state) {
-                        locationName = `${locationName}, ${addr.state}`;
-                    } else if (addr.state && addr.state !== locationName) {
-                        locationName = `${locationName}, ${addr.state}${addr.country ? `, ${addr.country}` : ''}`;
-                    } else if (addr.country && addr.country_code !== 'us') {
-                        locationName = `${locationName}, ${addr.country}`;
-                    }
-                } else {
-                    locationName = addr.state || addr.country || data?.display_name || 'your current location';
-                }
-
-                return {
-                    lat,
-                    lon,
-                    locationName,
-                    raw: data
-                };
-            } catch (error) {
-                return null;
-            }
-        }
-
-        function isCurrentLocationQuestion(text) {
-            const t = String(text || '').toLowerCase().trim();
-            if (!t) return false;
-            return /\b(where am i|what(?:'s| is) my current location|what(?:'s| is) my location|tell me my current location|tell me where i am|where is my current location|where i am right now)\b/.test(t);
-        }
-
-        async function answerCurrentLocation() {
-            try {
-                showThinkingIndicator();
-                const position = await getCurrentPositionAsync({ enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 });
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                const resolved = await reverseGeocodeCurrentPosition(lat, lon);
-                hideThinkingIndicator();
-
-                const locationLabel = resolved?.locationName || 'your current location';
-                const roundedLat = Number(lat).toFixed(4);
-                const roundedLon = Number(lon).toFixed(4);
-                const response = `You are near ${locationLabel}. Coordinates: ${roundedLat}, ${roundedLon}.`;
-                addChatMessage(response, false);
-                speak(`You are near ${locationLabel}`);
-                saveToHistory('current location', response);
-                return true;
-            } catch (error) {
-                hideThinkingIndicator();
-                await deliverApiReply('location_manual_prompt', {
-                    reason: 'geolocation_error',
-                    detail: 'I could not access your current location. Please enable location permission or tell me your city.'
-                }, {
-                    fallbackText: 'I could not access your current location. Please enable location permission or tell me your city.'
-                });
-                return true;
-            }
         }
 
         function haversineMiles(lat1, lon1, lat2, lon2) {
@@ -15788,253 +14708,6 @@ window.planToPromptList = function(plan){
         return `${i + 1}. ${title} (${duration})${travel}`;
     }).join("\n");
 };
-</script>
-
-
-<!-- ===== Fully Dynamic Travel Intent + Search Logic Patch ===== -->
-<script>
-window.detectTravelIntent = function(text) {
-    const t = String(text || '').toLowerCase();
-
-    if (/street food|foodie|food|eat|local food|night market|snack|dessert|coffee|tea/.test(t)) return 'food';
-    if (/history|historical|heritage|fort|palace|museum|monument|ruins|archaeological/.test(t)) return 'history';
-    if (/temple|church|mosque|culture|spiritual|cathedral|basilica|shrine|pagoda|monastery|synagogue/.test(t)) return 'culture';
-    if (/nature|park|lake|waterfall|beach|scenic|hike|forest|garden|river|mangrove/.test(t)) return 'nature';
-    if (/shopping|market|bazaar|souq|mall|shopping street/.test(t)) return 'shopping';
-
-    return 'general';
-};
-
-window.buildSearchQueries = function(location, intent) {
-    const q = String(location || '').trim();
-
-    const queryMap = {
-        food: [
-            `best street food in ${q}`,
-            `${q} famous food streets`,
-            `${q} night market food`,
-            `${q} local food market`
-        ],
-        history: [
-            `top historical places in ${q}`,
-            `${q} heritage attractions`,
-            `${q} forts museums monuments`
-        ],
-        culture: [
-            `top cultural places in ${q}`,
-            `${q} temples churches mosques shrines`,
-            `${q} spiritual places to visit`
-        ],
-        nature: [
-            `best nature places in ${q}`,
-            `${q} parks lakes beaches waterfalls`,
-            `${q} scenic spots`
-        ],
-        shopping: [
-            `best markets in ${q}`,
-            `${q} shopping streets bazaar`,
-            `${q} local market attractions`
-        ],
-        general: [
-            `top tourist places in ${q}`,
-            `things to do in ${q}`,
-            `${q} attractions must visit`
-        ]
-    };
-
-    return queryMap[intent] || queryMap.general;
-};
-
-window.normalizeSearchResults = function(results) {
-    return (results || [])
-        .filter(r => r && r.title)
-        .map(r => ({
-            title: r.title,
-            description: r.description || '',
-            lat: typeof r.lat === 'number' ? r.lat : (typeof r.latitude === 'number' ? r.latitude : null),
-            lon: typeof r.lon === 'number' ? r.lon : (typeof r.lng === 'number' ? r.lng : (typeof r.longitude === 'number' ? r.longitude : null)),
-            source: r.source || ''
-        }));
-};
-
-window.classifyPlace = function(place) {
-    const text = `${place.title || ''} ${place.description || ''}`.toLowerCase();
-
-    if (/temple|church|mosque|cathedral|basilica|shrine|pagoda|monastery|synagogue/.test(text))
-        return { type: 'religious', time: 2.5 };
-
-    if (/museum|gallery|exhibit|heritage center/.test(text))
-        return { type: 'museum', time: 2 };
-
-    if (/fort|palace|castle|citadel|ruins|archaeological|monument|amphitheatre/.test(text))
-        return { type: 'historical', time: 2 };
-
-    if (/park|garden|botanical|national park/.test(text))
-        return { type: 'park', time: 1.25 };
-
-    if (/market|bazaar|souq|food street|night market|street food/.test(text))
-        return { type: 'market_food', time: 1.5 };
-
-    if (/beach|coast|bay|shore/.test(text))
-        return { type: 'beach', time: 2 };
-
-    if (/viewpoint|tower|observation deck|lookout/.test(text))
-        return { type: 'viewpoint', time: 0.75 };
-
-    if (/lake|river|mangrove|waterfall|forest/.test(text))
-        return { type: 'nature', time: 1.5 };
-
-    return { type: 'attraction', time: 1.5 };
-};
-
-window.matchesIntent = function(place, intent) {
-    const text = `${place.title || ''} ${place.description || ''}`.toLowerCase();
-
-    const rules = {
-        food: /food|eat|street food|snack|market|bazaar|stall|restaurant|cafe|coffee|dessert|night market/,
-        history: /fort|palace|museum|monument|heritage|historical|ruins|archaeological/,
-        culture: /temple|church|mosque|cathedral|basilica|shrine|cultural|spiritual|pagoda|monastery|synagogue/,
-        nature: /park|beach|lake|waterfall|forest|garden|nature|scenic|viewpoint|mangrove|river/,
-        shopping: /market|bazaar|shopping|souq|street market|mall/,
-        general: /.*/
-    };
-
-    return (rules[intent] || rules.general).test(text);
-};
-
-window.extractConfirmedPlaces = function(searchResults, intent = 'general') {
-    const normalized = window.normalizeSearchResults(searchResults);
-    const filtered = normalized.filter(p => window.matchesIntent(p, intent));
-    const pool = filtered.length ? filtered : normalized;
-    return pool.slice(0, 10);
-};
-
-window.buildDayPlan = function(places) {
-    let hours = 0;
-    const maxHours = 8;
-    const plan = [];
-
-    for (const place of places) {
-        const info = window.classifyPlace(place);
-        if (hours + info.time <= maxHours) {
-            plan.push({
-                ...place,
-                name: place.title,
-                duration: info.time,
-                type: info.type
-            });
-            hours += info.time;
-        }
-    }
-    return plan;
-};
-
-window.insertFoodStops = function(plan, intent = 'general') {
-    const updated = [];
-    plan.forEach((p, i) => {
-        if (intent === 'food' && i === 0) {
-            updated.push({ name: 'Breakfast street-food stop nearby', title: 'Breakfast street-food stop nearby', duration: 1, type: 'food' });
-        }
-        updated.push(p);
-        if (i === 1) {
-            updated.push({
-                name: intent === 'food' ? 'Lunch food-market stop nearby' : 'Lunch nearby',
-                title: intent === 'food' ? 'Lunch food-market stop nearby' : 'Lunch nearby',
-                duration: 1,
-                type: 'food'
-            });
-        }
-    });
-
-    if (!updated.some(x => (x.type || '') === 'food')) {
-        updated.splice(1, 0, { name: 'Lunch nearby', title: 'Lunch nearby', duration: 1, type: 'food' });
-    }
-    return updated;
-};
-
-window.generateStructuredTravelPlan = function(searchResults, userText = '') {
-    const intent = window.detectTravelIntent(userText);
-    const confirmedPlaces = window.extractConfirmedPlaces(searchResults, intent);
-
-    const routeBase = (typeof window.buildSmartRoute === 'function')
-        ? window.buildSmartRoute(confirmedPlaces)
-        : confirmedPlaces;
-
-    const planned = window.buildDayPlan(routeBase);
-    const withFood = window.insertFoodStops(planned, intent);
-
-    const allowedPlaces = confirmedPlaces.map(p => p.title);
-    const planList = (typeof window.planToPromptList === 'function')
-        ? window.planToPromptList(withFood)
-        : withFood.map((p, i) => `${i + 1}. ${p.title || p.name || 'Stop'} (${p.duration || 1.5}h)`).join('\n');
-
-    return {
-        intent,
-        allowedPlaces,
-        confirmedPlaces,
-        planList
-    };
-};
-
-window.validatePlaces = function(aiText, allowedPlaces) {
-    if (!aiText) return false;
-    const lines = aiText.split('\n');
-
-    for (const line of lines) {
-        const looksLikePlace = /(temple|museum|park|fort|beach|palace|market|tower|cathedral|basilica|garden|lake|river|street|bazaar)/i.test(line);
-        if (!looksLikePlace) continue;
-
-        const containsAllowed = (allowedPlaces || []).some(p =>
-            String(line).toLowerCase().includes(String(p).toLowerCase())
-        );
-
-        if (!containsAllowed) return false;
-    }
-    return true;
-};
-</script>
-
-<script>
-function extractUnifiedAssistantText(data) {
-    if (!data || typeof data !== 'object') return '';
-
-    const direct =
-        (typeof data.answer === 'string' && data.answer.trim()) ? data.answer.trim() :
-        (typeof data.response === 'string' && data.response.trim()) ? data.response.trim() :
-        (typeof data.text === 'string' && data.text.trim()) ? data.text.trim() :
-        (typeof data.message === 'string' && data.message.trim()) ? data.message.trim() :
-        '';
-
-    if (direct) return direct;
-
-    if (Array.isArray(data.results) && data.results.length) {
-        const firstWithDescription = data.results.find(item =>
-            item && typeof item.description === 'string' && item.description.trim()
-        );
-        if (firstWithDescription) return firstWithDescription.description.trim();
-
-        const firstWithTitle = data.results.find(item =>
-            item && typeof item.title === 'string' && item.title.trim()
-        );
-        if (firstWithTitle) return firstWithTitle.title.trim();
-    }
-
-    return '';
-}
-
-function normalizeAssistantPayload(data, fallbackText = "Sorry, I couldn't generate a response.") {
-    const normalized = (data && typeof data === 'object') ? { ...data } : {};
-    const text = extractUnifiedAssistantText(normalized);
-
-    normalized.response = text || fallbackText;
-    normalized.text = normalized.response;
-
-    if (!Array.isArray(normalized.sources)) {
-        normalized.sources = [];
-    }
-
-    return normalized;
-}
 </script>
 
 </body>
