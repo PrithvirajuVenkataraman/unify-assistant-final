@@ -4801,7 +4801,7 @@ async function handleNameCorrection(text) {
 
             const welcomeSeen = sessionStorage.getItem('jarvis_welcome_seen') === '1';
             if (!welcomeSeen) {
-                const welcomeMessage = 'Hi, hello! How can I help today?';
+                const welcomeMessage = 'Hi, How can I help today?';
                 addChatMessage(welcomeMessage, false);
                 speak(welcomeMessage);
                 sessionStorage.setItem('jarvis_welcome_seen', '1');
