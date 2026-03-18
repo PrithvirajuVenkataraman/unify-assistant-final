@@ -4798,13 +4798,14 @@ async function handleNameCorrection(text) {
             renderCommuteCard();
             renderTripCard();
             renderSafetyCard();
-            
-            const welcomeMessage = userName
-                ? `Hi ${userName}. How can I help you today?`
-                : 'How can I help you today?';
-            addChatMessage(welcomeMessage, false);
-            speak(welcomeMessage);
-            
+
+            const welcomeSeen = sessionStorage.getItem('jarvis_welcome_seen') === '1';
+            if (!welcomeSeen) {
+                const welcomeMessage = 'Hi, hello! How can I help today?';
+                addChatMessage(welcomeMessage, false);
+                speak(welcomeMessage);
+                sessionStorage.setItem('jarvis_welcome_seen', '1');
+            }
             
         };
 
@@ -5861,19 +5862,28 @@ async function handleNameCorrection(text) {
                 chatContainer.appendChild(messageDiv);
                 
                 
-                const containsRenderedMarkup = /<[^>]+>/.test(formattedText);
-                const shouldTypewriter = (typewriter === null ? !hasHtmlContent : !!typewriter) && !containsRenderedMarkup;
+                const hasMarkdownFormatting = /\[[^\]]+\]\((https?:\/\/[^)]+)\)|\*\*([^*]+)\*\*/.test(displayText);
+                const shouldTypewriter = typewriter === null
+                    ? (!hasHtmlContent && !hasMarkdownFormatting)
+                    : (!!typewriter && !hasHtmlContent);
                 if (shouldTypewriter) {
                     const textElement = messageDiv.querySelector('.typewriter-text');
                     let charIndex = 0;
-                    const speed = 15; 
+                    
+                    function getHumanTypingDelay(ch) {
+                        if (/[.!?]/.test(ch)) return 130;
+                        if (/[,;:]/.test(ch)) return 95;
+                        if (/\s/.test(ch)) return 25;
+                        return 20 + Math.floor(Math.random() * 30);
+                    }
                     
                     function typeCharacter() {
                         if (charIndex < formattedText.length) {
                             textElement.innerHTML = formattedText.substring(0, charIndex + 1);
-                            charIndex++;
+                            const currentChar = formattedText.charAt(charIndex);
+                            charIndex += 1;
                             maybeAutoScroll(chatContainer);
-                            setTimeout(typeCharacter, speed);
+                            setTimeout(typeCharacter, getHumanTypingDelay(currentChar));
                         }
                     }
                     
@@ -5929,7 +5939,7 @@ function normalizeUiTokens(text) {
         }
 
         function addModelAssistantMessage(text, label = 'Model answer') {
-            addChatMessage(text, false, false);
+            addChatMessage(text, false);
         }
 
         function isSafeAssistantUrl(url) {
