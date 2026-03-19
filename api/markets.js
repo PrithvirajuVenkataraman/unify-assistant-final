@@ -282,4 +282,3 @@ function isPlausiblePrice(value, profile) {
     if (profile.kind === 'gem') return value >= 1 && value <= 1000000;
     return value >= 1 && value <= 1000000;
 }
-
