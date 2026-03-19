@@ -1928,6 +1928,66 @@
             border-left-color: rgba(100, 116, 139, 0.45);
             box-shadow: -18px 0 50px rgba(2, 6, 23, 0.45);
         }
+
+        .selection-helper-popover {
+            position: fixed;
+            z-index: 120;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.45);
+            background: rgba(255, 255, 255, 0.97);
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            max-width: min(460px, 92vw);
+        }
+
+        .selection-helper-popover.visible {
+            display: flex;
+        }
+
+        .selection-helper-chip {
+            font-size: 11px;
+            font-weight: 700;
+            color: #334155;
+            background: rgba(226, 232, 240, 0.9);
+            border-radius: 999px;
+            padding: 4px 8px;
+            max-width: 150px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .selection-helper-btn {
+            border: none;
+            border-radius: 999px;
+            padding: 7px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #ffffff;
+            background: linear-gradient(135deg, #0ea5e9, #2563eb);
+            cursor: pointer;
+            box-shadow: 0 8px 18px rgba(37, 99, 235, 0.3);
+        }
+
+        .selection-helper-btn:hover {
+            filter: brightness(1.05);
+        }
+
+        body.dark .selection-helper-popover {
+            background: rgba(15, 23, 42, 0.97);
+            border-color: rgba(100, 116, 139, 0.8);
+            box-shadow: 0 12px 28px rgba(2, 6, 23, 0.5);
+        }
+
+        body.dark .selection-helper-chip {
+            color: #e2e8f0;
+            background: rgba(51, 65, 85, 0.95);
+        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -4830,6 +4890,10 @@ async function handleNameCorrection(text) {
         let pendingReminderTask = '';
         let reminderHeartbeat = null;
         let chatHistory = [];
+        let selectionHelperState = {
+            selectedText: '',
+            popoverEl: null
+        };
         let micPermissionGranted = false;
         
         
@@ -4917,6 +4981,7 @@ async function handleNameCorrection(text) {
             updateVoiceToTextButton();
             initChatScrollLock();
             initKeyboardShortcuts();
+            initSelectionPromptHelper();
             window.addEventListener('online', updateOnlineStatus);
             window.addEventListener('offline', updateOnlineStatus);
             updateOnlineStatus();
@@ -4927,8 +4992,9 @@ async function handleNameCorrection(text) {
             renderTripCard();
             renderSafetyCard();
 
-            const welcomeSeen = sessionStorage.getItem('jarvis_welcome_seen') === '1';
-            if (!welcomeSeen) {
+            const chatContainer = document.getElementById('chat-container');
+            const hasRenderedMessages = !!chatContainer?.querySelector('[data-role]');
+            if (!hasRenderedMessages) {
                 const welcomeOptions = [
                     'Hi! How can I help today?',
                     'Hello! How can I help today?',
@@ -4939,7 +5005,6 @@ async function handleNameCorrection(text) {
                 const welcomeMessage = welcomeOptions[Math.floor(Math.random() * welcomeOptions.length)];
                 addChatMessage(welcomeMessage, false);
                 speak(welcomeMessage);
-                sessionStorage.setItem('jarvis_welcome_seen', '1');
             }
             
         };
@@ -5889,6 +5954,113 @@ async function handleNameCorrection(text) {
             const btn = document.getElementById('jump-to-latest-btn');
             if (!btn) return;
             btn.classList.toggle('hidden', !autoScrollLocked);
+        }
+
+        function initSelectionPromptHelper() {
+            if (selectionHelperState.popoverEl) return;
+
+            const popover = document.createElement('div');
+            popover.id = 'selection-helper-popover';
+            popover.className = 'selection-helper-popover';
+            popover.innerHTML = `
+                <span id="selection-helper-chip" class="selection-helper-chip"></span>
+                <button id="selection-helper-btn" type="button" class="selection-helper-btn">Do You Wanna know</button>
+            `;
+            document.body.appendChild(popover);
+            selectionHelperState.popoverEl = popover;
+
+            const askBtn = document.getElementById('selection-helper-btn');
+            if (askBtn) {
+                askBtn.addEventListener('click', applySelectionToPrompt);
+            }
+
+            document.addEventListener('mouseup', handleSelectionHelperTrigger, true);
+            document.addEventListener('keyup', handleSelectionHelperTrigger, true);
+            document.addEventListener('scroll', hideSelectionHelperPopover, true);
+            document.addEventListener('selectionchange', handleSelectionHelperSelectionChange, true);
+            document.addEventListener('mousedown', (event) => {
+                if (!selectionHelperState.popoverEl) return;
+                if (selectionHelperState.popoverEl.contains(event.target)) return;
+                hideSelectionHelperPopover();
+            }, true);
+        }
+
+        function handleSelectionHelperSelectionChange() {
+            const selection = window.getSelection ? window.getSelection() : null;
+            if (!selection || selection.toString().trim()) return;
+            hideSelectionHelperPopover();
+        }
+
+        function handleSelectionHelperTrigger() {
+            const selection = window.getSelection ? window.getSelection() : null;
+            if (!selection || selection.rangeCount === 0) {
+                hideSelectionHelperPopover();
+                return;
+            }
+
+            const selectedText = selection.toString().replace(/\s+/g, ' ').trim();
+            if (!selectedText || selectedText.length < 3) {
+                hideSelectionHelperPopover();
+                return;
+            }
+
+            const range = selection.getRangeAt(0);
+            const commonNode = range.commonAncestorContainer;
+            const element = commonNode && commonNode.nodeType === 1 ? commonNode : commonNode?.parentElement;
+            if (!element || !element.closest || !element.closest('.assistant-message-text')) {
+                hideSelectionHelperPopover();
+                return;
+            }
+
+            const rect = range.getBoundingClientRect();
+            if (!rect || !Number.isFinite(rect.top)) {
+                hideSelectionHelperPopover();
+                return;
+            }
+
+            selectionHelperState.selectedText = selectedText;
+            showSelectionHelperPopover(rect, selectedText);
+        }
+
+        function showSelectionHelperPopover(targetRect, selectedText) {
+            const popover = selectionHelperState.popoverEl;
+            if (!popover) return;
+            const chip = document.getElementById('selection-helper-chip');
+            if (chip) chip.textContent = selectedText;
+
+            popover.classList.add('visible');
+            const spacing = 10;
+            const maxLeft = Math.max(8, window.innerWidth - popover.offsetWidth - 8);
+            const preferredTop = targetRect.top + window.scrollY - popover.offsetHeight - spacing;
+            const fallbackTop = targetRect.bottom + window.scrollY + spacing;
+            const top = preferredTop > window.scrollY + 8 ? preferredTop : fallbackTop;
+            const left = Math.min(
+                maxLeft,
+                Math.max(8, targetRect.left + window.scrollX + (targetRect.width / 2) - (popover.offsetWidth / 2))
+            );
+            popover.style.top = `${top}px`;
+            popover.style.left = `${left}px`;
+        }
+
+        function hideSelectionHelperPopover() {
+            const popover = selectionHelperState.popoverEl;
+            if (!popover) return;
+            popover.classList.remove('visible');
+        }
+
+        function applySelectionToPrompt() {
+            const selected = String(selectionHelperState.selectedText || '').trim();
+            if (!selected) return;
+
+            const input = document.getElementById('text-input');
+            if (!input) return;
+
+            input.value = `Do you wanna know more about "${selected}"?`;
+            input.focus();
+            input.selectionStart = input.value.length;
+            input.selectionEnd = input.value.length;
+            toggleSendButton();
+            hideSelectionHelperPopover();
         }
         
         
@@ -9415,6 +9587,27 @@ function isStableBiographyQuestion(text) {
     return /^[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,4}$/.test(subject);
 }
 
+function isProfileOrIdentityQuery(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return false;
+
+    const profileIntent = /^(who is|who was|tell me about|what do you think of|what are your thoughts on|thoughts on)\b/i;
+    if (!profileIntent.test(raw)) return false;
+
+    const subject = raw
+        .replace(/^(who is|who was|tell me about|what do you think of|what are your thoughts on|thoughts on)\s+/i, '')
+        .replace(/[?.!,;]+$/g, '')
+        .trim();
+
+    if (!subject) return false;
+    if (subject.split(/\s+/).length > 7) return false;
+    if (/^(it|this|that|him|her|them|me|you|my|your|our|their)\b/i.test(subject)) return false;
+    if (/^(the|a|an)\s+(best|difference|weather|news|price|market|way|time|movie|song|recipe)\b/i.test(subject)) return false;
+
+    // For people/roles/entities, always prefer source-backed retrieval.
+    return true;
+}
+
 function isUniversalEntityFactQuestion(text) {
     return classifyUniversalEntityIntent(text).isEntityFact;
 }
@@ -9435,6 +9628,7 @@ function classifyUserMessage(text) {
         flags: {
             inappropriate: isInappropriateContent(raw),
             stableBiography: isStableBiographyQuestion(raw),
+            profileIdentity: isProfileOrIdentityQuery(raw),
             universalEntityFact: entityIntent.isEntityFact,
             currentInfo: isCurrentInfoQuery(raw),
             exchangeRate: isExchangeRateQuery(raw),
@@ -9467,7 +9661,7 @@ function decideAnswerPath(classification) {
     const flags = classification.flags || {};
 
     if (flags.inappropriate) return 'moderation';
-    if (flags.stableBiography) return 'default_model';
+    if (flags.profileIdentity || flags.stableBiography) return 'live_retrieval';
 
     if (flags.universalEntityFact) return 'entity_fact';
     if (flags.currentInfo) return 'current_info';
@@ -9531,6 +9725,7 @@ function decideHybridResponseMode(classification) {
     const strictLiveRequired = requiresStrictLiveVerification(raw, classification.liveIntent, classification.entityIntent);
 
     if (flags.inappropriate) return 'special_handler';
+    if (flags.profileIdentity || flags.stableBiography) return 'verify_first';
     if (flags.news || flags.exchangeRate || flags.marketPrice) return 'verify_first';
     if (flags.currentInfo && strictLiveRequired) return 'verify_first';
     if (flags.universalEntityFact && strictLiveRequired) return 'verify_first';
@@ -9550,8 +9745,14 @@ const ROUTING_REGRESSION_CASES = [
     {
         name: 'Stable biography',
         prompt: 'Who is Donald Trump?',
-        expectedPath: 'default_model',
-        expectedMode: 'chat_first'
+        expectedPath: 'live_retrieval',
+        expectedMode: 'verify_first'
+    },
+    {
+        name: 'Profile opinion prompt',
+        prompt: 'What do you think of Sai Abhyankar?',
+        expectedPath: 'live_retrieval',
+        expectedMode: 'verify_first'
     },
     {
         name: 'Strict political office',
@@ -11001,11 +11202,10 @@ async function handleLiveRetrievalQuery(userText) {
         const sourcePool = trusted.length >= 3 ? trusted : deduped;
         const distinctDomains = Array.from(new Set(sourcePool.map(r => getDomainFromUrl(r.url)).filter(Boolean)));
         if (!directFactQuery && distinctDomains.length < 2) {
-            if (!strictLiveRequired) {
-                return await publishUniversalModelFallback({ userText: query }, 'Model fallback');
+            if (strictLiveRequired) {
+                await fetchAndDisplayNews(userText);
+                return true;
             }
-            await fetchAndDisplayNews(userText);
-            return true;
         }
 
         if (directFactQuery) {
@@ -11099,10 +11299,13 @@ ${snippets}`
         const finalMsg = conciseFactQuery
             ? `${conciseAnswer}\n\nSources:\n${sourceLines}`
             : `${answer}\n\nSources:\n${sourceLines}`;
+        const finalWithCoverageNote = (!directFactQuery && distinctDomains.length < 2)
+            ? `${finalMsg}\n\nNote: Limited source coverage right now (single-domain result).`
+            : finalMsg;
 
-        addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
+        addVerifiedAssistantMessage(finalWithCoverageNote, 'Verified live sources');
         await speakApiReply('live_summary_ready', {}, 'I checked current sources and summarized what I found.');
-        saveToHistory(userText, finalMsg);
+        saveToHistory(userText, finalWithCoverageNote);
         return true;
     } catch (error) {
         if (isAbortError(error)) {
