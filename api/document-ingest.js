@@ -81,8 +81,22 @@ export default async function handler(req, res) {
         } else if (kind === 'image') {
             extractedText = await extractWithVisionFile(buffer, normalizedMime || 'image/jpeg', 'ocr');
             extractionMode = 'model-ocr';
-            if (!extractedText.trim() && /image\/avif/i.test(normalizedMime)) {
-                extractionHint = 'AVIF OCR may fail on some vision models. Convert to JPG/PNG and upload again.';
+            if (!extractedText.trim()) {
+                const described = await extractWithVisionFile(buffer, normalizedMime || 'image/jpeg', 'describe');
+                if (described.trim()) {
+                    extractedText = described;
+                    extractionMode = 'model-vision';
+                    extractionHint = 'No strong OCR text was detected; returning visual description of the image.';
+                }
+            }
+            if (!extractedText.trim()) {
+                if (!hasAnyVisionProviderConfigured()) {
+                    extractionHint = 'No vision OCR provider is configured. Add GEMINI_API_KEY or a valid GROQ vision setup, then redeploy.';
+                } else if (/image\/avif/i.test(normalizedMime)) {
+                    extractionHint = 'AVIF OCR may fail on some vision models. Convert to JPG/PNG and upload again.';
+                } else {
+                    extractionHint = 'No readable text was detected. Try a sharper image, higher contrast, or crop tightly around text.';
+                }
             }
         } else {
             return res.status(415).json({
@@ -428,7 +442,9 @@ async function extractWithGroqVision(buffer, mimeType, mode = 'ocr') {
 
     const prompt = mode === 'ocr'
         ? 'Extract as much readable text as possible from this file. Preserve line breaks and key fields.'
-        : 'Extract structured bill fields and visible text.';
+        : mode === 'describe'
+            ? 'Describe the image in concise, factual bullet points. Mention visible objects, scene context, and any likely readable text snippets.'
+            : 'Extract structured bill fields and visible text.';
 
     const configured = String(process.env.GROQ_VISION_MODEL || '').trim();
     const candidates = [
@@ -487,7 +503,9 @@ async function extractWithGeminiVision(buffer, mimeType, mode = 'ocr') {
     const model = String(process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
     const prompt = mode === 'ocr'
         ? 'Extract as much readable text as possible from this file. Preserve line breaks and key fields.'
-        : 'Extract structured bill fields and visible text.';
+        : mode === 'describe'
+            ? 'Describe the image in concise, factual bullet points. Mention visible objects, scene context, and any likely readable text snippets.'
+            : 'Extract structured bill fields and visible text.';
 
     try {
         const response = await fetch(
@@ -515,4 +533,10 @@ async function extractWithGeminiVision(buffer, mimeType, mode = 'ocr') {
     } catch (e) {
         return '';
     }
+}
+
+function hasAnyVisionProviderConfigured() {
+    const groqKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    return Boolean(groqKey || geminiKey);
 }
