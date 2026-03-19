@@ -11588,13 +11588,13 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         const deduped = await retrieveUniversalEntitySources(pipeline, controller);
 
         if (!deduped.length) { 
-            if (publishUniversalKnownFact(pipeline)) return true;
+            if (await publishUniversalKnownFact(pipeline)) return true;
             if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
             return publishUniversalVerificationFallback(pipeline, 'I could not verify that result right now.');
         } 
 
         const agreement = buildSourceAgreement(deduped.slice(0, 6), pipeline.entityIntent);
-        if (publishUniversalConsensusAnswer(pipeline, agreement)) return true;
+        if (await publishUniversalConsensusAnswer(pipeline, agreement)) return true;
 
         if (pipeline.entityIntent.directFact && agreement.mixed) {
             if (pipeline.knownFact && pipeline.entityIntent.relationType === 'title_count') {
@@ -11609,7 +11609,7 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         return await summarizeUniversalEntitySources(pipeline, deduped, controller);
     } catch (error) { 
         if (isAbortError(error)) return true; 
-        if (publishUniversalKnownFact(pipeline)) return true;
+        if (await publishUniversalKnownFact(pipeline)) return true;
         if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
         return publishUniversalVerificationFallback(pipeline);
     } finally { 
@@ -11710,13 +11710,16 @@ async function handleLiveRetrievalQuery(userText) {
             .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}`)
             .join('\n\n');
 
-        const summaryResponse = await fetch('/api/chat-groq', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: controller.signal,
-            body: JSON.stringify({
-                systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly.',
-                message: `Answer the user's question using ONLY the snippets below.
+        let answer = '';
+        try {
+            const summaryResponse = await Promise.race([
+                fetch('/api/chat-groq', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear or mixed, say so plainly.',
+                        message: `Answer the user's question using ONLY the snippets below.
 
 User question: "${query}"
 
@@ -11739,11 +11742,18 @@ Rules:
 
 Snippets:
 ${snippets}`
-            })
-        });
-
-        const summaryData = await summaryResponse.json();
-        const answer = cleanLiveAnswerText(String(summaryData?.response || summaryData?.text || '').trim());
+                    })
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('live_summary_timeout')), 12000))
+            ]);
+            if (!summaryResponse || !summaryResponse.ok) {
+                throw new Error('live_summary_failed');
+            }
+            const summaryData = await summaryResponse.json();
+            answer = cleanLiveAnswerText(String(summaryData?.response || summaryData?.text || '').trim());
+        } catch (summaryError) {
+            answer = '';
+        }
         if (!answer) {
             const top = sourcePool[0];
             if (!top) {
