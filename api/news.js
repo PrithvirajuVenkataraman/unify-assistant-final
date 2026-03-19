@@ -398,7 +398,7 @@ async function searchWithDuckDuckGoHtml(query, maxResults) {
         const url = sanitizeExternalUrl(decodeHtmlEntities(String(match[1] || '').trim()));
         const title = decodeHtmlEntities(stripTags(String(match[2] || '').trim()));
         if (!url || !title) continue;
-        out.push({ title, url, description: title });
+        out.push({ title, url, description: title }); 
     }
     return out;
 }
