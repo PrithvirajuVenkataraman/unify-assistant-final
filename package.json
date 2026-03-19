@@ -1,6 +1,10 @@
 {
-  "name": "jarvis-api",
-  "version": "1.0.0",
+  "name": "unify-assistant",
   "private": true,
-  "type": "module"
+  "version": "1.0.0",
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1"
+  }
 }
