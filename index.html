@@ -2293,7 +2293,7 @@
 })();
 
 // Temporary API debug helper (safe to remove after backend issues are fixed).
-const API_DEBUG_ENABLED = true;
+const API_DEBUG_ENABLED = false;
 
 function ensureApiDebugLine() {
     let line = document.getElementById('api-debug-line');
@@ -2398,6 +2398,14 @@ function isWeatherIntentText(text) {
         /\b(how'?s?\s+it\s+(?:outside|out(?:side)?|where\s+i\s+am)|what'?s?\s+it\s+like\s+(?:outside|where\s+i\s+am)|is\s+it\s+(?:raining|snowing|hot|cold|windy|sunny|cloudy|humid)\b)\b/.test(t) ||
         /\b(?:outside|here|around me|near me|my current location|current location|my location|where i am|my area|my place)\b/.test(t) &&
         /\b(?:forecast|temperature|rain|snow|hot|cold|wind|sunny|cloudy|humid|weather)\b/.test(t);
+}
+
+function isCurrentLocationIntentText(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    if (/\b(share|send|nearest|nearby|hospital|police|pharmacy|atm)\b/.test(t)) return false;
+    if (/\b(weather|forecast|temperature|rain|snow|wind|sunny|cloudy|humid)\b/.test(t)) return false;
+    return /\b(where\s+am\s+i|where\s+m\s+i|where\s+i\s+am|where\s+am\s+i\s+now|what\s+is\s+my\s+location|what'?s\s+my\s+location|my\s+current\s+location|current\s+location|my\s+coordinates?|current\s+coordinates?|my\s+gps|where'?s\s+my\s+location|latitude|longitude|coords?)\b/.test(t);
 }
 
 function isTamilJokeRequest(text) {
@@ -11424,6 +11432,11 @@ ${snippets}`
             
             const isReminderQuery = lower.includes('remind') || lower.includes('reminder');
 
+            if (isCurrentLocationIntentText(lower)) {
+                await handleCurrentLocationRequest(text);
+                return;
+            }
+
             const homeMatch = text.match(/\b(?:my\s+home\s+is|set\s+home\s+to)\s+(.+)$/i);
             if (homeMatch) {
                 commuteProfile.home = homeMatch[1].replace(/[?.!,]$/g, '').trim();
@@ -13882,6 +13895,77 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     ...options
                 });
             });
+        }
+
+        async function handleCurrentLocationRequest(originalText = '') {
+            showThinkingIndicator('Checking your current location...');
+            try {
+                const position = await getCurrentPositionAsync({
+                    enableHighAccuracy: true,
+                    timeout: 12000,
+                    maximumAge: 60000
+                });
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                let locationName = 'your current location';
+
+                try {
+                    const reverseResponse = await fetch(
+                        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+                        { headers: { 'User-Agent': 'JARVISVoiceAssistant/1.0' } }
+                    );
+                    if (reverseResponse.ok) {
+                        const reverseData = await reverseResponse.json();
+                        const addr = reverseData?.address || {};
+                        let cityName = addr.city ||
+                            addr.town ||
+                            addr.municipality ||
+                            addr.county ||
+                            addr.village ||
+                            addr.hamlet ||
+                            addr.suburb ||
+                            addr.neighbourhood ||
+                            addr.state_district ||
+                            null;
+
+                        if (cityName) {
+                            if (addr.country_code === 'us' && addr.state) {
+                                cityName = `${cityName}, ${addr.state}`;
+                            } else if (addr.state && addr.state !== cityName) {
+                                cityName = `${cityName}, ${addr.state}, ${addr.country || ''}`.replace(/,\s*$/, '');
+                            } else if (addr.country && addr.country_code !== 'us') {
+                                cityName = `${cityName}, ${addr.country}`;
+                            }
+                            locationName = cityName;
+                        } else {
+                            locationName = addr.state || addr.country || locationName;
+                        }
+                    }
+                } catch (error) {}
+
+                const latitude = Number(lat.toFixed(6));
+                const longitude = Number(lon.toFixed(6));
+                const mapsUrl = `https://maps.google.com/?q=${latitude},${longitude}`;
+
+                await deliverApiReply('current_location_with_coords', {
+                    location: locationName,
+                    latitude,
+                    longitude,
+                    mapsUrl
+                }, {
+                    historyKey: originalText || 'where am i',
+                    fallbackText: `You are currently near ${locationName}.\nCoordinates: ${latitude}, ${longitude}\nMap: ${mapsUrl}`
+                });
+            } catch (error) {
+                await deliverApiReply('gps_access_error', {
+                    feature: 'current_location'
+                }, {
+                    historyKey: originalText || 'where am i',
+                    fallbackText: 'I could not access your current location. Please enable location permission and try again.'
+                });
+            } finally {
+                hideThinkingIndicator();
+            }
         }
 
         async function estimateLeaveTime() {
