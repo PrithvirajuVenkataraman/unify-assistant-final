@@ -14022,15 +14022,13 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 const longitude = Number(lon.toFixed(6));
                 const mapsUrl = `https://maps.google.com/?q=${latitude},${longitude}`;
 
-                await deliverApiReply('current_location_with_coords', {
-                    location: locationName,
-                    latitude,
-                    longitude,
-                    mapsUrl
-                }, {
-                    historyKey: originalText || 'where am i',
-                    fallbackText: `You are currently near ${locationName}.\nCoordinates: ${latitude}, ${longitude}\nMap: ${mapsUrl}`
-                });
+                const locationLead = locationName === 'your current location'
+                    ? 'I found your current location.'
+                    : `You're currently in ${locationName}.`;
+                const locationSummary = `${locationLead}\nCoordinates: ${latitude}, ${longitude}.`;
+                addChatMessage(locationSummary, false);
+                saveToHistory(originalText || 'where am i', locationSummary);
+                speak(locationLead);
 
                 const embeddedMap = `
 <div class="map-container" style="margin-top:10px; border-radius:12px; overflow:hidden; box-shadow:0 2px 12px rgba(15,23,42,0.18); border:1px solid rgba(148,163,184,0.3);">
