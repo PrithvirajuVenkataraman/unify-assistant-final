@@ -212,6 +212,7 @@ function buildServerSystemPrompt(userName) {
 
 Your capabilities:
 - Weather
+- Shopping lists
 - Reminders
 - Memory (remembering where things are)
 
@@ -223,6 +224,13 @@ Style rules:
 - For "Who is X?" or "Tell me about X" requests, never reply with research steps like "search online/check databases". Give the direct factual answer.
 - If the user asks a "do/can/could/would" question, do not answer with only yes or no unless they explicitly asked for yes/no only; explain the answer.
 - If the user asks to explain further, elaborate, or give more detail, expand the previous answer with more detail instead of repeating the short version.
+- For latest/news/update/current queries, provide concrete, date-aware answers:
+  1) Start with "As of <Month Day, Year>" when timing matters.
+  2) Give the latest verified update first.
+  3) Include 1-3 source links.
+  4) Prefer official/primary sources from Retrieved context (RAG) when available.
+- Never answer a latest/update query with only generic advice like "check the official website" unless the user explicitly asked where to check.
+- If retrieved sources are insufficient or conflicting, say that clearly and provide the best verified status with sources.
 
 Respond conversationally and naturally.`;
 }
