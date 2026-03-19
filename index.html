@@ -6526,12 +6526,29 @@ function normalizeUiTokens(text) {
                 } catch (_) {
                     data = {};
                 }
+                let succeeded = response.ok && !!data?.success;
 
-                if (!response.ok || !data?.success) {
+                if (!succeeded && response.status === 404 && isImageLikeMimeOrName(mimeType, fileName)) {
+                    const fallback = await fallbackImageIngestWithVision({
+                        fileBase64,
+                        mimeType,
+                        fileName,
+                        intent
+                    });
+                    if (fallback?.success) {
+                        data = fallback;
+                        succeeded = true;
+                    }
+                }
+
+                if (!succeeded) {
                     const hint = data?.hint ? ` ${data.hint}` : '';
                     let msg = data?.error || '';
                     if (!msg && response.status === 413) {
                         msg = 'File is too large for server processing. Please use a smaller file (about 8 MB or less) or compress the image.';
+                    }
+                    if (!msg && response.status === 404) {
+                        msg = 'Upload endpoint /api/document-ingest was not found in this deployment. Redeploy to include api/document-ingest.js.';
                     }
                     if (!msg && response.status >= 500) {
                         msg = 'Server error while processing the file. Please try again.';
@@ -6609,6 +6626,62 @@ function normalizeUiTokens(text) {
                 mimeType: file.type || '',
                 fileName: file.name
             };
+        }
+
+        function isImageLikeMimeOrName(mimeType, fileName) {
+            const mt = String(mimeType || '').toLowerCase();
+            const fn = String(fileName || '').toLowerCase();
+            return mt.startsWith('image/') || /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(fn);
+        }
+
+        async function fallbackImageIngestWithVision({ fileBase64, mimeType, fileName, intent }) {
+            try {
+                const isBill = String(intent || '').toLowerCase() === 'bill' || /\b(bill|receipt|invoice|expense)\b/i.test(String(fileName || ''));
+                const response = await fetch('/api/vision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        task: isBill ? 'bill_summary' : 'text_extract',
+                        prompt: isBill
+                            ? 'Read this bill/receipt image and extract visible text, totals, tax, and merchant clues.'
+                            : 'Extract all readable text from this image.',
+                        mimeType: mimeType || 'image/jpeg',
+                        imageBase64: fileBase64
+                    })
+                });
+                const rawBody = await response.text();
+                let data = {};
+                try {
+                    data = rawBody ? JSON.parse(rawBody) : {};
+                } catch (_) {
+                    data = {};
+                }
+                if (!response.ok || !data?.success) return null;
+
+                const details = data?.details && typeof data.details === 'object' ? data.details : {};
+                const textDetected = Array.isArray(details.textDetected)
+                    ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean)
+                    : [];
+                const responseText = String(data?.response || '').trim();
+                const extractedText = (textDetected.join('\n') || responseText).slice(0, 22000).trim();
+                if (!extractedText) return null;
+                const summary = String(details?.summary || responseText || 'Image analyzed.').slice(0, 4000).trim();
+
+                return {
+                    success: true,
+                    fileName: fileName || 'image.jpg',
+                    mimeType: mimeType || 'image/jpeg',
+                    kind: 'image',
+                    extractionMode: 'vision-fallback',
+                    extractionHint: 'Used /api/vision fallback because /api/document-ingest was unavailable.',
+                    extractedText,
+                    extractedCharCount: extractedText.length,
+                    summary,
+                    bill: null
+                };
+            } catch (_) {
+                return null;
+            }
         }
 
         async function convertImageFileToJpegBase64(file) {
