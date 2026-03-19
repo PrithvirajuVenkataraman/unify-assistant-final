@@ -155,7 +155,9 @@ const SEARCH_STOP_WORDS = new Set([
     'please', 'kindly', 'just', 'about', 'on', 'for', 'to', 'of', 'in',
     'at', 'by', 'with', 'from', 'into', 'as', 'per', 'tell', 'show',
     'give', 'find', 'search', 'look', 'lookup', 'check', 'know', 'explain',
-    'describe', 'summarize', 'summary', 'information', 'info'
+    'describe', 'summarize', 'summary', 'information', 'info',
+    'provide', 'include', 'exact', 'please', 'sources', 'source', 'link', 'links',
+    'bullet', 'bullets', 'list', 'listed', 'showing'
 ]);
 
 const LEADING_QUERY_PATTERNS = [
@@ -169,6 +171,17 @@ const LEADING_QUERY_PATTERNS = [
 
 const TRAILING_QUERY_PATTERNS = [
     /\b(?:please|for me|per se)\b/gi
+];
+
+const PROMPT_DECORATOR_PATTERNS = [
+    /\b(?:give|provide|show|include)\s+(?:me\s+)?(?:the\s+)?/gi,
+    /\b(?:with|and)\s+\d+\s+(?:source\s+)?links?\b/gi,
+    /\b\d+\s+(?:source\s+)?links?\b/gi,
+    /\b(?:source|sources)\s+links?\b/gi,
+    /\b(?:in|as)\s+(?:short\s+)?bullet\s+points?\b/gi,
+    /\b(?:in|as)\s+(?:a\s+)?(?:single\s+)?line\b/gi,
+    /\b(?:exact|accurate)\s+(?:date|time|score|venue|teams?)\b/gi,
+    /\b(?:only|just)\s+(?:answer|result|score)\b/gi
 ];
 
 export async function searchWeb(query, maxResults = 8) {
@@ -280,9 +293,13 @@ export function extractSearchTopic(text) {
     for (const pattern of TRAILING_QUERY_PATTERNS) {
         cleaned = cleaned.replace(pattern, ' ');
     }
+    for (const pattern of PROMPT_DECORATOR_PATTERNS) {
+        cleaned = cleaned.replace(pattern, ' ');
+    }
 
     cleaned = cleaned
         .replace(/[?!]/g, ' ')
+        .replace(/\b\d+\b/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
