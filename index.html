@@ -4301,7 +4301,8 @@ function normalizeKnowledgeSubject(subject) {
         tamill: 'tamil',
         jilebi: 'jalebi',
         jilabi: 'jalebi',
-        jelabi: 'jalebi'
+        jelabi: 'jalebi',
+        'sean rolden': 'sean roldan'
     };
     return typoMap[raw.toLowerCase()] || raw;
 }
@@ -4575,15 +4576,27 @@ function isLowSignalModelAnswer(text) {
         /respond directly instead of guessing/,
         /tell me a little more/,
         /say a bit more/,
-        /i hear you\./
+        /i hear you\./,
+        /to find information about/,
+        /here are the steps you can follow/,
+        /check online databases or search engines/,
+        /look for (his|her|their) biography/
     ].some(pattern => pattern.test(t));
 }
 
 function sanitizeWeakModelAnswer(answerText, userMessage) {
     const raw = String(answerText || '').trim();
     if (!raw) return '';
+    const rawLower = raw.toLowerCase();
+    const directQuery = isDirectExplainerQuery(userMessage) || isConciseDirectFactQuery(userMessage);
+    const looksLikeResearchSteps =
+        /\b(here(?:'s| are)?\s+(?:the\s+)?steps?\b|steps?\s+you\s+can\s+follow|check\s+online\b|search\s+engines\b|look\s+for\s+(?:his|her|their)\s+biography|you\s+can\s+search\b|to\s+find\s+information\s+about\b)\b/.test(rawLower) ||
+        (/(\n|^)\s*\d+\s*[\).:-]\s+/.test(raw) && /\b(check|search|look|find)\b/.test(rawLower));
+    if (directQuery && looksLikeResearchSteps) {
+        return '';
+    }
     if (isLowSignalModelAnswer(raw) &&
-        (isDirectExplainerQuery(userMessage) || isConciseDirectFactQuery(userMessage))) {
+        directQuery) {
         return '';
     }
     return raw;
@@ -4762,6 +4775,7 @@ RULES:
 - Do not add generic closing prompts like "Would you like to know more..." unless the user explicitly asked for follow-ups.
 - For direct fact questions across any domain, answer with the fact immediately in 1-2 sentences. Do not pad with extra commentary, suggestions, or follow-up offers unless the user asked for detail.
 - For "Who is X?" person/celebrity questions, provide a concise factual bio first, then notable works/achievements.
+- For "Who is X?" or "Tell me about X" style queries, NEVER give steps like "check online/search". Give the direct answer immediately.
 - If the user asks a "do/can/could/would" question, do not reply with only yes or no unless they explicitly demand a yes/no-only answer; explain the answer.
 - If the user asks to explain more, explain further, elaborate, or give more detail, expand the previous answer instead of repeating the short version.
 
@@ -4800,7 +4814,10 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         const conciseFactHint = isConciseDirectFactQuery(normalizedUserMessage)
             ? 'This is a direct fact query. Answer in 1-2 sentences max. Give the fact immediately. Do not add generic extra explanation or follow-up offers unless the user asks.'
             : '';
-        const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\n${conciseFactHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
+        const directExplainerHint = isDirectExplainerQuery(normalizedUserMessage)
+            ? 'This is a direct explainer/identity query. Do not give research steps or suggestions to search online. Answer directly with concise factual content.'
+            : '';
+        const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\n${conciseFactHint}\n${directExplainerHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
 
          
         const response = await fetch('/api/chat-groq', { 
