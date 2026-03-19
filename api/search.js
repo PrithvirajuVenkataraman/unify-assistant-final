@@ -1,4 +1,4 @@
-import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './_lib/live-search.js';
+import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './live-search.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
