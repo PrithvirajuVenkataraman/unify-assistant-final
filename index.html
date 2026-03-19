@@ -6519,10 +6519,30 @@ function normalizeUiTokens(text) {
                         intent
                     })
                 });
-                const data = await response.json().catch(() => ({}));
+                const rawBody = await response.text();
+                let data = {};
+                try {
+                    data = rawBody ? JSON.parse(rawBody) : {};
+                } catch (_) {
+                    data = {};
+                }
 
                 if (!response.ok || !data?.success) {
-                    const msg = data?.error || 'I could not process that file.';
+                    const hint = data?.hint ? ` ${data.hint}` : '';
+                    let msg = data?.error || '';
+                    if (!msg && response.status === 413) {
+                        msg = 'File is too large for server processing. Please use a smaller file (about 8 MB or less) or compress the image.';
+                    }
+                    if (!msg && response.status >= 500) {
+                        msg = 'Server error while processing the file. Please try again.';
+                    }
+                    if (!msg && rawBody && !/^\s*</.test(rawBody)) {
+                        msg = String(rawBody).slice(0, 220);
+                    }
+                    if (!msg) {
+                        msg = 'I could not process that file.';
+                    }
+                    msg = `${msg}${hint}`;
                     addChatMessage(msg, false);
                     speak(msg);
                     return;
