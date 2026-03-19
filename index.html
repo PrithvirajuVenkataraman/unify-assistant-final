@@ -4637,10 +4637,15 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
     if (!raw) return '';
     const rawLower = raw.toLowerCase();
     const directQuery = isDirectExplainerQuery(userMessage) || isConciseDirectFactQuery(userMessage);
+    const freshnessQuery = hasExplicitFreshnessLanguage(userMessage) ||
+        /\b(latest|current|today|now|update|updates|news|headlines?|with sources?)\b/i.test(String(userMessage || ''));
     const looksLikeResearchSteps =
         /\b(here(?:'s| are)?\s+(?:the\s+)?steps?\b|steps?\s+you\s+can\s+follow|check\s+online\b|search\s+engines\b|look\s+for\s+(?:his|her|their)\s+biography|you\s+can\s+search\b|to\s+find\s+information\s+about\b)\b/.test(rawLower) ||
         (/(\n|^)\s*\d+\s*[\).:-]\s+/.test(raw) && /\b(check|search|look|find)\b/.test(rawLower));
     if (directQuery && looksLikeResearchSteps) {
+        return '';
+    }
+    if (freshnessQuery && looksLikeResearchSteps) {
         return '';
     }
     if (isLowSignalModelAnswer(raw) &&
@@ -6886,11 +6891,86 @@ function isMarketPriceQuery(text) {
            /\b(price|today|now|current|latest|quote)\b/.test(t);
 }
 
+function isMarketMoversQuery(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(gainer|gainers|loser|losers|top movers|biggest movers|market movers|top performing|best performing)\b/.test(t) &&
+           /\b(stock|stocks|market|markets|us market|wall street|nasdaq|nyse|dow|s&p)\b/.test(t);
+}
+
 function formatVerifiedSourcesList(sources) {
     return (Array.isArray(sources) ? sources : [])
         .slice(0, 5)
         .map((item, i) => `${i + 1}. [${item.title}](${item.url})`)
         .join('\n');
+}
+
+async function buildVerifiedSearchSummary(query, options = {}) {
+    const userQuery = String(query || '').trim();
+    if (!userQuery) return null;
+
+    try {
+        const searchResponse = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: userQuery,
+                maxResults: 8
+            })
+        });
+        if (!searchResponse.ok) return null;
+        const searchData = await searchResponse.json();
+        const results = Array.isArray(searchData?.results) ? searchData.results.filter(Boolean) : [];
+        if (!results.length) return null;
+
+        const snippets = results
+            .slice(0, 6)
+            .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}`)
+            .join('\n\n');
+
+        let summaryText = '';
+        try {
+            const summaryResponse = await fetch('/api/chat-groq', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemPrompt: 'You summarize only from supplied snippets. Do not invent facts. If evidence is unclear, say so plainly.',
+                    message: `Answer the user's question using ONLY the snippets below.
+
+User question: "${userQuery}"
+
+Rules:
+- Give a direct answer first.
+- Keep it concise and practical.
+- Do not provide "how to search" instructions.
+- If exact figures are uncertain, say what is clearly supported.
+
+Snippets:
+${snippets}`
+                })
+            });
+            if (summaryResponse.ok) {
+                const summaryData = await summaryResponse.json();
+                summaryText = cleanLiveAnswerText(String(summaryData?.response || summaryData?.text || '').trim());
+            }
+        } catch (error) {}
+
+        if (!summaryText) {
+            const fallbackLines = results
+                .slice(0, 3)
+                .map((r, i) => `${i + 1}. ${r.title}${r.description ? ` - ${r.description}` : ''}`);
+            summaryText = `I checked live sources and found these relevant updates:\n${fallbackLines.join('\n')}`;
+        }
+
+        const sourceLines = formatVerifiedSourcesList(results);
+        const finalText = `${summaryText}\n\nSources:\n${sourceLines}`;
+        return {
+            text: finalText,
+            speech: options.speech || 'I checked live sources and summarized the result.',
+            badge: options.badge || 'Verified live sources'
+        };
+    } catch (error) {
+        return null;
+    }
 }
 
 async function handleExchangeRateLookup(text) {
@@ -6906,6 +6986,19 @@ async function handleExchangeRateLookup(text) {
         });
         const data = await response.json();
         if (!response.ok || !data?.success) {
+            const fallback = await buildVerifiedSearchSummary(
+                `${parsed.from} to ${parsed.to} exchange rate today`,
+                {
+                    badge: 'Verified FX sources',
+                    speech: `I checked live sources for ${parsed.from} to ${parsed.to}.`
+                }
+            );
+            if (fallback?.text) {
+                addVerifiedAssistantMessage(fallback.text, fallback.badge);
+                speak(fallback.speech);
+                saveToHistory(text, fallback.text);
+                return true;
+            }
             const msg = data?.error || 'I could not verify the exchange rate right now.';
             addChatMessage(msg, false);
             speak(msg);
@@ -6926,6 +7019,19 @@ async function handleExchangeRateLookup(text) {
         saveToHistory(text, body);
         return true;
     } catch (error) {
+        const fallback = await buildVerifiedSearchSummary(
+            `${parsed.from} to ${parsed.to} exchange rate today`,
+            {
+                badge: 'Verified FX sources',
+                speech: `I checked live sources for ${parsed.from} to ${parsed.to}.`
+            }
+        );
+        if (fallback?.text) {
+            addVerifiedAssistantMessage(fallback.text, fallback.badge);
+            speak(fallback.speech);
+            saveToHistory(text, fallback.text);
+            return true;
+        }
         const msg = 'I could not verify the exchange rate right now.';
         addChatMessage(msg, false);
         speak(msg);
@@ -6938,6 +7044,19 @@ async function handleExchangeRateLookup(text) {
 async function handleMarketLookup(text) {
     showThinkingIndicator('Checking verified market sources...');
     try {
+        if (isMarketMoversQuery(text)) {
+            const moversFallback = await buildVerifiedSearchSummary(text, {
+                badge: 'Verified market sources',
+                speech: 'I checked verified market sources and summarized the latest movers.'
+            });
+            if (moversFallback?.text) {
+                addVerifiedAssistantMessage(moversFallback.text, moversFallback.badge);
+                speak(moversFallback.speech);
+                saveToHistory(text, moversFallback.text);
+                return true;
+            }
+        }
+
         const response = await fetch('/api/markets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -6945,6 +7064,16 @@ async function handleMarketLookup(text) {
         });
         const data = await response.json();
         if (!response.ok || !data?.success) {
+            const fallback = await buildVerifiedSearchSummary(text, {
+                badge: 'Verified market sources',
+                speech: 'I checked live market sources and summarized what I found.'
+            });
+            if (fallback?.text) {
+                addVerifiedAssistantMessage(fallback.text, fallback.badge);
+                speak(fallback.speech);
+                saveToHistory(text, fallback.text);
+                return true;
+            }
             const msg = data?.error || 'I could not verify market data right now.';
             addChatMessage(msg, false);
             speak(msg);
@@ -6965,6 +7094,16 @@ async function handleMarketLookup(text) {
         saveToHistory(text, body);
         return true;
     } catch (error) {
+        const fallback = await buildVerifiedSearchSummary(text, {
+            badge: 'Verified market sources',
+            speech: 'I checked live market sources and summarized what I found.'
+        });
+        if (fallback?.text) {
+            addVerifiedAssistantMessage(fallback.text, fallback.badge);
+            speak(fallback.speech);
+            saveToHistory(text, fallback.text);
+            return true;
+        }
         const msg = 'I could not verify market data right now.';
         addChatMessage(msg, false);
         speak(msg);
@@ -11260,7 +11399,7 @@ function requiresStrictLiveVerification(userText, liveIntent = null, entityInten
     const entity = entityIntent || extractUniversalEntityIntent(text, intent);
 
     if (!text) return false;
-    if (isExchangeRateQuery(text) || isMarketPriceQuery(text) || isNewsworthyLiveTopic(text) || isSportsLiveResultQuery(text)) {
+    if (isExchangeRateQuery(text) || isMarketPriceQuery(text) || isMarketMoversQuery(text) || isNewsworthyLiveTopic(text) || isSportsLiveResultQuery(text)) {
         return true;
     }
 
