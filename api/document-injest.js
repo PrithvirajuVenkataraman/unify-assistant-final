@@ -2,6 +2,14 @@ import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
 
+export const config = {
+    api: {
+        bodyParser: {
+            sizeLimit: '12mb'
+        }
+    }
+};
+
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_TEXT_CHARS = 22000;
 
