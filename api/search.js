@@ -191,11 +191,14 @@ function detectQueryDomain(text) {
     if (/\b(score|scores|winner|won|champion|standings|ranking|rankings|stats|team|player|match|tournament|league|season|ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup)\b/.test(t)) {
         return 'sports';
     }
-    if (/\b(stock|stocks|share|shares|market|market cap|earnings|price|repo rate|interest rate|inflation|forex|exchange rate|rbi|sebi|imf)\b/.test(t)) {
+    if (/\b(stock|stocks|share|shares|market|market cap|earnings|price|repo rate|interest rate|inflation|forex|exchange rate|rbi|sebi|imf|gold|silver|platinum|diamond|palladium|petrol|diesel|gasoline|crude|brent|wti|commodity|fuel)\b/.test(t)) {
         return 'finance';
     }
     if (/\b(president|prime minister|election|party|government|minister|parliament|senate|bjp|aap|dmk|aiadmk|tdp|ysrcp|bjd|nato|eu)\b/.test(t)) {
         return 'politics';
+    }
+    if (/\b(isro|nasa|esa|jaxa|spacex|rocket|mission|orbiter|lunar|moon|mars|satellite|space station|astronaut)\b/.test(t)) {
+        return 'space_science';
     }
     if (/\b(ai|ml|llm|agi|gpu|cpu|chip|software|hardware|startup|company|ceo|founder|nasa|isro|esa|jaxa|cern|tcs|ibm|amd)\b/.test(t)) {
         return 'tech';
@@ -219,10 +222,18 @@ function getDomainHints(domain) {
         case 'finance':
             return {
                 primary: 'finance',
-                secondary: 'stock company market',
-                context: 'official market data',
+                secondary: 'stock commodity fuel market',
+                context: 'official exchange commodity pricing',
                 fresh: 'latest price market update',
-                official: 'official filing company investor relations'
+                official: 'Bloomberg Reuters Nasdaq NYSE NSE BSE official prices'
+            };
+        case 'space_science':
+            return {
+                primary: 'space mission',
+                secondary: 'isro nasa esa',
+                context: 'official space agency update',
+                fresh: 'latest mission update',
+                official: 'isro.gov.in nasa.gov official statement'
             };
         case 'politics':
             return {
