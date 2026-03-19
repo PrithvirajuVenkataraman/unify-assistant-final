@@ -2372,6 +2372,29 @@ const RESPONSE_FORMAT_HINTS = {
     bullet: 'Prefer concise bullet points when possible.',
     steps: 'Prefer numbered step-by-step structure when possible.'
 };
+const CONVERSE_WELCOME_LINES = [
+    'Hey there, what do you want to talk about?',
+    'Hey, I am here. What should we talk about?',
+    'Hi, ready when you are. What is on your mind?',
+    'Hey, let us chat. What do you want to discuss?',
+    'I am listening. What do you want to talk about today?',
+    'Alright, Converse mode is on. What should we dive into?'
+];
+
+function getConverseWelcomeLine() {
+    const hour = new Date().getHours();
+    const base = CONVERSE_WELCOME_LINES[Math.floor(Math.random() * CONVERSE_WELCOME_LINES.length)];
+    const dayPart = hour < 12 ? 'morning' : (hour < 18 ? 'afternoon' : 'evening');
+    if (userName) {
+        const namedVariants = [
+            `Hey ${userName}, good ${dayPart}. What do you want to talk about?`,
+            `Hi ${userName}, I am listening. What is on your mind?`,
+            `${userName}, I am here. What should we dive into?`
+        ];
+        return namedVariants[Math.floor(Math.random() * namedVariants.length)];
+    }
+    return base;
+}
 
 function detectRequestedResponseLength(text) {
     const lower = (text || '').toLowerCase();
@@ -5812,9 +5835,16 @@ async function handleNameCorrection(text) {
                 listeningRequested = true;
                 wakeWordMode = false;
                 commandMode = false;
-                if (!isListening) {
-                    setTimeout(() => startListening(), 120);
+                if (isListening) {
+                    stopListening();
                 }
+                const greet = getConverseWelcomeLine();
+                speak(greet);
+                setTimeout(() => {
+                    if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking) {
+                        startListening();
+                    }
+                }, 500);
             } else if (isListening) {
                 stopListening();
             }
@@ -6736,6 +6766,26 @@ async function handleMarketLookup(text) {
         let converseFinalizeTimer = null;
         let currentSpeechTextLower = '';
 
+        function isHardStopSpeechCommand(text) {
+            const t = String(text || '').toLowerCase().trim();
+            if (!t) return false;
+            return /\b(stop|stop talking|stop speaking|shut up|be quiet|quiet|silence|mute)\b/.test(t);
+        }
+
+        function isLeadingHardStopCommand(text) {
+            return /^\s*(?:please\s+)?(?:jarvis[,:\s-]*)?(?:stop|stop talking|stop speaking|shut up|be quiet|quiet|silence|mute)\b/i.test(String(text || ''));
+        }
+
+        function getTrailingCommandAfterStopPhrase(text) {
+            const raw = String(text || '').trim();
+            if (!raw) return '';
+            const stripped = raw.replace(
+                /^\s*(?:please\s+)?(?:jarvis[,:\s-]*)?(?:stop|stop talking|stop speaking|shut up|be quiet|quiet|silence|mute)\b[\s,:-]*/i,
+                ''
+            ).trim();
+            return stripped.replace(/^(and|then)\s+/i, '').trim();
+        }
+
         function isLikelyTtsEcho(text) {
             const t = String(text || '').toLowerCase().trim();
             if (!t || !currentSpeechTextLower) return false;
@@ -6874,6 +6924,17 @@ async function handleMarketLookup(text) {
 
                 if (!text) return;
 
+                if (isAssistantSpeaking && isHardStopSpeechCommand(text)) {
+                    stopSpeaking();
+                    if (result.isFinal) {
+                        const trailing = getTrailingCommandAfterStopPhrase(result[0].transcript);
+                        if (trailing) {
+                            await handleFinalTranscript(trailing);
+                        }
+                    }
+                    return;
+                }
+
                 // Noise filter - filter out low confidence or short random noise
                 if (noiseFilterEnabled && result.isFinal) {
                     const threshold = NOISE_THRESHOLDS[noiseFilterLevel];
@@ -6950,11 +7011,12 @@ async function handleMarketLookup(text) {
                 
                 
                 if (converseMode) {
-                    if (isAssistantSpeaking && isMeaningfulInterruption(result[0].transcript, result.isFinal, confidence)) {
+                    const transcript = String(result[0].transcript || '').trim();
+                    if (isAssistantSpeaking && (isHardStopSpeechCommand(transcript) || isMeaningfulInterruption(transcript, result.isFinal, confidence))) {
                         stopSpeaking();
                     }
                     if (result.isFinal) {
-                        queueConverseFinalTranscript(result[0].transcript);
+                        queueConverseFinalTranscript(transcript);
                     }
                     return;
                 }
@@ -11423,6 +11485,19 @@ ${snippets}`
                 return;
             }
 
+            // Immediate speech interruption commands, with optional follow-up command in the same sentence.
+            if (isLeadingHardStopCommand(text) || (isAssistantSpeaking && isHardStopSpeechCommand(text))) {
+                stopSpeaking();
+                const trailingCommand = getTrailingCommandAfterStopPhrase(text);
+                if (trailingCommand) {
+                    await processCommand(trailingCommand);
+                    return;
+                }
+                addChatMessage("Okay, I'll stop.", false);
+                saveToHistory(text, "Okay, I'll stop.");
+                return;
+            }
+
             // Mark as visited (for analytics) but don't hide suggestions
             if (!localStorage.getItem('unify_has_visited')) {
                 localStorage.setItem('unify_has_visited', 'true');
@@ -13956,6 +14031,20 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     historyKey: originalText || 'where am i',
                     fallbackText: `You are currently near ${locationName}.\nCoordinates: ${latitude}, ${longitude}\nMap: ${mapsUrl}`
                 });
+
+                const embeddedMap = `
+<div class="map-container" style="margin-top:10px; border-radius:12px; overflow:hidden; box-shadow:0 2px 12px rgba(15,23,42,0.18); border:1px solid rgba(148,163,184,0.3);">
+  <iframe
+    src="https://maps.google.com/maps?q=${latitude},${longitude}&z=16&output=embed"
+    width="100%"
+    height="320"
+    style="border:0; display:block;"
+    loading="lazy"
+    allowfullscreen>
+  </iframe>
+</div>
+<p class="text-xs mt-2 text-slate-600 dark:text-slate-300">Exact location pin: ${escapeHtml(locationName)} (${latitude}, ${longitude}) • <a href="${mapsUrl}" target="_blank" class="underline">Open in Google Maps</a></p>`;
+                addChatMessage(embeddedMap, false, false);
             } catch (error) {
                 await deliverApiReply('gps_access_error', {
                     feature: 'current_location'
@@ -14653,6 +14742,26 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             button.querySelector('.stop-icon')?.classList.remove('hidden');
             speak(text, true);
         }
+
+        function getSpeechProfile(text, isConverse) {
+            const content = String(text || '').trim();
+            const words = content ? content.split(/\s+/).filter(Boolean).length : 0;
+
+            // Tune rate by utterance length so speech feels close to natural conversation.
+            let rate = 1.0;
+            if (words <= 8) rate = 1.08;
+            else if (words <= 22) rate = 1.03;
+            else if (words <= 45) rate = 0.99;
+            else rate = 0.95;
+
+            // Slightly crisper style for Converse mode.
+            if (isConverse) rate += 0.02;
+
+            return {
+                rate: Math.max(0.9, Math.min(1.12, rate)),
+                pitch: isConverse ? 0.96 : 0.92
+            };
+        }
         
         function speak(text, force = false) { 
             // Speech is allowed only in Converse mode or via explicit user click (force=true).
@@ -14660,6 +14769,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             if (!shouldAutoSpeak && !force) return; 
              
             const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim(); 
+            if (!cleanText) return;
+            const speechProfile = getSpeechProfile(cleanText, converseMode);
             currentSpeechTextLower = cleanText.toLowerCase();
             isAssistantSpeaking = true;
              
@@ -14668,8 +14779,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             if (typeof responsiveVoice !== 'undefined' && !converseMode) { 
                 responsiveVoice.cancel(); 
                 responsiveVoice.speak(cleanText, "UK English Male", {
-                    pitch: 0.9,
-                    rate: 0.95,
+                    pitch: speechProfile.pitch,
+                    rate: speechProfile.rate,
                     volume: 1,
                     onend: () => {
                         isAssistantSpeaking = false;
@@ -14698,8 +14809,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     utterance.voice = preferredVoice;
                 }
                 
-                utterance.rate = 0.95;      
-                utterance.pitch = 0.9;      
+                utterance.rate = speechProfile.rate;
+                utterance.pitch = speechProfile.pitch;
                 utterance.volume = 1.0;
                 
                 currentUtterance = utterance;
@@ -14718,7 +14829,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 };
                 
                 synth.speak(utterance);
-            }, 100);
+            }, 30);
         }
         
         
