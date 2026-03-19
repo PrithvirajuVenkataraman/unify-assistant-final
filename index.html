@@ -2292,6 +2292,70 @@
     };
 })();
 
+// Temporary API debug helper (safe to remove after backend issues are fixed).
+const API_DEBUG_ENABLED = true;
+
+function ensureApiDebugLine() {
+    let line = document.getElementById('api-debug-line');
+    if (line) return line;
+    line = document.createElement('div');
+    line.id = 'api-debug-line';
+    line.className = 'hidden fixed left-1/2 -translate-x-1/2 bottom-20 z-[70] max-w-[92vw] sm:max-w-3xl px-3 py-2 rounded-lg border text-xs font-semibold shadow-lg backdrop-blur';
+    document.body.appendChild(line);
+    return line;
+}
+
+function setApiDebugLine(message, level = 'error') {
+    if (!API_DEBUG_ENABLED) return;
+    const line = ensureApiDebugLine();
+    const isError = level === 'error';
+    line.className = `${isError
+        ? 'fixed left-1/2 -translate-x-1/2 bottom-20 z-[70] max-w-[92vw] sm:max-w-3xl px-3 py-2 rounded-lg border text-xs font-semibold shadow-lg backdrop-blur bg-rose-100/95 border-rose-300 text-rose-800'
+        : 'fixed left-1/2 -translate-x-1/2 bottom-20 z-[70] max-w-[92vw] sm:max-w-3xl px-3 py-2 rounded-lg border text-xs font-semibold shadow-lg backdrop-blur bg-emerald-100/95 border-emerald-300 text-emerald-800'
+    }`;
+    line.textContent = message;
+    line.classList.remove('hidden');
+}
+
+function installApiFetchDebugInterceptor() {
+    if (!API_DEBUG_ENABLED || window.__jarvisApiDebugFetchInstalled) return;
+    window.__jarvisApiDebugFetchInstalled = true;
+
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+        const requestInput = args[0];
+        const endpoint = typeof requestInput === 'string'
+            ? requestInput
+            : String(requestInput?.url || '');
+        const isApiCall = endpoint.includes('/api/');
+
+        try {
+            const response = await originalFetch(...args);
+            if (isApiCall && !response.ok) {
+                let details = '';
+                try {
+                    details = (await response.clone().text()).replace(/\s+/g, ' ').trim().slice(0, 220);
+                } catch (e) {
+                    details = '';
+                }
+                setApiDebugLine(
+                    `[API ERROR] ${endpoint} | status=${response.status}${details ? ` | ${details}` : ''}`,
+                    'error'
+                );
+            }
+            return response;
+        } catch (error) {
+            if (isApiCall) {
+                setApiDebugLine(
+                    `[API ERROR] ${endpoint} | network=${String(error?.message || error).slice(0, 220)}`,
+                    'error'
+                );
+            }
+            throw error;
+        }
+    };
+}
+
 const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'}; 
 const SUPPORT_MODE_HINTS = {
     balanced: 'Be clear, practical, and warm. Keep a neutral supportive tone.',
@@ -4969,6 +5033,7 @@ async function handleNameCorrection(text) {
         window.onload = async () => {
             // Ensure no queued/leftover speech survives a refresh.
             stopAllSpeechPlayback();
+            installApiFetchDebugInterceptor();
 
             requestMicrophonePermission().catch(() => {});
             loadUserData(); 
