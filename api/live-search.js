@@ -87,14 +87,63 @@ const SOURCE_POLICIES = {
             'wsj.com',
             'ft.com',
             'cnbc.com',
-            'reuters.com'
+            'reuters.com',
+            'nasdaq.com',
+            'nyse.com',
+            'nseindia.com',
+            'bseindia.com',
+            'spglobal.com',
+            'wfe.org',
+            'cmegroup.com',
+            'lme.com',
+            'kitco.com',
+            'mcxindia.com',
+            'iocl.com',
+            'hindustanpetroleum.com',
+            'bharatpetroleum.in',
+            'eia.gov'
         ],
         preferredDomains: [
             'ecb.europa.eu',
             'frankfurter.dev',
             'xe.com',
             'oanda.com',
-            'x-rates.com'
+            'x-rates.com',
+            'bloomberg.com',
+            'nasdaq.com',
+            'nyse.com',
+            'nseindia.com',
+            'bseindia.com',
+            'kitco.com',
+            'mcxindia.com',
+            'iocl.com',
+            'hindustanpetroleum.com',
+            'bharatpetroleum.in'
+        ]
+    },
+    space_science: {
+        trustedDomains: [
+            'nasa.gov',
+            'isro.gov.in',
+            'esa.int',
+            'jaxa.jp',
+            'spacex.com',
+            'space.com',
+            'scientificamerican.com',
+            'nature.com',
+            'science.org',
+            'reuters.com',
+            'apnews.com',
+            'bbc.com'
+        ],
+        preferredDomains: [
+            'isro.gov.in',
+            'nasa.gov',
+            'esa.int',
+            'jaxa.jp',
+            'spacex.com',
+            'nature.com',
+            'science.org'
         ]
     },
     tech: {
@@ -339,13 +388,16 @@ function scoreRecency(text) {
 
 function detectQueryDomain(queryText) {
     const text = String(queryText || '').toLowerCase();
+    if (/\b(isro|nasa|esa|jaxa|spacex|rocket|mission|orbiter|lunar|moon|mars|satellite|space station|astronaut)\b/.test(text)) {
+        return 'space_science';
+    }
     if (/\b(ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup|score|winner|standings|rankings|player|team|coach|captain)\b/.test(text)) {
         return 'sports';
     }
     if (/\b(president|prime minister|minister|senator|mp|mla|election|party|government|parliament|chief minister|mayor)\b/.test(text)) {
         return 'politics';
     }
-    if (/\b(stock|shares|price|market cap|repo rate|interest rate|inflation|bank|rbi|sebi|nasdaq|dow)\b/.test(text)) {
+    if (/\b(stock|shares|price|market cap|repo rate|interest rate|inflation|bank|rbi|sebi|nasdaq|dow|gold|silver|platinum|diamond|palladium|petrol|diesel|gasoline|brent|wti|crude|commodity|fuel)\b/.test(text)) {
         return 'finance';
     }
     if (/\b(ceo|founder|company|startup|ai|llm|gpu|cpu|software|chip|nvidia|microsoft|openai|google)\b/.test(text)) {
