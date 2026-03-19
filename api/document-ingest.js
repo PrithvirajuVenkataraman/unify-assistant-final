@@ -95,7 +95,7 @@ export default async function handler(req, res) {
                 } else if (/image\/avif/i.test(normalizedMime)) {
                     extractionHint = 'AVIF OCR may fail on some vision models. Convert to JPG/PNG and upload again.';
                 } else {
-                    extractionHint = 'No readable text was detected. Try a sharper image, higher contrast, or crop tightly around text.';
+                    extractionHint = `No readable text was detected. Try a sharper image, higher contrast, or crop tightly around text. If using Gemini, verify GEMINI_MODEL (current: ${String(process.env.GEMINI_MODEL || 'gemini-2.5-flash')}).`;
                 }
             }
         } else {
@@ -106,6 +106,23 @@ export default async function handler(req, res) {
         }
 
         extractedText = cleanExtractedText(extractedText);
+        if (!extractedText.trim() && kind === 'image') {
+            const fallbackText = 'No readable text detected in this image.';
+            return res.status(200).json({
+                success: true,
+                fileName: normalizedName,
+                mimeType: normalizedMime || mimeType || '',
+                kind,
+                extractionMode: extractionMode || 'model-ocr',
+                extractionHint: extractionHint || 'This image may not contain text.',
+                extractedText: fallbackText,
+                extractedCharCount: fallbackText.length,
+                summary: extractionHint
+                    ? `Image analyzed. ${extractionHint}`
+                    : 'Image analyzed. No readable text was detected, but the upload was processed successfully.',
+                bill: null
+            });
+        }
         if (!extractedText.trim()) {
             return res.status(200).json({
                 success: false,
@@ -500,43 +517,64 @@ async function extractWithGeminiVision(buffer, mimeType, mode = 'ocr') {
     const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!geminiKey) return '';
 
-    const model = String(process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
+    const configuredModel = String(process.env.GEMINI_MODEL || '').trim();
+    const candidates = [
+        configuredModel,
+        'gemini-1.5-flash',
+        'gemini-1.5-pro',
+        'gemini-2.5-flash'
+    ].filter(Boolean);
     const prompt = mode === 'ocr'
         ? 'Extract as much readable text as possible from this file. Preserve line breaks and key fields.'
         : mode === 'describe'
             ? 'Describe the image in concise, factual bullet points. Mention visible objects, scene context, and any likely readable text snippets.'
             : 'Extract structured bill fields and visible text.';
 
-    try {
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [
-                            { text: prompt },
-                            { inlineData: { mimeType, data: buffer.toString('base64') } }
-                        ]
-                    }],
-                    generationConfig: {
-                        temperature: 0.1,
-                        maxOutputTokens: 2400
-                    }
-                })
-            }
-        );
-        if (!response.ok) return '';
-        const data = await response.json();
-        return String(data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
-    } catch (e) {
-        return '';
+    for (const model of candidates) {
+        try {
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [
+                                { text: prompt },
+                                { inlineData: { mimeType, data: buffer.toString('base64') } }
+                            ]
+                        }],
+                        generationConfig: {
+                            temperature: 0.1,
+                            maxOutputTokens: 2400
+                        }
+                    })
+                }
+            );
+            if (!response.ok) continue;
+            const data = await response.json();
+            const text = extractGeminiText(data);
+            if (text) return text;
+        } catch (e) {}
     }
+    return '';
 }
 
 function hasAnyVisionProviderConfigured() {
     const groqKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
     const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     return Boolean(groqKey || geminiKey);
+}
+
+function extractGeminiText(data) {
+    const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+    for (const c of candidates) {
+        const parts = Array.isArray(c?.content?.parts) ? c.content.parts : [];
+        const text = parts
+            .map(p => (typeof p?.text === 'string' ? p.text : ''))
+            .join('\n')
+            .trim();
+        if (text) return text;
+    }
+    return '';
 }
