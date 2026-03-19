@@ -2194,7 +2194,7 @@
                         <line x1="12" y1="3" x2="12" y2="15"></line>
                     </svg>
                     <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                        Upload PDF/DOCX/JPG
+                        Upload PDF/DOCX/PPTX/Bill
                     </div>
                 </button>
                 <input
@@ -11625,11 +11625,12 @@ async function handleSportsFactQuery(userText, intent) {
 async function handleLiveRetrievalQuery(userText) {
     showThinkingIndicator('Checking current sources...');
     const controller = beginAbortableRequest();
+    let strictLiveRequired = false;
     try {
         const query = String(userText || '').trim();
         const intent = extractLiveQueryIntent(query);
         const entityIntent = extractUniversalEntityIntent(query, intent);
-        const strictLiveRequired = requiresStrictLiveVerification(query, intent, entityIntent);
+        strictLiveRequired = requiresStrictLiveVerification(query, intent, entityIntent);
         const directFactQuery = intent.directFact || isSportsLiveResultQuery(query);
         const conciseFactQuery = isConciseDirectFactQuery(query);
         const queries = buildLiveSearchQueries(query, intent);
