@@ -17,6 +17,10 @@ export default async function handler(req, res) {
             const crypto = await lookupCrypto(query);
             return res.status(200).json(crypto);
         }
+        if (inferredType === 'commodity') {
+            const commodity = await lookupCommodity(query);
+            return res.status(200).json(commodity);
+        }
 
         const stock = await lookupStock(query);
         return res.status(200).json(stock);
@@ -33,6 +37,9 @@ function inferAssetType(query) {
     const t = String(query || '').toLowerCase();
     if (/\b(bitcoin|btc|ethereum|eth|solana|sol|dogecoin|doge|crypto|coin|token)\b/.test(t)) {
         return 'crypto';
+    }
+    if (/\b(gold|silver|platinum|diamond|palladium|petrol|diesel|gasoline|crude|brent|wti|commodity|fuel)\b/.test(t)) {
+        return 'commodity';
     }
     return 'stock';
 }
@@ -156,3 +163,123 @@ function inferTicker(query) {
     const match = upper.match(/\b[A-Z]{1,5}\b/);
     return match ? match[0] : '';
 }
+
+async function lookupCommodity(query) {
+    const profile = inferCommodityProfile(query);
+    const verified = await runVerifiedWebSearch(buildCommodityQueries(query, profile), {
+        maxResultsPerQuery: 5,
+        limit: 10
+    });
+    const extracted = extractPriceFromResults(verified.results, profile);
+
+    return {
+        success: verified.results.length > 0,
+        verified: verified.results.length > 0,
+        provider: 'web-verified-commodity',
+        assetType: 'commodity',
+        commodityType: profile.kind,
+        symbol: profile.token.toUpperCase(),
+        name: profile.label,
+        unit: profile.unit,
+        price: extracted.price,
+        currency: extracted.currency,
+        sourceCount: verified.results.length,
+        distinctDomainCount: verified.distinctDomains.length,
+        sources: verified.results.slice(0, 6).map(item => ({
+            title: item.title,
+            url: item.url,
+            description: item.description
+        }))
+    };
+}
+
+function inferCommodityProfile(query) {
+    const t = String(query || '').toLowerCase();
+    if (/\bpetrol|gasoline\b/.test(t)) {
+        return { kind: 'fuel', label: 'Petrol', token: 'petrol', unit: 'per litre' };
+    }
+    if (/\bdiesel\b/.test(t)) {
+        return { kind: 'fuel', label: 'Diesel', token: 'diesel', unit: 'per litre' };
+    }
+    if (/\bgold\b/.test(t)) {
+        return { kind: 'metal', label: 'Gold', token: 'gold', unit: 'per ounce' };
+    }
+    if (/\bsilver\b/.test(t)) {
+        return { kind: 'metal', label: 'Silver', token: 'silver', unit: 'per ounce' };
+    }
+    if (/\bplatinum\b/.test(t)) {
+        return { kind: 'metal', label: 'Platinum', token: 'platinum', unit: 'per ounce' };
+    }
+    if (/\bdiamond\b/.test(t)) {
+        return { kind: 'gem', label: 'Diamond', token: 'diamond', unit: 'market quote' };
+    }
+    return { kind: 'commodity', label: 'Commodity', token: 'commodity', unit: 'market quote' };
+}
+
+function buildCommodityQueries(rawQuery, profile) {
+    const q = String(rawQuery || '').trim();
+    if (profile.kind === 'fuel') {
+        return [
+            `${profile.token} price today India`,
+            `${profile.token} price today IOCL HPCL BPCL`,
+            `${profile.token} price per litre Bloomberg Reuters`,
+            q
+        ];
+    }
+    if (profile.kind === 'metal' || profile.kind === 'gem') {
+        return [
+            `${profile.token} price today`,
+            `${profile.token} spot price Bloomberg Reuters`,
+            `${profile.token} price today kitco investing.com`,
+            q
+        ];
+    }
+    return [
+        `${q} latest price today`,
+        `${q} price Bloomberg Reuters`,
+        q
+    ];
+}
+
+function extractPriceFromResults(results, profile) {
+    const pool = Array.isArray(results) ? results : [];
+    for (const item of pool.slice(0, 8)) {
+        const haystack = `${item?.title || ''} ${item?.description || ''}`;
+        const parsed = extractPriceCandidate(haystack, profile);
+        if (parsed) return parsed;
+    }
+    return { price: null, currency: '' };
+}
+
+function extractPriceCandidate(text, profile) {
+    const body = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!body) return null;
+
+    const inrMatch = body.match(/(?:₹|rs\.?|inr)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?)/i);
+    if (inrMatch?.[1]) {
+        const value = parseNumber(inrMatch[1]);
+        if (isPlausiblePrice(value, profile)) return { price: value, currency: 'INR' };
+    }
+
+    const usdMatch = body.match(/(?:usd|us\$|\$)\s*([0-9]{1,5}(?:,[0-9]{3})*(?:\.[0-9]+)?)/i);
+    if (usdMatch?.[1]) {
+        const value = parseNumber(usdMatch[1]);
+        if (isPlausiblePrice(value, profile)) return { price: value, currency: 'USD' };
+    }
+
+    return null;
+}
+
+function parseNumber(raw) {
+    const value = Number(String(raw || '').replace(/,/g, ''));
+    return Number.isFinite(value) ? value : null;
+}
+
+function isPlausiblePrice(value, profile) {
+    if (!Number.isFinite(value) || value <= 0) return false;
+    if (profile.kind === 'fuel') return value >= 10 && value <= 1000;
+    if (profile.kind === 'metal') return value >= 1 && value <= 100000;
+    if (profile.kind === 'gem') return value >= 1 && value <= 1000000;
+    return value >= 1 && value <= 1000000;
+}
+
