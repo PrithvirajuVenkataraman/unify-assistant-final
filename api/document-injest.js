@@ -73,6 +73,9 @@ export default async function handler(req, res) {
         } else if (kind === 'image') {
             extractedText = await extractWithVisionFile(buffer, normalizedMime || 'image/jpeg', 'ocr');
             extractionMode = 'model-ocr';
+            if (!extractedText.trim() && /image\/avif/i.test(normalizedMime)) {
+                extractionHint = 'AVIF OCR may fail on some vision models. Convert to JPG/PNG and upload again.';
+            }
         } else {
             return res.status(415).json({
                 success: false,
