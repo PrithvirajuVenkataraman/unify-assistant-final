@@ -11665,7 +11665,11 @@ async function handleLiveRetrievalQuery(userText) {
 
         if (!deduped.length) {
             if (!strictLiveRequired) {
-                return await publishUniversalModelFallback({ userText: query }, 'Model fallback');
+                const published = await publishUniversalModelFallback({ userText: query }, 'Model fallback');
+                if (published) return true;
+                addChatMessage('I checked live sources, but I could not produce a final answer right now. Please try again in a moment.', false);
+                speak('I checked live sources, but I could not produce a final answer right now. Please try again in a moment.');
+                return true;
             }
             await fetchAndDisplayNews(userText);
             return true;
@@ -11744,7 +11748,11 @@ ${snippets}`
             const top = sourcePool[0];
             if (!top) {
                 if (!strictLiveRequired) {
-                    return await publishUniversalModelFallback({ userText: query }, 'Model fallback');
+                    const published = await publishUniversalModelFallback({ userText: query }, 'Model fallback');
+                    if (published) return true;
+                    addChatMessage('I found sources, but I could not assemble a clean answer. Please try once more.', false);
+                    speak('I found sources, but I could not assemble a clean answer. Please try once more.');
+                    return true;
                 }
                 await fetchAndDisplayNews(userText);
                 return true;
@@ -11785,7 +11793,11 @@ ${snippets}`
             return true;
         }
         if (!strictLiveRequired) {
-            return await publishUniversalModelFallback({ userText }, 'Model fallback');
+            const published = await publishUniversalModelFallback({ userText }, 'Model fallback');
+            if (published) return true;
+            addChatMessage('I hit a temporary processing issue after live search. Please try again.', false);
+            speak('I hit a temporary processing issue after live search. Please try again.');
+            return true;
         }
         await fetchAndDisplayNews(userText);
         return true;
