@@ -27,8 +27,8 @@ export default async function handler(req, res) {
                 .join('\n')
             : '';
         const clientRagBlock = typeof ragContext === 'string' ? ragContext.trim() : '';
-        const liveRagBlock = await buildLiveRagContext(message);
-        const ragBlock = [clientRagBlock, liveRagBlock].filter(Boolean).join('\n\n');
+        const liveRag = await buildLiveRagContext(message, req);
+        const ragBlock = [clientRagBlock, liveRag.ragText].filter(Boolean).join('\n\n');
         const finalPrompt = [
             systemPrompt,
             ragBlock ? `Retrieved context (RAG):\n${ragBlock}` : '',
@@ -93,6 +93,7 @@ export default async function handler(req, res) {
                         action: null
                     };
                 }
+                parsedResponse = enforceLiveAnswerStyle(parsedResponse, message, liveRag.sources);
 
                 return res.status(200).json({
                     ...parsedResponse,
@@ -193,6 +194,7 @@ export default async function handler(req, res) {
                 action: null
             };
         }
+        parsedResponse = enforceLiveAnswerStyle(parsedResponse, message, liveRag.sources);
 
         return res.status(200).json({
             ...parsedResponse,
@@ -209,19 +211,25 @@ export default async function handler(req, res) {
     }
 }
 
-async function buildLiveRagContext(message) {
+async function buildLiveRagContext(message, req) {
     const query = String(message || '').trim();
-    if (!query || !isTimeSensitiveInfoRequest(query)) return '';
+    if (!query || !isTimeSensitiveInfoRequest(query)) return { ragText: '', sources: [] };
 
     try {
         const runVerifiedWebSearch = await resolveRunVerifiedWebSearch();
-        if (!runVerifiedWebSearch) return '';
-        const verified = await runVerifiedWebSearch([query], {
-            maxResultsPerQuery: 6,
-            limit: 6
-        });
-        const results = Array.isArray(verified?.results) ? verified.results.slice(0, 6) : [];
-        if (!results.length) return '';
+        let results = [];
+
+        if (runVerifiedWebSearch) {
+            const verified = await runVerifiedWebSearch([query], {
+                maxResultsPerQuery: 6,
+                limit: 6
+            });
+            results = Array.isArray(verified?.results) ? verified.results.slice(0, 6) : [];
+        } else {
+            results = await fetchFromOwnSearchApi(query, req);
+        }
+
+        if (!results.length) return { ragText: '', sources: [] };
 
         const lines = [`Live web verification for: "${query}"`];
         for (let i = 0; i < results.length; i++) {
@@ -232,9 +240,9 @@ async function buildLiveRagContext(message) {
                 lines.push(`Summary: ${String(item.description).trim()}`);
             }
         }
-        return lines.join('\n');
+        return { ragText: lines.join('\n'), sources: results };
     } catch (error) {
-        return '';
+        return { ragText: '', sources: [] };
     }
 }
 
@@ -248,9 +256,62 @@ async function resolveRunVerifiedWebSearch() {
     return null;
 }
 
+async function fetchFromOwnSearchApi(query, req) {
+    try {
+        const host = String(req?.headers?.host || '').trim();
+        if (!host) return [];
+        const proto = String(req?.headers?.['x-forwarded-proto'] || 'https').trim();
+        const baseUrl = `${proto}://${host}`;
+        const response = await fetch(`${baseUrl}/api/search`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, maxResults: 6 })
+        });
+        if (!response.ok) return [];
+        const data = await response.json();
+        const results = Array.isArray(data?.results) ? data.results : [];
+        return results.slice(0, 6);
+    } catch (_) {
+        return [];
+    }
+}
+
 function isTimeSensitiveInfoRequest(text) {
     const t = String(text || '').toLowerCase();
     return /\b(latest|recent|current|today|now|update|updates|news|headlines|status|mission|launch|price|rate|score|result|election|breaking|as of)\b/.test(t);
+}
+
+function enforceLiveAnswerStyle(parsedResponse, message, liveSources) {
+    const responseText = String(parsedResponse?.response || '').trim();
+    if (!isTimeSensitiveInfoRequest(message)) return parsedResponse;
+    if (!Array.isArray(liveSources) || !liveSources.length) return parsedResponse;
+
+    const hasLinks = /https?:\/\//i.test(responseText);
+    const genericAdvice = /\b(check|visit|see|refer)\b[\s\S]{0,80}\b(official website|website|site)\b/i.test(responseText) ||
+        /\bi recommend checking\b/i.test(responseText);
+
+    if (hasLinks && !genericAdvice) return parsedResponse;
+
+    return {
+        ...parsedResponse,
+        intent: parsedResponse?.intent || 'live_update',
+        response: buildLiveUpdateResponse(message, liveSources),
+        action: parsedResponse?.action ?? null
+    };
+}
+
+function buildLiveUpdateResponse(message, liveSources) {
+    const now = new Date();
+    const asOf = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const top = liveSources.slice(0, 3);
+    const lead = top[0] || {};
+    const title = String(lead.title || 'Latest update');
+
+    const lines = [`As of ${asOf}, the latest update is: ${title}.`, '', 'Sources:'];
+    for (const item of top) {
+        lines.push(`- ${String(item.title || 'Source')}: ${String(item.url || '').trim()}`);
+    }
+    return lines.join('\n');
 }
 
 function buildServerSystemPrompt(userName) {
