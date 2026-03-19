@@ -57,7 +57,7 @@ export default async function handler(req, res) {
         if (kind === 'pdf') {
             extractedText = await extractPdfText(buffer);
             if (!extractedText.trim()) {
-                extractedText = await extractWithGeminiFile(buffer, normalizedMime || 'application/pdf', 'ocr');
+                extractedText = await extractWithVisionFile(buffer, normalizedMime || 'application/pdf', 'ocr');
                 extractionMode = 'model-ocr';
             }
         } else if (kind === 'docx') {
@@ -67,7 +67,7 @@ export default async function handler(req, res) {
         } else if (kind === 'text') {
             extractedText = buffer.toString('utf8');
         } else if (kind === 'image') {
-            extractedText = await extractWithGeminiFile(buffer, normalizedMime || 'image/jpeg', 'ocr');
+            extractedText = await extractWithVisionFile(buffer, normalizedMime || 'image/jpeg', 'ocr');
             extractionMode = 'model-ocr';
         } else {
             return res.status(415).json({
@@ -395,7 +395,71 @@ async function callTextModel(prompt) {
     }
 }
 
-async function extractWithGeminiFile(buffer, mimeType, mode = 'ocr') {
+async function extractWithVisionFile(buffer, mimeType, mode = 'ocr') {
+    const groqText = await extractWithGroqVision(buffer, mimeType, mode);
+    if (groqText.trim()) return groqText;
+    return await extractWithGeminiVision(buffer, mimeType, mode);
+}
+
+async function extractWithGroqVision(buffer, mimeType, mode = 'ocr') {
+    const groqKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
+    if (!groqKey) return '';
+
+    const prompt = mode === 'ocr'
+        ? 'Extract as much readable text as possible from this file. Preserve line breaks and key fields.'
+        : 'Extract structured bill fields and visible text.';
+
+    const configured = String(process.env.GROQ_VISION_MODEL || '').trim();
+    const candidates = [
+        configured,
+        'llama-3.2-90b-vision-preview',
+        'llama-3.2-11b-vision-preview'
+    ].filter(Boolean);
+
+    const dataUrl = `data:${mimeType || 'image/jpeg'};base64,${buffer.toString('base64')}`;
+
+    for (const model of candidates) {
+        try {
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${groqKey}`
+                },
+                body: JSON.stringify({
+                    model,
+                    temperature: 0.1,
+                    max_tokens: 2400,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: [
+                                { type: 'text', text: prompt },
+                                { type: 'image_url', image_url: { url: dataUrl } }
+                            ]
+                        }
+                    ]
+                })
+            });
+            if (!response.ok) continue;
+            const data = await response.json();
+            const content = data?.choices?.[0]?.message?.content;
+            if (typeof content === 'string' && content.trim()) {
+                return content.trim();
+            }
+            if (Array.isArray(content)) {
+                const joined = content
+                    .map(item => (typeof item?.text === 'string' ? item.text : ''))
+                    .join('\n')
+                    .trim();
+                if (joined) return joined;
+            }
+        } catch (e) {}
+    }
+    return '';
+}
+
+async function extractWithGeminiVision(buffer, mimeType, mode = 'ocr') {
     const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!geminiKey) return '';
 
