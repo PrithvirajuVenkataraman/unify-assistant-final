@@ -1,4 +1,4 @@
-import { extractSearchTopic } from './_lib/live-search.js';
+import { extractSearchTopic } from './live-search.js';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
