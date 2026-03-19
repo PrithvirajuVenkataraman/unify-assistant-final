@@ -6887,7 +6887,7 @@ function parseExchangeQuery(text) {
 
 function isMarketPriceQuery(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(stock|share|shares|ticker|crypto|bitcoin|ethereum|btc|eth|solana|dogecoin|market cap|price)\b/.test(t) &&
+    return /\b(stock|share|shares|ticker|crypto|bitcoin|ethereum|btc|eth|solana|dogecoin|market cap|price|gold|silver|platinum|diamond|palladium|petrol|diesel|gasoline|crude|brent|wti|commodity|fuel)\b/.test(t) &&
            /\b(price|today|now|current|latest|quote)\b/.test(t);
 }
 
@@ -7083,6 +7083,12 @@ async function handleMarketLookup(text) {
         let body = '';
         if (data.assetType === 'crypto' && Number.isFinite(data.priceUsd)) {
             body = `**${data.name} (${data.symbol})**\nPrice: $${Number(data.priceUsd).toFixed(4)} USD\n24h change: ${Number.isFinite(data.change24h) ? Number(data.change24h).toFixed(2) + '%' : 'N/A'}\nVerified sources checked: ${data.sourceCount} across ${data.distinctDomainCount} domains\n\nSources:\n${formatVerifiedSourcesList(data.sources)}`;
+        } else if (data.assetType === 'commodity') {
+            const hasPrice = Number.isFinite(Number(data.price));
+            const quoteLine = hasPrice
+                ? `Price: ${data.currency ? data.currency + ' ' : ''}${Number(data.price).toFixed(2)}${data.unit ? ` (${data.unit})` : ''}`
+                : 'Price: not cleanly extractable from source snippets yet';
+            body = `**${data.name || data.symbol || 'Commodity'}**\n${quoteLine}\nVerified sources checked: ${data.sourceCount} across ${data.distinctDomainCount} domains\n\nSources:\n${formatVerifiedSourcesList(data.sources)}`;
         } else if (data.assetType === 'stock' && Number.isFinite(data.price)) {
             body = `**${data.symbol}**\nPrice: $${Number(data.price).toFixed(2)}\nChange: ${Number.isFinite(data.change) ? Number(data.change).toFixed(2) : 'N/A'} ${data.changePercent || ''}\nTrading day: ${data.tradingDay || 'N/A'}\nVerified sources checked: ${data.sourceCount} across ${data.distinctDomainCount} domains\n\nSources:\n${formatVerifiedSourcesList(data.sources)}`;
         } else {
@@ -10574,14 +10580,38 @@ const DOMAIN_SOURCE_POLICIES = {
             'wsj.com',
             'ft.com',
             'cnbc.com',
-            'reuters.com'
+            'reuters.com',
+            'nasdaq.com',
+            'nyse.com',
+            'nseindia.com',
+            'bseindia.com',
+            'spglobal.com',
+            'wfe.org',
+            'cmegroup.com',
+            'lme.com',
+            'kitco.com',
+            'mcxindia.com',
+            'iocl.com',
+            'hindustanpetroleum.com',
+            'bharatpetroleum.in',
+            'eia.gov'
         ],
         preferredDomains: [
             'ecb.europa.eu',
             'frankfurter.dev',
             'xe.com',
             'oanda.com',
-            'x-rates.com'
+            'x-rates.com',
+            'bloomberg.com',
+            'nasdaq.com',
+            'nyse.com',
+            'nseindia.com',
+            'bseindia.com',
+            'kitco.com',
+            'mcxindia.com',
+            'iocl.com',
+            'hindustanpetroleum.com',
+            'bharatpetroleum.in'
         ]
     },
     tech: {
@@ -10667,14 +10697,35 @@ const DOMAIN_SOURCE_POLICIES = {
             'wsj.com',
             'ft.com',
             'cnbc.com',
-            'reuters.com'
+            'reuters.com',
+            'nasdaq.com',
+            'nyse.com',
+            'nseindia.com',
+            'bseindia.com',
+            'spglobal.com',
+            'wfe.org',
+            'cmegroup.com',
+            'lme.com',
+            'kitco.com',
+            'mcxindia.com',
+            'iocl.com',
+            'hindustanpetroleum.com',
+            'bharatpetroleum.in',
+            'eia.gov'
         ],
         preferredDomains: [
             'sec.gov',
             'investor.nvidia.com',
             'investor.microsoft.com',
             'abc.xyz',
-            'openai.com'
+            'openai.com',
+            'bloomberg.com',
+            'nasdaq.com',
+            'nyse.com',
+            'nseindia.com',
+            'bseindia.com',
+            'kitco.com',
+            'mcxindia.com'
         ]
     }
 };
