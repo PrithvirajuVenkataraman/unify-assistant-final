@@ -133,14 +133,23 @@ export default async function handler(req, res) {
 
         const trimmedText = extractedText.slice(0, MAX_TEXT_CHARS);
         const isBillLike = isBillIntent(intent) || looksLikeBillText(trimmedText) || isBillFileName(lowerName);
-        const summary = await summarizeExtractedText(trimmedText, {
-            kind,
-            fileName: normalizedName,
-            billLike: isBillLike
-        });
-
+        let summary = '';
         if (isBillLike) {
-            bill = await buildBillShape(trimmedText, summary);
+            const billSeedSummary = buildFallbackSummary(trimmedText, {
+                kind,
+                fileName: normalizedName,
+                billLike: true
+            });
+            bill = await buildBillShape(trimmedText, billSeedSummary);
+            summary = buildFixedBillSummary(bill, trimmedText);
+        }
+
+        if (!summary) {
+            summary = await summarizeExtractedText(trimmedText, {
+                kind,
+                fileName: normalizedName,
+                billLike: isBillLike
+            });
         }
 
         return res.status(200).json({
@@ -376,6 +385,57 @@ function toNumberOrNull(primary, fallback) {
     if (Number.isFinite(p)) return p;
     const f = Number(fallback);
     return Number.isFinite(f) ? f : null;
+}
+
+function buildFixedBillSummary(bill, text) {
+    const safeBill = bill && typeof bill === 'object' ? bill : {};
+    const merchant = String(safeBill.merchant || '').trim() || 'Not found';
+    const date = String(safeBill.date || '').trim() || 'Not found';
+    const currency = String(safeBill.currency || '').trim() || detectCurrencyFromText(text) || 'Not found';
+    const lineItems = Array.isArray(safeBill.lineItems) ? safeBill.lineItems.slice(0, 8) : [];
+    const lineItemText = lineItems.length
+        ? lineItems
+            .map(item => {
+                const name = String(item?.name || 'Item').trim();
+                const amount = Number(item?.amount);
+                if (Number.isFinite(amount)) {
+                    return `${name} - ${amount.toFixed(2)}`;
+                }
+                return name;
+            })
+            .join('; ')
+        : 'Not found';
+    const subtotal = Number.isFinite(Number(safeBill.subtotal)) ? Number(safeBill.subtotal).toFixed(2) : 'Not found';
+    const tax = Number.isFinite(Number(safeBill.tax)) ? Number(safeBill.tax).toFixed(2) : 'Not found';
+    const total = Number.isFinite(Number(safeBill.total)) ? Number(safeBill.total).toFixed(2) : 'Not found';
+    const paymentMethod = extractPaymentMethodHint(text);
+
+    return [
+        'Bill Summary',
+        `1. Merchant: ${merchant}`,
+        `2. Date: ${date}`,
+        `3. Line items: ${lineItemText}`,
+        `4. Subtotal: ${subtotal}`,
+        `5. Tax: ${tax}`,
+        `6. Total: ${total}`,
+        `7. Payment method: ${paymentMethod}`
+    ].join('\n');
+}
+
+function detectCurrencyFromText(text) {
+    const t = String(text || '');
+    if (/\b(inr|rs\.?|₹)\b/i.test(t)) return 'INR';
+    if (/\b(usd|\$)\b/i.test(t)) return 'USD';
+    if (/\b(eur|€)\b/i.test(t)) return 'EUR';
+    return '';
+}
+
+function extractPaymentMethodHint(text) {
+    const t = String(text || '');
+    if (/\b(card|credit card|debit card|bank card|visa|mastercard)\b/i.test(t)) return 'Card';
+    if (/\b(cash)\b/i.test(t)) return 'Cash';
+    if (/\b(upi|gpay|google pay|phonepe|paytm)\b/i.test(t)) return 'UPI/Digital';
+    return 'Not found';
 }
 
 function safeJson(text) {
