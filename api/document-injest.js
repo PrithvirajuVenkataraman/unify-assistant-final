@@ -53,12 +53,16 @@ export default async function handler(req, res) {
         let extractedText = '';
         let extractionMode = 'text-parser';
         let bill = null;
+        let extractionHint = '';
 
         if (kind === 'pdf') {
             extractedText = await extractPdfText(buffer);
             if (!extractedText.trim()) {
                 extractedText = await extractWithVisionFile(buffer, normalizedMime || 'application/pdf', 'ocr');
                 extractionMode = 'model-ocr';
+                if (!extractedText.trim()) {
+                    extractionHint = 'This PDF appears image-based. Groq vision OCR works best with image uploads. Convert PDF pages to images or add GEMINI_API_KEY for PDF OCR fallback.';
+                }
             }
         } else if (kind === 'docx') {
             extractedText = await extractDocxText(buffer);
@@ -80,7 +84,8 @@ export default async function handler(req, res) {
         if (!extractedText.trim()) {
             return res.status(200).json({
                 success: false,
-                error: 'Could not extract readable text from this file.'
+                error: 'Could not extract readable text from this file.',
+                hint: extractionHint || 'Try a clearer scan/image or a text-based document.'
             });
         }
 
@@ -102,6 +107,7 @@ export default async function handler(req, res) {
             mimeType: normalizedMime || mimeType || '',
             kind,
             extractionMode,
+            extractionHint: extractionHint || null,
             extractedText: trimmedText,
             extractedCharCount: trimmedText.length,
             summary,
@@ -396,14 +402,18 @@ async function callTextModel(prompt) {
 }
 
 async function extractWithVisionFile(buffer, mimeType, mode = 'ocr') {
-    const groqText = await extractWithGroqVision(buffer, mimeType, mode);
-    if (groqText.trim()) return groqText;
+    const normalizedMime = String(mimeType || '').toLowerCase();
+    if (normalizedMime.startsWith('image/')) {
+        const groqText = await extractWithGroqVision(buffer, normalizedMime, mode);
+        if (groqText.trim()) return groqText;
+    }
     return await extractWithGeminiVision(buffer, mimeType, mode);
 }
 
 async function extractWithGroqVision(buffer, mimeType, mode = 'ocr') {
     const groqKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
     if (!groqKey) return '';
+    if (!String(mimeType || '').toLowerCase().startsWith('image/')) return '';
 
     const prompt = mode === 'ocr'
         ? 'Extract as much readable text as possible from this file. Preserve line breaks and key fields.'
