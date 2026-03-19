@@ -182,6 +182,7 @@ export async function searchWeb(query, maxResults = 8) {
     }
     attempts.push(() => searchWithDuckDuckGoHtml(searchQuery, normalizedMax));
     attempts.push(() => searchWithDuckDuckGo(searchQuery, normalizedMax));
+    attempts.push(() => searchWithWikipedia(searchQuery, normalizedMax));
     if (isLikelyNewsQuery(query)) {
         attempts.push(() => searchWithGoogleNewsRss(searchQuery, normalizedMax));
     }
@@ -450,12 +451,59 @@ async function searchWithDuckDuckGoHtml(query, maxResults) {
     const re = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
     let match;
     while ((match = re.exec(html)) && out.length < maxResults) {
-        const url = sanitizeExternalUrl(decodeHtmlEntities(String(match[1] || '').trim()));
+        const rawHref = decodeHtmlEntities(String(match[1] || '').trim());
+        const resolvedHref = normalizeDuckDuckGoResultUrl(rawHref);
+        const url = sanitizeExternalUrl(resolvedHref);
         const title = decodeHtmlEntities(stripTags(String(match[2] || '').trim()));
         if (!url || !title) continue;
         out.push({ title, url, description: title });
     }
     return out;
+}
+
+function normalizeDuckDuckGoResultUrl(href) {
+    let candidate = String(href || '').trim();
+    if (!candidate) return '';
+
+    if (candidate.startsWith('//')) {
+        candidate = `https:${candidate}`;
+    } else if (candidate.startsWith('/')) {
+        candidate = `https://duckduckgo.com${candidate}`;
+    }
+
+    try {
+        const parsed = new URL(candidate);
+        const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+        const isDuckRedirect = host === 'duckduckgo.com' && parsed.pathname.startsWith('/l/');
+        if (isDuckRedirect) {
+            const encodedTarget = parsed.searchParams.get('uddg');
+            if (encodedTarget) {
+                return decodeURIComponent(encodedTarget);
+            }
+        }
+    } catch (error) {
+        return '';
+    }
+
+    return candidate;
+}
+
+async function searchWithWikipedia(query, maxResults) {
+    const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=${Math.min(maxResults, 10)}&format=json`;
+    const response = await fetch(url);
+    if (!response.ok) return [];
+    const data = await response.json();
+    const hits = Array.isArray(data?.query?.search) ? data.query.search : [];
+
+    return hits.slice(0, maxResults).map((item) => {
+        const title = String(item?.title || '').trim();
+        const snippet = decodeHtmlEntities(stripTags(String(item?.snippet || '').trim()));
+        return {
+            title: title || 'Wikipedia result',
+            url: `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/\s+/g, '_'))}`,
+            description: snippet || title
+        };
+    }).filter(item => item.url);
 }
 
 async function searchWithGoogleNewsRss(query, maxResults) {
