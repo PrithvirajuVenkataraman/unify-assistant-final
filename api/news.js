@@ -12,9 +12,6 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    let stage = 'init';
-    const debug = {};
-
     try {
         const query = String(req.body?.query || '').trim();
         const category = String(req.body?.category || '').trim();
@@ -33,29 +30,17 @@ export default async function handler(req, res) {
         if (!query && city) queries.push(`${city} breaking news`);
         if (!query && countryCode && countryCode !== 'DEFAULT') queries.push(`${countryCode} national news`);
 
-        stage = 'parallel_fetch';
         const settled = await Promise.allSettled([
             (async () => {
-                stage = 'verified_search';
                 return runVerifiedWebSearch(queries, {
                     maxResultsPerQuery: 6,
                     limit: 10
                 });
             })(),
             (async () => {
-                stage = 'rss_fetch';
                 return fetchGoogleNewsRss(topic);
             })()
         ]);
-
-        debug.verified_search = settled[0]?.status;
-        debug.rss_fetch = settled[1]?.status;
-        if (settled[0]?.status === 'rejected') {
-            debug.verified_search_error = String(settled[0].reason?.message || settled[0].reason || '');
-        }
-        if (settled[1]?.status === 'rejected') {
-            debug.rss_fetch_error = String(settled[1].reason?.message || settled[1].reason || '');
-        }
 
         const verified = settled[0]?.status === 'fulfilled'
             ? settled[0].value
@@ -84,8 +69,7 @@ export default async function handler(req, res) {
                 sourceCount: 0,
                 distinctDomainCount: 0,
                 trustedCount: 0,
-                articles: [],
-                debug
+                articles: []
             });
         }
 
@@ -100,18 +84,15 @@ export default async function handler(req, res) {
                 title: item.title,
                 url: item.url,
                 description: item.description
-            })),
-            debug
+            }))
         });
     } catch (error) {
         return res.status(200).json({
             success: false,
             error: 'news lookup failed',
-            stage,
             details: String(error?.message || error),
             query: String(req.body?.query || req.body?.category || '').trim(),
-            articles: [],
-            debug
+            articles: []
         });
     }
 }
@@ -176,6 +157,10 @@ function cleanGoogleNewsTitle(title) {
 }
 
 const TRUSTED_DOMAINS = [
+    'isro.gov.in',
+    'nasa.gov',
+    'esa.int',
+    'space.com',
     'reuters.com',
     'apnews.com',
     'bbc.com',
@@ -219,14 +204,10 @@ async function searchWeb(query, maxResults = 8) {
     const searchQuery = normalizeTopic(query) || String(query || '').trim();
     const normalizedMax = Math.min(Math.max(Number(maxResults || 8), 1), 10);
     const serperKey = process.env.SERPER_API_KEY;
-    const braveKey = process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY;
     const attempts = [];
 
     if (serperKey) {
         attempts.push(() => searchWithSerper(searchQuery, normalizedMax, serperKey));
-    }
-    if (braveKey) {
-        attempts.push(() => searchWithBrave(searchQuery, normalizedMax, braveKey));
     }
     attempts.push(() => searchWithDuckDuckGoHtml(searchQuery, normalizedMax));
     attempts.push(() => searchWithDuckDuckGo(searchQuery, normalizedMax));
@@ -371,24 +352,6 @@ async function searchWithSerper(query, maxResults, apiKey) {
     })).filter(item => item.url);
 }
 
-async function searchWithBrave(query, maxResults, apiKey) {
-    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults}`;
-    const response = await fetch(url, {
-        headers: {
-            'Accept': 'application/json',
-            'X-Subscription-Token': apiKey
-        }
-    });
-    if (!response.ok) return [];
-    const data = await response.json();
-    const list = Array.isArray(data?.web?.results) ? data.web.results : [];
-    return list.slice(0, maxResults).map(item => ({
-        title: item?.title || 'Untitled',
-        url: sanitizeExternalUrl(item?.url || ''),
-        description: item?.description || ''
-    })).filter(item => item.url);
-}
-
 async function searchWithDuckDuckGo(query, maxResults) {
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
     const response = await fetch(url);
@@ -439,3 +402,4 @@ async function searchWithDuckDuckGoHtml(query, maxResults) {
     }
     return out;
 }
+
