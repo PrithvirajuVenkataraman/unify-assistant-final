@@ -26,7 +26,9 @@ export default async function handler(req, res) {
                 .map(m => `${m?.role === 'user' ? 'User' : 'Assistant'}: ${String(m?.text || '')}`)
                 .join('\n')
             : '';
-        const ragBlock = typeof ragContext === 'string' ? ragContext.trim() : '';
+        const clientRagBlock = typeof ragContext === 'string' ? ragContext.trim() : '';
+        const liveRagBlock = await buildLiveRagContext(message);
+        const ragBlock = [clientRagBlock, liveRagBlock].filter(Boolean).join('\n\n');
         const finalPrompt = [
             systemPrompt,
             ragBlock ? `Retrieved context (RAG):\n${ragBlock}` : '',
@@ -207,12 +209,55 @@ export default async function handler(req, res) {
     }
 }
 
+async function buildLiveRagContext(message) {
+    const query = String(message || '').trim();
+    if (!query || !isTimeSensitiveInfoRequest(query)) return '';
+
+    try {
+        const runVerifiedWebSearch = await resolveRunVerifiedWebSearch();
+        if (!runVerifiedWebSearch) return '';
+        const verified = await runVerifiedWebSearch([query], {
+            maxResultsPerQuery: 6,
+            limit: 6
+        });
+        const results = Array.isArray(verified?.results) ? verified.results.slice(0, 6) : [];
+        if (!results.length) return '';
+
+        const lines = [`Live web verification for: "${query}"`];
+        for (let i = 0; i < results.length; i++) {
+            const item = results[i] || {};
+            lines.push(`${i + 1}. ${String(item.title || 'Untitled').trim()}`);
+            lines.push(`URL: ${String(item.url || '').trim()}`);
+            if (item.description) {
+                lines.push(`Summary: ${String(item.description).trim()}`);
+            }
+        }
+        return lines.join('\n');
+    } catch (error) {
+        return '';
+    }
+}
+
+async function resolveRunVerifiedWebSearch() {
+    try {
+        const mod = await import('./live-search.js');
+        if (typeof mod?.runVerifiedWebSearch === 'function') {
+            return mod.runVerifiedWebSearch;
+        }
+    } catch (_) {}
+    return null;
+}
+
+function isTimeSensitiveInfoRequest(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(latest|recent|current|today|now|update|updates|news|headlines|status|mission|launch|price|rate|score|result|election|breaking|as of)\b/.test(t);
+}
+
 function buildServerSystemPrompt(userName) {
     return `You are Unify, a helpful voice assistant.${userName ? ` The user's name is ${userName}.` : ''}
 
 Your capabilities:
 - Weather
-- Shopping lists
 - Reminders
 - Memory (remembering where things are)
 
