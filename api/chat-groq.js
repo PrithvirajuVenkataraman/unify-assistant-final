@@ -320,7 +320,8 @@ function enforceLiveAnswerStyle(parsedResponse, message, liveSources) {
 function buildLiveUpdateResponse(message, liveSources) {
     const now = new Date();
     const asOf = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    const top = liveSources.slice(0, 3);
+    const rankedForLead = rankLeadSources(message, liveSources);
+    const top = rankedForLead.slice(0, 3);
     const lead = top[0] || {};
     const title = String(lead.title || 'Latest update');
 
@@ -370,6 +371,11 @@ function rankLiveSources(query, results) {
             if (/\b(isro|launch|mission|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan)\b/.test(hay)) score += 4;
             if (/\.pdf($|\?)/i.test(url) && !host.endsWith('isro.gov.in')) score -= 6;
             if (/\b(aps|unoosa|respond basket)\b/.test(hay)) score -= 7;
+            if (/^isro$/i.test(title.trim())) score -= 6;
+            if (/\/?$/.test(safePathname(url)) && host.endsWith('isro.gov.in')) score -= 5;
+            if (host === 'x.com' || host === 'twitter.com') score -= 4;
+            if (/latest_updates\.html/i.test(url)) score += 3;
+            if (/\b(update|updates|mission|launch|press release|statement)\b/.test(hay)) score += 3;
         }
 
         if (/\b(latest|today|update|updates|current|now|recent)\b/.test(hay)) score += 2;
@@ -389,6 +395,38 @@ function rankLiveSources(query, results) {
 
     scored.sort((a, b) => (b.__score || 0) - (a.__score || 0));
     return scored.filter(item => (item.__score || 0) >= 0);
+}
+
+function rankLeadSources(query, sources) {
+    const wantsIsro = /\bisro\b/i.test(String(query || ''));
+    const list = Array.isArray(sources) ? sources.slice() : [];
+    const withScore = list.map(item => {
+        const title = String(item?.title || '');
+        const desc = String(item?.description || '');
+        const url = String(item?.url || '');
+        const host = getHost(url);
+        const hay = `${title} ${desc}`.toLowerCase();
+        let score = 0;
+        if (wantsIsro) {
+            if (host.endsWith('isro.gov.in')) score += 4;
+            if (/\b(update|updates|mission|launch|statement|press)\b/.test(hay)) score += 5;
+            if (/^isro$/i.test(title.trim())) score -= 6;
+            if ((host === 'x.com' || host === 'twitter.com')) score -= 5;
+            if (/latest_updates\.html/i.test(url)) score += 4;
+            if (/\/?$/.test(safePathname(url)) && host.endsWith('isro.gov.in')) score -= 4;
+        }
+        return { ...item, __leadScore: score };
+    });
+    withScore.sort((a, b) => (b.__leadScore || 0) - (a.__leadScore || 0));
+    return withScore;
+}
+
+function safePathname(url) {
+    try {
+        return new URL(String(url || '')).pathname || '/';
+    } catch (_) {
+        return '/';
+    }
 }
 
 function getHost(url) {
