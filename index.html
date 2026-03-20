@@ -4789,6 +4789,13 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
 async function askGeminiAI(userMessage) { 
     let normalizedUserMessage = String(userMessage || '');
     const controller = beginAbortableRequest();
+    const hadExistingThinkingIndicator = Boolean(document.getElementById('chat-thinking-indicator'));
+    let autoIndicatorShown = false;
+    const autoIndicatorTimer = setTimeout(() => {
+        if (hadExistingThinkingIndicator) return;
+        showThinkingIndicator('Fetching response...');
+        autoIndicatorShown = true;
+    }, 260);
     try { 
         normalizedUserMessage = resolveKnowledgeFollowupQuery(userMessage);
         maybeCaptureKnowledgeEntity(normalizedUserMessage);
@@ -4880,7 +4887,8 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             body: JSON.stringify({ 
                 message: effectiveMessage, 
                 systemPrompt: systemPromptWithTopic,
-                userName: userName 
+                userName: userName,
+                context: conversationContext
             }) 
         }); 
         
@@ -4958,6 +4966,10 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             intent: 'soft_fallback'
         }; 
     } finally {
+        clearTimeout(autoIndicatorTimer);
+        if (autoIndicatorShown && !hadExistingThinkingIndicator) {
+            hideThinkingIndicator();
+        }
         clearActiveRequest(controller);
     }
 } 
@@ -6800,6 +6812,10 @@ function normalizeUiTokens(text) {
         }
 
         function toggleSendButton() {
+            if (activeRequestController) {
+                setPrimaryActionButtonToStop();
+                return;
+            }
             const input = document.getElementById('text-input');
             const hasInput = !!(input && input.value.trim().length > 0);
             const shouldSend = hasInput;
@@ -6812,6 +6828,10 @@ function normalizeUiTokens(text) {
         }
 
 async function sendTextInput() {
+            if (activeRequestController) {
+                stopActiveGeneration();
+                return;
+            }
             const input = document.getElementById('text-input');
             if (!input) return;
             const text = input.value.trim();
