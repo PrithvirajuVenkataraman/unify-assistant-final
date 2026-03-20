@@ -299,15 +299,8 @@ function isTimeSensitiveInfoRequest(text) {
 }
 
 function enforceLiveAnswerStyle(parsedResponse, message, liveSources) {
-    const responseText = String(parsedResponse?.response || '').trim();
     if (!isTimeSensitiveInfoRequest(message)) return parsedResponse;
     if (!Array.isArray(liveSources) || !liveSources.length) return parsedResponse;
-
-    const hasLinks = /https?:\/\//i.test(responseText);
-    const genericAdvice = /\b(check|visit|see|refer)\b[\s\S]{0,80}\b(official website|website|site)\b/i.test(responseText) ||
-        /\bi recommend checking\b/i.test(responseText);
-
-    if (hasLinks && !genericAdvice) return parsedResponse;
 
     return {
         ...parsedResponse,
@@ -320,14 +313,16 @@ function enforceLiveAnswerStyle(parsedResponse, message, liveSources) {
 function buildLiveUpdateResponse(message, liveSources) {
     const now = new Date();
     const asOf = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    const rankedForLead = rankLeadSources(message, liveSources);
+    const rankedForLead = rankLeadSources(message, liveSources).filter(item => shouldUseAsFinalSource(message, item));
     const top = rankedForLead.slice(0, 3);
     const lead = top[0] || {};
-    const title = String(lead.title || 'Latest update');
+    const title = normalizeLeadTitle(message, lead);
+    const description = String(lead?.description || '').trim();
+    const updateLine = normalizeUpdateLine(title, description);
 
-    const lines = [`As of ${asOf}, the latest update is: ${title}.`, '', 'Sources:'];
+    const lines = [`As of ${asOf}, ${updateLine}`, '', 'Sources:'];
     for (const item of top) {
-        lines.push(`- ${String(item.title || 'Source')}: ${String(item.url || '').trim()}`);
+        lines.push(`- ${String(item.url || '').trim()}`);
     }
     return lines.join('\n');
 }
@@ -338,9 +333,9 @@ function buildLiveQueries(query) {
     const lower = q.toLowerCase();
     if (/\bisro\b/.test(lower)) {
         return [
-            'ISRO latest mission update site:isro.gov.in',
-            'ISRO latest launch update site:isro.gov.in',
-            'ISRO mission update press release site:isro.gov.in',
+            'ISRO latest mission update press release site:isro.gov.in',
+            'ISRO launch mission statement site:isro.gov.in',
+            'ISRO mission update PSLV GSLV NVS site:isro.gov.in',
             `${q} Reuters OR The Hindu OR Indian Express`
         ];
     }
@@ -374,8 +369,11 @@ function rankLiveSources(query, results) {
             if (/^isro$/i.test(title.trim())) score -= 6;
             if (/\/?$/.test(safePathname(url)) && host.endsWith('isro.gov.in')) score -= 5;
             if (host === 'x.com' || host === 'twitter.com') score -= 4;
-            if (/latest_updates\.html/i.test(url)) score += 3;
+            if (/latest_updates\.html/i.test(url)) score -= 1;
             if (/\b(update|updates|mission|launch|press release|statement)\b/.test(hay)) score += 3;
+            if (isGenericIsroTitle(title)) score -= 6;
+            if (isGoogleNewsRedirect(url)) score -= 7;
+            if (!/\b(mission|launch|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan)\b/.test(hay)) score -= 2;
         }
 
         if (/\b(latest|today|update|updates|current|now|recent)\b/.test(hay)) score += 2;
@@ -409,11 +407,14 @@ function rankLeadSources(query, sources) {
         let score = 0;
         if (wantsIsro) {
             if (host.endsWith('isro.gov.in')) score += 4;
-            if (/\b(update|updates|mission|launch|statement|press)\b/.test(hay)) score += 5;
+            if (/\b(update|updates|mission|launch|statement|press|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan)\b/.test(hay)) score += 5;
             if (/^isro$/i.test(title.trim())) score -= 6;
             if ((host === 'x.com' || host === 'twitter.com')) score -= 5;
-            if (/latest_updates\.html/i.test(url)) score += 4;
+            if (/latest_updates\.html/i.test(url)) score -= 1;
             if (/\/?$/.test(safePathname(url)) && host.endsWith('isro.gov.in')) score -= 4;
+            if (isGenericIsroTitle(title)) score -= 7;
+            if (isGoogleNewsRedirect(url)) score -= 7;
+            if (!/\b(mission|launch|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan)\b/.test(hay)) score -= 2;
         }
         return { ...item, __leadScore: score };
     });
@@ -435,6 +436,46 @@ function getHost(url) {
     } catch (_) {
         return '';
     }
+}
+
+function isGoogleNewsRedirect(url) {
+    const host = getHost(url);
+    return host === 'news.google.com' && /\/rss\/articles\//i.test(String(url || ''));
+}
+
+function isGenericIsroTitle(title) {
+    const t = String(title || '').trim().toLowerCase();
+    return t === 'isro' || t === 'updates - isro' || t === 'latest updates - isro';
+}
+
+function shouldUseAsFinalSource(message, item) {
+    const isroMissionQuery = /\bisro\b/i.test(String(message || '')) && /\b(mission|launch|update|latest)\b/i.test(String(message || ''));
+    const title = String(item?.title || '');
+    const desc = String(item?.description || '');
+    const hay = `${title} ${desc}`.toLowerCase();
+    const url = String(item?.url || '');
+    if (isGoogleNewsRedirect(url)) return false;
+    if (!isroMissionQuery) return true;
+    if (isGenericIsroTitle(title)) return false;
+    return /\b(mission|launch|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan|statement|press)\b/.test(hay);
+}
+
+function normalizeLeadTitle(message, lead) {
+    const raw = String(lead?.title || '').trim();
+    if (!raw) return 'Latest mission update is currently being tracked from official sources';
+    if (/\bisro\b/i.test(String(message || '')) && isGenericIsroTitle(raw)) {
+        return 'ISRO published fresh mission-related updates on its official channels';
+    }
+    return raw;
+}
+
+function normalizeUpdateLine(title, description) {
+    const cleanTitle = String(title || '').replace(/[.\s]+$/g, '').trim();
+    const descFirst = String(description || '').split(/[.!?]\s/)[0].trim();
+    if (descFirst && descFirst.length >= 25 && !/^https?:\/\//i.test(descFirst)) {
+        return `${cleanTitle}. ${descFirst}.`;
+    }
+    return `the latest update is: ${cleanTitle}.`;
 }
 
 function buildServerSystemPrompt(userName) {
