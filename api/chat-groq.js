@@ -44,7 +44,7 @@ export default async function handler(req, res) {
 
         // Pass 2: only do live search when the first answer is weak/stale for time-sensitive queries.
         if (escalation.escalate) {
-            liveRag = await buildLiveRagContext(message, req);
+            liveRag = await buildLiveRagContext(message, req, context);
             if (liveRag.ragText) {
                 const secondPrompt = composeFinalPrompt(
                     systemPrompt,
@@ -300,12 +300,13 @@ function getWebEscalationDecision(message, firstAnswer) {
     return { escalate: false, reason: 'model_answer_accepted' };
 }
 
-async function buildLiveRagContext(message, req) {
+async function buildLiveRagContext(message, req, contextTurns = []) {
     const query = String(message || '').trim();
     if (!query || !isWebCheckCandidateQuery(query)) return { ragText: '', sources: [] };
 
     try {
-        const liveQueries = buildLiveQueries(query);
+        const resolvedQuery = resolveContextualLiveQuery(query, contextTurns);
+        const liveQueries = buildLiveQueries(resolvedQuery);
         const runVerifiedWebSearch = await resolveRunVerifiedWebSearch();
         let results = [];
 
@@ -319,10 +320,13 @@ async function buildLiveRagContext(message, req) {
             results = await fetchFromOwnSearchApi(liveQueries, req);
         }
 
-        const ranked = rankLiveSources(query, results).slice(0, 6);
+        const ranked = rankLiveSources(resolvedQuery, results).slice(0, 6);
         if (!ranked.length) return { ragText: '', sources: [] };
 
         const lines = [`Live web verification for: "${query}"`];
+        if (resolvedQuery.toLowerCase() !== query.toLowerCase()) {
+            lines.push(`Resolved query: "${resolvedQuery}"`);
+        }
         for (let i = 0; i < ranked.length; i++) {
             const item = ranked[i] || {};
             lines.push(`${i + 1}. ${String(item.title || 'Untitled').trim()}`);
@@ -444,7 +448,9 @@ function buildLiveQueries(query) {
     if (/\bipl\b/.test(lower) || (/\b(match|schedule|fixture|opening|first)\b/.test(lower) && /\bcricket\b/.test(lower))) {
         return [
             'IPL first match date official schedule iplt20.com',
+            'IPL first match teams official schedule iplt20.com',
             'IPL opening match date ESPNcricinfo Cricbuzz',
+            'IPL opening match teams ESPNcricinfo Cricbuzz',
             'IPL fixtures first game date',
             q
         ];
@@ -455,6 +461,7 @@ function buildLiveQueries(query) {
 function rankLiveSources(query, results) {
     const list = Array.isArray(results) ? results : [];
     const q = String(query || '').toLowerCase();
+    const queryTerms = tokenizeRelevanceTerms(q);
     const wantsIsro = /\bisro\b/.test(q);
     const currentYear = new Date().getUTCFullYear();
     const seen = new Set();
@@ -469,8 +476,14 @@ function rankLiveSources(query, results) {
         const desc = String(item?.description || '');
         const hay = `${title} ${desc}`.toLowerCase();
         const host = getHost(url);
+        const overlap = queryTerms.reduce((acc, term) => acc + (hay.includes(term) ? 1 : 0), 0);
 
         let score = 0;
+        if (overlap > 0) {
+            score += overlap * 2;
+        } else if (queryTerms.length > 0) {
+            score -= 8;
+        }
         if (wantsIsro) {
             if (host.endsWith('isro.gov.in')) score += 8;
             if (/\b(isro|launch|mission|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan)\b/.test(hay)) score += 4;
@@ -498,15 +511,18 @@ function rankLiveSources(query, results) {
             }
         }
 
-        scored.push({ ...item, __score: score });
+        scored.push({ ...item, __score: score, __termOverlap: overlap });
     }
 
     scored.sort((a, b) => (b.__score || 0) - (a.__score || 0));
+    const relevant = scored.filter(item => (item.__termOverlap || 0) > 0 && (item.__score || 0) >= 0);
+    if (relevant.length >= 2) return relevant;
     return scored.filter(item => (item.__score || 0) >= 0);
 }
 
 function rankLeadSources(query, sources) {
     const wantsIsro = /\bisro\b/i.test(String(query || ''));
+    const queryTerms = tokenizeRelevanceTerms(query);
     const list = Array.isArray(sources) ? sources.slice() : [];
     const withScore = list.map(item => {
         const title = String(item?.title || '');
@@ -514,7 +530,13 @@ function rankLeadSources(query, sources) {
         const url = String(item?.url || '');
         const host = getHost(url);
         const hay = `${title} ${desc}`.toLowerCase();
+        const overlap = queryTerms.reduce((acc, term) => acc + (hay.includes(term) ? 1 : 0), 0);
         let score = 0;
+        if (overlap > 0) {
+            score += overlap * 2;
+        } else if (queryTerms.length > 0) {
+            score -= 6;
+        }
         if (wantsIsro) {
             if (host.endsWith('isro.gov.in')) score += 4;
             if (/\b(update|updates|mission|launch|statement|press|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan)\b/.test(hay)) score += 5;
@@ -530,6 +552,124 @@ function rankLeadSources(query, sources) {
     });
     withScore.sort((a, b) => (b.__leadScore || 0) - (a.__leadScore || 0));
     return withScore;
+}
+
+function resolveContextualLiveQuery(query, contextTurns) {
+    const current = String(query || '').trim();
+    if (!current) return '';
+    const context = Array.isArray(contextTurns) ? contextTurns : [];
+    const anchor = buildTopicAnchor(context);
+    if (!anchor) return current;
+
+    const currentTerms = tokenizeTopicTerms(current);
+    const anchorTerms = tokenizeTopicTerms(anchor);
+    const overlap = countTokenOverlap(currentTerms, anchorTerms);
+    const underspecified = isUnderspecifiedFollowup(current, currentTerms);
+
+    if (overlap > 0) return current;
+    if (isTopicDiversion(current, currentTerms, anchorTerms)) return current;
+    if (!underspecified) return current;
+
+    return `${current} ${anchor}`.replace(/\s+/g, ' ').trim();
+}
+
+function tokenizeRelevanceTerms(text) {
+    const stop = new Set([
+        'the', 'a', 'an', 'and', 'or', 'but', 'if', 'then', 'than',
+        'is', 'are', 'was', 'were', 'be', 'been', 'being',
+        'who', 'what', 'when', 'where', 'why', 'how',
+        'in', 'on', 'for', 'to', 'of', 'with', 'by', 'from',
+        'me', 'you', 'your', 'my', 'our', 'their',
+        'latest', 'current', 'today', 'update', 'updates'
+    ]);
+
+    return Array.from(new Set(
+        String(text || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .split(/\s+/)
+            .filter(token => token && token.length > 1 && !stop.has(token))
+            .slice(0, 16)
+    ));
+}
+
+function buildTopicAnchor(contextTurns) {
+    const userTurns = (Array.isArray(contextTurns) ? contextTurns : [])
+        .filter(turn => String(turn?.role || '').toLowerCase() === 'user')
+        .slice(-8)
+        .map(turn => String(turn?.text || '').trim())
+        .filter(Boolean);
+
+    for (let i = userTurns.length - 1; i >= 0; i--) {
+        const candidate = userTurns[i];
+        const terms = tokenizeTopicTerms(candidate);
+        if (terms.length < 2) continue;
+        if (isUnderspecifiedFollowup(candidate, terms)) continue;
+        return terms.slice(0, 8).join(' ');
+    }
+    return '';
+}
+
+function tokenizeTopicTerms(text) {
+    const stop = new Set([
+        'a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'than',
+        'do', 'does', 'did', 'can', 'could', 'would', 'will', 'should',
+        'what', 'which', 'who', 'whom', 'whose', 'when', 'where', 'why', 'how',
+        'is', 'are', 'am', 'was', 'were', 'be', 'been', 'being',
+        'have', 'has', 'had', 'i', 'me', 'my', 'mine', 'you', 'your', 'yours',
+        'we', 'our', 'ours', 'they', 'their', 'theirs', 'he', 'she', 'it',
+        'this', 'that', 'these', 'those', 'there', 'here',
+        'please', 'kindly', 'just', 'about', 'on', 'for', 'to', 'of', 'in',
+        'at', 'by', 'with', 'from', 'into', 'as', 'per',
+        'tell', 'show', 'give', 'find', 'search', 'look', 'lookup', 'check',
+        'explain', 'describe', 'summarize', 'summary',
+        'latest', 'recent', 'current', 'today', 'right', 'now', 'update', 'updates',
+        'sources', 'source', 'link', 'links', 'news', 'headline', 'headlines'
+    ]);
+
+    return Array.from(new Set(
+        String(text || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .split(/\s+/)
+            .filter(token => token && token.length > 1 && !stop.has(token))
+            .slice(0, 16)
+    ));
+}
+
+function countTokenOverlap(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || !a.length || !b.length) return 0;
+    const bSet = new Set(b);
+    let count = 0;
+    for (const token of a) {
+        if (bSet.has(token)) count++;
+    }
+    return count;
+}
+
+function isUnderspecifiedFollowup(query, pretokenizedTerms) {
+    const q = String(query || '').trim().toLowerCase();
+    const terms = Array.isArray(pretokenizedTerms) ? pretokenizedTerms : tokenizeTopicTerms(q);
+    if (!q) return false;
+
+    const referential = /\b(it|its|they|them|that|this|these|those|there|same|above|earlier|previous|first match|opening match|that match|that game|who are playing|who is playing)\b/.test(q);
+    const questionLead = /^(who|what|when|where|which|how)\b/.test(q);
+    const veryShort = terms.length > 0 && terms.length <= 3;
+    const asksFactWithoutEntity = questionLead && terms.length <= 4;
+
+    return referential || veryShort || asksFactWithoutEntity;
+}
+
+function isTopicDiversion(query, currentTerms, anchorTerms) {
+    const q = String(query || '').toLowerCase();
+    const overlap = countTokenOverlap(currentTerms, anchorTerms);
+    if (overlap > 0) return false;
+
+    const hasNamedLikeSignal = (Array.isArray(currentTerms) ? currentTerms : []).length >= 4;
+    const explicitSwitch = /\b(now|instead|different topic|another topic|new topic|change topic|switch topic)\b/.test(q);
+    const containsDistinctEntityHint = /\b(who is|what is|tell me about)\s+[a-z0-9][a-z0-9\s-]{2,}/.test(q);
+
+    return explicitSwitch || (hasNamedLikeSignal && containsDistinctEntityHint);
 }
 
 function safePathname(url) {
