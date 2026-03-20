@@ -43,7 +43,10 @@ export default async function handler(req, res) {
             return res.status(400).json({ success: false, error: 'Invalid file content' });
         }
         if (buffer.length > MAX_FILE_BYTES) {
-            return res.status(413).json({ success: false, error: 'File too large. Max 10 MB.' });
+            return res.status(413).json({
+                success: false,
+                error: 'File too large. Parser max is 10 MB (deployment request limits may be lower after base64 encoding).'
+            });
         }
 
         const normalizedMime = String(mimeType || '').toLowerCase();
