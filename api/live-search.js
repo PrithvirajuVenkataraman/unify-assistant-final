@@ -352,7 +352,8 @@ export function extractSearchTopic(text) {
 
     cleaned = cleaned
         .replace(/[?!]/g, ' ')
-        .replace(/\b\d+\b/g, ' ')
+        // Keep 4-digit years (e.g., 2026) so time-specific queries stay precise.
+        .replace(/\b\d+\b/g, (digits) => (/^(19|20)\d{2}$/.test(digits) ? digits : ' '))
         .replace(/\s+/g, ' ')
         .trim();
 
