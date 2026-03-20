@@ -27,6 +27,7 @@ export default async function handler(req, res) {
                 .join('\n')
             : '';
         const clientRagBlock = typeof ragContext === 'string' ? ragContext.trim() : '';
+        const isInternalSummary = isInternalSummarizerPrompt(message, clientSystemPrompt);
 
         // Pass 1: model-only (no live search) for speed and cost.
         const firstPrompt = composeFinalPrompt(systemPrompt, clientRagBlock, contextBlock, message);
@@ -37,7 +38,9 @@ export default async function handler(req, res) {
 
         let selectedPass = firstPass;
         let liveRag = { ragText: '', sources: [] };
-        const escalation = getWebEscalationDecision(message, firstPass.parsedResponse?.response || '');
+        const escalation = isInternalSummary
+            ? { escalate: false, reason: 'internal_summarizer_prompt' }
+            : getWebEscalationDecision(message, firstPass.parsedResponse?.response || '');
 
         // Pass 2: only do live search when the first answer is weak/stale for time-sensitive queries.
         if (escalation.escalate) {
@@ -62,10 +65,11 @@ export default async function handler(req, res) {
             modelUsed: selectedPass.modelUsed,
             provider: selectedPass.provider,
             webEscalation: {
-                considered: isTimeSensitiveInfoRequest(message),
+                considered: isWebCheckCandidateQuery(message),
                 escalated: escalation.escalate,
                 reason: escalation.reason,
-                sourceCount: Array.isArray(liveRag.sources) ? liveRag.sources.length : 0
+                sourceCount: Array.isArray(liveRag.sources) ? liveRag.sources.length : 0,
+                requestType: isInternalSummary ? 'internal_summary' : 'user_query'
             }
         });
     } catch (error) {
@@ -258,10 +262,20 @@ function shouldEscalateToWeb(message, firstAnswer) {
     return getWebEscalationDecision(message, firstAnswer).escalate;
 }
 
+function isInternalSummarizerPrompt(message, clientSystemPrompt) {
+    const msg = String(message || '').toLowerCase();
+    const sp = String(clientSystemPrompt || '').toLowerCase();
+    return (
+        (msg.includes('snippets:') && msg.includes('user question:')) ||
+        sp.includes('summarize only from supplied snippets') ||
+        sp.includes('do not invent facts')
+    );
+}
+
 function getWebEscalationDecision(message, firstAnswer) {
     const query = String(message || '').trim();
     const answer = String(firstAnswer || '').trim();
-    if (!isTimeSensitiveInfoRequest(query)) return { escalate: false, reason: 'not_time_sensitive' };
+    if (!isWebCheckCandidateQuery(query)) return { escalate: false, reason: 'not_factual_or_time_sensitive' };
     if (!answer) return { escalate: true, reason: 'empty_answer' };
     if (/\b(with sources?|source links?)\b/i.test(query)) return { escalate: true, reason: 'user_requested_sources' };
 
@@ -275,12 +289,20 @@ function getWebEscalationDecision(message, firstAnswer) {
     const asksWhenOrDate = /\b(when|date|first match|opening match|schedule|fixture)\b/i.test(query);
     if (asksWhenOrDate && !extractDateCandidate(answer)) return { escalate: true, reason: 'date_missing_in_answer' };
 
+    const factualQuery = isFactualQuery(query);
+    const evasiveFactualAnswer =
+        /\b(i think|maybe|perhaps|not sure|cannot confirm|can't confirm|hard to say)\b/i.test(answer) ||
+        /\b(check|visit|refer)\b[\s\S]{0,120}\b(official website|website|site|search|google)\b/i.test(answer);
+    if (factualQuery && evasiveFactualAnswer) {
+        return { escalate: true, reason: 'weak_factual_answer' };
+    }
+
     return { escalate: false, reason: 'model_answer_accepted' };
 }
 
 async function buildLiveRagContext(message, req) {
     const query = String(message || '').trim();
-    if (!query || !isTimeSensitiveInfoRequest(query)) return { ragText: '', sources: [] };
+    if (!query || !isWebCheckCandidateQuery(query)) return { ragText: '', sources: [] };
 
     try {
         const liveQueries = buildLiveQueries(query);
@@ -365,13 +387,26 @@ function isTimeSensitiveInfoRequest(text) {
     return /\b(latest|recent|current|today|now|update|updates|news|headlines|status|mission|launch|price|rate|score|result|election|breaking|as of|ipl|match|matches|fixture|fixtures|schedule|opening match|first match)\b/.test(t);
 }
 
+function isFactualQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    if (/\b(joke|poem|story|write|compose|roleplay|imagine)\b/.test(t)) return false;
+
+    return /\b(who|what|when|where|which|how many|how much|date of|founded|ceo|president|prime minister|captain|winner|population|capital|currency|height|age|released|launch date)\b/.test(t) ||
+        /\b(is|are|was|were)\b.+\b\?\s*$/.test(t);
+}
+
+function isWebCheckCandidateQuery(text) {
+    return isTimeSensitiveInfoRequest(text) || isFactualQuery(text);
+}
+
 function enforceLiveAnswerStyle(parsedResponse, message, liveSources) {
     if (!isTimeSensitiveInfoRequest(message)) return parsedResponse;
     if (!Array.isArray(liveSources) || !liveSources.length) return parsedResponse;
 
     return {
         ...parsedResponse,
-        intent: parsedResponse?.intent || 'live_update',
+        intent: 'live_update',
         response: buildLiveUpdateResponse(message, liveSources),
         action: parsedResponse?.action ?? null
     };
@@ -385,7 +420,7 @@ function buildLiveUpdateResponse(message, liveSources) {
     const lead = top[0] || {};
     const title = normalizeLeadTitle(message, lead);
     const description = String(lead?.description || '').trim();
-    const updateLine = normalizeUpdateLine(message, title, description);
+    const updateLine = normalizeUpdateLine(message, title, description, liveSources);
 
     const lines = [`As of ${asOf}, ${updateLine}`, '', 'Sources:'];
     for (const item of top) {
@@ -544,15 +579,18 @@ function normalizeLeadTitle(message, lead) {
     return raw;
 }
 
-function normalizeUpdateLine(message, title, description) {
+function normalizeUpdateLine(message, title, description, sources) {
     const msg = String(message || '').toLowerCase();
     const cleanTitle = String(title || '').replace(/[.\s]+$/g, '').trim();
     const descFirst = String(description || '').split(/[.!?]\s/)[0].trim();
     const combined = `${cleanTitle} ${descFirst}`.trim();
-    const date = extractDateCandidate(combined);
+    const date = extractDateCandidate(combined) || findDateAcrossSources(sources);
 
     if (/^\s*when\b/.test(msg) && date) {
         return `the reported date is ${date} (${cleanTitle}).`;
+    }
+    if (/^\s*when\b/.test(msg) && !date) {
+        return `I could not confirm an exact date from the top live snippets.`;
     }
     if (descFirst && descFirst.length >= 25 && !/^https?:\/\//i.test(descFirst)) {
         return `${cleanTitle}. ${descFirst}.`;
@@ -574,6 +612,16 @@ function extractDateCandidate(text) {
     for (const p of patterns) {
         const m = t.match(p);
         if (m?.[0]) return m[0];
+    }
+    return '';
+}
+
+function findDateAcrossSources(sources) {
+    const list = Array.isArray(sources) ? sources : [];
+    for (const item of list.slice(0, 6)) {
+        const t = `${String(item?.title || '')} ${String(item?.description || '')}`;
+        const date = extractDateCandidate(t);
+        if (date) return date;
     }
     return '';
 }
