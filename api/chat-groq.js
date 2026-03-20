@@ -27,179 +27,46 @@ export default async function handler(req, res) {
                 .join('\n')
             : '';
         const clientRagBlock = typeof ragContext === 'string' ? ragContext.trim() : '';
-        const liveRag = await buildLiveRagContext(message, req);
-        const ragBlock = [clientRagBlock, liveRag.ragText].filter(Boolean).join('\n\n');
-        const finalPrompt = [
-            systemPrompt,
-            ragBlock ? `Retrieved context (RAG):\n${ragBlock}` : '',
-            contextBlock ? `Recent turns:\n${contextBlock}` : '',
-            `User message: ${message}`
-        ].filter(Boolean).join('\n\n');
 
-        // Prefer Groq for this endpoint; keep Gemini fallback for compatibility.
-        let groqFailureDetail = '';
-        let groqTriedModels = [];
-        const groqApiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
-        if (groqApiKey) {
-            const groqConfiguredModel = String(process.env.GROQ_MODEL || '').trim();
-            const groqCandidates = [
-                groqConfiguredModel,
-                'llama-3.3-70b-versatile',
-                'llama-3.1-8b-instant'
-            ].filter(Boolean);
+        // Pass 1: model-only (no live search) for speed and cost.
+        const firstPrompt = composeFinalPrompt(systemPrompt, clientRagBlock, contextBlock, message);
+        const firstPass = await runModelWithFallback(firstPrompt);
+        if (!firstPass.ok) {
+            return res.status(200).json(firstPass.payload);
+        }
 
-            let groqText = '';
-            let modelUsed = null;
-            let lastErrorDetail = '';
-            const triedModels = [];
+        let selectedPass = firstPass;
+        let liveRag = { ragText: '', sources: [] };
+        const escalation = getWebEscalationDecision(message, firstPass.parsedResponse?.response || '');
 
-            for (const model of groqCandidates) {
-                triedModels.push(model);
-                const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${groqApiKey}`
-                    },
-                    body: JSON.stringify({
-                        model,
-                        temperature: 0.7,
-                        max_tokens: 2500,
-                        messages: [
-                            { role: 'user', content: finalPrompt }
-                        ]
-                    })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    groqText = String(data?.choices?.[0]?.message?.content || '').trim();
-                    modelUsed = model;
-                    break;
+        // Pass 2: only do live search when the first answer is weak/stale for time-sensitive queries.
+        if (escalation.escalate) {
+            liveRag = await buildLiveRagContext(message, req);
+            if (liveRag.ragText) {
+                const secondPrompt = composeFinalPrompt(
+                    systemPrompt,
+                    [clientRagBlock, liveRag.ragText].filter(Boolean).join('\n\n'),
+                    contextBlock,
+                    message
+                );
+                const secondPass = await runModelWithFallback(secondPrompt);
+                if (secondPass.ok) {
+                    selectedPass = secondPass;
                 }
-
-                const bodyText = await response.text().catch(() => '');
-                lastErrorDetail = `provider=groq, model=${model}, status=${response.status}, body=${bodyText.slice(0, 300)}`;
             }
-
-            if (groqText) {
-                let parsedResponse;
-                try {
-                    parsedResponse = JSON.parse(groqText);
-                } catch (e) {
-                    parsedResponse = {
-                        intent: 'casual_chat',
-                        response: groqText,
-                        action: null
-                    };
-                }
-                parsedResponse = enforceLiveAnswerStyle(parsedResponse, message, liveRag.sources);
-
-                return res.status(200).json({
-                    ...parsedResponse,
-                    modelUsed,
-                    provider: 'groq'
-                });
-            }
-            // Do not fail hard here; continue to Gemini fallback if available.
-            groqFailureDetail = lastErrorDetail || 'Groq did not return a successful response.';
-            groqTriedModels = triedModels;
         }
 
-        // Fallback path: Gemini if GROQ key is not configured.
-        const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-        if (!geminiApiKey) {
-            return res.status(200).json({
-                intent: 'service_unconfigured',
-                response: 'AI backend is not configured. Set GROQ_API_KEY or GEMINI_API_KEY in the server environment.',
-                action: null,
-                provider: 'none',
-                details: groqFailureDetail || undefined,
-                triedModels: groqTriedModels.length ? groqTriedModels : undefined
-            });
-        }
-
-        const geminiConfiguredModel = String(process.env.GEMINI_MODEL || '').trim();
-        const geminiCandidates = [
-            geminiConfiguredModel,
-            'gemini-2.5-flash',
-            'gemini-2.5-flash-lite',
-            'gemini-2.0-flash'
-        ].filter(Boolean);
-
-        let geminiData = null;
-        let modelUsed = null;
-        let lastErrorDetail = '';
-        const triedModels = [];
-
-        for (const model of geminiCandidates) {
-            triedModels.push(model);
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [{ text: finalPrompt }]
-                        }],
-                        generationConfig: {
-                            temperature: 0.7,
-                            topK: 40,
-                            topP: 0.95,
-                            maxOutputTokens: 2500,
-                        }
-                    })
-                }
-            );
-
-            if (response.ok) {
-                geminiData = await response.json();
-                modelUsed = model;
-                break;
-            }
-
-            const bodyText = await response.text().catch(() => '');
-            lastErrorDetail = `provider=gemini, model=${model}, status=${response.status}, body=${bodyText.slice(0, 300)}`;
-        }
-
-        if (!geminiData) {
-            return res.status(200).json({
-                intent: 'service_unavailable',
-                response: 'The AI service is temporarily unavailable right now. Please try again shortly.',
-                action: null,
-                triedModels,
-                provider: 'gemini',
-                details: [
-                    groqFailureDetail ? `groq: ${groqFailureDetail}` : '',
-                    lastErrorDetail ? `gemini: ${lastErrorDetail}` : 'No Gemini model responded successfully.'
-                ].filter(Boolean).join(' | ')
-            });
-        }
-
-        let aiText = '';
-        if (geminiData?.candidates?.[0]?.content?.parts?.[0]?.text) {
-            aiText = geminiData.candidates[0].content.parts[0].text;
-        }
-
-        let parsedResponse;
-        try {
-            parsedResponse = JSON.parse(aiText);
-        } catch (e) {
-            parsedResponse = {
-                intent: 'casual_chat',
-                response: aiText,
-                action: null
-            };
-        }
-        parsedResponse = enforceLiveAnswerStyle(parsedResponse, message, liveRag.sources);
-
+        const finalParsed = enforceLiveAnswerStyle(selectedPass.parsedResponse, message, liveRag.sources);
         return res.status(200).json({
-            ...parsedResponse,
-            modelUsed,
-            provider: 'gemini'
+            ...finalParsed,
+            modelUsed: selectedPass.modelUsed,
+            provider: selectedPass.provider,
+            webEscalation: {
+                considered: isTimeSensitiveInfoRequest(message),
+                escalated: escalation.escalate,
+                reason: escalation.reason,
+                sourceCount: Array.isArray(liveRag.sources) ? liveRag.sources.length : 0
+            }
         });
     } catch (error) {
         return res.status(200).json({
@@ -209,6 +76,206 @@ export default async function handler(req, res) {
             details: String(error?.message || error)
         });
     }
+}
+
+function composeFinalPrompt(systemPrompt, ragBlock, contextBlock, message) {
+    return [
+        systemPrompt,
+        ragBlock ? `Retrieved context (RAG):\n${ragBlock}` : '',
+        contextBlock ? `Recent turns:\n${contextBlock}` : '',
+        `User message: ${message}`
+    ].filter(Boolean).join('\n\n');
+}
+
+async function runModelWithFallback(finalPrompt) {
+    let groqFailureDetail = '';
+    let groqTriedModels = [];
+    const groqApiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
+
+    if (groqApiKey) {
+        const groqConfiguredModel = String(process.env.GROQ_MODEL || '').trim();
+        const groqCandidates = [
+            groqConfiguredModel,
+            'llama-3.3-70b-versatile',
+            'llama-3.1-8b-instant'
+        ].filter(Boolean);
+
+        let groqText = '';
+        let modelUsed = null;
+        let lastErrorDetail = '';
+        const triedModels = [];
+
+        for (const model of groqCandidates) {
+            triedModels.push(model);
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${groqApiKey}`
+                },
+                body: JSON.stringify({
+                    model,
+                    temperature: 0.7,
+                    max_tokens: 2500,
+                    messages: [
+                        { role: 'user', content: finalPrompt }
+                    ]
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                groqText = String(data?.choices?.[0]?.message?.content || '').trim();
+                modelUsed = model;
+                break;
+            }
+
+            const bodyText = await response.text().catch(() => '');
+            lastErrorDetail = `provider=groq, model=${model}, status=${response.status}, body=${bodyText.slice(0, 300)}`;
+        }
+
+        if (groqText) {
+            return {
+                ok: true,
+                parsedResponse: parseModelText(groqText),
+                modelUsed,
+                provider: 'groq'
+            };
+        }
+
+        groqFailureDetail = lastErrorDetail || 'Groq did not return a successful response.';
+        groqTriedModels = triedModels;
+    }
+
+    const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (!geminiApiKey) {
+        return {
+            ok: false,
+            payload: {
+                intent: 'service_unconfigured',
+                response: 'AI backend is not configured. Set GROQ_API_KEY or GEMINI_API_KEY in the server environment.',
+                action: null,
+                provider: 'none',
+                details: groqFailureDetail || undefined,
+                triedModels: groqTriedModels.length ? groqTriedModels : undefined
+            }
+        };
+    }
+
+    const geminiConfiguredModel = String(process.env.GEMINI_MODEL || '').trim();
+    const geminiCandidates = [
+        geminiConfiguredModel,
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
+        'gemini-2.0-flash'
+    ].filter(Boolean);
+
+    let geminiData = null;
+    let modelUsed = null;
+    let lastErrorDetail = '';
+    const triedModels = [];
+
+    for (const model of geminiCandidates) {
+        triedModels.push(model);
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{ text: finalPrompt }]
+                    }],
+                    generationConfig: {
+                        temperature: 0.7,
+                        topK: 40,
+                        topP: 0.95,
+                        maxOutputTokens: 2500,
+                    }
+                })
+            }
+        );
+
+        if (response.ok) {
+            geminiData = await response.json();
+            modelUsed = model;
+            break;
+        }
+
+        const bodyText = await response.text().catch(() => '');
+        lastErrorDetail = `provider=gemini, model=${model}, status=${response.status}, body=${bodyText.slice(0, 300)}`;
+    }
+
+    if (!geminiData) {
+        return {
+            ok: false,
+            payload: {
+                intent: 'service_unavailable',
+                response: 'The AI service is temporarily unavailable right now. Please try again shortly.',
+                action: null,
+                triedModels,
+                provider: 'gemini',
+                details: [
+                    groqFailureDetail ? `groq: ${groqFailureDetail}` : '',
+                    lastErrorDetail ? `gemini: ${lastErrorDetail}` : 'No Gemini model responded successfully.'
+                ].filter(Boolean).join(' | ')
+            }
+        };
+    }
+
+    const aiText = String(geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+    return {
+        ok: true,
+        parsedResponse: parseModelText(aiText),
+        modelUsed,
+        provider: 'gemini'
+    };
+}
+
+function parseModelText(modelText) {
+    const text = String(modelText || '').trim();
+    if (!text) {
+        return {
+            intent: 'casual_chat',
+            response: '',
+            action: null
+        };
+    }
+    try {
+        return JSON.parse(text);
+    } catch (_) {
+        return {
+            intent: 'casual_chat',
+            response: text,
+            action: null
+        };
+    }
+}
+
+function shouldEscalateToWeb(message, firstAnswer) {
+    return getWebEscalationDecision(message, firstAnswer).escalate;
+}
+
+function getWebEscalationDecision(message, firstAnswer) {
+    const query = String(message || '').trim();
+    const answer = String(firstAnswer || '').trim();
+    if (!isTimeSensitiveInfoRequest(query)) return { escalate: false, reason: 'not_time_sensitive' };
+    if (!answer) return { escalate: true, reason: 'empty_answer' };
+    if (/\b(with sources?|source links?)\b/i.test(query)) return { escalate: true, reason: 'user_requested_sources' };
+
+    const genericAdvice = /\b(check|visit|see|refer)\b[\s\S]{0,120}\b(official website|website|site|news websites?)\b/i.test(answer) ||
+        /\b(steps you can follow|you can check)\b/i.test(answer);
+    if (genericAdvice) return { escalate: true, reason: 'generic_advice_answer' };
+
+    const uncertain = /\b(i (?:don'?t|do not) have (?:live|real[- ]?time)|not sure|cannot verify|might be outdated)\b/i.test(answer);
+    if (uncertain) return { escalate: true, reason: 'uncertain_or_stale_answer' };
+
+    const asksWhenOrDate = /\b(when|date|first match|opening match|schedule|fixture)\b/i.test(query);
+    if (asksWhenOrDate && !extractDateCandidate(answer)) return { escalate: true, reason: 'date_missing_in_answer' };
+
+    return { escalate: false, reason: 'model_answer_accepted' };
 }
 
 async function buildLiveRagContext(message, req) {
@@ -295,7 +362,7 @@ async function fetchFromOwnSearchApi(queries, req) {
 
 function isTimeSensitiveInfoRequest(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(latest|recent|current|today|now|update|updates|news|headlines|status|mission|launch|price|rate|score|result|election|breaking|as of)\b/.test(t);
+    return /\b(latest|recent|current|today|now|update|updates|news|headlines|status|mission|launch|price|rate|score|result|election|breaking|as of|ipl|match|matches|fixture|fixtures|schedule|opening match|first match)\b/.test(t);
 }
 
 function enforceLiveAnswerStyle(parsedResponse, message, liveSources) {
@@ -318,7 +385,7 @@ function buildLiveUpdateResponse(message, liveSources) {
     const lead = top[0] || {};
     const title = normalizeLeadTitle(message, lead);
     const description = String(lead?.description || '').trim();
-    const updateLine = normalizeUpdateLine(title, description);
+    const updateLine = normalizeUpdateLine(message, title, description);
 
     const lines = [`As of ${asOf}, ${updateLine}`, '', 'Sources:'];
     for (const item of top) {
@@ -337,6 +404,14 @@ function buildLiveQueries(query) {
             'ISRO launch mission statement site:isro.gov.in',
             'ISRO mission update PSLV GSLV NVS site:isro.gov.in',
             `${q} Reuters OR The Hindu OR Indian Express`
+        ];
+    }
+    if (/\bipl\b/.test(lower) || (/\b(match|schedule|fixture|opening|first)\b/.test(lower) && /\bcricket\b/.test(lower))) {
+        return [
+            'IPL first match date official schedule iplt20.com',
+            'IPL opening match date ESPNcricinfo Cricbuzz',
+            'IPL fixtures first game date',
+            q
         ];
     }
     return [q];
@@ -469,13 +544,38 @@ function normalizeLeadTitle(message, lead) {
     return raw;
 }
 
-function normalizeUpdateLine(title, description) {
+function normalizeUpdateLine(message, title, description) {
+    const msg = String(message || '').toLowerCase();
     const cleanTitle = String(title || '').replace(/[.\s]+$/g, '').trim();
     const descFirst = String(description || '').split(/[.!?]\s/)[0].trim();
+    const combined = `${cleanTitle} ${descFirst}`.trim();
+    const date = extractDateCandidate(combined);
+
+    if (/^\s*when\b/.test(msg) && date) {
+        return `the reported date is ${date} (${cleanTitle}).`;
+    }
     if (descFirst && descFirst.length >= 25 && !/^https?:\/\//i.test(descFirst)) {
         return `${cleanTitle}. ${descFirst}.`;
     }
     return `the latest update is: ${cleanTitle}.`;
+}
+
+function extractDateCandidate(text) {
+    const t = String(text || '');
+    if (!t) return '';
+
+    const patterns = [
+        /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b/i,
+        /\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i,
+        /\b\d{1,2}\s+(Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s+\d{4}\b/i,
+        /\b(Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s+\d{1,2},\s+\d{4}\b/i
+    ];
+
+    for (const p of patterns) {
+        const m = t.match(p);
+        if (m?.[0]) return m[0];
+    }
+    return '';
 }
 
 function buildServerSystemPrompt(userName) {
