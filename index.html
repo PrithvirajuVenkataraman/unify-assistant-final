@@ -4766,6 +4766,34 @@ function isLikelyLocationOrTravelQuery(text) {
     return /\b(map|maps|directions?|route|near me|nearby|location|where is|where to|hotel|hotels|restaurant|restaurants|food|trip|travel|itinerary|weather|transport|bus|train|taxi|uber|airport|station)\b/.test(t);
 }
 
+function isPastReleaseQuestion(text) {
+    const t = String(text || '').toLowerCase();
+    return /\bwhen did\b/.test(t) && /\b(release|released|come out|premiere|premiered)\b/.test(t);
+}
+
+function fixHistoricalReleaseWording(answerText, userMessage) {
+    let text = String(answerText || '').trim();
+    if (!text || !isPastReleaseQuestion(userMessage)) return text;
+
+    const patterns = [
+        /\bis scheduled to release in theaters on ([A-Za-z]+\s+\d{1,2},\s+\d{4})\b/i,
+        /\bis scheduled to be released in theaters on ([A-Za-z]+\s+\d{1,2},\s+\d{4})\b/i,
+        /\bis scheduled to release on ([A-Za-z]+\s+\d{1,2},\s+\d{4})\b/i,
+        /\bis scheduled to be released on ([A-Za-z]+\s+\d{1,2},\s+\d{4})\b/i
+    ];
+
+    for (const p of patterns) {
+        const m = text.match(p);
+        if (!m || !m[1]) continue;
+        const parsedDate = Date.parse(m[1]);
+        if (!Number.isFinite(parsedDate) || parsedDate > Date.now()) continue;
+        text = text.replace(p, `was released in theaters on ${m[1]}`);
+        break;
+    }
+
+    return text;
+}
+
 function postProcessAssistantResponse(rawText, userMessage = '') {
     let text = String(rawText || '').trim();
     if (!text) return text;
@@ -4782,6 +4810,9 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
         .replace(/\s*(would you like to know more about[^?]*\?)\s*$/i, '')
         .replace(/\s*(is there (?:anything|something) else i can help you with\??)\s*$/i, '')
         .trim();
+
+    // Keep tense accurate for historical "When did ... release?" questions.
+    text = fixHistoricalReleaseWording(text, userMessage);
 
     return text;
 }
