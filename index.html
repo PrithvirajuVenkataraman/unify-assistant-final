@@ -6499,9 +6499,19 @@ function normalizeUiTokens(text) {
             if (!file) return;
             input.value = '';
 
-            const maxBytes = 10 * 1024 * 1024;
-            if (file.size > maxBytes) {
+            const parserMaxBytes = 10 * 1024 * 1024;
+            // Request body expands due to base64 (~33%) + JSON framing. Keep under deployment limits.
+            const requestSafeMaxBytes = 3 * 1024 * 1024;
+            const estimatedPayloadBytes = Math.ceil(file.size * 1.37) + 4096;
+
+            if (file.size > parserMaxBytes) {
                 const msg = 'File is too large. Please upload a file up to 10 MB.';
+                addChatMessage(msg, false);
+                speak(msg);
+                return;
+            }
+            if (estimatedPayloadBytes > requestSafeMaxBytes) {
+                const msg = 'This file may exceed request-size limits after encoding. Please upload a file around 3 MB or less.';
                 addChatMessage(msg, false);
                 speak(msg);
                 return;
@@ -6553,7 +6563,7 @@ function normalizeUiTokens(text) {
                     const hint = data?.hint ? ` ${data.hint}` : '';
                     let msg = data?.error || '';
                     if (!msg && response.status === 413) {
-                        msg = 'File is too large for server processing. Please use a smaller file (about 8 MB or less) or compress the image.';
+                        msg = 'Upload payload exceeded server request limits after encoding. Please try a smaller file (around 3 MB or less).';
                     }
                     if (!msg && response.status === 404) {
                         msg = 'Upload endpoint /api/document-ingest was not found in this deployment. Redeploy to include api/document-ingest.js.';
