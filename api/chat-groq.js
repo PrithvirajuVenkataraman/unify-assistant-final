@@ -216,31 +216,33 @@ async function buildLiveRagContext(message, req) {
     if (!query || !isTimeSensitiveInfoRequest(query)) return { ragText: '', sources: [] };
 
     try {
+        const liveQueries = buildLiveQueries(query);
         const runVerifiedWebSearch = await resolveRunVerifiedWebSearch();
         let results = [];
 
         if (runVerifiedWebSearch) {
-            const verified = await runVerifiedWebSearch([query], {
+            const verified = await runVerifiedWebSearch(liveQueries, {
                 maxResultsPerQuery: 6,
-                limit: 6
+                limit: 12
             });
-            results = Array.isArray(verified?.results) ? verified.results.slice(0, 6) : [];
+            results = Array.isArray(verified?.results) ? verified.results : [];
         } else {
-            results = await fetchFromOwnSearchApi(query, req);
+            results = await fetchFromOwnSearchApi(liveQueries, req);
         }
 
-        if (!results.length) return { ragText: '', sources: [] };
+        const ranked = rankLiveSources(query, results).slice(0, 6);
+        if (!ranked.length) return { ragText: '', sources: [] };
 
         const lines = [`Live web verification for: "${query}"`];
-        for (let i = 0; i < results.length; i++) {
-            const item = results[i] || {};
+        for (let i = 0; i < ranked.length; i++) {
+            const item = ranked[i] || {};
             lines.push(`${i + 1}. ${String(item.title || 'Untitled').trim()}`);
             lines.push(`URL: ${String(item.url || '').trim()}`);
             if (item.description) {
                 lines.push(`Summary: ${String(item.description).trim()}`);
             }
         }
-        return { ragText: lines.join('\n'), sources: results };
+        return { ragText: lines.join('\n'), sources: ranked };
     } catch (error) {
         return { ragText: '', sources: [] };
     }
@@ -256,21 +258,36 @@ async function resolveRunVerifiedWebSearch() {
     return null;
 }
 
-async function fetchFromOwnSearchApi(query, req) {
+async function fetchFromOwnSearchApi(queries, req) {
     try {
         const host = String(req?.headers?.host || '').trim();
         if (!host) return [];
         const proto = String(req?.headers?.['x-forwarded-proto'] || 'https').trim();
         const baseUrl = `${proto}://${host}`;
-        const response = await fetch(`${baseUrl}/api/search`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, maxResults: 6 })
-        });
-        if (!response.ok) return [];
-        const data = await response.json();
-        const results = Array.isArray(data?.results) ? data.results : [];
-        return results.slice(0, 6);
+        const list = Array.isArray(queries) ? queries : [String(queries || '')];
+        const all = [];
+
+        for (const q of list.slice(0, 4)) {
+            const response = await fetch(`${baseUrl}/api/search`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: String(q || ''), maxResults: 6 })
+            });
+            if (!response.ok) continue;
+            const data = await response.json();
+            const results = Array.isArray(data?.results) ? data.results : [];
+            all.push(...results);
+        }
+
+        const seen = new Set();
+        const deduped = [];
+        for (const item of all) {
+            const key = String(item?.url || '').trim();
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            deduped.push(item);
+        }
+        return deduped;
     } catch (_) {
         return [];
     }
@@ -312,6 +329,74 @@ function buildLiveUpdateResponse(message, liveSources) {
         lines.push(`- ${String(item.title || 'Source')}: ${String(item.url || '').trim()}`);
     }
     return lines.join('\n');
+}
+
+function buildLiveQueries(query) {
+    const q = String(query || '').trim();
+    if (!q) return [];
+    const lower = q.toLowerCase();
+    if (/\bisro\b/.test(lower)) {
+        return [
+            'ISRO latest mission update site:isro.gov.in',
+            'ISRO latest launch update site:isro.gov.in',
+            'ISRO mission update press release site:isro.gov.in',
+            `${q} Reuters OR The Hindu OR Indian Express`
+        ];
+    }
+    return [q];
+}
+
+function rankLiveSources(query, results) {
+    const list = Array.isArray(results) ? results : [];
+    const q = String(query || '').toLowerCase();
+    const wantsIsro = /\bisro\b/.test(q);
+    const currentYear = new Date().getUTCFullYear();
+    const seen = new Set();
+    const scored = [];
+
+    for (const item of list) {
+        const url = String(item?.url || '').trim();
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+
+        const title = String(item?.title || '');
+        const desc = String(item?.description || '');
+        const hay = `${title} ${desc}`.toLowerCase();
+        const host = getHost(url);
+
+        let score = 0;
+        if (wantsIsro) {
+            if (host.endsWith('isro.gov.in')) score += 8;
+            if (/\b(isro|launch|mission|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan)\b/.test(hay)) score += 4;
+            if (/\.pdf($|\?)/i.test(url) && !host.endsWith('isro.gov.in')) score -= 6;
+            if (/\b(aps|unoosa|respond basket)\b/.test(hay)) score -= 7;
+        }
+
+        if (/\b(latest|today|update|updates|current|now|recent)\b/.test(hay)) score += 2;
+        if (/\b(reuters|the hindu|indian express|bbc|ap news)\b/.test(hay)) score += 2;
+
+        const yearMatch = hay.match(/\b(20\d{2})\b/);
+        if (yearMatch?.[1]) {
+            const y = Number(yearMatch[1]);
+            if (Number.isFinite(y)) {
+                if (y >= currentYear - 1) score += 2;
+                if (y <= currentYear - 3) score -= 3;
+            }
+        }
+
+        scored.push({ ...item, __score: score });
+    }
+
+    scored.sort((a, b) => (b.__score || 0) - (a.__score || 0));
+    return scored.filter(item => (item.__score || 0) >= 0);
+}
+
+function getHost(url) {
+    try {
+        return new URL(String(url || '')).hostname.replace(/^www\./i, '').toLowerCase();
+    } catch (_) {
+        return '';
+    }
 }
 
 function buildServerSystemPrompt(userName) {
