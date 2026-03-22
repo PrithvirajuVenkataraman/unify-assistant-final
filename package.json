@@ -2,6 +2,7 @@
     "name":  "unify-assistant",
     "private":  true,
     "version":  "1.0.0",
+    "type":  "module",
     "dependencies":  {
                          "jszip":  "^3.10.1",
                          "mammoth":  "^1.8.0",
@@ -15,8 +16,8 @@
                                  },
                    "rewrites":  [
                                     {
-                                        "destination":  "/index.html",
-                                        "source":  "/"
+                                        "source":  "/",
+                                        "destination":  "/index.html"
                                     }
                                 ]
                }
