@@ -1,3 +1,4 @@
+export const config = { maxDuration: 60 };
 import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
