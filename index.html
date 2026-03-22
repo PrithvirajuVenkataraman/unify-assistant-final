@@ -5706,10 +5706,49 @@ async function handleNameCorrection(text) {
         }
 
         let activeRequestController = null;
+        let assistantProcessingDepth = 0;
+        let activeTypewriterTimeouts = new Set();
+        let activeTypewriterRuns = new Set();
+
+        function beginAssistantProcessing() {
+            assistantProcessingDepth += 1;
+            toggleSendButton();
+        }
+
+        function endAssistantProcessing() {
+            assistantProcessingDepth = Math.max(0, assistantProcessingDepth - 1);
+            toggleSendButton();
+        }
+
+        function isAssistantProcessing() {
+            return assistantProcessingDepth > 0;
+        }
+
+        function setManagedTimeout(callback, delayMs) {
+            const id = setTimeout(() => {
+                activeTypewriterTimeouts.delete(id);
+                callback();
+            }, delayMs);
+            activeTypewriterTimeouts.add(id);
+            return id;
+        }
+
+        function stopActiveTypewriterAnimations() {
+            for (const run of activeTypewriterRuns) {
+                run.cancelled = true;
+            }
+            activeTypewriterRuns.clear();
+
+            for (const id of activeTypewriterTimeouts) {
+                clearTimeout(id);
+            }
+            activeTypewriterTimeouts.clear();
+        }
 
         function beginAbortableRequest() {
             const controller = new AbortController();
             activeRequestController = controller;
+            beginAssistantProcessing();
             setPrimaryActionButtonToStop();
             return controller;
         }
@@ -5717,16 +5756,30 @@ async function handleNameCorrection(text) {
         function clearActiveRequest(controller) {
             if (controller && activeRequestController !== controller) return;
             activeRequestController = null;
-            toggleSendButton();
+            endAssistantProcessing();
         }
 
         function stopActiveGeneration() {
-            if (!activeRequestController) return;
-            try {
-                activeRequestController.abort();
-            } catch (e) {}
-            activeRequestController = null;
+            const hadRequest = !!activeRequestController;
+            const hadTypewriter = activeTypewriterRuns.size > 0 || activeTypewriterTimeouts.size > 0;
+            if (!hadRequest && !hadTypewriter) {
+                return;
+            }
+            const controller = activeRequestController;
+            if (controller) {
+                try {
+                    controller.abort();
+                } catch (e) {}
+                clearActiveRequest(controller);
+            }
+            stopActiveTypewriterAnimations();
+            if (converseFinalizeTimer) {
+                clearTimeout(converseFinalizeTimer);
+                converseFinalizeTimer = null;
+                converseTranscriptBuffer = '';
+            }
             hideThinkingIndicator();
+            assistantProcessingDepth = 0;
             toggleSendButton();
             showTemporaryMessage('Response stopped.');
         }
@@ -6319,7 +6372,18 @@ async function handleNameCorrection(text) {
                     : (!!typewriter && !hasHtmlContent);
                 if (shouldTypewriter) {
                     const textElement = messageDiv.querySelector('.typewriter-text');
+                    const typewriterRun = { cancelled: false };
+                    activeTypewriterRuns.add(typewriterRun);
+                    beginAssistantProcessing();
                     let charIndex = 0;
+                    let finished = false;
+
+                    function finishTypewriter() {
+                        if (finished) return;
+                        finished = true;
+                        activeTypewriterRuns.delete(typewriterRun);
+                        endAssistantProcessing();
+                    }
                     
                     function getHumanTypingDelay(ch) {
                         if (/[.!?]/.test(ch)) return 115;
@@ -6329,13 +6393,19 @@ async function handleNameCorrection(text) {
                     }
                     
                     function typeCharacter() {
+                        if (typewriterRun.cancelled) {
+                            finishTypewriter();
+                            return;
+                        }
                         if (charIndex < formattedText.length) {
                             textElement.innerHTML = formattedText.substring(0, charIndex + 1);
                             const currentChar = formattedText.charAt(charIndex);
                             charIndex += 1;
                             maybeAutoScroll(chatContainer);
-                            setTimeout(typeCharacter, getHumanTypingDelay(currentChar));
+                            setManagedTimeout(typeCharacter, getHumanTypingDelay(currentChar));
+                            return;
                         }
+                        finishTypewriter();
                     }
                     
                     typeCharacter();
@@ -6967,7 +7037,7 @@ ${code}
         }
 
         function toggleSendButton() {
-            if (activeRequestController) {
+            if (activeRequestController || isAssistantProcessing()) {
                 setPrimaryActionButtonToStop();
                 return;
             }
@@ -6983,7 +7053,7 @@ ${code}
         }
 
 async function sendTextInput() {
-            if (activeRequestController) {
+            if (activeRequestController || isAssistantProcessing()) {
                 stopActiveGeneration();
                 return;
             }
@@ -7004,34 +7074,39 @@ async function sendTextInput() {
                 }
                 inputHistoryIndex = -1;
                 addChatMessage(outgoingText, true);
-                
-                if (waitingForName) {
-                    await handleNameInput(outgoingText);
-                } else if (waitingForLocation) {
-                    
-                    const cleanLocation = outgoingText.trim();
-                    if (cleanLocation.length < 2) {
-                        await deliverApiReply('location_prompt_retry', {
-                            reason: 'too_short'
-                        });
-                        input.value = '';
+
+                beginAssistantProcessing();
+                try {
+                    if (waitingForName) {
+                        await handleNameInput(outgoingText);
+                    } else if (waitingForLocation) {
+
+                        const cleanLocation = outgoingText.trim();
+                        if (cleanLocation.length < 2) {
+                            await deliverApiReply('location_prompt_retry', {
+                                reason: 'too_short'
+                            });
+                            input.value = '';
+                            return;
+                        }
+
+                        const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh'];
+                        if (fillerWords.includes(cleanLocation.toLowerCase())) {
+                            await deliverApiReply('location_prompt_retry', {
+                                reason: 'unclear_location'
+                            });
+                            input.value = '';
+                            return;
+                        }
+                        waitingForLocation = false;
+                        getWeatherByCity(cleanLocation);
+                    } else if (handleUploadedDocumentFollowup(normalizedOutgoingText)) {
                         return;
+                    } else {
+                        await processCommand(normalizedOutgoingText);
                     }
-                    
-                    const fillerWords = ['he', 'she', 'it', 'a', 'an', 'the', 'um', 'uh', 'er', 'oh'];
-                    if (fillerWords.includes(cleanLocation.toLowerCase())) {
-                        await deliverApiReply('location_prompt_retry', {
-                            reason: 'unclear_location'
-                        });
-                        input.value = '';
-                        return;
-                    }
-                    waitingForLocation = false;
-                    getWeatherByCity(cleanLocation);
-                } else if (handleUploadedDocumentFollowup(normalizedOutgoingText)) {
-                    return;
-                } else {
-                    await processCommand(normalizedOutgoingText);
+                } finally {
+                    endAssistantProcessing();
                 }
             }
         }
