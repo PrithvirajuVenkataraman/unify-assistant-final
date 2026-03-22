@@ -1,3 +1,4 @@
+export const config = { maxDuration: 60 };
 import { applyApiSecurity } from './security.js';
 
 export default async function handler(req, res) {
@@ -793,4 +794,3 @@ Style rules:
 
 Respond conversationally and naturally.`;
 }
-
