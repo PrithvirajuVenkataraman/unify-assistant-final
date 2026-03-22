@@ -1,16 +1,13 @@
+import { applyApiSecurity } from './security.js';
+
 export default async function handler(req, res) {
-    // Enable CORS
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
+    const guard = applyApiSecurity(req, res, {
+        methods: ['POST'],
+        routeKey: 'chat-groq',
+        maxBodyBytes: 180 * 1024,
+        rateLimit: { max: 25, windowMs: 60 * 1000 }
+    });
+    if (guard.handled) return;
 
     try {
         const { message, userName, systemPrompt: clientSystemPrompt, ragContext, context } = req.body || {};
@@ -77,9 +74,13 @@ export default async function handler(req, res) {
             intent: 'service_error',
             response: 'The AI service hit an internal error. Please try again.',
             action: null,
-            details: String(error?.message || error)
+            details: shouldExposeInternalErrors() ? String(error?.message || error) : undefined
         });
     }
+}
+
+function shouldExposeInternalErrors() {
+    return String(process.env.EXPOSE_INTERNAL_ERRORS || '').toLowerCase() === 'true';
 }
 
 function composeFinalPrompt(systemPrompt, ragBlock, contextBlock, message) {
@@ -792,3 +793,4 @@ Style rules:
 
 Respond conversationally and naturally.`;
 }
+
