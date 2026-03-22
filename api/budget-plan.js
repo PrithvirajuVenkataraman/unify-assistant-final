@@ -9,7 +9,6 @@ export default async function handler(req, res) {
         rateLimit: { max: 30, windowMs: 60 * 1000 }
     });
     if (guard.handled) return;
-
     try {
         const { query = '' } = req.body || {};
         if (String(query).length > 1000) {
