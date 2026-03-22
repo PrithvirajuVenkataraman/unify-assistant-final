@@ -4117,11 +4117,12 @@ async function fetchAndDisplayNews(query) {
     const controller = beginAbortableRequest();
 
     try {
-        const response = await fetch('/api/news', {
+        const response = await fetch('/api/markets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             signal: controller.signal,
             body: JSON.stringify({
+                mode: 'news',
                 query
             })
         });
@@ -7058,10 +7059,10 @@ async function handleExchangeRateLookup(text) {
 
     showThinkingIndicator('Checking verified exchange sources...');
     try {
-        const response = await fetch('/api/exchange', {
+        const response = await fetch('/api/markets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(parsed)
+            body: JSON.stringify({ mode: 'exchange', ...parsed })
         });
         const data = await response.json();
         if (!response.ok || !data?.success) {
