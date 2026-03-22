@@ -1,15 +1,23 @@
 import { runVerifiedWebSearch } from './live-search.js';
+import { applyApiSecurity } from './security.js';
 
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') return res.status(200).end();
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+    const guard = applyApiSecurity(req, res, {
+        methods: ['POST'],
+        routeKey: 'markets',
+        maxBodyBytes: 32 * 1024,
+        rateLimit: { max: 45, windowMs: 60 * 1000 }
+    });
+    if (guard.handled) return;
 
     try {
         const query = String(req.body?.query || '').trim();
+        if (!query) {
+            return res.status(400).json({ success: false, error: 'query is required' });
+        }
+        if (query.length > 400) {
+            return res.status(413).json({ success: false, error: 'query is too long' });
+        }
         const hintedType = String(req.body?.assetType || '').trim().toLowerCase();
         const inferredType = hintedType || inferAssetType(query);
 
@@ -28,9 +36,13 @@ export default async function handler(req, res) {
         return res.status(500).json({
             success: false,
             error: 'market lookup failed',
-            details: String(error?.message || error)
+            details: shouldExposeInternalErrors() ? String(error?.message || error) : undefined
         });
     }
+}
+
+function shouldExposeInternalErrors() {
+    return String(process.env.EXPOSE_INTERNAL_ERRORS || '').toLowerCase() === 'true';
 }
 
 function inferAssetType(query) {
