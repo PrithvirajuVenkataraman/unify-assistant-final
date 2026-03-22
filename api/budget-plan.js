@@ -1,18 +1,19 @@
+import { applyApiSecurity } from './security.js';
+
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
+    const guard = applyApiSecurity(req, res, {
+        methods: ['POST'],
+        routeKey: 'budget-plan',
+        maxBodyBytes: 32 * 1024,
+        rateLimit: { max: 30, windowMs: 60 * 1000 }
+    });
+    if (guard.handled) return;
 
     try {
         const { query = '' } = req.body || {};
+        if (String(query).length > 1000) {
+            return res.status(413).json({ success: false, error: 'query is too long' });
+        }
         const parsed = parseBudgetQuery(query);
         const plan = buildBudgetPlan(parsed);
 
@@ -21,7 +22,6 @@ export default async function handler(req, res) {
             plan
         });
     } catch (error) {
-        console.error('budget plan api error:', error);
         return res.status(500).json({ success: false, error: 'Internal server error' });
     }
 }
@@ -89,3 +89,4 @@ function buildBudgetPlan({ budget, currency, days, destination }) {
 function roundMoney(value) {
     return Math.round(Number(value) || 0);
 }
+
