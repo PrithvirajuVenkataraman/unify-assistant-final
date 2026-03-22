@@ -1,3 +1,4 @@
+export const config = { maxDuration: 60 };
 import { applyApiSecurity } from './security.js';
 
 export default async function handler(req, res) {
@@ -89,4 +90,3 @@ function buildBudgetPlan({ budget, currency, days, destination }) {
 function roundMoney(value) {
     return Math.round(Number(value) || 0);
 }
-
