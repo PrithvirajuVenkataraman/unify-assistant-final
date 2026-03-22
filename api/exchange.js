@@ -1,3 +1,4 @@
+export const config = { maxDuration: 60 };
 import { runVerifiedWebSearch } from './live-search.js';
 import { applyApiSecurity } from './security.js';
 
