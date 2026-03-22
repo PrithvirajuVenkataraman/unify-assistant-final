@@ -1,6 +1,7 @@
 import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
+import { applyApiSecurity } from './security.js';
 
 export const config = {
     api: {
@@ -14,17 +15,13 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_TEXT_CHARS = 22000;
 
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-
-    if (req.method !== 'POST') {
-        return res.status(405).json({ success: false, error: 'Method not allowed' });
-    }
+    const guard = applyApiSecurity(req, res, {
+        methods: ['POST'],
+        routeKey: 'document-ingest',
+        maxBodyBytes: 12 * 1024 * 1024,
+        rateLimit: { max: 8, windowMs: 60 * 1000 }
+    });
+    if (guard.handled) return;
 
     try {
         const {
@@ -33,6 +30,9 @@ export default async function handler(req, res) {
             fileBase64 = '',
             intent = 'general'
         } = req.body || {};
+        if (String(fileName).length > 255 || String(mimeType).length > 120) {
+            return res.status(413).json({ success: false, error: 'File metadata is too long' });
+        }
 
         if (!fileBase64 || typeof fileBase64 !== 'string') {
             return res.status(400).json({ success: false, error: 'fileBase64 is required' });
@@ -171,9 +171,13 @@ export default async function handler(req, res) {
         return res.status(500).json({
             success: false,
             error: 'Document processing failed',
-            details: String(error?.message || error)
+            details: shouldExposeInternalErrors() ? String(error?.message || error) : undefined
         });
     }
+}
+
+function shouldExposeInternalErrors() {
+    return String(process.env.EXPOSE_INTERNAL_ERRORS || '').toLowerCase() === 'true';
 }
 
 function detectDocumentKind(mimeType, fileName) {
@@ -641,3 +645,4 @@ function extractGeminiText(data) {
     }
     return '';
 }
+
