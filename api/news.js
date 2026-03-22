@@ -1,16 +1,14 @@
 import { extractSearchTopic } from './live-search.js';
+import { applyApiSecurity } from './security.js';
 
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
+    const guard = applyApiSecurity(req, res, {
+        methods: ['POST'],
+        routeKey: 'news',
+        maxBodyBytes: 48 * 1024,
+        rateLimit: { max: 30, windowMs: 60 * 1000 }
+    });
+    if (guard.handled) return;
 
     try {
         const query = String(req.body?.query || '').trim();
@@ -90,11 +88,15 @@ export default async function handler(req, res) {
         return res.status(200).json({
             success: false,
             error: 'news lookup failed',
-            details: String(error?.message || error),
+            details: shouldExposeInternalErrors() ? String(error?.message || error) : undefined,
             query: String(req.body?.query || req.body?.category || '').trim(),
             articles: []
         });
     }
+}
+
+function shouldExposeInternalErrors() {
+    return String(process.env.EXPOSE_INTERNAL_ERRORS || '').toLowerCase() === 'true';
 }
 
 function normalizeTopic(text) {
@@ -398,8 +400,7 @@ async function searchWithDuckDuckGoHtml(query, maxResults) {
         const url = sanitizeExternalUrl(decodeHtmlEntities(String(match[1] || '').trim()));
         const title = decodeHtmlEntities(stripTags(String(match[2] || '').trim()));
         if (!url || !title) continue;
-        out.push({ title, url, description: title }); 
+        out.push({ title, url, description: title });
     }
     return out;
 }
-
