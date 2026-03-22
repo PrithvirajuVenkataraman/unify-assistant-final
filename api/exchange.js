@@ -1,20 +1,29 @@
 import { runVerifiedWebSearch } from './live-search.js';
-export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+import { applyApiSecurity } from './security.js';
 
-    if (req.method === 'OPTIONS') return res.status(200).end();
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+export default async function handler(req, res) {
+    const guard = applyApiSecurity(req, res, {
+        methods: ['POST'],
+        routeKey: 'exchange',
+        maxBodyBytes: 24 * 1024,
+        rateLimit: { max: 50, windowMs: 60 * 1000 }
+    });
+    if (guard.handled) return;
 
     try {
         const from = String(req.body?.from || '').trim().toUpperCase();
         const to = String(req.body?.to || '').trim().toUpperCase();
-        const amount = Number(req.body?.amount || 1);
+        const amount = Number(req.body?.amount ?? 1);
         const date = String(req.body?.date || '').trim();
 
         if (!/^[A-Z]{3}$/.test(from) || !/^[A-Z]{3}$/.test(to)) {
             return res.status(400).json({ error: 'Valid 3-letter currency codes are required.' });
+        }
+        if (!Number.isFinite(amount) || amount <= 0 || amount > 1e9) {
+            return res.status(400).json({ error: 'Amount must be a positive number.' });
+        }
+        if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+            return res.status(400).json({ error: 'date must be in YYYY-MM-DD format.' });
         }
 
         const endpoint = date
@@ -61,7 +70,11 @@ export default async function handler(req, res) {
         return res.status(500).json({
             success: false,
             error: 'exchange lookup failed',
-            details: String(error?.message || error)
+            details: shouldExposeInternalErrors() ? String(error?.message || error) : undefined
         });
     }
+}
+
+function shouldExposeInternalErrors() {
+    return String(process.env.EXPOSE_INTERNAL_ERRORS || '').toLowerCase() === 'true';
 }
