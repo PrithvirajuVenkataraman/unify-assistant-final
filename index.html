@@ -2170,7 +2170,6 @@
                             <div id="trip-summary" class="space-y-2 text-sm text-gray-700 dark:text-gray-300"></div>
                             <div id="trip-live-map" class="hidden mt-4 rounded-xl overflow-hidden border border-emerald-200 dark:border-slate-600 shadow-sm bg-white/70 dark:bg-slate-900/60"></div>
                             <div class="mt-4 flex flex-wrap gap-2">
-                                <button onclick="startTripToOffice()" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-all">Start to office</button>
                                 <button onclick="promptTripDestination()" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-slate-900/70 border border-emerald-200 dark:border-slate-600 text-emerald-700 dark:text-emerald-300 text-sm font-semibold transition-all">Start custom trip</button>
                                 <button onclick="stopForegroundTrip()" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-slate-900/70 border border-emerald-200 dark:border-slate-600 text-emerald-700 dark:text-emerald-300 text-sm font-semibold transition-all">Stop trip</button>
                             </div>
@@ -2328,7 +2327,6 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button onclick="shareCurrentLocation()" class="px-4 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all">Share location</button>
-            <button onclick="startSafetyCheckIn()" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Start safety timer</button>
             <button onclick="openNearbySearch('hospital')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest hospital</button>
             <button onclick="openNearbySearch('police station')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest police</button>
             <button onclick="openNearbySearch('pharmacy')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest pharmacy</button>
@@ -5311,10 +5309,9 @@ async function handleNameCorrection(text) {
                                 <p><strong>General Medical Guidance:</strong> "What should I do for a sore throat?" or "When is a fever serious?"</p>
                                 <p><strong>Live Trip Mode:</strong> "start trip to office" or "start trip to Times Square"</p>
                                 <p><strong>Leave-Time Estimate:</strong> "when should I leave for work?"</p>
-                                <p><strong>Safety Tools:</strong> "share my location", "nearest hospital", or "start safety timer for 30 minutes"</p>
+                                <p><strong>Safety Tools:</strong> "share my location", "nearest hospital", or "nearest police"</p>
                                 <p><strong>Translator:</strong> "Speak in Tamil" or "Translate this to Hindi"</p>
                                 <p><strong>Budget Planner:</strong> "budget trip to Seattle for 3 days under 900 USD"</p>
-                                <p><strong>Calendar Sync:</strong> "sync to calendar" after a budget trip plan</p>
                             </div>
                         </section>
 
@@ -5393,7 +5390,7 @@ async function handleNameCorrection(text) {
                                 <p><strong>Converse Mode:</strong> Hands-free conversation with auto speaking.</p>
                                 <p><strong>Foreground Live Trip:</strong> I can track your trip, ETA drift, "you are close", and possible off-route movement while this website stays open.</p>
                                 <p><strong>Traffic-Aware Leave Estimate:</strong> I can use a route API for live leave-time estimates when configured, with a fallback estimate if not.</p>
-                                <p><strong>Safety Mode:</strong> Women-focused safety shortcuts, trusted contact storage, location sharing, and safety check-in timers.</p>
+                                <p><strong>Safety Mode:</strong> Women-focused safety shortcuts, trusted contact storage, and location sharing.</p>
                             </div>
                         </section>
 
@@ -12280,15 +12277,6 @@ ${snippets}`
                 return;
             }
 
-            const safetyTimerMatch = text.match(/\b(?:start|set)\s+(?:a\s+)?safety\s+(?:timer|check(?:-| )?in)(?:\s+for)?\s+(\d+)\s*(minutes?|mins?|hours?)?\b/i);
-            if (safetyTimerMatch) {
-                const amount = parseInt(safetyTimerMatch[1], 10);
-                const unit = (safetyTimerMatch[2] || 'minutes').toLowerCase();
-                const minutes = unit.startsWith('hour') ? amount * 60 : amount;
-                startSafetyCheckIn(minutes);
-                return;
-            }
-
             if (/\b(share my location|send my location)\b/i.test(lower)) {
                 await shareCurrentLocation();
                 return;
@@ -12303,7 +12291,7 @@ ${snippets}`
             if (/\b(emergency|help me stay safe|safety help)\b/i.test(lower)) {
                 showSafetyPanel();
                 await deliverApiReply('safety_shortcuts_ready', {
-                    supportedActions: ['share my location', 'nearest hospital', 'nearest police', 'start safety timer for 30 minutes']
+                    supportedActions: ['share my location', 'nearest hospital', 'nearest police', 'nearest pharmacy']
                 }, { historyKey: text });
                 return;
             }
@@ -14545,9 +14533,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const rows = [];
             rows.push(`<p><strong>Safety mode:</strong> ${safetyProfile.womenSafetyMode ? 'Women-focused safety shortcuts on' : 'Standard safety shortcuts'}</p>`);
             rows.push(`<p><strong>Trusted contact:</strong> ${escapeHtml(safetyProfile.trustedContact || 'Not set')}</p>`);
-            rows.push(`<p><strong>Safety timer:</strong> ${escapeHtml(String(safetyProfile.checkInMinutes || 30))} minute check-in</p>`);
             if (safetyProfile.womenSafetyMode) {
-                rows.push('<p><strong>Quick actions:</strong> Share live location faster, start a check-in timer, and jump to nearby police, hospital, or pharmacy.</p>');
+                rows.push('<p><strong>Quick actions:</strong> Share live location faster and jump to nearby police, hospital, or pharmacy.</p>');
             }
             summary.innerHTML = rows.join('');
         }
@@ -15152,15 +15139,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 const fallback = `https://www.google.com/maps/search/${encodeURIComponent(`${query} near me`)}`;
                 window.open(fallback, '_blank', 'noopener,noreferrer');
             }
-        }
-
-        function startSafetyCheckIn(minutes = null) {
-            const duration = Math.max(5, parseInt(minutes || safetyProfile.checkInMinutes || 30, 10));
-            safetyProfile.checkInMinutes = duration;
-            saveSafetyProfile();
-
-            const reminderTime = new Date(Date.now() + duration * 60 * 1000);
-            createReminder('check in and share your location', reminderTime, formatReminderDate(reminderTime));
         }
 
         function playReminderAlertTone() {
