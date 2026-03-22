@@ -1,7 +1,6 @@
 export const config = { maxDuration: 60 };
 import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './live-search.js';
 import { applyApiSecurity } from './security.js';
-
 export default async function handler(req, res) {
     const guard = applyApiSecurity(req, res, {
         methods: ['POST'],
