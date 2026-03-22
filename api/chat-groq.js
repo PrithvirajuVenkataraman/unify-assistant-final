@@ -75,14 +75,10 @@ export default async function handler(req, res) {
             intent: 'service_error',
             response: 'The AI service hit an internal error. Please try again.',
             action: null,
-            details: shouldExposeInternalErrors() ? String(error?.message || error) : undefined
         });
     }
 }
 
-function shouldExposeInternalErrors() {
-    return String(process.env.EXPOSE_INTERNAL_ERRORS || '').toLowerCase() === 'true';
-}
 
 function composeFinalPrompt(systemPrompt, ragBlock, contextBlock, message) {
     return [
@@ -161,9 +157,7 @@ async function runModelWithFallback(finalPrompt) {
                 intent: 'service_unconfigured',
                 response: 'AI backend is not configured. Set GROQ_API_KEY or GEMINI_API_KEY in the server environment.',
                 action: null,
-                provider: 'none',
-                details: groqFailureDetail || undefined,
-                triedModels: groqTriedModels.length ? groqTriedModels : undefined
+                provider: 'none'
             }
         };
     }
@@ -221,12 +215,7 @@ async function runModelWithFallback(finalPrompt) {
                 intent: 'service_unavailable',
                 response: 'The AI service is temporarily unavailable right now. Please try again shortly.',
                 action: null,
-                triedModels,
-                provider: 'gemini',
-                details: [
-                    groqFailureDetail ? `groq: ${groqFailureDetail}` : '',
-                    lastErrorDetail ? `gemini: ${lastErrorDetail}` : 'No Gemini model responded successfully.'
-                ].filter(Boolean).join(' | ')
+                provider: 'gemini'
             }
         };
     }
