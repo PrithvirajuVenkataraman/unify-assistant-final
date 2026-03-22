@@ -1,10 +1,23 @@
 {
-  "name": "unify-assistant",
-  "private": true,
-  "version": "1.0.0",
-  "dependencies": {
-    "jszip": "^3.10.1",
-    "mammoth": "^1.8.0",
-    "pdf-parse": "^1.1.1"
-  }
+    "name":  "unify-assistant",
+    "private":  true,
+    "version":  "1.0.0",
+    "dependencies":  {
+                         "jszip":  "^3.10.1",
+                         "mammoth":  "^1.8.0",
+                         "pdf-parse":  "^1.1.1"
+                     },
+    "vercel":  {
+                   "functions":  {
+                                     "api/**/*.js":  {
+                                                         "maxDuration":  60
+                                                     }
+                                 },
+                   "rewrites":  [
+                                    {
+                                        "destination":  "/index.html",
+                                        "source":  "/"
+                                    }
+                                ]
+               }
 }
