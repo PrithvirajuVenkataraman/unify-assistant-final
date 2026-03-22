@@ -8,11 +8,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>JARVIS - Just A Rather Very Intelligent System</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://code.responsivevoice.org/responsivevoice.js?key=jQZ2zpcE"></script>
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://code.responsivevoice.org/responsivevoice.js"></script>
     <style>
         :root {
             --jarvis-radius-md: 12px;
@@ -1988,6 +1986,11 @@
             color: #e2e8f0;
             background: rgba(51, 65, 85, 0.95);
         }
+
+        .trip-live-map-canvas {
+            width: 100%;
+            height: 260px;
+        }
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -2127,6 +2130,7 @@
                                 <h2 class="text-xl font-bold text-gray-800 dark:text-white">Live Trip</h2>
                             </div>
                             <div id="trip-summary" class="space-y-2 text-sm text-gray-700 dark:text-gray-300"></div>
+                            <div id="trip-live-map" class="hidden mt-4 rounded-xl overflow-hidden border border-emerald-200 dark:border-slate-600 shadow-sm bg-white/70 dark:bg-slate-900/60"></div>
                             <div class="mt-4 flex flex-wrap gap-2">
                                 <button onclick="startTripToOffice()" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-all">Start to office</button>
                                 <button onclick="promptTripDestination()" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-slate-900/70 border border-emerald-200 dark:border-slate-600 text-emerald-700 dark:text-emerald-300 text-sm font-semibold transition-all">Start custom trip</button>
@@ -4319,7 +4323,10 @@ function extractKnowledgeSubject(text) {
         /^\s*do\s+you\s+know\s+(.+?)\s*\??$/i,
         /^\s*(?:what\s+is|who\s+is|tell\s+me\s+about)\s+(.+?)\s*\??$/i,
         /^\s*(?:what\s+do\s+you\s+know\s+about|give\s+me\s+details\s+about|share\s+about)\s+(.+?)\s*\??$/i,
-        /^\s*(?:info(?:rmation)?\s+on|details\s+on|about)\s+(.+?)\s*\??$/i
+        /^\s*(?:info(?:rmation)?\s+on|details\s+on|about)\s+(.+?)\s*\??$/i,
+        /^\s*when\s+did\s+(.+?)\s+(?:release|come\s+out|premiere|premiered)(?:\s+in\s+theaters?)?\s*\??$/i,
+        /^\s*when\s+was\s+(.+?)\s+released(?:\s+in\s+theaters?)?\s*\??$/i,
+        /^\s*who\s+(?:was|is)\s+(?:the\s+)?(?:music\s+composer|composer|soundtrack\s+composer)\s+for\s+(.+?)\s*\??$/i
     ];
     for (const p of patterns) {
         const m = raw.match(p);
@@ -4408,8 +4415,8 @@ async function fetchWikipediaSummaryFallback(subject) {
 function isPronounKnowledgeFollowup(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    if (/^(it|this|that|this company|that company|the company)$/.test(t)) return true;
-    return /\b(tell me more|more about|about it|about this|about that|that company|this company|expand on it)\b/.test(t);
+    if (/^(it|this|that|this one|that one|this company|that company|the company|this film|that film|this movie|that movie|this song|that song)$/.test(t)) return true;
+    return /\b(tell me more|more about|about it|about this|about that|that company|this company|that film|this film|that movie|this movie|that song|this song|expand on it)\b/.test(t);
 }
 
 function normalizeEntityText(value) {
@@ -4429,7 +4436,7 @@ function isAcknowledgementUtterance(text) {
 function isGenericNonEntity(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return true;
-    return /^(it|this|that|this one|that one|the company|the person|the topic|more|details|explain|tell me more|what about it|about it|about this|about that)$/i.test(t);
+    return /^(it|this|that|this one|that one|this film|that film|this movie|that movie|this song|that song|the company|the person|the topic|more|details|explain|tell me more|what about it|about it|about this|about that)$/i.test(t);
 }
 
 function extractEntityCandidate(text) {
@@ -4465,7 +4472,7 @@ function resolveKnowledgeFollowupQuery(text) {
     const raw = String(text || '').trim();
     if (!raw || !lastDiscussedEntity) return raw;
     if (!isPronounKnowledgeFollowup(raw)) return raw;
-    return raw.replace(/\b(it|this|that|this one|that one|the company|the person|the topic)(\s+company)?\b/gi, lastDiscussedEntity).trim();
+    return raw.replace(/\b(it|this|that|this one|that one|this film|that film|this movie|that movie|this song|that song|the company|the person|the topic)(\s+company)?\b/gi, lastDiscussedEntity).trim();
 }
 
 function maybeCaptureKnowledgeEntity(text) {
@@ -5114,14 +5121,25 @@ async function handleNameCorrection(text) {
             watchId: null,
             destinationText: '',
             destinationCoords: null,
+            currentCoords: null,
             startedAt: null,
             baselineDistanceMiles: 0,
             lastDistanceMiles: null,
             etaMinutes: null,
             offRouteDetections: 0,
             closeAlertSent: false,
-            routeLabel: ''
+            routeLabel: '',
+            lastUpdatedAt: null,
+            routeGeometryLatLngs: null
         };
+        let tripMapInstance = null;
+        let tripMapCurrentMarker = null;
+        let tripMapDestinationMarker = null;
+        let tripMapRouteLine = null;
+        let tripRouteFetchInFlight = false;
+        let tripRouteNextFetchAt = 0;
+        let tripRouteLastFrom = null;
+        let tripRouteLastTo = null;
         let safetyProfile = {
             womenSafetyMode: false,
             trustedContact: '',
@@ -12181,6 +12199,7 @@ ${snippets}`
                     active: tripState.active,
                     destination: tripState.destinationText,
                     distanceMiles: tripState.lastDistanceMiles != null ? Number(tripState.lastDistanceMiles.toFixed(2)) : null,
+                    distanceKm: tripState.lastDistanceMiles != null ? Number(milesToKm(tripState.lastDistanceMiles).toFixed(2)) : null,
                     etaMinutes: tripState.etaMinutes != null ? Math.round(tripState.etaMinutes) : null
                 }, { historyKey: text });
                 return;
@@ -14394,6 +14413,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             section.classList.toggle('hidden', !tripState.active && !tripState.destinationText);
             if (!tripState.active && !tripState.destinationText) {
                 summary.innerHTML = '';
+                renderTripLiveMap();
                 return;
             }
 
@@ -14401,10 +14421,13 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             rows.push(`<p><strong>Destination:</strong> ${escapeHtml(tripState.destinationText || 'Not set')}</p>`);
             rows.push(`<p><strong>Status:</strong> ${tripState.active ? 'Tracking live in this tab' : 'Ready to start'}</p>`);
             if (tripState.lastDistanceMiles != null) {
-                rows.push(`<p><strong>Distance left:</strong> ${tripState.lastDistanceMiles.toFixed(2)} miles</p>`);
+                rows.push(`<p><strong>Distance left:</strong> ${formatDistanceKmWithMiles(tripState.lastDistanceMiles)}</p>`);
             }
             if (tripState.etaMinutes != null) {
-                rows.push(`<p><strong>ETA:</strong> ${Math.max(1, Math.round(tripState.etaMinutes))} min</p>`);
+                const etaMinutesRounded = Math.max(1, Math.round(tripState.etaMinutes));
+                const etaClock = new Date(Date.now() + etaMinutesRounded * 60 * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+                rows.push(`<p><strong>Estimated time:</strong> ${etaMinutesRounded} min</p>`);
+                rows.push(`<p><strong>ETA:</strong> ${etaClock}</p>`);
             }
             if (tripState.startedAt) {
                 rows.push(`<p><strong>Started:</strong> ${new Date(tripState.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>`);
@@ -14412,7 +14435,11 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             if (tripState.offRouteDetections > 0) {
                 rows.push(`<p><strong>Route drift:</strong> ${tripState.offRouteDetections} potential off-route warning${tripState.offRouteDetections > 1 ? 's' : ''}</p>`);
             }
+            if (tripState.lastUpdatedAt) {
+                rows.push(`<p><strong>Last update:</strong> ${new Date(tripState.lastUpdatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</p>`);
+            }
             summary.innerHTML = rows.join('');
+            renderTripLiveMap();
         }
 
         async function promptCommuteSetup() {
@@ -14535,6 +14562,174 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
         function estimateRoadMiles(straightLineMiles) {
             return Math.max(0.1, straightLineMiles * 1.22);
+        }
+
+        function milesToKm(miles) {
+            return Number(miles || 0) * 1.609344;
+        }
+
+        function formatDistanceKmWithMiles(miles) {
+            const milesNum = Number(miles || 0);
+            const km = milesToKm(milesNum);
+            return `${km.toFixed(2)} km (${milesNum.toFixed(2)} miles)`;
+        }
+
+        function resetTripRouteGeometryCache() {
+            tripRouteFetchInFlight = false;
+            tripRouteNextFetchAt = 0;
+            tripRouteLastFrom = null;
+            tripRouteLastTo = null;
+            tripState.routeGeometryLatLngs = null;
+        }
+
+        function buildOsrmRouteUrl(from, to) {
+            const fromLon = Number(from?.lon);
+            const fromLat = Number(from?.lat);
+            const toLon = Number(to?.lon);
+            const toLat = Number(to?.lat);
+            return `https://router.project-osrm.org/route/v1/driving/${fromLon},${fromLat};${toLon},${toLat}?overview=full&geometries=geojson&steps=false`;
+        }
+
+        function shouldRefreshTripRouteGeometry(from, to, nowMs) {
+            if (!tripRouteLastFrom || !tripRouteLastTo) return true;
+            if (nowMs >= tripRouteNextFetchAt) return true;
+
+            const movedFromMiles = haversineMiles(from.lat, from.lon, tripRouteLastFrom.lat, tripRouteLastFrom.lon);
+            const movedToMiles = haversineMiles(to.lat, to.lon, tripRouteLastTo.lat, tripRouteLastTo.lon);
+            return movedFromMiles >= 0.1 || movedToMiles >= 0.03;
+        }
+
+        async function refreshTripRouteGeometry(force = false) {
+            if (!tripState.active || !tripState.currentCoords || !tripState.destinationCoords) return;
+            if (tripRouteFetchInFlight) return;
+
+            const nowMs = Date.now();
+            const from = { lat: Number(tripState.currentCoords.lat), lon: Number(tripState.currentCoords.lon) };
+            const to = { lat: Number(tripState.destinationCoords.lat), lon: Number(tripState.destinationCoords.lon) };
+            if (!force && !shouldRefreshTripRouteGeometry(from, to, nowMs)) return;
+
+            tripRouteFetchInFlight = true;
+            tripRouteNextFetchAt = nowMs + 12000;
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 6500);
+                const response = await fetch(buildOsrmRouteUrl(from, to), {
+                    signal: controller.signal,
+                    headers: { 'Accept': 'application/json' }
+                });
+                clearTimeout(timeoutId);
+                if (!response.ok) return;
+
+                const data = await response.json();
+                const route = Array.isArray(data?.routes) ? data.routes[0] : null;
+                const coords = Array.isArray(route?.geometry?.coordinates) ? route.geometry.coordinates : [];
+                if (coords.length >= 2) {
+                    tripState.routeGeometryLatLngs = coords
+                        .map(pair => [Number(pair[1]), Number(pair[0])])
+                        .filter(pair => Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
+                    tripRouteLastFrom = from;
+                    tripRouteLastTo = to;
+                }
+            } catch (e) {
+            } finally {
+                tripRouteFetchInFlight = false;
+                if (tripState.active) renderTripLiveMap();
+            }
+        }
+
+        function renderTripLiveMap() {
+            const mapContainer = document.getElementById('trip-live-map');
+            if (!mapContainer) return;
+
+            if (!tripState.active || !tripState.currentCoords || !tripState.destinationCoords) {
+                if (tripMapInstance) {
+                    try { tripMapInstance.remove(); } catch (e) {}
+                }
+                tripMapInstance = null;
+                tripMapCurrentMarker = null;
+                tripMapDestinationMarker = null;
+                tripMapRouteLine = null;
+                resetTripRouteGeometryCache();
+                mapContainer.classList.add('hidden');
+                mapContainer.innerHTML = '';
+                return;
+            }
+
+            const curLat = Number(tripState.currentCoords.lat).toFixed(6);
+            const curLon = Number(tripState.currentCoords.lon).toFixed(6);
+            const destLat = Number(tripState.destinationCoords.lat).toFixed(6);
+            const destLon = Number(tripState.destinationCoords.lon).toFixed(6);
+            const directionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${curLat},${curLon}`)}&destination=${encodeURIComponent(`${destLat},${destLon}`)}&travelmode=driving`;
+            if (!mapContainer.querySelector('#trip-live-map-canvas')) {
+                mapContainer.innerHTML = `
+                    <div id="trip-live-map-canvas" class="trip-live-map-canvas"></div>
+                    <div id="trip-live-map-meta" class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300"></div>
+                `;
+            }
+
+            const mapCanvas = mapContainer.querySelector('#trip-live-map-canvas');
+            const mapMeta = mapContainer.querySelector('#trip-live-map-meta');
+            if (!mapCanvas || !mapMeta) return;
+
+            const currentLatLng = [Number(tripState.currentCoords.lat), Number(tripState.currentCoords.lon)];
+            const destinationLatLng = [Number(tripState.destinationCoords.lat), Number(tripState.destinationCoords.lon)];
+            const routeLatLngs = Array.isArray(tripState.routeGeometryLatLngs) && tripState.routeGeometryLatLngs.length >= 2
+                ? tripState.routeGeometryLatLngs
+                : [currentLatLng, destinationLatLng];
+
+            if (typeof window.L === 'undefined') {
+                mapContainer.innerHTML = `
+                    <div class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+                        Live map failed to load.
+                        <a class="underline ml-1" href="${directionsUrl}" target="_blank" rel="noopener noreferrer">Open navigation</a>
+                    </div>
+                `;
+                mapContainer.classList.remove('hidden');
+                return;
+            }
+
+            if (!tripMapInstance) {
+                tripMapInstance = L.map(mapCanvas, {
+                    zoomControl: true,
+                    attributionControl: true
+                });
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(tripMapInstance);
+
+                tripMapCurrentMarker = L.marker(currentLatLng).addTo(tripMapInstance).bindPopup('Your current location');
+                tripMapDestinationMarker = L.marker(destinationLatLng).addTo(tripMapInstance).bindPopup(escapeHtml(tripState.destinationText || 'Destination'));
+                tripMapRouteLine = L.polyline(routeLatLngs, {
+                    color: '#10b981',
+                    weight: 4,
+                    opacity: 0.9,
+                    dashArray: tripState.routeGeometryLatLngs ? undefined : '8 6'
+                }).addTo(tripMapInstance);
+            } else {
+                tripMapCurrentMarker?.setLatLng(currentLatLng);
+                tripMapDestinationMarker?.setLatLng(destinationLatLng);
+                tripMapRouteLine?.setStyle({ dashArray: tripState.routeGeometryLatLngs ? undefined : '8 6' });
+                tripMapRouteLine?.setLatLngs(routeLatLngs);
+            }
+
+            const bounds = tripMapRouteLine?.getBounds?.() || L.latLngBounds([currentLatLng, destinationLatLng]);
+            tripMapInstance.fitBounds(bounds.pad(0.3), { animate: false });
+            setTimeout(() => {
+                try { tripMapInstance?.invalidateSize(); } catch (e) {}
+            }, 0);
+
+            mapMeta.innerHTML = `
+                Live origin: ${curLat}, ${curLon}
+                <span class="mx-1">•</span>
+                Destination: ${escapeHtml(tripState.destinationText || '')}
+                <span class="mx-1">•</span>
+                Distance: ${tripState.lastDistanceMiles != null ? formatDistanceKmWithMiles(tripState.lastDistanceMiles) : '--'}
+                <span class="mx-1">•</span>
+                <a class="underline" href="${directionsUrl}" target="_blank" rel="noopener noreferrer">Open navigation</a>
+            `;
+            mapContainer.classList.remove('hidden');
         }
 
         function getCommuteSpeedMph(mode) {
@@ -14765,15 +14960,19 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 watchId: null,
                 destinationText,
                 destinationCoords: { lat: destination.lat, lon: destination.lon },
+                currentCoords: { lat: startLat, lon: startLon },
                 startedAt: Date.now(),
                 baselineDistanceMiles: baselineDistance,
                 lastDistanceMiles: baselineDistance,
                 etaMinutes: initialEta,
                 offRouteDetections: 0,
                 closeAlertSent: false,
-                routeLabel: destination.label || destinationText
+                routeLabel: destination.label || destinationText,
+                lastUpdatedAt: Date.now(),
+                routeGeometryLatLngs: null
             };
             renderTripCard();
+            void refreshTripRouteGeometry(true);
 
             await deliverApiReply('trip_started', {
                 destination: destinationText
@@ -14814,14 +15013,16 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const straightLine = haversineMiles(lat, lon, tripState.destinationCoords.lat, tripState.destinationCoords.lon);
             const roadMilesLeft = estimateRoadMiles(straightLine);
             const etaMinutes = Math.max(1, Math.round((roadMilesLeft / getCommuteSpeedMph(commuteProfile.mode || 'drive')) * 60));
+            const distanceLabel = formatDistanceKmWithMiles(roadMilesLeft);
 
             if (tripState.lastDistanceMiles != null && roadMilesLeft > tripState.lastDistanceMiles + 0.22) {
                 tripState.offRouteDetections += 1;
                 if (tripState.offRouteDetections <= 2) {
-                    const warn = `Distance to ${tripState.destinationText} increased to ${roadMilesLeft.toFixed(2)} miles.`;
+                    const warn = `Distance to ${tripState.destinationText} increased to ${distanceLabel}.`;
                     deliverApiReply('trip_off_route_warning', {
                         destination: tripState.destinationText,
-                        distanceMiles: Number(roadMilesLeft.toFixed(2))
+                        distanceMiles: Number(roadMilesLeft.toFixed(2)),
+                        distanceKm: Number(milesToKm(roadMilesLeft).toFixed(2))
                     }, { speak: true });
                     maybeNotifyTripEvent('Trip warning', warn);
                 }
@@ -14829,13 +15030,17 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
             tripState.lastDistanceMiles = roadMilesLeft;
             tripState.etaMinutes = etaMinutes;
+            tripState.currentCoords = { lat, lon };
+            tripState.lastUpdatedAt = Date.now();
+            void refreshTripRouteGeometry(false);
 
             if (!tripState.closeAlertSent && (roadMilesLeft <= 0.35 || etaMinutes <= 3)) {
                 tripState.closeAlertSent = true;
-                const closeMsg = `About ${roadMilesLeft.toFixed(2)} miles left to ${tripState.destinationText}.`;
+                const closeMsg = `About ${distanceLabel} left to ${tripState.destinationText}.`;
                 deliverApiReply('trip_near_destination', {
                     destination: tripState.destinationText,
-                    distanceMiles: Number(roadMilesLeft.toFixed(2))
+                    distanceMiles: Number(roadMilesLeft.toFixed(2)),
+                    distanceKm: Number(milesToKm(roadMilesLeft).toFixed(2))
                 }, { speak: true });
                 maybeNotifyTripEvent('Near destination', closeMsg);
             }
@@ -14855,13 +15060,16 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 watchId: null,
                 destinationText: tripState.destinationText || '',
                 destinationCoords: null,
+                currentCoords: null,
                 startedAt: null,
                 baselineDistanceMiles: 0,
                 lastDistanceMiles: null,
                 etaMinutes: null,
                 offRouteDetections: 0,
                 closeAlertSent: false,
-                routeLabel: ''
+                routeLabel: '',
+                lastUpdatedAt: null,
+                routeGeometryLatLngs: null
             };
             renderTripCard();
             if (announce && hadTrip) {
