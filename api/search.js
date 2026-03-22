@@ -1,18 +1,14 @@
 import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './live-search.js';
-
+import { applyApiSecurity } from './security.js';
 
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
+    const guard = applyApiSecurity(req, res, {
+        methods: ['POST'],
+        routeKey: 'search',
+        maxBodyBytes: 48 * 1024,
+        rateLimit: { max: 40, windowMs: 60 * 1000 }
+    });
+    if (guard.handled) return;
 
     try {
         const query = String(req.body?.query || '').trim();
@@ -48,9 +44,13 @@ export default async function handler(req, res) {
             trustedCount: 0,
             results: [],
             error: 'search_unavailable',
-            details: String(error?.message || error)
+            details: shouldExposeInternalErrors() ? String(error?.message || error) : undefined
         });
     }
+}
+
+function shouldExposeInternalErrors() {
+    return String(process.env.EXPOSE_INTERNAL_ERRORS || '').toLowerCase() === 'true';
 }
 
 function buildSearchQueries(query) {
