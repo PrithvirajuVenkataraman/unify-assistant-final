@@ -1,10 +1,10 @@
-export const config = { maxDuration: 60 };
 import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
 import JSZip from 'jszip';
 import { applyApiSecurity } from './security.js';
 
 export const config = {
+    maxDuration: 60,
     api: {
         bodyParser: {
             sizeLimit: '12mb'
@@ -58,7 +58,7 @@ export default async function handler(req, res) {
         if (!kind) {
             return res.status(415).json({
                 success: false,
-                error: 'Unsupported file type. Use PDF, DOCX, PPTX, TXT, CSV, or image files.'
+                error: 'Unsupported file type. Use PDF, DOCX, PPTX, TXT, CSV, SVG, or image files.'
             });
         }
 
@@ -81,7 +81,9 @@ export default async function handler(req, res) {
         } else if (kind === 'pptx') {
             extractedText = await extractPptxText(buffer);
         } else if (kind === 'text') {
-            extractedText = buffer.toString('utf8');
+            extractedText = (normalizedMime === 'image/svg+xml' || lowerName.endsWith('.svg'))
+                ? extractSvgText(buffer.toString('utf8'))
+                : buffer.toString('utf8');
         } else if (kind === 'image') {
             extractedText = await extractWithVisionFile(buffer, normalizedMime || 'image/jpeg', 'ocr');
             extractionMode = 'model-ocr';
@@ -172,16 +174,14 @@ export default async function handler(req, res) {
         return res.status(500).json({
             success: false,
             error: 'Document processing failed',
-            details: shouldExposeInternalErrors() ? String(error?.message || error) : undefined
+            details: String(error?.message || 'unknown error').slice(0, 240)
         });
     }
 }
 
-function shouldExposeInternalErrors() {
-    return String(process.env.EXPOSE_INTERNAL_ERRORS || '').toLowerCase() === 'true';
-}
 
 function detectDocumentKind(mimeType, fileName) {
+    if (mimeType === 'image/svg+xml' || fileName.endsWith('.svg')) return 'text';
     if (mimeType === 'application/pdf' || fileName.endsWith('.pdf')) return 'pdf';
     if (
         mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
@@ -198,6 +198,23 @@ function detectDocumentKind(mimeType, fileName) {
     ) return 'text';
     if (fileName.endsWith('.doc') || fileName.endsWith('.ppt')) return 'legacy';
     return '';
+}
+
+function extractSvgText(svgText) {
+    const raw = String(svgText || '');
+    if (!raw) return '';
+    return raw
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .replace(/\s{2,}/g, ' ')
+        .trim();
 }
 
 async function extractPdfText(buffer) {
@@ -646,4 +663,6 @@ function extractGeminiText(data) {
     }
     return '';
 }
+
+
 
