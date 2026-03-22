@@ -1,3 +1,4 @@
+export const config = { maxDuration: 60 };
 import { extractSearchTopic } from './live-search.js';
 import { applyApiSecurity } from './security.js';
 
