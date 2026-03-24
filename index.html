@@ -13386,178 +13386,13 @@ Rules:
             
             else if (isWeatherIntentText(cleanText)) {
                 const location = extractLocationFromSentence(cleanText);
-                
+
                 if (location) {
-                    
-                    getWeatherByCity(location);
-                } else if (weather && weather.current) {
-                    
-                    
-                    if (cleanText.toLowerCase().includes('rain')) {
-                        const willRain = willItRain(weather.current.weather_code);
-                        const celsius = Math.round(weather.current.temperature_2m);
-                        const fahrenheit = Math.round((celsius * 9/5) + 32);
-                        const advice = await getWeatherAdvice(weather);
-                        if (willRain) {
-                            await deliverApiReply('weather_rain_check', {
-                                willRain,
-                                fahrenheit,
-                                celsius,
-                                advice
-                            }, {
-                                historyKey: cleanText,
-                                fallbackText: `Yes, it looks like rain is expected today. ${advice}`
-                            });
-                        } else {
-                            await deliverApiReply('weather_rain_check', {
-                                willRain,
-                                fahrenheit,
-                                celsius,
-                                advice
-                            }, {
-                                historyKey: cleanText,
-                                fallbackText: `No, it won't rain today. The temperature is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${advice}`
-                            });
-                        }
-                    } 
-                    
-                    else if (cleanText.toLowerCase().includes('snow')) {
-                        const willSnow = willItSnow(weather.current.weather_code);
-                        const celsius = Math.round(weather.current.temperature_2m);
-                        const fahrenheit = Math.round((celsius * 9/5) + 32);
-                        const advice = await getWeatherAdvice(weather);
-                        if (willSnow) {
-                            await deliverApiReply('weather_snow_check', {
-                                willSnow,
-                                fahrenheit,
-                                celsius,
-                                advice
-                            }, {
-                                historyKey: cleanText,
-                                fallbackText: `Yes, snow is expected! ${advice}`
-                            });
-                        } else {
-                            await deliverApiReply('weather_snow_check', {
-                                willSnow,
-                                fahrenheit,
-                                celsius,
-                                advice
-                            }, {
-                                historyKey: cleanText,
-                                fallbackText: `No, it won't snow today. The temperature is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${advice}`
-                            });
-                        }
-                    }
-                    
-                    else {
-                        const celsius = Math.round(weather.current.temperature_2m);
-                        const fahrenheit = Math.round((celsius * 9/5) + 32);
-                        const advice = await getWeatherAdvice(weather);
-                        await deliverApiReply('weather_current_summary', {
-                            fahrenheit,
-                            celsius,
-                            advice
-                        }, {
-                            historyKey: cleanText,
-                            fallbackText: `The temperature is ${fahrenheit}\u00B0F (${celsius}\u00B0C). ${advice}`
-                        });
-                    }
+                    await getWeatherByCity(location);
                 } else {
-                    
-                    showThinkingIndicator();
-                    
-                    if (navigator.geolocation) {
-                        
-                        navigator.geolocation.getCurrentPosition(
-                            async (position) => {
-                                const lat = position.coords.latitude;
-                                const lon = position.coords.longitude;
-                                                                
-                                try {
-                                    const reverseResponse = await fetch(
-                                        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
-                                        { headers: { 'User-Agent': 'JARVISVoiceAssistant/1.0' } }
-                                    );
-                                    const reverseData = await reverseResponse.json();
-                                    
-                                    
-                                    
-                                    const addr = reverseData.address;
-
-                                    // Prefer city/town over smaller localities (suburb, village, hamlet, neighbourhood)
-                                    // This ensures "Mason, Ohio" instead of "Socialville, Ohio"
-                                    let cityName = addr.city ||
-                                                   addr.town ||
-                                                   addr.municipality ||
-                                                   addr.county ||
-                                                   addr.village ||
-                                                   addr.hamlet ||
-                                                   addr.suburb ||
-                                                   addr.neighbourhood ||
-                                                   addr.state_district ||
-                                                   null;
-
-                                    // Format location name based on country
-                                    if (cityName) {
-                              
-                                        // For US: City, State format
-                                        if (addr.country_code === 'us' && addr.state) {
-                                            cityName = `${cityName}, ${addr.state}`;
-                                        } else if (addr.state && addr.state !== cityName) {
-                                            // For international: City, State, Country
-                                            cityName = `${cityName}, ${addr.state}, ${addr.country}`;
-                                        } else if (addr.country && addr.country_code !== 'us') {
-                                            cityName = `${cityName}, ${addr.country}`;
-                                        }
-                                    } else {
-                                        // Fallback
-                                        cityName = addr.state || addr.country || "your location";
-                                    }
-                                    
-                                    fetchWeather(lat, lon, cityName);
-                                } catch (error) {
-                                    
-                                    fetchWeather(lat, lon, "your location");
-                                }
-                            },
-                            async (error) => {
-                                
-                                hideThinkingIndicator();
-                                let askMsg;
-                                if (error.code === 1) {
-                                    
-                                    askMsg = "Location permission was denied. Please tell me your city, or check your browser settings to enable location access.";
-                                } else if (error.code === 2) {
-                                    
-                                    askMsg = "I couldn't determine your location. Where are you? Just say your city!";
-                                } else if (error.code === 3) {
-                                    
-                                    askMsg = "Location detection is taking too long. Where are you located?";
-                                } else {
-                                    askMsg = "I couldn't detect your location. Where are you?";
-                                }
-                                await deliverApiReply('location_manual_prompt', {
-                                    reason: 'geolocation_error',
-                                    detail: askMsg
-                                }, {
-                                    fallbackText: askMsg
-                                });
-                                waitingForLocation = true;
-                            },
-                            {
-                                enableHighAccuracy: false, 
-                                timeout: 15000, 
-                                maximumAge: 300000 
-                            }
-                        );
-                    } else {
-                        await deliverApiReply('location_manual_prompt', {
-                            reason: 'browser_no_geolocation'
-                        });
-                        waitingForLocation = true;
-                    }
+                    await handleCurrentLocationWeatherRequest(cleanText);
                 }
-                return; 
+                return;
             }
             
             // Memory feature temporarily disabled - will be implemented in future
@@ -14091,6 +13926,90 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             else {
                 container.style.background = 'linear-gradient(to bottom, #6B7280, #9CA3AF)';
                 container.style.color = 'white';
+            }
+        }
+
+        async function handleCurrentLocationWeatherRequest(originalQuery = '') {
+            showThinkingIndicator();
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+
+                        try {
+                            const reverseResponse = await fetch(
+                                `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+                                { headers: { 'User-Agent': 'JARVISVoiceAssistant/1.0' } }
+                            );
+                            const reverseData = await reverseResponse.json();
+                            const addr = reverseData.address || {};
+
+                            let cityName = addr.city ||
+                                           addr.town ||
+                                           addr.municipality ||
+                                           addr.county ||
+                                           addr.village ||
+                                           addr.hamlet ||
+                                           addr.suburb ||
+                                           addr.neighbourhood ||
+                                           addr.state_district ||
+                                           null;
+
+                            if (cityName) {
+                                if (addr.country_code === 'us' && addr.state) {
+                                    cityName = `${cityName}, ${addr.state}`;
+                                } else if (addr.state && addr.state !== cityName) {
+                                    cityName = `${cityName}, ${addr.state}, ${addr.country}`;
+                                } else if (addr.country && addr.country_code !== 'us') {
+                                    cityName = `${cityName}, ${addr.country}`;
+                                }
+                            } else {
+                                cityName = addr.state || addr.country || 'your location';
+                            }
+
+                            await fetchWeather(lat, lon, cityName, originalQuery);
+                        } catch (error) {
+                            await fetchWeather(lat, lon, 'your location', originalQuery);
+                        }
+                    },
+                    async (error) => {
+                        hideThinkingIndicator();
+                        let askMsg;
+                        if (error.code === 1) {
+                            askMsg = "Location permission was denied. Please tell me your city, or check your browser settings to enable location access.";
+                        } else if (error.code === 2) {
+                            askMsg = "I couldn't determine your location. Where are you? Just say your city!";
+                        } else if (error.code === 3) {
+                            askMsg = "Location detection is taking too long. Where are you located?";
+                        } else {
+                            askMsg = "I couldn't detect your location. Where are you?";
+                        }
+                        await deliverApiReply('location_manual_prompt', {
+                            reason: 'geolocation_error',
+                            detail: askMsg
+                        }, {
+                            fallbackText: askMsg
+                        });
+                        waitingForLocation = true;
+                    },
+                    {
+                        enableHighAccuracy: false,
+                        timeout: 15000,
+                        maximumAge: 300000
+                    }
+                );
+            } else {
+                hideThinkingIndicator();
+                const fallbackMsg = "This device doesn't support location detection. Please tell me your city.";
+                await deliverApiReply('location_manual_prompt', {
+                    reason: 'browser_no_geolocation',
+                    detail: fallbackMsg
+                }, {
+                    fallbackText: fallbackMsg
+                });
+                waitingForLocation = true;
             }
         }
 
