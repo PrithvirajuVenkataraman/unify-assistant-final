@@ -943,6 +943,56 @@ body {
                 
             }
         }
+
+        @media (max-width: 640px) {
+            #input-bar-container .max-w-5xl {
+                padding-left: 0.5rem;
+                padding-right: 0.5rem;
+            }
+
+            #input-bar-container .max-w-xl,
+            #input-bar-container .sm\:max-w-3xl {
+                max-width: 100%;
+            }
+
+            #input-bar-inner {
+                gap: 0.25rem;
+                padding-left: 0.375rem;
+                padding-right: 0.375rem;
+                padding-top: 0.25rem;
+                padding-bottom: 0.25rem;
+                border-radius: 20px;
+            }
+
+            .input-utility-btn {
+                padding: 0.45rem;
+            }
+
+            .input-utility-btn svg {
+                width: 18px;
+                height: 18px;
+            }
+
+            .footer-action-btn {
+                width: 38px;
+                height: 38px;
+                flex: 0 0 38px;
+            }
+
+            .footer-action-btn svg {
+                width: 17px;
+                height: 17px;
+            }
+
+            .footer-action-pill {
+                gap: 0.25rem;
+                margin-left: 0.125rem;
+            }
+
+            #text-input {
+                font-size: 16px;
+            }
+        }
         
         .scrollbar-hide {
             -ms-overflow-style: none;
@@ -1593,6 +1643,22 @@ body {
             background: transparent;
             border: none;
             box-shadow: none;
+            flex-shrink: 0;
+            min-width: fit-content;
+        }
+
+        #input-bar-inner,
+        .modern-input {
+            min-width: 0;
+        }
+
+        #text-input {
+            min-width: 0;
+            width: 100%;
+        }
+
+        .input-utility-btn {
+            flex-shrink: 0;
         }
 
         body.dark .footer-action-pill {
@@ -2364,7 +2430,7 @@ body {
         <div class="max-w-5xl mx-auto px-3 py-1">
             <div class="max-w-xl sm:max-w-3xl mx-auto">
             <div id="input-bar-inner" class="flex items-center gap-1.5 modern-input px-2 py-1">
-                <button onclick="showHelpModal()" id="help-btn" class="flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
+                <button onclick="showHelpModal()" id="help-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
                         <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
@@ -2375,7 +2441,7 @@ body {
                         Help & Tips
                     </div>
                 </button>
-                <button onclick="showSafetyPanel()" id="safety-btn" class="flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all" title="Safety">
+                <button onclick="showSafetyPanel()" id="safety-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all" title="Safety">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-rose-600 transition-all">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                     </svg>
@@ -2383,7 +2449,7 @@ body {
                         Safety
                     </div>
                 </button>
-                <button onclick="openDocumentPicker()" id="document-upload-btn" class="flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition-all" title="Upload document">
+                <button onclick="openDocumentPicker()" id="document-upload-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition-all" title="Upload document">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-sky-600 transition-all">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="17 8 12 3 7 8"></polyline>
@@ -14031,7 +14097,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         function extractLocationFromSentence(text) {
             const lower = text.toLowerCase();
             
-            
             const currentLocationKeywords = [
                 'my location', 'current location', 'my current location', 'here', 'over here',
                 'around here', 'nearby', 'outside', 'outside now', 'outside right now',
@@ -14040,10 +14105,13 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             ];
             for (const keyword of currentLocationKeywords) {
                 if (lower.includes(keyword)) {
-                    return null; 
+                    return null;
                 }
             }
-            
+
+            if (/^\s*(?:what'?s|what is|how'?s|how is)?\s*(?:the\s+)?(?:weather|forecast|temperature|climate|conditions?)\b[\s?!.,]*$/i.test(text)) {
+                return null;
+            }
             
             let cleanText = text;
             const timeWords = ['right now', 'now', 'today', 'tomorrow', 'tonight', 'currently', 'at the moment'];
@@ -14052,25 +14120,30 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             });
             
             const patterns = [
+                /(?:how'?s?|what'?s?|how is|what is)\s+(?:the\s+)?(?:weather|climate|temperature|humidity|forecast|conditions?)\s+(?:in|at|for|around|near)\s+([^?]+)/i,
                 /(?:weather|climate|temperature|humidity|rain|snow|hot|cold|forecast|conditions?|wind|windy)\s+(?:in|at|for|around|near)\s+([^?]+)/i,
                 /(?:in|at|around|near)\s+([^?]+?)\s*(?:weather|climate|temperature|humidity|rain|snow|hot|cold|forecast|conditions?|wind|windy)/i,
-                /(?:how'?s?|what'?s?|how is|what is)\s+(?:the\s+)?(?:weather|climate|temperature|humidity|forecast|conditions?)\s+(?:in|at|for|around|near)\s+([^?]+)/i,
                 /(?:forecast|temperature|weather)\s+(?:for)\s+([^?]+)/i,
+                /(?:weather|forecast|temperature)\s+([a-zA-Z][^?.,!]+)$/i,
+                /^([a-zA-Z][a-zA-Z\s.'-]{1,60})\s+(?:weather|forecast|temperature)$/i
             ];
             
             for (const pattern of patterns) {
                 const match = cleanText.match(pattern);
                 if (match && match[1]) {
                     let location = match[1].trim();
-                    
+                    location = location.replace(/^(?:the\s+)?(?:weather|forecast|temperature)\s+(?:in|at|for)\s+/i, '').trim();
                     location = location.replace(/[?.!,;]$/g, '').trim();
-                    
                     
                     const locationLower = location.toLowerCase();
                     for (const keyword of currentLocationKeywords) {
                         if (locationLower.includes(keyword)) {
-                            return null; 
+                            return null;
                         }
+                    }
+
+                    if (/^(?:the\s+)?(?:weather|forecast|temperature|climate|conditions?)$/i.test(location)) {
+                        return null;
                     }
                     
                     if (location.length > 0) return location;
