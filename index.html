@@ -5530,7 +5530,7 @@ async function handleNameCorrection(text) {
                     'Hey there! How can I help today?'
                 ];
                 const welcomeMessage = welcomeOptions[Math.floor(Math.random() * welcomeOptions.length)];
-                addChatMessage(welcomeMessage, false);
+                addInitialGreetingMessage(welcomeMessage);
                 speak(welcomeMessage);
             }
             
@@ -6597,6 +6597,34 @@ async function handleNameCorrection(text) {
             window.open(formUrl, '_blank', 'noopener,noreferrer');
         }
 
+        function addInitialGreetingMessage(text) {
+            const chatContainer = document.getElementById('chat-container');
+            if (!chatContainer) return;
+
+            const displayText = normalizeUiTokens(String(text ?? ''));
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex justify-start items-start gap-3';
+            messageDiv.dataset.role = 'assistant';
+            messageDiv.dataset.systemGreeting = 'true';
+
+            const readableText = formatAssistantTextForReadability(displayText);
+            const formattedText = sanitizeAssistantMarkup(
+                escapeHtml(readableText)
+                    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                    .replace(/(^|\n)-\s+/g, '$1&#8226; ')
+                    .replace(/\n/g, '<br>')
+            );
+
+            messageDiv.innerHTML = `
+                <div class="w-full max-w-3xl">
+                    <div class="assistant-message-text text-sm leading-relaxed text-left">${formattedText}</div>
+                </div>
+            `;
+
+            chatContainer.appendChild(messageDiv);
+            maybeAutoScroll(chatContainer);
+        }
+
         function addChatMessage(text, isUser = true, typewriter = null) {
             const chatContainer = document.getElementById('chat-container');
             if (!chatContainer) return;
@@ -6794,6 +6822,80 @@ async function handleNameCorrection(text) {
                 .replace(/\n{3,}/g, '\n\n')
                 .trim();
             return cleaned;
+        }
+
+        function buildRagDocumentId(fileName) {
+            const base = String(fileName || 'document')
+                .toLowerCase()
+                .replace(/[^a-z0-9_-]/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '')
+                .slice(0, 48) || 'document';
+            return `upload-${Date.now()}-${base}`;
+        }
+
+        async function indexUploadedDocumentInRag(docPayload) {
+            const extractedText = String(docPayload?.extractedText || '').trim();
+            if (!extractedText) return null;
+
+            const documentId = buildRagDocumentId(docPayload?.fileName || 'document');
+            const namespace = 'jarvis-docs';
+
+            try {
+                const response = await fetch('/api/rag', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'upsert',
+                        namespace,
+                        documentId,
+                        text: extractedText,
+                        metadata: {
+                            source: 'upload',
+                            fileName: String(docPayload?.fileName || 'document'),
+                            kind: String(docPayload?.kind || 'document'),
+                            uploadedAt: new Date().toISOString()
+                        }
+                    })
+                });
+                if (!response.ok) return null;
+                const data = await response.json();
+                if (!data?.success) return null;
+                return {
+                    ragDocumentId: String(data.documentId || documentId),
+                    ragNamespace: String(data.namespace || namespace),
+                    ragChunkCount: Number(data.chunkCount || 0)
+                };
+            } catch (_) {
+                return null;
+            }
+        }
+
+        async function fetchRagContextForDocumentQuestion(question, doc) {
+            const ragDocumentId = String(doc?.ragDocumentId || '').trim();
+            const ragNamespace = String(doc?.ragNamespace || '').trim();
+            if (!ragDocumentId || !ragNamespace) return '';
+
+            try {
+                const response = await fetch('/api/rag', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'query',
+                        namespace: ragNamespace,
+                        query: String(question || ''),
+                        topK: 6,
+                        filter: {
+                            documentId: { '$eq': ragDocumentId }
+                        }
+                    })
+                });
+                if (!response.ok) return '';
+                const data = await response.json();
+                return String(data?.ragContext || '').trim();
+            } catch (_) {
+                return '';
+            }
         }
 
         function buildShortDocumentSummary(summaryText, maxLength = 320) {
@@ -7044,6 +7146,13 @@ function normalizeUiTokens(text) {
                 addChatMessage(resultCard, false, false);
                 speak('Here is a short summary.');
                 saveToHistory(`uploaded ${data.fileName}`, `Summary:\n${buildShortDocumentSummary(String(data.summary || ''), 600)}`);
+
+                // Best-effort vector indexing for persistent document memory (no user-facing failure).
+                const ragIndex = await indexUploadedDocumentInRag(data);
+                if (ragIndex) {
+                    lastUploadedDocument.ragDocumentId = ragIndex.ragDocumentId;
+                    lastUploadedDocument.ragNamespace = ragIndex.ragNamespace;
+                }
             } catch (error) {
                 const msg = 'Upload failed. Please try again.';
                 addChatMessage(msg, false);
@@ -7244,8 +7353,11 @@ function normalizeUiTokens(text) {
             const extractedText = String(doc?.extractedText || '').trim();
             const billData = doc?.bill && typeof doc.bill === 'object' ? doc.bill : null;
             const fileName = String(doc?.fileName || 'uploaded file');
+            const ragContext = await fetchRagContextForDocumentQuestion(question, doc);
             const contentBlock = [summary, extractedText].filter(Boolean).join('\n\n').slice(0, 12000);
-            if (!contentBlock && !billData) {
+            const retrievalBlock = ragContext ? `Retrieved chunks:\n${ragContext}` : '';
+            const grounding = [retrievalBlock, contentBlock].filter(Boolean).join('\n\n').slice(0, 14000);
+            if (!grounding && !billData) {
                 return `I could not read enough content from ${fileName}. Please upload a clearer file.`;
             }
 
@@ -7254,7 +7366,7 @@ function normalizeUiTokens(text) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     systemPrompt: 'You answer using only the provided document content. Be concise, direct, and practical. If a detail is missing, say it is not found in the uploaded file.',
-                    message: `Question about uploaded file "${fileName}": "${question}"\n\nDocument summary/content:\n${contentBlock}\n\nBill data (if present):\n${billData ? JSON.stringify(billData, null, 2) : 'None'}\n\nRules:\n- Do not expose raw OCR dumps.\n- Give a direct answer in plain language.\n- If asked to teach/explain, teach clearly with short steps based on the document.\n- If unsure, say "Not found in the uploaded file."`
+                    message: `Question about uploaded file "${fileName}": "${question}"\n\nDocument summary/content:\n${grounding}\n\nBill data (if present):\n${billData ? JSON.stringify(billData, null, 2) : 'None'}\n\nRules:\n- Do not expose raw OCR dumps.\n- Give a direct answer in plain language.\n- If asked to teach/explain, teach clearly with short steps based on the document.\n- If unsure, say "Not found in the uploaded file."`
                 })
             });
             if (!response.ok) throw new Error(`document_qa_failed_${response.status}`);
