@@ -2149,13 +2149,18 @@ body {
             overflow: hidden;
         }
 
+        :root {
+            --app-max-width: 1180px;
+            --app-gutter-x: 20px;
+        }
+
         .app-shell {
             width: 100%;
-            max-width: 1180px !important;
+            max-width: var(--app-max-width) !important;
             min-width: 0;
             min-height: 0;
             height: 100%;
-            padding: calc(16px + env(safe-area-inset-top)) 20px calc(88px + env(safe-area-inset-bottom));
+            padding: calc(16px + env(safe-area-inset-top)) var(--app-gutter-x) calc(88px + env(safe-area-inset-bottom));
             display: flex;
             flex-direction: column;
             margin: 0 auto;
@@ -2210,12 +2215,12 @@ body {
 
         .chat-panel-height,
         #chat-container {
-            flex: 1 1 auto;
+            flex: 0 0 auto;
             width: 100% !important;
             min-width: 0 !important;
             min-height: 0 !important;
-            height: 100% !important;
-            max-height: none !important;
+            height: clamp(260px, 50vh, 520px) !important;
+            max-height: 58vh !important;
         }
 
         #chat-container {
@@ -2231,16 +2236,30 @@ body {
             left: 0;
             right: 0;
             width: 100%;
-            padding: 0 12px calc(10px + env(safe-area-inset-bottom));
+            padding: 0 0 calc(10px + env(safe-area-inset-bottom));
         }
 
         #input-bar-container .max-w-5xl,
         #input-bar-container .max-w-xl,
         #input-bar-container .sm\:max-w-3xl {
             width: 100% !important;
-            max-width: 1180px !important;
+            max-width: var(--app-max-width) !important;
             margin-left: auto !important;
             margin-right: auto !important;
+            padding-left: var(--app-gutter-x) !important;
+            padding-right: var(--app-gutter-x) !important;
+            box-sizing: border-box !important;
+        }
+
+        #input-bar-container .max-w-5xl {
+            padding-top: 4px !important;
+            padding-bottom: 4px !important;
+        }
+
+        #input-bar-container .max-w-5xl > .max-w-xl,
+        #input-bar-container .max-w-5xl > .sm\:max-w-3xl {
+            padding-left: 0 !important;
+            padding-right: 0 !important;
         }
 
         #input-bar-inner {
@@ -2252,20 +2271,23 @@ body {
         }
 
         @media (min-width: 1024px) {
-            .app-shell {
-                padding-left: 28px;
-                padding-right: 28px;
+            :root {
+                --app-gutter-x: 28px;
             }
 
-            #input-bar-container {
-                padding-left: 24px;
-                padding-right: 24px;
+            .app-shell {
+                padding-left: var(--app-gutter-x);
+                padding-right: var(--app-gutter-x);
             }
         }
 
         @media (max-width: 768px) {
+            :root {
+                --app-gutter-x: 10px;
+            }
+
             .app-shell {
-                padding: calc(10px + env(safe-area-inset-top)) 10px calc(84px + env(safe-area-inset-bottom));
+                padding: calc(10px + env(safe-area-inset-top)) var(--app-gutter-x) calc(84px + env(safe-area-inset-bottom));
             }
 
             .header-enhanced {
@@ -2278,9 +2300,11 @@ body {
                 padding: 14px;
             }
 
-            #input-bar-container {
-                padding-left: 8px;
-                padding-right: 8px;
+            #input-bar-container .max-w-5xl,
+            #input-bar-container .max-w-xl,
+            #input-bar-container .sm\:max-w-3xl {
+                padding-left: var(--app-gutter-x) !important;
+                padding-right: var(--app-gutter-x) !important;
             }
         }
 
@@ -2510,25 +2534,26 @@ body {
         @media (max-width: 768px) {
             .chat-panel-height,
             #chat-container {
-                height: 100% !important;
-                min-height: 0 !important;
-                max-height: none !important;
+                height: clamp(220px, 42vh, 360px) !important;
+                min-height: 220px !important;
+                max-height: 48vh !important;
             }
         }
 
         @media (max-width: 1024px) and (min-width: 769px) {
             .chat-panel-height,
             #chat-container {
-                height: 100% !important;
-                max-height: none !important;
+                height: clamp(240px, 46vh, 430px) !important;
+                max-height: 52vh !important;
             }
         }
 
         @media (max-width: 480px) {
             .chat-panel-height,
             #chat-container {
-                height: 100% !important;
-                min-height: 0 !important;
+                height: clamp(200px, 38vh, 300px) !important;
+                min-height: 200px !important;
+                max-height: 44vh !important;
             }
         }
 
@@ -16497,6 +16522,3 @@ function addTravelHintsToPlan(places){
 
 </body>
 </html>
-
-
-
