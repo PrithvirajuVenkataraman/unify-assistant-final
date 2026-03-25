@@ -1844,21 +1844,6 @@ body {
             padding-bottom: 14rem;
         }
 
-        /* Responsive chat panel height to avoid pushing left cards too low */
-        .chat-panel-height {
-            height: clamp(260px, 50vh, 520px);
-            min-height: 260px;
-            max-height: 520px;
-        }
-
-        @media (max-height: 820px) {
-            .chat-panel-height {
-                height: clamp(240px, 44vh, 460px);
-                min-height: 240px;
-                max-height: 460px;
-            }
-        }
-
         .offline-banner {
             position: fixed;
             top: 12px;
@@ -2193,12 +2178,12 @@ body {
 
         .chat-panel-height,
         #chat-container {
-            flex: 1 1 auto;
+            flex: 0 0 auto;
             width: 100% !important;
             min-width: 0 !important;
             min-height: 0 !important;
-            height: 100% !important;
-            max-height: none !important;
+            height: clamp(240px, 44dvh, 460px) !important;
+            max-height: 44dvh !important;
         }
 
         #chat-container {
@@ -2353,7 +2338,8 @@ body {
 
         .chat-bubble-assistant {
             background: #ffffff !important;
-            border: 1px solid rgba(148, 163, 184, 0.22) !important;
+            border: 1.5px solid #cbd5e1 !important;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05) !important;
         }
 
         body.dark .chat-bubble-assistant {
@@ -2458,9 +2444,9 @@ body {
         @media (max-width: 768px) {
             .chat-panel-height,
             #chat-container {
-                height: clamp(200px, 36dvh, 320px) !important;
-                min-height: 200px !important;
-                max-height: 38dvh !important;
+                height: clamp(190px, 32dvh, 290px) !important;
+                min-height: 190px !important;
+                max-height: 34dvh !important;
             }
         }
 
@@ -2548,19 +2534,6 @@ body {
                             </div>
                             <p id="temperature" class="text-5xl font-bold mb-2 text-white relative z-10">--&#176;F / --&#176;C</p>
                             <p id="weather-advice" class="text-white/90 text-lg relative z-10"></p>
-                        </div>
-
-                        <!-- Saved Items -->
-                        <div id="favorites-section" class="hidden bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-slate-800 dark:to-slate-700 p-6 rounded-2xl mt-6 border border-amber-100 dark:border-slate-600">
-                            <div class="flex items-center gap-3 mb-4">
-                                <div class="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-xl">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" class="text-amber-600 dark:text-amber-400">
-                                        <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path>
-                                    </svg>
-                                </div>
-                                <h2 class="text-xl font-bold text-gray-800 dark:text-white">Saved</h2>
-                            </div>
-                            <div id="favorites-list" class="space-y-2"></div>
                         </div>
 
                         <div id="commute-section" class="hidden bg-gradient-to-br from-sky-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 p-6 rounded-2xl mt-6 border border-sky-100 dark:border-slate-600">
@@ -5193,8 +5166,8 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
 
     // Remove common filler/opening boilerplate.
     text = text
-        .replace(/^hi[!.,\s-]*(i(?:'|�)d be happy to help(?: you)?(?: with (?:this|that|your question))?|i can help(?: you)?(?: with (?:this|that))?)\.?\s*/i, '')
-        .replace(/^i(?:'|�)d be happy to help(?: you)?(?: with (?:this|that|your question))?\.?\s*/i, '')
+        .replace(/^hi[!.,\s-]*(i(?:'|-)d be happy to help(?: you)?(?: with (?:this|that|your question))?|i can help(?: you)?(?: with (?:this|that))?)\.?\s*/i, '')
+        .replace(/^i(?:'|-)d be happy to help(?: you)?(?: with (?:this|that|your question))?\.?\s*/i, '')
         .replace(/^sure[!.,\s-]*/i, '')
         .trim();
 
@@ -6813,6 +6786,23 @@ async function handleNameCorrection(text) {
             chatHistory.push({ text: `Uploaded file: ${name}`, isUser: true });
         }
 
+        function sanitizeDocumentSummaryText(text) {
+            let cleaned = String(text || '').trim();
+            if (!cleaned) return '';
+            cleaned = cleaned
+                .replace(/\b(?:ocr|extracted text|extraction mode|parser|char(?:acter)? count|vision fallback)\b.*?(?:\n|$)/gi, '')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+            return cleaned;
+        }
+
+        function buildShortDocumentSummary(summaryText, maxLength = 320) {
+            const normalized = sanitizeDocumentSummaryText(summaryText).replace(/\s+/g, ' ').trim();
+            if (!normalized) return 'I reviewed the file. Ask if you want a deeper breakdown.';
+            if (normalized.length <= maxLength) return normalized;
+            return `${normalized.slice(0, maxLength - 1).trimEnd()}...`;
+        }
+
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
@@ -6978,14 +6968,11 @@ function normalizeUiTokens(text) {
             }
 
             addUserFileAttachmentMessage(file);
-            showThinkingIndicator(`Reading ${file.name}...`);
+            showThinkingIndicator('Processing your file...');
 
             try {
                 const { fileBase64, mimeType, fileName } = await prepareFilePayload(file);
                 const intent = /\b(bill|receipt|invoice|expense)\b/i.test(file.name) ? 'bill' : 'general';
-                const previewDataUrl = isImageLikeMimeOrName(mimeType, fileName)
-                    ? `data:${mimeType || 'image/jpeg'};base64,${fileBase64}`
-                    : '';
 
                 const response = await fetch('/api/document-ingest', {
                     method: 'POST',
@@ -7049,16 +7036,14 @@ function normalizeUiTokens(text) {
                     kind: data.kind,
                     extractedText: data.extractedText,
                     summary: data.summary,
-                    bill: data.bill || null
+                    bill: data.bill || null,
+                    uploadedAt: Date.now()
                 };
 
-                if (previewDataUrl) {
-                    data.previewDataUrl = previewDataUrl;
-                }
                 const resultCard = formatDocumentResultCard(data);
                 addChatMessage(resultCard, false, false);
-                speak(`I finished reading ${data.fileName}.`);
-                saveToHistory(`uploaded ${data.fileName}`, `Summary:\n${String(data.summary || '').slice(0, 1000)}`);
+                speak('Here is a short summary.');
+                saveToHistory(`uploaded ${data.fileName}`, `Summary:\n${buildShortDocumentSummary(String(data.summary || ''), 600)}`);
             } catch (error) {
                 const msg = 'Upload failed. Please try again.';
                 addChatMessage(msg, false);
@@ -7203,85 +7188,137 @@ function normalizeUiTokens(text) {
 
         function formatDocumentResultCard(data) {
             const fileName = escapeHtml(String(data?.fileName || 'document'));
-            const kind = escapeHtml(String(data?.kind || 'document').toUpperCase());
-            const mode = escapeHtml(String(data?.extractionMode || 'text-parser'));
-            const rawKind = String(data?.kind || 'document').toLowerCase();
-            const symbol = rawKind === 'image' ? '??' :
-                rawKind === 'pdf' ? '??' :
-                    rawKind === 'docx' ? '??' :
-                        rawKind === 'pptx' ? '??' :
-                            rawKind === 'text' ? '??' : '??';
-            const summary = escapeHtml(String(data?.summary || 'No summary available.')).replace(/\n/g, '<br>');
-            const excerptRaw = String(data?.extractedText || '');
-            const excerpt = escapeHtml(excerptRaw.slice(0, 1200)).replace(/\n/g, '<br>');
-            const hasMore = excerptRaw.length > 1200;
-            const extractedChars = Number(data?.extractedCharCount || excerptRaw.length || 0);
-
-            let billBlock = '';
-            const bill = data?.bill;
-            if (bill && typeof bill === 'object') {
-                const itemLines = Array.isArray(bill.lineItems) ? bill.lineItems.slice(0, 8) : [];
-                const itemText = itemLines.length
-                    ? itemLines.map(item => {
-                        const name = escapeHtml(String(item?.name || 'Item'));
-                        const amount = Number(item?.amount);
-                        return `${name}: ${Number.isFinite(amount) ? amount.toFixed(2) : '-'}`;
-                    }).join('<br>')
-                    : 'No line items detected.';
-
-                billBlock = `
-<div class="mt-3 p-3 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20">
-  <p class="text-sm font-semibold text-emerald-800 dark:text-emerald-200 mb-1">Bill parser</p>
-  <p class="text-xs text-emerald-800 dark:text-emerald-200">Merchant: ${escapeHtml(String(bill.merchant || '-'))}</p>
-  <p class="text-xs text-emerald-800 dark:text-emerald-200">Date: ${escapeHtml(String(bill.date || '-'))}</p>
-  <p class="text-xs text-emerald-800 dark:text-emerald-200">Currency: ${escapeHtml(String(bill.currency || '-'))}</p>
-  <p class="text-xs text-emerald-800 dark:text-emerald-200">Subtotal: ${bill.subtotal ?? '-'}</p>
-  <p class="text-xs text-emerald-800 dark:text-emerald-200">Tax: ${bill.tax ?? '-'}</p>
-  <p class="text-xs text-emerald-800 dark:text-emerald-200">Total: ${bill.total ?? '-'}</p>
-  <p class="text-xs text-emerald-800 dark:text-emerald-200 mt-1">${itemText}</p>
-</div>`;
-            }
-
+            const shortSummary = escapeHtml(buildShortDocumentSummary(String(data?.summary || ''))).replace(/\n/g, '<br>');
             return `
 <div class="p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70">
-  <div class="mt-1 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70">
-    <div class="flex items-center gap-2">
-      <span class="text-base leading-none">${symbol}</span>
-      <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">${fileName}</p>
-    </div>
-    <p class="text-xs text-slate-500 dark:text-slate-300 mt-1">Type: ${kind} � Mode: ${mode} � Extracted: ${extractedChars} chars</p>
-  </div>
-  <div class="mt-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70">
-    <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">Summary</p>
-    <p class="text-sm text-slate-700 dark:text-slate-200">${summary}</p>
-  </div>
-  <div class="mt-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70">
-    <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">Extracted text preview</p>
-    <p class="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap">${excerpt}${hasMore ? '<br><br>... (truncated)' : ''}</p>
-  </div>
-  ${billBlock}
+  <p class="text-xs font-semibold text-slate-500 dark:text-slate-300 mb-1">Uploaded file</p>
+  <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-2">${fileName}</p>
+  <p class="text-sm text-slate-700 dark:text-slate-200">${shortSummary}</p>
 </div>`;
         }
 
-        function handleUploadedDocumentFollowup(text) {
+        function isDocumentRawTextRequest(lowerText) {
+            return /\b(show|give|send|print|dump|display)\b/.test(lowerText) &&
+                /\b(extracted text|raw text|ocr text|full text|verbatim text)\b/.test(lowerText);
+        }
+
+        function isLikelyDocumentQuestion(q) {
+            if (!lastUploadedDocument) return false;
+            const lower = String(q || '').toLowerCase().trim();
+            if (!lower) return false;
+
+            const hasDocWords = /\b(file|document|upload|uploaded|pdf|doc|docx|ppt|pptx|image|bill|receipt|invoice|notes|chapter|material)\b/.test(lower);
+            const asksSummary = /\b(summary|summarize|gist|tldr|brief|short)\b/.test(lower);
+            const asksAboutBill = /\b(total|amount|subtotal|tax|gst|vat|merchant|vendor|store|shop|date|payment)\b/.test(lower);
+            const asksQuestion = /\b(what|why|how|which|when|where|who|explain|teach|define|difference|compare|solve)\b/.test(lower) || /\?$/.test(lower);
+            const clearlyOtherIntent = /\b(weather|forecast|news|headline|route|directions|map|near me|restaurant near|hotel near|translate|joke|alarm|reminder)\b/.test(lower);
+
+            if (clearlyOtherIntent) return false;
+            if (hasDocWords || asksSummary || isDocumentRawTextRequest(lower)) return true;
+            if (lastUploadedDocument.bill && asksAboutBill) return true;
+
+            const uploadedAt = Number(lastUploadedDocument.uploadedAt || 0);
+            const recentlyUploaded = uploadedAt > 0 && (Date.now() - uploadedAt) <= (45 * 60 * 1000);
+            return recentlyUploaded && asksQuestion;
+        }
+
+        function buildBillQuickAnswer(queryLower, bill, fileName) {
+            if (!bill || typeof bill !== 'object') return '';
+            const merchant = String(bill.merchant || '').trim();
+            const date = String(bill.date || '').trim();
+            const currency = String(bill.currency || '').trim();
+            const subtotal = Number.isFinite(Number(bill.subtotal)) ? Number(bill.subtotal).toFixed(2) : '';
+            const tax = Number.isFinite(Number(bill.tax)) ? Number(bill.tax).toFixed(2) : '';
+            const total = Number.isFinite(Number(bill.total)) ? Number(bill.total).toFixed(2) : '';
+
+            if (/\btotal|amount due|final amount\b/.test(queryLower) && total) return `Total in ${fileName}: ${currency ? `${currency} ` : ''}${total}`;
+            if (/\bsubtotal\b/.test(queryLower) && subtotal) return `Subtotal in ${fileName}: ${currency ? `${currency} ` : ''}${subtotal}`;
+            if (/\btax|gst|vat\b/.test(queryLower) && tax) return `Tax in ${fileName}: ${currency ? `${currency} ` : ''}${tax}`;
+            if (/\bmerchant|vendor|store|shop\b/.test(queryLower) && merchant) return `Merchant in ${fileName}: ${merchant}`;
+            if (/\bdate\b/.test(queryLower) && date) return `Bill date in ${fileName}: ${date}`;
+            return '';
+        }
+
+        async function answerFromUploadedDocument(question, doc) {
+            const summary = String(doc?.summary || '').trim();
+            const extractedText = String(doc?.extractedText || '').trim();
+            const billData = doc?.bill && typeof doc.bill === 'object' ? doc.bill : null;
+            const fileName = String(doc?.fileName || 'uploaded file');
+            const contentBlock = [summary, extractedText].filter(Boolean).join('\n\n').slice(0, 12000);
+            if (!contentBlock && !billData) {
+                return `I could not read enough content from ${fileName}. Please upload a clearer file.`;
+            }
+
+            const response = await fetch('/api/chat-groq', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    systemPrompt: 'You answer using only the provided document content. Be concise, direct, and practical. If a detail is missing, say it is not found in the uploaded file.',
+                    message: `Question about uploaded file "${fileName}": "${question}"\n\nDocument summary/content:\n${contentBlock}\n\nBill data (if present):\n${billData ? JSON.stringify(billData, null, 2) : 'None'}\n\nRules:\n- Do not expose raw OCR dumps.\n- Give a direct answer in plain language.\n- If asked to teach/explain, teach clearly with short steps based on the document.\n- If unsure, say "Not found in the uploaded file."`
+                })
+            });
+            if (!response.ok) throw new Error(`document_qa_failed_${response.status}`);
+            const data = await response.json();
+            const answer = postProcessAssistantResponse(String(data?.response || data?.text || '').trim(), question);
+            return answer || `I could not find that detail in ${fileName}.`;
+        }
+
+        async function handleUploadedDocumentFollowup(text) {
             const q = String(text || '').trim();
-            if (!q || !lastUploadedDocument) return false;
-            const lower = q.toLowerCase();
-            const asksSummary = /\b(summary|summarize|gist|tldr|brief|short)\b/.test(lower) &&
-                /\b(file|document|upload|uploaded|that|this|image|pdf|docx|pptx)\b/.test(lower);
-            if (!asksSummary) return false;
+            if (!q || !lastUploadedDocument || !isLikelyDocumentQuestion(q)) return false;
 
             const fileName = String(lastUploadedDocument.fileName || 'uploaded file');
+            const lower = q.toLowerCase();
             const summary = String(lastUploadedDocument.summary || '').trim();
-            const fallback = String(lastUploadedDocument.extractedText || '').trim().slice(0, 800);
-            const answer = summary
-                ? `Summary for ${fileName}:\n${summary}`
-                : `I could not build a full summary for ${fileName}, but here is extracted text:\n${fallback || 'No extracted text available.'}`;
+            const extracted = String(lastUploadedDocument.extractedText || '').trim();
 
-            addChatMessage(answer, false);
-            speak(`Here is the summary for ${fileName}.`);
-            saveToHistory(q, answer);
-            return true;
+            if (isDocumentRawTextRequest(lower)) {
+                const answer = extracted
+                    ? `I keep extracted text internal by default. If needed, I can answer questions from it directly.`
+                    : `I do not have extracted raw text available for ${fileName}, but I can still try with the summary.`;
+                addChatMessage(answer, false);
+                speak('I can answer directly from your uploaded file.');
+                saveToHistory(q, answer);
+                return true;
+            }
+
+            const asksSummary = /\b(summary|summarize|gist|tldr|brief|short)\b/.test(lower);
+            if (asksSummary) {
+                const answer = summary
+                    ? `Summary for ${fileName}:\n${summary}`
+                    : `I could not generate a clear summary for ${fileName} yet. Ask a specific question and I will answer from the file.`;
+                addChatMessage(answer, false);
+                speak(`Here is the summary for ${fileName}.`);
+                saveToHistory(q, answer);
+                return true;
+            }
+
+            const billQuickAnswer = buildBillQuickAnswer(lower, lastUploadedDocument.bill, fileName);
+            if (billQuickAnswer) {
+                addChatMessage(billQuickAnswer, false);
+                speak(billQuickAnswer);
+                saveToHistory(q, billQuickAnswer);
+                return true;
+            }
+
+            showThinkingIndicator('Reading your uploaded file...');
+            try {
+                const answer = await answerFromUploadedDocument(q, lastUploadedDocument);
+                addChatMessage(answer, false);
+                speak(answer);
+                saveToHistory(q, answer);
+                return true;
+            } catch (_) {
+                const fallback = summary
+                    ? `I could not complete document Q&A right now. Here is what I have from ${fileName}:\n${summary}`
+                    : `I could not answer from ${fileName} right now. Please ask again in a moment.`;
+                addChatMessage(fallback, false);
+                speak('I could not complete that document lookup right now.');
+                saveToHistory(q, fallback);
+                return true;
+            } finally {
+                hideThinkingIndicator();
+            }
         }
 
         function isLikelyCodeInput(text) {
@@ -7447,8 +7484,6 @@ async function sendTextInput() {
                         }
                         waitingForLocation = false;
                         getWeatherByCity(cleanLocation);
-                    } else if (handleUploadedDocumentFollowup(normalizedOutgoingText)) {
-                        return;
                     } else {
                         await processCommand(normalizedOutgoingText);
                     }
@@ -9121,14 +9156,14 @@ function isEraLanguageHitsBlendRequest(text) {
     const t = String(text || '').toLowerCase();
     const hasMusicAsk = /\b(song|songs|track|tracks|music|playlist|recommend|suggest|best|top|hit|hits|melody|melodies|mix|blend)\b/.test(t);
     if (!hasMusicAsk) return false;
-    const hasEra = /\b(?:[6-9]0['�]?s|00['�]?s|10['�]?s|20['�]?s|(?:19|20)\d{2}s)\b/.test(t);
+    const hasEra = /\b(?:[6-9]0['-]?s|00['-]?s|10['-]?s|20['-]?s|(?:19|20)\d{2}s)\b/.test(t);
     const hasLanguage = /\b(tamil|hindi|telugu|kannada|malayalam|english|spanish|french|arabic|punjabi|marathi|bengali)\b/.test(t);
     const hasBlendWord = /\b(blend|mix|era|decade)\b/.test(t);
     return (hasEra && hasLanguage) || (hasEra && hasBlendWord);
 }
 
 function normalizeEraToken(token) {
-    const raw = String(token || '').toLowerCase().replace(/['�]/g, '').trim();
+    const raw = String(token || '').toLowerCase().replace(/['-]/g, '').trim();
     if (!raw) return null;
     if (/^\d{4}s$/.test(raw)) {
         const year = Number(raw.slice(0, 4));
@@ -9146,10 +9181,10 @@ function normalizeEraToken(token) {
 
 function extractRequestedEras(text) {
     const raw = String(text || '').toLowerCase();
-    const matches = raw.match(/\b(?:[6-9]0['�]?s|00['�]?s|10['�]?s|20['�]?s|(?:19|20)\d{2}s)\b/g) || [];
+    const matches = raw.match(/\b(?:[6-9]0['-]?s|00['-]?s|10['-]?s|20['-]?s|(?:19|20)\d{2}s)\b/g) || [];
     const eras = [];
     for (const m of matches) {
-        const normalized = normalizeEraToken(m.replace(/['�]/g, ''));
+        const normalized = normalizeEraToken(m.replace(/['-]/g, ''));
         if (normalized && !eras.includes(normalized)) eras.push(normalized);
     }
     eras.sort((a, b) => a - b);
@@ -9190,7 +9225,7 @@ function extractArtistForEraBlend(text) {
     if (!base) return '';
     const stripped = base
         .replace(/\b(tamil|hindi|telugu|kannada|malayalam|english|spanish|french|arabic|punjabi|marathi|bengali)\b/gi, ' ')
-        .replace(/\b(?:[6-9]0['�]?s|00['�]?s|10['�]?s|20['�]?s|(?:19|20)\d{2}s)\b/gi, ' ')
+        .replace(/\b(?:[6-9]0['-]?s|00['-]?s|10['-]?s|20['-]?s|(?:19|20)\d{2}s)\b/gi, ' ')
         .replace(/\b(blend|mix|hits?|songs?|tracks?)\b/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -9664,7 +9699,7 @@ function formatClassicSongsDiscoveryReply(intent, grouped) {
             const work = String(song.work || '').trim();
             if (!title) return;
             const detail = [artist, work].filter(Boolean).join(' | ');
-            lines.push(detail ? `� ${title} - ${detail}` : `� ${title}`);
+            lines.push(detail ? `- ${title} - ${detail}` : `- ${title}`);
         });
         lines.push('');
     });
@@ -9744,7 +9779,7 @@ function formatLanguageEraHitsReply(intent, eraBuckets, fallback = false) {
             const artist = String(item.artist || '').trim();
             if (!song) continue;
             const detail = [work, artist].filter(Boolean).join(' | ');
-            lines.push(detail ? `� ${song} - ${detail}` : `� ${song}`);
+            lines.push(detail ? `- ${song} - ${detail}` : `- ${song}`);
         }
         lines.push('');
     }
@@ -10149,7 +10184,7 @@ function formatMusicSongReply(artist, requestedCount, items, fallback = false) {
         const workVerified = item?.workVerified !== false && !!work;
         if (!song) return;
         const reason = fixedNotes[index % fixedNotes.length];
-        lines.push(workVerified ? `� ${song} - ${work}` : `� ${song}`);
+        lines.push(workVerified ? `- ${song} - ${work}` : `- ${song}`);
         lines.push(`Note: ${reason}`);
     });
 
@@ -11919,7 +11954,7 @@ function extractFactCandidate(result, entityIntent) {
     }
 
     if (entityIntent.relationType === 'price') {
-        const match = combined.match(/\b(?:price|rate|market cap|valuation|trading at|closed at)\b[:\s-]*([$��?]?\s?\d+(?:[.,]\d+)?(?:\s?(?:billion|million|trillion|%))?)/i);
+        const match = combined.match(/\b(?:price|rate|market cap|valuation|trading at|closed at)\b[:\s-]*([$--?]?\s?\d+(?:[.,]\d+)?(?:\s?(?:billion|million|trillion|%))?)/i);
         return match ? match[1].trim() : '';
     }
 
@@ -12637,6 +12672,10 @@ ${snippets}`
 
             if (isCodeAnalyzerRequest(text)) {
                 await handleCodeAnalyzerRequest(text);
+                return;
+            }
+
+            if (await handleUploadedDocumentFollowup(text)) {
                 return;
             }
 
@@ -14728,11 +14767,11 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
             mapMeta.innerHTML = `
                 Live origin: ${curLat}, ${curLon}
-                <span class="mx-1">�</span>
+                <span class="mx-1">-</span>
                 Destination: ${escapeHtml(tripState.destinationText || '')}
-                <span class="mx-1">�</span>
+                <span class="mx-1">-</span>
                 Distance: ${tripState.lastDistanceMiles != null ? formatDistanceKmWithMiles(tripState.lastDistanceMiles) : '--'}
-                <span class="mx-1">�</span>
+                <span class="mx-1">-</span>
                 <a class="underline" href="${directionsUrl}" target="_blank" rel="noopener noreferrer">Open navigation</a>
             `;
             mapContainer.classList.remove('hidden');
@@ -14836,7 +14875,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
     allowfullscreen>
   </iframe>
 </div>
-<p class="text-xs mt-2 text-slate-600 dark:text-slate-300">Exact location pin: ${escapeHtml(locationName)} (${latitude}, ${longitude}) � <a href="${mapsUrl}" target="_blank" class="underline">Open in Google Maps</a></p>`;
+<p class="text-xs mt-2 text-slate-600 dark:text-slate-300">Exact location pin: ${escapeHtml(locationName)} (${latitude}, ${longitude}) - <a href="${mapsUrl}" target="_blank" class="underline">Open in Google Maps</a></p>`;
                 addChatMessage(embeddedMap, false, false);
             } catch (error) {
                 await deliverApiReply('gps_access_error', {
@@ -15977,8 +16016,11 @@ function extractConfirmedPlaces(searchResults){
 
 /* -------- Convert plan into structured list for AI formatting -------- */
 function planToPromptList(plan){
-    return plan.map((p,i)=>{
-        return `${i+1}. ${p.name} (${p.duration}h)`;
+    return (plan || []).map((p, i) => {
+        const title = p?.title || p?.name || 'Attraction';
+        const duration = Number.isFinite(Number(p?.duration)) ? `${Number(p.duration)}h` : '1.5h';
+        const travel = p?.travelHint ? ` | Transit from previous: ${p.travelHint}` : '';
+        return `${i + 1}. ${title} (${duration})${travel}`;
     }).join("\n");
 }
 
@@ -16104,7 +16146,9 @@ function buildSmartRoute(searchResults){
     const clusters = clusterNearbyPlaces(ordered);
 
     const flattened = clusters.flat();
-
+    if (typeof addTravelHintsToPlan === "function") {
+        return addTravelHintsToPlan(flattened);
+    }
     return flattened;
 }
 
@@ -16134,10 +16178,10 @@ function estimateTravelTimeKm(distanceKm, mode){
 
 function formatTravelTime(minutes, mode){
     const modeLabel = mode === "walk" ? "Walk" : mode === "auto" ? "Auto/Taxi" : "Drive";
-    if(minutes < 60) return `${modeLabel} � ~${minutes} min`;
+    if(minutes < 60) return `${modeLabel} - ~${minutes} min`;
     const hrs = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    return `${modeLabel} � ~${hrs}h ${mins}m`;
+    return `${modeLabel} - ~${hrs}h ${mins}m`;
 }
 
 function addTravelHintsToPlan(places){
@@ -16181,29 +16225,22 @@ function addTravelHintsToPlan(places){
             travelFromPreviousKm: null,
             travelMinutes: 15,
             travelMode: "drive",
-            travelHint: "Transit � ~15 min"
+            travelHint: "Transit - ~15 min"
         };
     });
 }
 
-const __originalBuildSmartRoute = window.buildSmartRoute;
-window.buildSmartRoute = function(searchResults){
-    const ordered = typeof __originalBuildSmartRoute === "function"
-        ? __originalBuildSmartRoute(searchResults)
-        : (Array.isArray(searchResults) ? searchResults : []);
-
-    return addTravelHintsToPlan(ordered);
-};
-
-window.planToPromptList = function(plan){
-    return (plan || []).map((p, i) => {
-        const title = p.title || p.name || "Attraction";
-        const duration = p.duration ? `${p.duration}h` : "1.5h";
-        const travel = p.travelHint ? ` | Transit from previous: ${p.travelHint}` : "";
-        return `${i + 1}. ${title} (${duration})${travel}`;
-    }).join("\n");
-};
+(function registerTravelPlannerModule(){
+    if (!window.JarvisApp || typeof window.JarvisApp.register !== "function") return;
+    window.JarvisApp.register("travel-planner", {
+        inferTravelMode,
+        estimateTravelTimeKm,
+        formatTravelTime,
+        addTravelHintsToPlan,
+        buildSmartRoute,
+        planToPromptList
+    });
+})();
 </script>
-
 </body>
 </html>
