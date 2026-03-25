@@ -10,7 +10,6 @@ export default async function handler(req, res) {
         rateLimit: { max: 50, windowMs: 60 * 1000 }
     });
     if (guard.handled) return;
-
     try {
         const mode = resolveMode(req.body);
         if (mode === 'news') {
