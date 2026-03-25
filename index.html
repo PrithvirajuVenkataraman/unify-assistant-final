@@ -2424,6 +2424,46 @@ body {
             color: #e2e8f0 !important;
         }
 
+        /* Requested UI tweaks */
+        body:not(.dark) #input-bar-inner,
+        body:not(.dark) .modern-input {
+            border: 1.5px solid #cbd5e1 !important;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+        }
+
+        .message-action-btn {
+            background: #ffffff !important;
+            color: #000000 !important;
+            border: 1px solid rgba(148, 163, 184, 0.45) !important;
+            box-shadow: none !important;
+        }
+
+        .message-action-btn:hover {
+            background: #f8fafc !important;
+            color: #000000 !important;
+            filter: none !important;
+        }
+
+        body.dark .message-action-btn {
+            background: #020617 !important;
+            color: #ffffff !important;
+            border-color: rgba(100, 116, 139, 0.65) !important;
+        }
+
+        body.dark .message-action-btn:hover {
+            background: #0f172a !important;
+            color: #ffffff !important;
+        }
+
+        @media (max-width: 768px) {
+            .chat-panel-height,
+            #chat-container {
+                height: clamp(200px, 36dvh, 320px) !important;
+                min-height: 200px !important;
+                max-height: 38dvh !important;
+            }
+        }
+
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -3415,13 +3455,6 @@ function copyAssistantPlan(button) {
     const text = decodeURIComponent(raw);
     if (!text) return;
     copyToClipboard(text);
-}
-
-function saveAssistantMessage(button) {
-    const raw = button?.dataset?.favText || '';
-    const text = decodeURIComponent(raw);
-    if (!text) return;
-    addFavorite(text);
 }
 
 function retryLastRequest() {
@@ -5428,7 +5461,6 @@ async function handleNameCorrection(text) {
         let medicalMode = false;
         let converseMode = false;
         let lastUploadedDocument = null;
-        let favorites = [];
         let inputHistory = [];
         let inputHistoryIndex = -1;
         let songMoodGameState = null;
@@ -5500,7 +5532,6 @@ async function handleNameCorrection(text) {
             loadUserData(); 
             loadNoiseFilterSettings(); 
             loadAssistantModes();
-            loadFavorites();
             loadCommuteProfile();
             loadSafetyProfile();
             setupInputHistoryNavigation();
@@ -5911,80 +5942,6 @@ async function handleNameCorrection(text) {
             const banner = document.getElementById('offline-banner');
             if (!banner) return;
             banner.classList.toggle('hidden', navigator.onLine);
-        }
-
-        function getFavoritesStorageKey() {
-            const safeUserName = (userName || 'default_user').replace(/[^a-zA-Z0-9]/g, '_');
-            return `unify_favorites_${safeUserName}`;
-        }
-
-        function loadFavorites() {
-            try {
-                const stored = localStorage.getItem(getFavoritesStorageKey());
-                favorites = stored ? JSON.parse(stored) : [];
-            } catch (e) {
-                favorites = [];
-            }
-            renderFavorites();
-        }
-
-        function saveFavorites() {
-            try {
-                localStorage.setItem(getFavoritesStorageKey(), JSON.stringify(favorites));
-            } catch (e) {}
-        }
-
-        function addFavorite(content) {
-            const trimmed = String(content || '').trim();
-            if (!trimmed) return;
-            const item = {
-                id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
-                text: trimmed.substring(0, 4000),
-                createdAt: new Date().toISOString()
-            };
-            favorites.unshift(item);
-            if (favorites.length > 30) favorites = favorites.slice(0, 30);
-            saveFavorites();
-            renderFavorites();
-            showTemporaryMessage('Saved to favorites.');
-        }
-
-        function removeFavorite(id) {
-            favorites = favorites.filter(f => f.id !== id);
-            saveFavorites();
-            renderFavorites();
-        }
-
-        function copyFavorite(id) {
-            const item = favorites.find(f => f.id === id);
-            if (!item) return;
-            copyToClipboard(item.text);
-        }
-
-        function renderFavorites() {
-            const section = document.getElementById('favorites-section');
-            const list = document.getElementById('favorites-list');
-            if (!section || !list) return;
-
-            if (!favorites.length) {
-                section.classList.add('hidden');
-                list.innerHTML = '';
-                return;
-            }
-
-            section.classList.remove('hidden');
-            list.innerHTML = favorites.map(item => {
-                const preview = escapeHtml(item.text.length > 100 ? item.text.slice(0, 100) + '...' : item.text);
-                return `
-                    <div class="p-3 rounded-xl bg-white/80 dark:bg-slate-900/60 border border-amber-200 dark:border-slate-600">
-                        <p class="text-xs text-gray-700 dark:text-gray-300 mb-2">${preview}</p>
-                        <div class="flex gap-2">
-                            <button onclick="copyFavorite('${item.id}')" class="px-2 py-1 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold">Copy</button>
-                            <button onclick="removeFavorite('${item.id}')" class="px-2 py-1 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs font-semibold">Remove</button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
         }
 
         function setupInputHistoryNavigation() {
@@ -6732,19 +6689,14 @@ async function handleNameCorrection(text) {
                                 <div class="assistant-message-text typewriter-text text-sm leading-relaxed text-left"></div>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2 pl-1 sm:pl-0 sm:flex-col sm:items-center sm:pt-1">
-                            <button onclick="copyAssistantPlan(this)" data-copy-text="${encodeURIComponent(textForSpeech)}" class="flex-shrink-0 w-8 h-8 rounded-full bg-sky-500 hover:bg-sky-600 text-white transition-all shadow-md hover:shadow-lg flex items-center justify-center" title="Copy">
+                        <div class="flex items-center gap-2 pl-1 sm:pl-0">
+                            <button onclick="copyAssistantPlan(this)" data-copy-text="${encodeURIComponent(textForSpeech)}" class="message-action-btn flex-shrink-0 w-8 h-8 rounded-full bg-sky-500 hover:bg-sky-600 text-white transition-all shadow-md hover:shadow-lg flex items-center justify-center" title="Copy">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <rect x="9" y="9" width="13" height="13" rx="2"></rect>
                                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                                 </svg>
                             </button>
-                            <button onclick="saveAssistantMessage(this)" data-fav-text="${encodeURIComponent(textForSpeech)}" class="flex-shrink-0 w-8 h-8 rounded-full bg-amber-500 hover:bg-amber-600 text-white transition-all shadow-md hover:shadow-lg flex items-center justify-center" title="Save to favorites">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5">
-                                    <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path>
-                                </svg>
-                            </button>
-                            <button data-speech-id="${speechId}" onclick="toggleSpeakById(this.dataset.speechId, this)" class="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white transition-all shadow-md hover:shadow-lg speaker-btn flex items-center justify-center">
+                            <button data-speech-id="${speechId}" onclick="toggleSpeakById(this.dataset.speechId, this)" class="message-action-btn flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white transition-all shadow-md hover:shadow-lg speaker-btn flex items-center justify-center">
                                 <svg class="play-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                                     <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
