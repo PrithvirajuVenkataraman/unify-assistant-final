@@ -2264,6 +2264,166 @@ body {
             }
         }
 
+        /* Enterprise mode: stricter, flatter, calmer */
+        .tube-light-container {
+            display: none !important;
+        }
+
+        body {
+            font-family: "Inter", "Segoe UI", Arial, sans-serif !important;
+        }
+
+        body.light {
+            background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
+        }
+
+        body.dark {
+            background: linear-gradient(180deg, #020617 0%, #0b1220 100%) !important;
+        }
+
+        #bg-effects > div {
+            opacity: 0.04 !important;
+            filter: blur(80px) !important;
+        }
+
+        .card-hover:hover,
+        .logo-container:hover,
+        .footer-action-btn-converse:hover,
+        .suggestion-chip:hover {
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .jarvis-title {
+            background: none !important;
+            -webkit-text-fill-color: currentColor !important;
+            color: #1e293b !important;
+            letter-spacing: -0.02em !important;
+            font-size: clamp(2rem, 2.5vw, 2.4rem) !important;
+            font-weight: 800 !important;
+        }
+
+        body.dark .jarvis-title {
+            color: #e2e8f0 !important;
+        }
+
+        #subtitle {
+            color: #64748b !important;
+            font-size: 0.84rem !important;
+        }
+
+        body.dark #subtitle {
+            color: #94a3b8 !important;
+        }
+
+        #main-card {
+            border-radius: 16px !important;
+            border: 1px solid rgba(148, 163, 184, 0.26) !important;
+            box-shadow: 0 2px 14px rgba(15, 23, 42, 0.05) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+
+        body.dark #main-card {
+            border-color: rgba(100, 116, 139, 0.56) !important;
+            box-shadow: 0 4px 18px rgba(2, 6, 23, 0.34) !important;
+        }
+
+        #chat-container {
+            border-radius: 12px !important;
+            padding: 14px !important;
+            border: 1px solid rgba(148, 163, 184, 0.24) !important;
+            background: #f8fafc !important;
+        }
+
+        body.dark #chat-container {
+            background: rgba(15, 23, 42, 0.78) !important;
+            border-color: rgba(100, 116, 139, 0.52) !important;
+        }
+
+        .chat-bubble-user,
+        .chat-bubble-assistant {
+            border-radius: 10px !important;
+            box-shadow: none !important;
+        }
+
+        .chat-bubble-user {
+            background: #1d4ed8 !important;
+        }
+
+        .chat-bubble-assistant {
+            background: #ffffff !important;
+            border: 1px solid rgba(148, 163, 184, 0.22) !important;
+        }
+
+        body.dark .chat-bubble-assistant {
+            background: #1e293b !important;
+            border-color: rgba(100, 116, 139, 0.5) !important;
+        }
+
+        .floating-input-bar {
+            background: rgba(248, 250, 252, 0.98) !important;
+            border-top: 1px solid rgba(148, 163, 184, 0.22) !important;
+            border-left: none !important;
+            border-right: none !important;
+            border-bottom: none !important;
+            box-shadow: 0 -2px 12px rgba(15, 23, 42, 0.06) !important;
+        }
+
+        body.dark .floating-input-bar {
+            background: rgba(2, 6, 23, 0.92) !important;
+            border-top-color: rgba(100, 116, 139, 0.44) !important;
+            box-shadow: 0 -4px 12px rgba(2, 6, 23, 0.36) !important;
+        }
+
+        #input-bar-inner {
+            border-radius: 12px !important;
+            min-height: 44px !important;
+        }
+
+        .modern-input {
+            border-radius: 12px !important;
+            border: 1px solid rgba(148, 163, 184, 0.4) !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+        }
+
+        body.dark .modern-input {
+            background: #0f172a !important;
+            border-color: rgba(100, 116, 139, 0.58) !important;
+        }
+
+        .modern-input:focus-within {
+            border-color: rgba(37, 99, 235, 0.58) !important;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+        }
+
+        #text-input {
+            font-size: 0.95rem !important;
+            font-weight: 500 !important;
+        }
+
+        .footer-action-btn {
+            width: 38px !important;
+            height: 38px !important;
+        }
+
+        .footer-action-btn svg {
+            width: 17px !important;
+            height: 17px !important;
+        }
+
+        .footer-action-btn-converse {
+            background: #e2e8f0 !important;
+            color: #0f172a !important;
+            box-shadow: none !important;
+        }
+
+        body.dark .footer-action-btn-converse {
+            background: #1e293b !important;
+            color: #e2e8f0 !important;
+        }
+
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -16095,4 +16255,3 @@ window.planToPromptList = function(plan){
 
 </body>
 </html>
-
