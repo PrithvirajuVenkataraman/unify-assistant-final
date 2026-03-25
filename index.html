@@ -6749,31 +6749,15 @@ async function handleNameCorrection(text) {
         }
 
         function addInitialGreetingMessage(text) {
+            addChatMessage(text, false, false);
             const chatContainer = document.getElementById('chat-container');
-            if (!chatContainer) return;
-
-            const displayText = normalizeUiTokens(String(text ?? ''));
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'flex justify-start items-start gap-3';
-            messageDiv.dataset.role = 'assistant';
-            messageDiv.dataset.systemGreeting = 'true';
-
-            const readableText = formatAssistantTextForReadability(displayText);
-            const formattedText = sanitizeAssistantMarkup(
-                escapeHtml(readableText)
-                    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-                    .replace(/(^|\n)-\s+/g, '$1&#8226; ')
-                    .replace(/\n/g, '<br>')
-            );
-
-            messageDiv.innerHTML = `
-                <div class="w-full max-w-3xl">
-                    <div class="assistant-message-text text-sm leading-relaxed text-left">${formattedText}</div>
-                </div>
-            `;
-
-            chatContainer.appendChild(messageDiv);
-            maybeAutoScroll(chatContainer);
+            const assistantMessages = chatContainer?.querySelectorAll('[data-role="assistant"]');
+            const lastAssistantMessage = assistantMessages && assistantMessages.length
+                ? assistantMessages[assistantMessages.length - 1]
+                : null;
+            if (lastAssistantMessage) {
+                lastAssistantMessage.dataset.systemGreeting = 'true';
+            }
         }
 
         function addChatMessage(text, isUser = true, typewriter = null) {
