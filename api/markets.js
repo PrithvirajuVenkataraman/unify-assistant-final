@@ -1,48 +1,259 @@
 export const config = { maxDuration: 60 };
-import { runVerifiedWebSearch } from './live-search.js';
+import { extractSearchTopic, runVerifiedWebSearch } from './live-search.js';
 import { applyApiSecurity } from './security.js';
+
 export default async function handler(req, res) {
     const guard = applyApiSecurity(req, res, {
         methods: ['POST'],
-        routeKey: 'markets',
-        maxBodyBytes: 32 * 1024,
-        rateLimit: { max: 45, windowMs: 60 * 1000 }
+        routeKey: 'market-intel',
+        maxBodyBytes: 64 * 1024,
+        rateLimit: { max: 50, windowMs: 60 * 1000 }
     });
     if (guard.handled) return;
 
     try {
-        const query = String(req.body?.query || '').trim();
-        if (!query) {
-            return res.status(400).json({ success: false, error: 'query is required' });
+        const mode = resolveMode(req.body);
+        if (mode === 'news') {
+            return await handleNewsLookup(req, res);
         }
-        if (query.length > 400) {
-            return res.status(413).json({ success: false, error: 'query is too long' });
+        if (mode === 'exchange') {
+            return await handleExchangeLookup(req, res);
         }
-        const hintedType = String(req.body?.assetType || '').trim().toLowerCase();
-        const inferredType = hintedType || inferAssetType(query);
-
-        if (inferredType === 'crypto') {
-            const crypto = await lookupCrypto(query);
-            return res.status(200).json(crypto);
+        if (mode === 'budget_plan') {
+            return await handleBudgetPlanLookup(req, res);
         }
-        if (inferredType === 'commodity') {
-            const commodity = await lookupCommodity(query);
-            return res.status(200).json(commodity);
+        if (mode === 'route_traffic') {
+            return await handleRouteTrafficLookup(req, res);
         }
-
-        const stock = await lookupStock(query);
-        return res.status(200).json(stock);
+        return await handleMarketLookup(req, res);
     } catch (error) {
         return res.status(500).json({
             success: false,
-            error: 'market lookup failed',
-            details: shouldExposeInternalErrors() ? String(error?.message || error) : undefined
+            error: 'market intelligence lookup failed',
         });
     }
 }
 
-function shouldExposeInternalErrors() {
-    return String(process.env.EXPOSE_INTERNAL_ERRORS || '').toLowerCase() === 'true';
+function resolveMode(body) {
+    const mode = String(body?.mode || body?.service || body?.type || '').trim().toLowerCase();
+    if (
+        mode === 'news' ||
+        mode === 'exchange' ||
+        mode === 'budget_plan' ||
+        mode === 'route_traffic' ||
+        mode === 'markets' ||
+        mode === 'market'
+    ) {
+        return mode === 'market' ? 'markets' : mode;
+    }
+
+    const hasExchangeShape = Boolean(body?.from || body?.to || body?.amount || body?.date);
+    if (hasExchangeShape) return 'exchange';
+
+    const hasBudgetShape = typeof body?.query === 'string' &&
+        /\b(budget|trip|travel|itinerary|under|within|days?)\b/i.test(String(body.query || ''));
+    if (hasBudgetShape) return 'budget_plan';
+
+    const hasRouteShape = Boolean(
+        body?.origin?.lat !== undefined &&
+        body?.origin?.lon !== undefined &&
+        body?.destination?.lat !== undefined &&
+        body?.destination?.lon !== undefined
+    );
+    if (hasRouteShape) return 'route_traffic';
+
+    const hasNewsShape = Boolean(body?.category || body?.city || body?.countryCode);
+    if (hasNewsShape) return 'news';
+
+    return 'markets';
+}
+
+async function handleBudgetPlanLookup(req, res) {
+    const query = String(req.body?.query || '');
+    if (query.length > 1000) {
+        return res.status(413).json({ success: false, error: 'query is too long' });
+    }
+
+    const parsed = parseBudgetQuery(query);
+    const plan = buildBudgetPlan(parsed);
+    return res.status(200).json({ success: true, plan });
+}
+
+function parseBudgetQuery(text) {
+    const query = String(text || '');
+
+    const budgetMatch = query.match(/(?:under|within|budget\s*(?:of)?|for)\s*\$?\s*(\d+[\d,]*)\s*(usd|inr|eur|gbp)?/i)
+        || query.match(/\$\s*(\d+[\d,]*)/i)
+        || query.match(/(\d+[\d,]*)\s*(usd|inr|eur|gbp)\b/i);
+
+    const daysMatch = query.match(/(\d+)\s*(?:day|days|night|nights)/i);
+    const destinationMatch = query.match(/\b(?:to|in)\s+([a-zA-Z][a-zA-Z\s,.-]{1,60})\b/i);
+
+    const budget = budgetMatch ? Number(String(budgetMatch[1]).replace(/,/g, '')) : 1200;
+    const currency = normalizeBudgetCurrency((budgetMatch && budgetMatch[2]) || 'USD');
+    const days = daysMatch ? Math.max(1, Number(daysMatch[1])) : 3;
+    const destination = destinationMatch ? destinationMatch[1].trim() : 'your destination';
+
+    return { budget, currency, days, destination };
+}
+
+function normalizeBudgetCurrency(input) {
+    const c = String(input || 'USD').toUpperCase();
+    if (['USD', 'INR', 'EUR', 'GBP'].includes(c)) return c;
+    return 'USD';
+}
+
+function buildBudgetPlan({ budget, currency, days, destination }) {
+    const weights = {
+        lodging: 0.4,
+        food: 0.25,
+        transport: 0.15,
+        activities: 0.15,
+        buffer: 0.05
+    };
+
+    const breakdown = {
+        lodging: roundMoney(budget * weights.lodging),
+        food: roundMoney(budget * weights.food),
+        transport: roundMoney(budget * weights.transport),
+        activities: roundMoney(budget * weights.activities),
+        buffer: roundMoney(budget * weights.buffer)
+    };
+
+    const dailyBudget = roundMoney(budget / days);
+    const tip = `Aim for stays around ${currency} ${roundMoney(breakdown.lodging / days)} per night and keep at least ${currency} ${breakdown.buffer} as emergency buffer.`;
+
+    return {
+        destination,
+        days,
+        currency,
+        totalBudget: roundMoney(budget),
+        breakdown,
+        dailyBudget,
+        createdAt: new Date().toISOString(),
+        title: `${days}-day budget trip to ${destination}`,
+        notes: 'Generated by Unify Budget Trip Planner',
+        tip
+    };
+}
+
+function roundMoney(value) {
+    return Math.round(Number(value) || 0);
+}
+
+async function handleRouteTrafficLookup(req, res) {
+    const origin = normalizePoint(req.body?.origin);
+    const destination = normalizePoint(req.body?.destination);
+    const mode = normalizeCommuteMode(req.body?.travelMode ?? req.body?.mode);
+
+    if (!origin || !destination) {
+        return res.status(400).json({ success: false, error: 'origin and destination are required' });
+    }
+
+    const tomTomKey = process.env.TOMTOM_API_KEY || process.env.TOMTOM_KEY;
+    if (tomTomKey) {
+        const trafficResult = await fetchTomTomRoute({ origin, destination, mode, apiKey: tomTomKey });
+        if (trafficResult) {
+            return res.status(200).json({
+                success: true,
+                liveTraffic: true,
+                provider: 'tomtom',
+                ...trafficResult
+            });
+        }
+    }
+
+    const fallback = buildFallbackEstimate(origin, destination, mode);
+    return res.status(200).json({
+        success: true,
+        liveTraffic: false,
+        provider: 'fallback',
+        ...fallback
+    });
+}
+
+function normalizePoint(value) {
+    const lat = Number(value?.lat);
+    const lon = Number(value?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    return {
+        lat,
+        lon,
+        label: String(value?.label || '').trim()
+    };
+}
+
+function normalizeCommuteMode(mode) {
+    const raw = String(mode || 'drive').toLowerCase();
+    if (raw === 'walk' || raw === 'walking') return 'walk';
+    if (raw === 'transit' || raw === 'bus' || raw === 'train') return 'transit';
+    return 'drive';
+}
+
+async function fetchTomTomRoute({ origin, destination, mode, apiKey }) {
+    const travelMode = mode === 'walk' ? 'pedestrian' : 'car';
+    const url = `https://api.tomtom.com/routing/1/calculateRoute/${origin.lat},${origin.lon}:${destination.lat},${destination.lon}/json?traffic=true&travelMode=${travelMode}&routeType=fastest&key=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const route = Array.isArray(data?.routes) ? data.routes[0] : null;
+    const summary = route?.summary;
+    if (!summary) return null;
+
+    return {
+        durationMinutes: Number(summary.travelTimeInSeconds || 0) / 60,
+        trafficDelayMinutes: Number(summary.trafficDelayInSeconds || 0) / 60,
+        distanceMiles: Number(summary.lengthInMeters || 0) / 1609.344
+    };
+}
+
+function buildFallbackEstimate(origin, destination, mode) {
+    const straightLineMiles = haversineMiles(origin.lat, origin.lon, destination.lat, destination.lon);
+    const roadMiles = Math.max(0.1, straightLineMiles * 1.22);
+    const mph = mode === 'walk' ? 3.1 : mode === 'transit' ? 16 : 26;
+    return {
+        durationMinutes: Math.max(3, (roadMiles / mph) * 60),
+        trafficDelayMinutes: 0,
+        distanceMiles: roadMiles
+    };
+}
+
+function haversineMiles(lat1, lon1, lat2, lon2) {
+    const toRad = (deg) => deg * Math.PI / 180;
+    const R = 3958.8;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+
+async function handleMarketLookup(req, res) {
+    const query = String(req.body?.query || '').trim();
+    if (!query) {
+        return res.status(400).json({ success: false, error: 'query is required' });
+    }
+    if (query.length > 400) {
+        return res.status(413).json({ success: false, error: 'query is too long' });
+    }
+
+    const hintedType = String(req.body?.assetType || '').trim().toLowerCase();
+    const inferredType = hintedType || inferAssetType(query);
+
+    if (inferredType === 'crypto') {
+        const crypto = await lookupCrypto(query);
+        return res.status(200).json(crypto);
+    }
+    if (inferredType === 'commodity') {
+        const commodity = await lookupCommodity(query);
+        return res.status(200).json(commodity);
+    }
+
+    const stock = await lookupStock(query);
+    return res.status(200).json(stock);
 }
 
 function inferAssetType(query) {
@@ -267,7 +478,7 @@ function extractPriceCandidate(text, profile) {
     const body = String(text || '').replace(/\s+/g, ' ').trim();
     if (!body) return null;
 
-    const inrMatch = body.match(/(?:₹|rs\.?|inr)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?)/i);
+    const inrMatch = body.match(/(?:\u20B9|rs\.?|inr)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?)/i);
     if (inrMatch?.[1]) {
         const value = parseNumber(inrMatch[1]);
         if (isPlausiblePrice(value, profile)) return { price: value, currency: 'INR' };
@@ -293,4 +504,209 @@ function isPlausiblePrice(value, profile) {
     if (profile.kind === 'metal') return value >= 1 && value <= 100000;
     if (profile.kind === 'gem') return value >= 1 && value <= 1000000;
     return value >= 1 && value <= 1000000;
+}
+
+async function handleExchangeLookup(req, res) {
+    const from = String(req.body?.from || '').trim().toUpperCase();
+    const to = String(req.body?.to || '').trim().toUpperCase();
+    const amount = Number(req.body?.amount ?? 1);
+    const date = String(req.body?.date || '').trim();
+
+    if (!/^[A-Z]{3}$/.test(from) || !/^[A-Z]{3}$/.test(to)) {
+        return res.status(400).json({ error: 'Valid 3-letter currency codes are required.' });
+    }
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 1e9) {
+        return res.status(400).json({ error: 'Amount must be a positive number.' });
+    }
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ error: 'date must be in YYYY-MM-DD format.' });
+    }
+
+    try {
+        const endpoint = date
+            ? `https://api.frankfurter.dev/v1/${encodeURIComponent(date)}?base=${from}&symbols=${to}`
+            : `https://api.frankfurter.dev/v1/latest?base=${from}&symbols=${to}`;
+        const response = await fetch(endpoint);
+        if (!response.ok) {
+            return res.status(502).json({ error: 'Exchange provider unavailable.' });
+        }
+        const data = await response.json();
+        const rate = Number(data?.rates?.[to]);
+        if (!Number.isFinite(rate)) {
+            return res.status(502).json({ error: 'Exchange rate unavailable.' });
+        }
+
+        const verified = await runVerifiedWebSearch([
+            `${from} ${to} exchange rate today`,
+            `${from} to ${to} rate xe oanda x-rates`,
+            `${from} ${to} exchange rate Reuters OR ECB`
+        ], {
+            maxResultsPerQuery: 4,
+            limit: 8
+        });
+
+        return res.status(200).json({
+            success: true,
+            verified: true,
+            provider: 'frankfurter',
+            date: data?.date || date || null,
+            from,
+            to,
+            amount,
+            rate,
+            convertedAmount: amount * rate,
+            sourceCount: verified.results.length,
+            distinctDomainCount: verified.distinctDomains.length,
+            sources: verified.results.slice(0, 5).map(item => ({
+                title: item.title,
+                url: item.url,
+                description: item.description
+            }))
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            error: 'exchange lookup failed',
+        });
+    }
+}
+
+async function handleNewsLookup(req, res) {
+    const query = String(req.body?.query || '').trim();
+    const category = String(req.body?.category || '').trim();
+    const city = String(req.body?.city || '').trim();
+    const countryCode = String(req.body?.countryCode || '').trim();
+    if ([query, category, city, countryCode].some(value => value.length > 500)) {
+        return res.status(413).json({ success: false, error: 'news query is too long', articles: [] });
+    }
+
+    const topic = normalizeTopic(query || category || (city ? `${city} news` : 'latest news'));
+    const queries = [
+        topic,
+        `latest ${topic}`,
+        `${topic} Reuters OR AP OR BBC OR Al Jazeera`
+    ];
+    if (!query && city) queries.push(`${city} breaking news`);
+    if (!query && countryCode && countryCode !== 'DEFAULT') queries.push(`${countryCode} national news`);
+
+    try {
+        const settled = await Promise.allSettled([
+            runVerifiedWebSearch(queries, {
+                maxResultsPerQuery: 6,
+                limit: 10
+            }),
+            fetchGoogleNewsRss(topic)
+        ]);
+
+        const verified = settled[0]?.status === 'fulfilled'
+            ? settled[0].value
+            : { results: [], distinctDomains: [], trustedCount: 0 };
+        const rssArticles = settled[1]?.status === 'fulfilled'
+            ? settled[1].value
+            : [];
+
+        if (rssArticles.length) {
+            return res.status(200).json({
+                success: true,
+                verified: true,
+                query: topic,
+                sourceCount: rssArticles.length,
+                distinctDomainCount: 1,
+                trustedCount: rssArticles.length,
+                articles: rssArticles
+            });
+        }
+
+        if (!verified.results.length) {
+            return res.status(200).json({
+                success: true,
+                verified: false,
+                query: topic,
+                sourceCount: 0,
+                distinctDomainCount: 0,
+                trustedCount: 0,
+                articles: []
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            verified: true,
+            query: topic,
+            sourceCount: verified.results.length,
+            distinctDomainCount: verified.distinctDomains.length,
+            trustedCount: verified.trustedCount,
+            articles: verified.results.map(item => ({
+                title: item.title,
+                url: item.url,
+                description: item.description
+            }))
+        });
+    } catch (error) {
+        return res.status(200).json({
+            success: false,
+            error: 'news lookup failed',
+            query: String(req.body?.query || req.body?.category || '').trim(),
+            articles: []
+        });
+    }
+}
+
+function normalizeTopic(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+    return extractSearchTopic(raw) || raw;
+}
+
+async function fetchGoogleNewsRss(topic) {
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(topic)}&hl=en-US&gl=US&ceid=US:en`;
+    const response = await fetch(url, {
+        headers: {
+            Accept: 'application/rss+xml, application/xml, text/xml'
+        }
+    });
+    if (!response.ok) return [];
+
+    const xml = await response.text();
+    const items = [];
+    const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+    let match;
+    while ((match = itemRegex.exec(xml)) && items.length < 8) {
+        const block = match[1];
+        const title = decodeXml(getTag(block, 'title'));
+        const link = decodeXml(getTag(block, 'link'));
+        const description = decodeXml(stripHtml(getTag(block, 'description')));
+        if (!title || !link) continue;
+        items.push({
+            title: cleanGoogleNewsTitle(title),
+            url: link,
+            description: description || title
+        });
+    }
+    return items;
+}
+
+function getTag(block, tag) {
+    const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'i');
+    return regex.exec(block)?.[1] || '';
+}
+
+function stripHtml(input) {
+    return String(input || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function decodeXml(input) {
+    return String(input || '')
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function cleanGoogleNewsTitle(title) {
+    return String(title || '').replace(/\s+-\s+[^-]+$/, '').trim();
 }
