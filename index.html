@@ -3151,10 +3151,13 @@ async function handleVerifiedPlacesMode(text) {
 async function handleBudgetTripPlanner(text) {
     try {
         showLoading('Building your budget trip plan...');
-        const response = await fetch('/api/budget-plan', {
+        const response = await fetch('/api/markets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: text })
+            body: JSON.stringify({
+                mode: 'budget_plan',
+                query: text
+            })
         });
 
         if (!response.ok) throw new Error('budget plan request failed');
@@ -15046,13 +15049,14 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             let trafficLabel = 'estimated road speed';
 
             try {
-                const response = await fetch('/api/route-traffic', {
+                const response = await fetch('/api/markets', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        mode: 'route_traffic',
                         origin: { lat: origin.lat, lon: origin.lon, label: originLabel },
                         destination: { lat: destination.lat, lon: destination.lon, label: commuteProfile.office },
-                        mode: commuteProfile.mode
+                        travelMode: commuteProfile.mode
                     })
                 });
                 if (response.ok) {
@@ -16354,5 +16358,9 @@ function addTravelHintsToPlan(places){
     });
 })();
 </script>
+
 </body>
 </html>
+
+
+
