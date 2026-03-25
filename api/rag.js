@@ -5,7 +5,6 @@ export const config = {
     maxDuration: 60,
     api: { bodyParser: { sizeLimit: '2mb' } }
 };
-
 const DEFAULT_EMBED_MODEL = String(
     process.env.GEMINI_EMBED_MODEL ||
     process.env.GOOGLE_EMBED_MODEL ||
