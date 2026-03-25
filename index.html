@@ -23,6 +23,7 @@
         .map-message .map-container {
             min-width: 0 !important;
         }
+
         /* Respect reduced-motion user preference across major animated UI blocks. */
         @media (prefers-reduced-motion: reduce) {
             *,
@@ -2119,13 +2120,14 @@ body {
 
         .app-shell {
             width: 100%;
-            max-width: none !important;
+            max-width: 1180px !important;
             min-width: 0;
             min-height: 0;
             height: 100%;
             padding: calc(16px + env(safe-area-inset-top)) 20px calc(108px + env(safe-area-inset-bottom));
             display: flex;
             flex-direction: column;
+            margin: 0 auto;
         }
 
         .header-enhanced {
@@ -2177,12 +2179,12 @@ body {
 
         .chat-panel-height,
         #chat-container {
-            flex: 0 0 auto;
+            flex: 1 1 auto;
             width: 100% !important;
             min-width: 0 !important;
             min-height: 0 !important;
-            height: clamp(240px, 44dvh, 460px) !important;
-            max-height: 44dvh !important;
+            height: auto !important;
+            max-height: none !important;
         }
 
         #chat-container {
@@ -2191,6 +2193,7 @@ body {
             overflow-x: hidden;
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
+            min-height: 280px;
         }
 
         #input-bar-container {
@@ -2204,7 +2207,9 @@ body {
         #input-bar-container .max-w-xl,
         #input-bar-container .sm\:max-w-3xl {
             width: 100% !important;
-            max-width: 100% !important;
+            max-width: 1180px !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
         }
 
         #input-bar-inner {
@@ -2421,6 +2426,16 @@ body {
             color: #000000 !important;
             border: 1px solid rgba(148, 163, 184, 0.45) !important;
             box-shadow: none !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 32px !important;
+            height: 32px !important;
+            min-width: 32px !important;
+            min-height: 32px !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            flex-shrink: 0 !important;
         }
 
         .message-action-btn:hover {
@@ -2443,9 +2458,7 @@ body {
         @media (max-width: 768px) {
             .chat-panel-height,
             #chat-container {
-                height: clamp(190px, 32dvh, 290px) !important;
                 min-height: 190px !important;
-                max-height: 34dvh !important;
             }
         }
 
@@ -16360,6 +16373,3 @@ function addTravelHintsToPlan(places){
 
 </body>
 </html>
-
-
-
