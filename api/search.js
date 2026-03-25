@@ -9,7 +9,6 @@ export default async function handler(req, res) {
         rateLimit: { max: 40, windowMs: 60 * 1000 }
     });
     if (guard.handled) return;
-
     try {
         const query = String(req.body?.query || '').trim();
         const maxResults = Math.min(Math.max(Number(req.body?.maxResults || 8), 1), 10);
