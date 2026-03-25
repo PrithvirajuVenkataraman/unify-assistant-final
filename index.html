@@ -2173,10 +2173,11 @@ body {
         }
 
         #main-card {
-            flex: 1 1 auto;
+            flex: 0 0 auto;
             width: 100%;
             min-width: 0;
-            min-height: 0;
+            min-height: auto;
+            height: auto !important;
             margin-bottom: 0 !important;
             padding: 0 !important;
             background: transparent !important;
@@ -2191,11 +2192,11 @@ body {
         #chat-layout {
             display: flex;
             flex-direction: column;
-            flex: 1 1 auto;
+            flex: 0 0 auto;
             width: 100%;
             min-width: 0;
-            min-height: 0;
-            height: 100%;
+            min-height: auto;
+            height: auto;
             gap: 0;
         }
 
@@ -2206,11 +2207,11 @@ body {
         #chat-panel {
             display: flex;
             flex-direction: column;
-            flex: 1 1 auto;
+            flex: 0 0 auto;
             width: 100%;
             min-width: 0;
-            min-height: 0;
-            height: 100%;
+            min-height: auto;
+            height: auto;
         }
 
         .chat-panel-height,
@@ -2361,16 +2362,18 @@ body {
         }
 
         #main-card {
-            border-radius: 16px !important;
-            border: 1px solid rgba(148, 163, 184, 0.26) !important;
-            box-shadow: 0 2px 14px rgba(15, 23, 42, 0.05) !important;
+            border-radius: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
         }
 
         body.dark #main-card {
-            border-color: rgba(100, 116, 139, 0.56) !important;
-            box-shadow: 0 4px 18px rgba(2, 6, 23, 0.34) !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
         }
 
         #chat-container {
