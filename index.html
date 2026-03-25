@@ -1386,6 +1386,37 @@ body {
             animation: voiceListening 1s ease-in-out infinite;
         }
 
+        .vtt-idle-icon,
+        .vtt-live-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .vtt-live-icon.hidden,
+        .vtt-idle-icon.hidden {
+            display: none !important;
+        }
+
+        .voice-vtt-wave {
+            display: inline-flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 14px;
+        }
+
+        .voice-vtt-wave .wave-bar {
+            width: 2px;
+            border-radius: 999px;
+            background: currentColor;
+            transform-origin: center bottom;
+        }
+
+        .voice-vtt-wave .wave-bar:nth-child(1) { height: 6px; animation-delay: 0s; }
+        .voice-vtt-wave .wave-bar:nth-child(2) { height: 12px; animation-delay: 0.1s; }
+        .voice-vtt-wave .wave-bar:nth-child(3) { height: 8px; animation-delay: 0.2s; }
+        .voice-vtt-wave .wave-bar:nth-child(4) { height: 11px; animation-delay: 0.3s; }
+
         @keyframes voiceListening {
             0%, 100% {
                 transform: scale(1);
@@ -2124,7 +2155,7 @@ body {
             min-width: 0;
             min-height: 0;
             height: 100%;
-            padding: calc(16px + env(safe-area-inset-top)) 20px calc(108px + env(safe-area-inset-bottom));
+            padding: calc(16px + env(safe-area-inset-top)) 20px calc(88px + env(safe-area-inset-bottom));
             display: flex;
             flex-direction: column;
             margin: 0 auto;
@@ -2179,12 +2210,12 @@ body {
 
         .chat-panel-height,
         #chat-container {
-            flex: 1 1 auto;
+            flex: 0 0 auto;
             width: 100% !important;
             min-width: 0 !important;
             min-height: 0 !important;
-            height: auto !important;
-            max-height: none !important;
+            height: clamp(220px, 36vh, 420px) !important;
+            max-height: 56vh !important;
         }
 
         #chat-container {
@@ -2234,7 +2265,7 @@ body {
 
         @media (max-width: 768px) {
             .app-shell {
-                padding: calc(10px + env(safe-area-inset-top)) 10px calc(96px + env(safe-area-inset-bottom));
+                padding: calc(10px + env(safe-area-inset-top)) 10px calc(84px + env(safe-area-inset-bottom));
             }
 
             .header-enhanced {
@@ -2438,6 +2469,27 @@ body {
             flex-shrink: 0 !important;
         }
 
+        .message-action-btn svg {
+            display: block !important;
+            width: 14px !important;
+            height: 14px !important;
+            stroke: currentColor !important;
+        }
+
+        .message-action-btn .stop-icon {
+            fill: currentColor !important;
+            stroke: currentColor !important;
+        }
+
+        .assistant-action-stack {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            align-self: flex-start !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+
         .message-action-btn:hover {
             background: #f8fafc !important;
             color: #000000 !important;
@@ -2458,7 +2510,25 @@ body {
         @media (max-width: 768px) {
             .chat-panel-height,
             #chat-container {
-                min-height: 190px !important;
+                height: clamp(180px, 30vh, 280px) !important;
+                min-height: 180px !important;
+                max-height: 46vh !important;
+            }
+        }
+
+        @media (max-width: 1024px) and (min-width: 769px) {
+            .chat-panel-height,
+            #chat-container {
+                height: clamp(200px, 33vh, 340px) !important;
+                max-height: 48vh !important;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .chat-panel-height,
+            #chat-container {
+                height: clamp(165px, 28vh, 230px) !important;
+                min-height: 165px !important;
             }
         }
 
@@ -5421,6 +5491,9 @@ async function handleNameCorrection(text) {
         let isVoiceTyping = false;
         let voiceTypingRecognition = null;
         let voiceTypingFinalText = '';
+        let voiceTypingInterimText = '';
+        let voiceTypingBaseText = '';
+        let voiceTypingCommitOnEnd = false;
         let wakeWordCooldown = false; // Prevent double "Hey JARVIS" detection 
         let lastWakeWordTime = 0; // Track when wake word was last triggered 
         let lastWakeAckTime = 0; // Prevent duplicate wake acknowledgments from STT repeats 
@@ -6288,21 +6361,32 @@ async function handleNameCorrection(text) {
             if (isVoiceTyping) {
                 btn.classList.add('is-active');
                 btn.innerHTML = `
-                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
-                        <rect x="6" y="6" width="12" height="12" rx="2"></rect>
-                    </svg>
+                    <span class="vtt-live-icon" aria-hidden="true">
+                        <span class="voice-vtt-wave">
+                            <span class="wave-bar"></span>
+                            <span class="wave-bar"></span>
+                            <span class="wave-bar"></span>
+                            <span class="wave-bar"></span>
+                        </span>
+                    </span>
                 `;
+                btn.setAttribute('title', 'Stop voice capture');
+                btn.setAttribute('aria-label', 'Stop voice capture');
                 return;
             }
             btn.classList.remove('is-active');
             btn.innerHTML = `
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
-                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                    <line x1="12" y1="19" x2="12" y2="22"></line>
-                    <line x1="8" y1="22" x2="16" y2="22"></line>
-                </svg>
+                <span class="vtt-idle-icon" aria-hidden="true">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="22"></line>
+                        <line x1="8" y1="22" x2="16" y2="22"></line>
+                    </svg>
+                </span>
             `;
+            btn.setAttribute('title', 'Voice to text');
+            btn.setAttribute('aria-label', 'Voice to text');
         }
 
         function initializeVoiceToTextRecognition() {
@@ -6317,11 +6401,10 @@ async function handleNameCorrection(text) {
                 stopSpeaking();
                 isVoiceTyping = true;
                 updateVoiceToTextButton();
+                showTemporaryMessage('Listening... tap the mic again to stop.');
             };
 
             voiceTypingRecognition.onresult = (event) => {
-                const input = document.getElementById('text-input');
-                if (!input) return;
                 let interim = '';
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript || '';
@@ -6331,18 +6414,36 @@ async function handleNameCorrection(text) {
                         interim += transcript;
                     }
                 }
-                input.value = (voiceTypingFinalText + interim).trim();
-                toggleSendButton();
+                voiceTypingInterimText = interim.trim();
             };
 
             voiceTypingRecognition.onerror = () => {
                 isVoiceTyping = false;
+                voiceTypingCommitOnEnd = false;
                 updateVoiceToTextButton();
             };
 
             voiceTypingRecognition.onend = () => {
                 isVoiceTyping = false;
                 updateVoiceToTextButton();
+                if (!voiceTypingCommitOnEnd) return;
+
+                const input = document.getElementById('text-input');
+                const base = String(voiceTypingBaseText || '').trim();
+                const captured = `${voiceTypingFinalText} ${voiceTypingInterimText}`.replace(/\s+/g, ' ').trim();
+                const merged = [base, captured].filter(Boolean).join(base && captured ? ' ' : '');
+
+                if (input && merged) {
+                    input.value = merged.trim();
+                    toggleSendButton();
+                }
+                if (!captured) {
+                    showTemporaryMessage('No speech captured. Try again and speak closer to the mic.');
+                }
+                voiceTypingCommitOnEnd = false;
+                voiceTypingFinalText = '';
+                voiceTypingInterimText = '';
+                voiceTypingBaseText = '';
             };
 
             return true;
@@ -6357,9 +6458,7 @@ async function handleNameCorrection(text) {
             }
 
             if (isVoiceTyping) {
-                try {
-                    voiceTypingRecognition.abort();
-                } catch (e) {}
+                stopVoiceToTextInput(true);
                 return;
             }
 
@@ -6370,15 +6469,24 @@ async function handleNameCorrection(text) {
             stopSpeaking();
 
             const input = document.getElementById('text-input');
-            if (input) {
-                voiceTypingFinalText = input.value ? `${input.value.trim()} ` : '';
-            } else {
-                voiceTypingFinalText = '';
-            }
+            voiceTypingBaseText = input?.value ? input.value.trim() : '';
+            voiceTypingFinalText = '';
+            voiceTypingInterimText = '';
+            voiceTypingCommitOnEnd = true;
 
             try {
                 voiceTypingRecognition.start();
             } catch (e) {}
+        }
+
+        function stopVoiceToTextInput(commitToInput = true) {
+            if (!voiceTypingRecognition) return;
+            voiceTypingCommitOnEnd = !!commitToInput;
+            try {
+                voiceTypingRecognition.stop();
+            } catch (e) {
+                try { voiceTypingRecognition.abort(); } catch (err) {}
+            }
         }
 
         function closeHelpModal() {
@@ -6705,7 +6813,7 @@ async function handleNameCorrection(text) {
                                 <div class="assistant-message-text typewriter-text text-sm leading-relaxed text-left"></div>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2 pl-1 sm:pl-0">
+                        <div class="assistant-action-stack flex items-center gap-2 pl-1 sm:pl-0">
                             <button onclick="copyAssistantPlan(this)" data-copy-text="${encodeURIComponent(textForSpeech)}" class="message-action-btn flex-shrink-0 w-8 h-8 rounded-full bg-sky-500 hover:bg-sky-600 text-white transition-all shadow-md hover:shadow-lg flex items-center justify-center" title="Copy">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <rect x="9" y="9" width="13" height="13" rx="2"></rect>
@@ -15646,19 +15754,54 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const words = content ? content.split(/\s+/).filter(Boolean).length : 0;
 
             // Tune rate by utterance length so speech feels close to natural conversation.
-            let rate = 1.0;
-            if (words <= 8) rate = 1.08;
-            else if (words <= 22) rate = 1.03;
-            else if (words <= 45) rate = 0.99;
-            else rate = 0.95;
+            let rate = 0.98;
+            if (words <= 8) rate = 1.0;
+            else if (words <= 22) rate = 0.98;
+            else if (words <= 45) rate = 0.95;
+            else rate = 0.92;
 
             // Slightly crisper style for Converse mode.
-            if (isConverse) rate += 0.02;
+            if (isConverse) rate += 0.01;
 
             return {
-                rate: Math.max(0.9, Math.min(1.12, rate)),
-                pitch: isConverse ? 0.96 : 0.92
+                rate: Math.max(0.88, Math.min(1.04, rate)),
+                pitch: isConverse ? 1.0 : 0.98
             };
+        }
+
+        function chooseBestEnglishVoice(voices) {
+            if (!Array.isArray(voices) || !voices.length) return null;
+            const englishVoices = voices.filter(v => /^en(-|_)/i.test(String(v.lang || '')));
+            const pool = englishVoices.length ? englishVoices : voices;
+
+            const preferredNames = [
+                /aria/i,
+                /jenny/i,
+                /guy/i,
+                /samantha/i,
+                /google us english/i,
+                /neural/i,
+                /natural/i,
+                /online/i,
+                /enhanced/i
+            ];
+
+            let best = null;
+            let bestScore = -1;
+            for (const voice of pool) {
+                const name = String(voice.name || '');
+                let score = 0;
+                preferredNames.forEach((re, idx) => {
+                    if (re.test(name)) score += (preferredNames.length - idx) * 10;
+                });
+                if (/en-us/i.test(String(voice.lang || ''))) score += 8;
+                if (voice.localService) score += 3;
+                if (score > bestScore) {
+                    best = voice;
+                    bestScore = score;
+                }
+            }
+            return best || pool[0] || null;
         }
         
         function speak(text, force = false) { 
@@ -15673,38 +15816,19 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             isAssistantSpeaking = true;
              
              
-            // Prefer browser natural voices for converse mode to get closer to ChatGPT-style TTS.
-            if (typeof responsiveVoice !== 'undefined' && !converseMode) { 
-                responsiveVoice.cancel(); 
-                responsiveVoice.speak(cleanText, "UK English Male", {
-                    pitch: speechProfile.pitch,
-                    rate: speechProfile.rate,
-                    volume: 1,
-                    onend: () => {
-                        isAssistantSpeaking = false;
-                        currentSpeechTextLower = '';
-                        if (converseMode && listeningRequested && !isListening && !isProcessing) {
-                            setTimeout(() => startListening(), 180);
-                        }
-                    }
-                }); 
-                return; 
-            } 
-            
             synth.cancel();
             setTimeout(() => {
                 const utterance = new SpeechSynthesisUtterance(cleanText);
                 
                 
                 const voices = synth.getVoices();
-                
-                
-                const preferredVoice = voices.find(v => 
-                    /Aria|Jenny|Sonia|Samantha|Google US English|Neural|Natural/i.test(v.name)
-                ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
+                const preferredVoice = chooseBestEnglishVoice(voices);
                 
                 if (preferredVoice) {
                     utterance.voice = preferredVoice;
+                    utterance.lang = preferredVoice.lang || 'en-US';
+                } else {
+                    utterance.lang = 'en-US';
                 }
                 
                 utterance.rate = speechProfile.rate;
