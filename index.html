@@ -2507,6 +2507,17 @@ body {
             stroke: currentColor !important;
         }
 
+        .message-action-btn .play-icon-img {
+            display: block !important;
+            width: 13px !important;
+            height: 13px !important;
+            object-fit: contain !important;
+        }
+
+        body.dark .message-action-btn.speaker-btn .play-icon-img {
+            filter: invert(1) brightness(1.15) !important;
+        }
+
         .message-action-btn .stop-icon {
             fill: none !important;
             stroke: currentColor !important;
@@ -6896,11 +6907,11 @@ async function handleNameCorrection(text) {
                                 </svg>
                             </button>
                             <button data-speech-id="${speechId}" onclick="toggleSpeakById(this.dataset.speechId, this)" class="message-action-btn speaker-btn flex-shrink-0 w-8 h-8 rounded-full transition-none flex items-center justify-center" title="Speak">
-                                <svg class="play-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M11 5 6 9H3v6h3l5 4V5z"></path>
-                                    <path d="M15.5 8.5a5 5 0 0 1 0 7"></path>
-                                    <path d="M18.5 6a8.5 8.5 0 0 1 0 12"></path>
-                                </svg>
+                                <img
+                                    class="play-icon play-icon-img"
+                                    alt="Speak"
+                                    src="data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2024%2024%27%3E%3Cpath%20fill%3D%27%23000%27%20d%3D%27M3%209v6h4l5%204V5L7%209H3z%27/%3E%3Cpath%20fill%3D%27%23000%27%20d%3D%27M14.5%208.5a1%201%200%200%201%201.4%200%205%205%200%200%201%200%207%201%201%200%201%201-1.4-1.4%203%203%200%200%200%200-4.2%201%201%200%200%201%200-1.4z%27/%3E%3Cpath%20fill%3D%27%23000%27%20d%3D%27M17.7%205.3a1%201%200%200%201%201.4%200%209%209%200%200%201%200%2012.7%201%201%200%200%201-1.4-1.4%207%207%200%200%200%200-9.9%201%201%200%200%201%200-1.4z%27/%3E%3C/svg%3E"
+                                />
                                 <svg class="stop-icon hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
                                     <line x1="7" y1="7" x2="17" y2="17"></line>
                                     <line x1="17" y1="7" x2="7" y2="17"></line>
