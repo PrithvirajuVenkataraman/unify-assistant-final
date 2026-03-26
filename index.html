@@ -2508,7 +2508,7 @@ body {
         }
 
         .message-action-btn .stop-icon {
-            fill: currentColor !important;
+            fill: none !important;
             stroke: currentColor !important;
         }
 
@@ -6896,12 +6896,14 @@ async function handleNameCorrection(text) {
                                 </svg>
                             </button>
                             <button data-speech-id="${speechId}" onclick="toggleSpeakById(this.dataset.speechId, this)" class="message-action-btn speaker-btn flex-shrink-0 w-8 h-8 rounded-full transition-none flex items-center justify-center" title="Speak">
-                                <svg class="play-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M4 10v4h4l5 4V6l-5 4H4z"></path>
-                                    <path d="M16.5 9.2a4.6 4.6 0 0 1 0 5.6"></path>
+                                <svg class="play-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M11 5 6 9H3v6h3l5 4V5z"></path>
+                                    <path d="M15.5 8.5a5 5 0 0 1 0 7"></path>
+                                    <path d="M18.5 6a8.5 8.5 0 0 1 0 12"></path>
                                 </svg>
-                                <svg class="stop-icon hidden" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8">
-                                    <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+                                <svg class="stop-icon hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                                    <line x1="7" y1="7" x2="17" y2="17"></line>
+                                    <line x1="17" y1="7" x2="7" y2="17"></line>
                                 </svg>
                             </button>
                         </div>
@@ -12139,6 +12141,20 @@ function extractEntitySubject(text, relationType, liveIntent = null) {
         subject = liveIntent.topic;
     }
 
+    if (relationType === 'latest_work') {
+        subject = String(subject || '')
+            .replace(/\b(actor|actress|director|producer|singer|composer|music director)\b/gi, ' ')
+            .replace(/\b(tamil|hindi|telugu|kannada|malayalam|bollywood|kollywood|tollywood)\b/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const possessiveMatch = subject.match(/^([A-Za-z][A-Za-z.'-]{1,})(?:'s)\b/i);
+        if (possessiveMatch?.[1]) {
+            subject = possessiveMatch[1].trim();
+        } else {
+            subject = subject.replace(/'s\b/gi, '').trim();
+        }
+    }
+
     return subject || raw;
 } 
  
@@ -12235,6 +12251,35 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
 
 function normalizeAgreementValue(value) {
     return normalizeEntitySearchText(value).replace(/\b(the|a|an)\b/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function getEntitySubjectTokens(subject) {
+    return normalizeEntitySearchText(String(subject || '').replace(/'s\b/gi, ' '))
+        .split(' ')
+        .map(token => token.trim())
+        .filter(Boolean)
+        .filter(token => !/^(actor|actress|director|producer|singer|composer|movie|film|show|series|latest|recent|new|current|tamil|hindi|telugu|kannada|malayalam)$/.test(token));
+}
+
+function sourceMatchesEntitySubject(result, entityIntent) {
+    const relationType = String(entityIntent?.relationType || '');
+    const subjectTokens = getEntitySubjectTokens(entityIntent?.subject || '');
+    if (!subjectTokens.length) return true;
+
+    const textTokens = new Set(
+        normalizeEntitySearchText(`${String(result?.title || '')} ${String(result?.description || '')}`)
+            .split(' ')
+            .map(token => token.trim())
+            .filter(Boolean)
+    );
+
+    const requiresStrictPersonMatch = entityIntent?.entityType === 'profession_person' || relationType === 'latest_work' || relationType === 'role';
+    if (requiresStrictPersonMatch) {
+        const exactHits = subjectTokens.filter(token => textTokens.has(token));
+        return exactHits.length >= Math.min(subjectTokens.length, 2) || exactHits.length >= 1;
+    }
+
+    return subjectTokens.some(token => textTokens.has(token));
 }
 
 function escapeRegexLiteral(value) {
@@ -12406,6 +12451,108 @@ function buildSourceAgreement(results, entityIntent) {
         mixed: rankedVotes.length > 1 && top && rankedVotes[1].count === top.count,
         agreed: Boolean(top && top.count >= 2 && !(rankedVotes[1] && rankedVotes[1].count === top.count))
     };
+}
+
+function normalizePersonVariant(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/\b(actor|actress|director|producer|singer|composer|music director|filmography|movies?|films?)\b/g, ' ')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function extractNamedVariantsFromText(text, anchorToken) {
+    const raw = String(text || '');
+    const token = String(anchorToken || '').trim().toLowerCase();
+    if (!raw || !token) return [];
+
+    const matches = raw.match(/\b[A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3}\b/g) || [];
+    return matches
+        .map(name => String(name || '').trim())
+        .filter(Boolean)
+        .filter(name => {
+            const norm = normalizePersonVariant(name);
+            if (!norm) return false;
+            const tokens = norm.split(' ').filter(Boolean);
+            if (!tokens.length || tokens.length > 4) return false;
+            if (!tokens.includes(token)) return false;
+            if (/\b(wikipedia|imdb|rotten tomatoes|official)\b/i.test(name)) return false;
+            return true;
+        });
+}
+
+function detectEntityIdentityAmbiguity(results, entityIntent) {
+    const relationType = String(entityIntent?.relationType || '');
+    const subjectRaw = String(entityIntent?.subject || '').trim();
+    const subjectNorm = normalizePersonVariant(subjectRaw);
+    if (!subjectNorm) return { isAmbiguous: false, variants: [] };
+
+    const subjectTokens = subjectNorm.split(' ').filter(Boolean);
+    const singleTokenSubject = subjectTokens.length === 1;
+    const anchorToken = subjectTokens[0] || '';
+    const likelyPersonEntity = entityIntent?.entityType === 'profession_person' || entityIntent?.domain === 'entertainment';
+    const ambiguitySensitiveRelation = relationType === 'latest_work' || relationType === 'role' || relationType === 'general';
+    if (!likelyPersonEntity || !ambiguitySensitiveRelation || !singleTokenSubject || !anchorToken) {
+        return { isAmbiguous: false, variants: [] };
+    }
+
+    const variantStats = new Map();
+    for (const item of Array.isArray(results) ? results : []) {
+        const text = `${String(item?.title || '')}. ${String(item?.description || '')}`;
+        const variants = extractNamedVariantsFromText(text, anchorToken);
+        for (const variant of variants) {
+            const key = normalizePersonVariant(variant);
+            if (!key) continue;
+            const prev = variantStats.get(key) || { value: variant, count: 0 };
+            prev.count += 1;
+            if (variant.length > prev.value.length) prev.value = variant;
+            variantStats.set(key, prev);
+        }
+    }
+
+    const rankedVariants = Array.from(variantStats.values())
+        .filter(v => v.count >= 1)
+        .sort((a, b) => b.count - a.count || b.value.length - a.value.length);
+
+    const distinct = rankedVariants
+        .map(v => normalizePersonVariant(v.value))
+        .filter(Boolean);
+    const uniqueDistinct = Array.from(new Set(distinct));
+
+    if (uniqueDistinct.length <= 1) return { isAmbiguous: false, variants: rankedVariants };
+
+    const hasExactSubjectOnly = uniqueDistinct.includes(subjectNorm) && uniqueDistinct.length === 2;
+    const hasDifferentFullName = uniqueDistinct.some(v => v !== subjectNorm && v.split(' ').length >= 2);
+    if (!hasDifferentFullName && hasExactSubjectOnly) return { isAmbiguous: false, variants: rankedVariants };
+
+    return {
+        isAmbiguous: true,
+        variants: rankedVariants.slice(0, 4).map(v => v.value)
+    };
+}
+
+async function publishUniversalEntityAmbiguity(pipeline, ambiguity, results) {
+    const options = (Array.isArray(ambiguity?.variants) ? ambiguity.variants : []).slice(0, 3);
+    const sourceLines = (Array.isArray(results) ? results : [])
+        .slice(0, 4)
+        .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+        .join('\n');
+    const optionLines = options.length ? options.map((name, i) => `${i + 1}. ${name}`).join('\n') : '';
+    const relationHint = pipeline?.entityIntent?.relationType === 'latest_work'
+        ? 'latest movie/work'
+        : 'requested fact';
+    const subject = pipeline?.entityIntent?.subject || pipeline?.userText || 'this name';
+    const message = optionLines
+        ? `I found multiple people matching "${subject}" in live sources, so I should not guess the ${relationHint}.\n\nDid you mean:\n${optionLines}\n\nReply with the exact full name.\n\nSources:\n${sourceLines}`
+        : `I found multiple people matching "${subject}" in live sources, so I should not guess the ${relationHint}. Please reply with the exact full name.\n\nSources:\n${sourceLines}`;
+    addVerifiedAssistantMessage(message, 'Ambiguous entity');
+    await speakApiReply('entity_ambiguous', {
+        subject,
+        options
+    }, 'I found multiple people with that name. Please tell me the exact full name.');
+    saveToHistory(pipeline.userText, message);
+    return true;
 }
 
 function formatConsensusAnswer(entityIntent, agreement) { 
@@ -12733,6 +12880,11 @@ async function retrieveUniversalEntitySources(pipeline, controller) {
         if (deduped.length >= 8) break;
     }
 
+    const subjectFiltered = deduped.filter(item => sourceMatchesEntitySubject(item, pipeline.entityIntent));
+    const strictPersonIntent = pipeline?.entityIntent?.entityType === 'profession_person' || pipeline?.entityIntent?.relationType === 'latest_work';
+    if (strictPersonIntent && subjectFiltered.length >= 1) return subjectFiltered;
+    if (subjectFiltered.length >= 2) return subjectFiltered;
+    if (subjectFiltered.length === 1 && deduped.length <= 2) return subjectFiltered;
     return deduped;
 }
 
@@ -12884,6 +13036,11 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
             if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
             return publishUniversalVerificationFallback(pipeline, 'I could not verify that result right now.');
         } 
+
+        const ambiguity = detectEntityIdentityAmbiguity(deduped, pipeline.entityIntent);
+        if (ambiguity.isAmbiguous) {
+            return publishUniversalEntityAmbiguity(pipeline, ambiguity, deduped);
+        }
 
         const agreement = buildSourceAgreement(deduped.slice(0, 6), pipeline.entityIntent);
         if (await publishUniversalConsensusAnswer(pipeline, agreement)) return true;
@@ -16887,3 +17044,6 @@ function addTravelHintsToPlan(places){
 
 </body>
 </html>
+
+
+
