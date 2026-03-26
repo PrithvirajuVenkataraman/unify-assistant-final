@@ -287,16 +287,54 @@ function getRagQueryTerms(query) {
     ));
 }
 
-function buildSearchQueriesForRag(query) {
+function parseJsonArrayFromText(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+        const match = raw.match(/\[[\s\S]*\]/);
+        if (!match) return [];
+        try {
+            const parsed = JSON.parse(match[0]);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+}
+
+async function generateSemanticSearchQueries(query, options = {}) {
     const clean = normalizeWhitespace(query);
     if (!clean) return [];
-    const topic = extractSearchTopic(clean) || clean;
-    const out = [topic];
-    if (/\b(latest|recent|current|today|now|update|news|score|price)\b/i.test(clean)) {
-        out.push(`latest ${topic}`);
-        out.push(`${topic} Reuters OR AP OR BBC`);
+
+    const base = extractSearchTopic(clean) || clean;
+    const out = [base];
+    const baseUrl = String(options.baseUrl || '').trim();
+    if (!baseUrl) return out;
+
+    try {
+        const response = await fetch(`${baseUrl}/api/chat-groq`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                systemPrompt: 'Generate semantic web-search rewrites. Return ONLY a JSON array of short query strings. No prose.',
+                message: `Rewrite this user query into 3 alternative web search queries that preserve intent and maximize factual retrieval quality.\n\nQuery: "${clean}"\n\nOutput strictly as JSON array of strings.`
+            })
+        });
+        if (!response.ok) return out;
+        const data = await response.json();
+        const rewrites = parseJsonArrayFromText(data?.response || data?.text || '')
+            .map(item => normalizeWhitespace(String(item || '')))
+            .filter(Boolean)
+            .slice(0, 3);
+        out.push(...rewrites);
+    } catch (_) {
+        // Keep baseline query only.
     }
-    return Array.from(new Set(out.filter(Boolean)));
+
+    return Array.from(new Set(out.filter(Boolean))).slice(0, 4);
 }
 
 function sanitizeWebUrl(url) {
@@ -376,25 +414,19 @@ function extractPublishedAtFromHtml(html, text = '') {
     return 0;
 }
 
-function isTimeSensitiveRagQuery(query) {
-    return /\b(latest|recent|current|today|now|right now|update|news|headline|breaking|score|result|price|rate|status|as of)\b/i
-        .test(String(query || ''));
-}
-
-function freshnessScore(publishedAtMs, query) {
+function freshnessScore(publishedAtMs) {
     const ts = Number(publishedAtMs) || 0;
-    const timeSensitive = isTimeSensitiveRagQuery(query);
-    if (!ts) return timeSensitive ? -0.2 : 0;
+    if (!ts) return 0;
 
     const ageDays = (Date.now() - ts) / (1000 * 60 * 60 * 24);
     if (!Number.isFinite(ageDays)) return 0;
-    if (ageDays <= 2) return timeSensitive ? 1.0 : 0.2;
-    if (ageDays <= 7) return timeSensitive ? 0.8 : 0.18;
-    if (ageDays <= 30) return timeSensitive ? 0.45 : 0.12;
-    if (ageDays <= 180) return timeSensitive ? 0.2 : 0.08;
-    if (ageDays <= 365) return timeSensitive ? -0.05 : 0.02;
-    if (ageDays <= 3 * 365) return timeSensitive ? -0.25 : -0.03;
-    return timeSensitive ? -0.45 : -0.06;
+    if (ageDays <= 2) return 0.22;
+    if (ageDays <= 7) return 0.18;
+    if (ageDays <= 30) return 0.12;
+    if (ageDays <= 180) return 0.06;
+    if (ageDays <= 365) return 0.01;
+    if (ageDays <= 3 * 365) return -0.03;
+    return -0.08;
 }
 
 async function fetchAndExtractWebDocument(url, timeoutMs = 6000) {
@@ -461,7 +493,7 @@ async function fetchSearchResultsForRag(query, options = {}) {
     }
 
     try {
-        const queries = buildSearchQueriesForRag(query);
+        const queries = await generateSemanticSearchQueries(query, { baseUrl });
         const verified = await runVerifiedWebSearch(queries, {
             maxResultsPerQuery: Math.min(maxResults, 6),
             limit: maxResults
@@ -509,32 +541,61 @@ function lexicalScore(text, terms) {
     return overlap / terms.length;
 }
 
-function scoreSearchHitRelevance(hit, query, queryTerms) {
-    const title = String(hit?.title || '');
-    const description = String(hit?.description || '');
-    const url = String(hit?.url || '');
-    const hay = `${title} ${description} ${url}`.toLowerCase();
-    const q = String(query || '').toLowerCase();
-    const terms = Array.isArray(queryTerms) ? queryTerms : [];
-
-    let score = lexicalScore(hay, terms);
-
-    const overlapCount = terms.reduce((acc, t) => acc + (hay.includes(t) ? 1 : 0), 0);
-    if (overlapCount >= 3) score += 0.2;
-    if (overlapCount >= 5) score += 0.2;
-
-    // Prevent obvious topic-drift like "hotel incentive" hijacking model-release queries.
-    const queryHasModelIntent = /\b(model|release|ai|llm|gpt|openai)\b/.test(q);
-    if (queryHasModelIntent && /\b(hotel|real estate|tourism|resort)\b/.test(hay)) {
-        score -= 0.8;
+function getHostFromUrl(url) {
+    try {
+        return new URL(String(url || '')).hostname.toLowerCase();
+    } catch (_) {
+        return '';
     }
+}
 
-    // Prefer authoritative model/product pages when query is about AI model releases.
-    if (queryHasModelIntent && /\b(openai\.com|help\.openai\.com|reuters|wsj|bloomberg)\b/.test(hay)) {
-        score += 0.25;
+function loadTrustedHostWeights() {
+    const raw = String(process.env.RAG_TRUSTED_HOST_WEIGHTS || '').trim();
+    if (!raw) return {};
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        const out = {};
+        for (const [host, value] of Object.entries(parsed)) {
+            const key = String(host || '').trim().toLowerCase();
+            const weight = Number(value);
+            if (!key || !Number.isFinite(weight)) continue;
+            out[key] = clamp(weight, -0.4, 0.4);
+        }
+        return out;
+    } catch (_) {
+        return {};
     }
+}
 
-    return score;
+function sourceTrustScore(url, trustedHostWeights = {}) {
+    const host = getHostFromUrl(url);
+    if (!host) return 0;
+    let best = 0;
+    for (const [domain, weight] of Object.entries(trustedHostWeights || {})) {
+        if (host === domain || host.endsWith(`.${domain}`)) {
+            if (Math.abs(weight) > Math.abs(best)) best = weight;
+        }
+    }
+    return best;
+}
+
+function buildHitTextForEmbedding(hit) {
+    const title = normalizeWhitespace(String(hit?.title || ''));
+    const desc = normalizeWhitespace(String(hit?.description || ''));
+    const url = normalizeWhitespace(String(hit?.url || ''));
+    return [title, desc, url].filter(Boolean).join('\n').slice(0, 1200);
+}
+
+function computeAdaptiveThreshold(scores, floor = 0.12) {
+    const arr = (Array.isArray(scores) ? scores : []).filter(Number.isFinite).sort((a, b) => b - a);
+    if (!arr.length) return floor;
+    if (arr.length === 1) return Math.max(floor, arr[0] - 0.01);
+    const mean = arr.reduce((sum, n) => sum + n, 0) / arr.length;
+    const variance = arr.reduce((sum, n) => sum + (n - mean) * (n - mean), 0) / arr.length;
+    const std = Math.sqrt(Math.max(variance, 0));
+    const dynamic = mean + (0.1 * std);
+    return Math.max(floor, dynamic);
 }
 
 async function buildLiveWebMatches(query, options = {}) {
@@ -547,14 +608,26 @@ async function buildLiveWebMatches(query, options = {}) {
         maxResults: Math.max(maxUrls, topK),
         baseUrl: options.baseUrl
     });
-    const queryTerms = getRagQueryTerms(query);
-    const rankedHits = (Array.isArray(searchResults) ? searchResults : [])
-        .map((hit) => ({
-            ...hit,
-            __relevance: scoreSearchHitRelevance(hit, query, queryTerms)
-        }))
-        .filter(hit => Number.isFinite(hit.__relevance) && hit.__relevance >= 0.08)
-        .sort((a, b) => b.__relevance - a.__relevance);
+    const trustedHostWeights = loadTrustedHostWeights();
+    const hits = Array.isArray(searchResults) ? searchResults : [];
+    if (!hits.length) return [];
+
+    const hitTexts = hits.map(buildHitTextForEmbedding);
+    const [queryVector] = await googleEmbeddings([query], { taskType: 'RETRIEVAL_QUERY' });
+    const hitVectors = await googleEmbeddings(hitTexts, { taskType: 'RETRIEVAL_DOCUMENT' });
+
+    const rankedWithScores = hits.map((hit, idx) => {
+        const semantic = clamp((cosineSimilarity(queryVector, hitVectors[idx]) + 1) / 2, 0, 1);
+        const trust = sourceTrustScore(hit?.url, trustedHostWeights);
+        const score = (semantic * 0.9) + (trust * 0.1);
+        return { ...hit, __relevance: score };
+    }).sort((a, b) => b.__relevance - a.__relevance);
+
+    const threshold = computeAdaptiveThreshold(rankedWithScores.map(item => item.__relevance), 0.14);
+    let rankedHits = rankedWithScores.filter(item => Number.isFinite(item.__relevance) && item.__relevance >= threshold);
+    if (!rankedHits.length) {
+        rankedHits = rankedWithScores.slice(0, Math.min(maxUrls, 3));
+    }
 
     const topUrls = rankedHits.slice(0, maxUrls).map(item => item.url).filter(Boolean);
     if (!topUrls.length) return [];
@@ -585,7 +658,6 @@ async function buildLiveWebMatches(query, options = {}) {
     }
     if (!allChunks.length) return [];
 
-    const [queryVector] = await googleEmbeddings([query], { taskType: 'RETRIEVAL_QUERY' });
     const batchSize = 20;
     const vectors = [];
     for (let i = 0; i < allChunks.length; i += batchSize) {
@@ -594,12 +666,11 @@ async function buildLiveWebMatches(query, options = {}) {
         vectors.push(...partVectors);
     }
 
-    const terms = queryTerms;
     const scored = allChunks.map((chunk, idx) => {
         const semantic = clamp((cosineSimilarity(queryVector, vectors[idx]) + 1) / 2, 0, 1);
-        const lexical = lexicalScore(chunk.text, terms);
-        const fresh = freshnessScore(chunk?.metadata?.publishedAt, query);
-        const score = (semantic * 0.66) + (lexical * 0.22) + (fresh * 0.12);
+        const fresh = freshnessScore(chunk?.metadata?.publishedAt);
+        const trust = sourceTrustScore(chunk?.metadata?.url, trustedHostWeights);
+        const score = (semantic * 0.82) + (fresh * 0.1) + (trust * 0.08);
         return {
             id: chunk.id,
             score,
@@ -609,7 +680,10 @@ async function buildLiveWebMatches(query, options = {}) {
         };
     }).sort((a, b) => b.score - a.score);
 
-    return scored.slice(0, clamp(topK * 2, topK, 20));
+    const cutoff = computeAdaptiveThreshold(scored.map(item => item.score), 0.2);
+    const filtered = scored.filter(item => item.score >= cutoff);
+    const finalList = filtered.length ? filtered : scored.slice(0, clamp(topK, 1, 8));
+    return finalList.slice(0, clamp(topK * 2, topK, 20));
 }
 
 function fuseMatches(primary, secondary, topK) {
