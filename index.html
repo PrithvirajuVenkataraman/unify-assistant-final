@@ -2538,22 +2538,46 @@ body {
             color: #ffffff !important;
         }
 
-        .message-action-btn.speaker-btn {
-            background: #0b1220 !important;
-            color: #ffffff !important;
-            border-color: rgba(148, 163, 184, 0.7) !important;
+        .message-action-btn.speaker-btn,
+        .message-action-btn.speaker-btn:hover,
+        .message-action-btn.speaker-btn:active,
+        .message-action-btn.speaker-btn:focus,
+        .message-action-btn.speaker-btn:focus-visible {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border-color: rgba(148, 163, 184, 0.65) !important;
             box-shadow: none !important;
-        }
-
-        .message-action-btn.speaker-btn:hover {
-            background: #111827 !important;
-            color: #ffffff !important;
+            filter: none !important;
+            outline: none !important;
             transform: none !important;
+            animation: none !important;
+            background-image: none !important;
+            -webkit-tap-highlight-color: transparent !important;
         }
 
-        .message-action-btn.speaker-btn.is-speaking {
+        .message-action-btn.speaker-btn.is-speaking,
+        .message-action-btn.speaker-btn.is-speaking:hover,
+        .message-action-btn.speaker-btn.is-speaking:active,
+        .message-action-btn.speaker-btn.is-speaking:focus,
+        .message-action-btn.speaker-btn.is-speaking:focus-visible {
             background: #b91c1c !important;
-            border-color: rgba(239, 68, 68, 0.8) !important;
+            color: #ffffff !important;
+            border-color: rgba(239, 68, 68, 0.85) !important;
+            box-shadow: none !important;
+            filter: none !important;
+            outline: none !important;
+            transform: none !important;
+            animation: none !important;
+        }
+
+        body.dark .message-action-btn.speaker-btn,
+        body.dark .message-action-btn.speaker-btn:hover,
+        body.dark .message-action-btn.speaker-btn:active,
+        body.dark .message-action-btn.speaker-btn:focus,
+        body.dark .message-action-btn.speaker-btn:focus-visible {
+            background: #0f172a !important;
+            color: #e2e8f0 !important;
+            border-color: rgba(100, 116, 139, 0.75) !important;
             box-shadow: none !important;
         }
 
@@ -6871,11 +6895,10 @@ async function handleNameCorrection(text) {
                                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                                 </svg>
                             </button>
-                            <button data-speech-id="${speechId}" onclick="toggleSpeakById(this.dataset.speechId, this)" class="message-action-btn speaker-btn flex-shrink-0 w-8 h-8 rounded-full transition-all flex items-center justify-center" title="Speak">
+                            <button data-speech-id="${speechId}" onclick="toggleSpeakById(this.dataset.speechId, this)" class="message-action-btn speaker-btn flex-shrink-0 w-8 h-8 rounded-full transition-none flex items-center justify-center" title="Speak">
                                 <svg class="play-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M12 6 8.4 9H5v6h3.4L12 18V6z"></path>
-                                    <path d="M15.2 9.5a3.6 3.6 0 0 1 0 5"></path>
-                                    <path d="M17.8 7.2a6.8 6.8 0 0 1 0 9.6"></path>
+                                    <path d="M4 10v4h4l5 4V6l-5 4H4z"></path>
+                                    <path d="M16.5 9.2a4.6 4.6 0 0 1 0 5.6"></path>
                                 </svg>
                                 <svg class="stop-icon hidden" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8">
                                     <rect x="6" y="6" width="12" height="12" rx="2"></rect>
@@ -12214,15 +12237,41 @@ function normalizeAgreementValue(value) {
     return normalizeEntitySearchText(value).replace(/\b(the|a|an)\b/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function isLikelyLatestWorkTitleCandidate(candidate, subject) {
+function escapeRegexLiteral(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function hasLatestWorkEvidence(result, entityIntent = null) {
+    const medium = detectLatestWorkMedium(entityIntent?.raw || '');
+    const mediumPattern = medium === 'song'
+        ? /\b(song|single|track|music|release)\b/i
+        : medium === 'album'
+            ? /\b(album|ep|record|release)\b/i
+            : medium === 'show'
+                ? /\b(show|series|episode|streaming|release)\b/i
+                : medium === 'project'
+                    ? /\b(project|upcoming|announced|release)\b/i
+                    : /\b(film|movie|cinema|release|released|upcoming)\b/i;
+    const text = `${String(result?.title || '')} ${String(result?.description || '')}`;
+    if (!text.trim()) return false;
+    return /\b(latest|recent|new|newest|upcoming|future|release|released|announced)\b/i.test(text) || mediumPattern.test(text);
+}
+
+function isLikelyLatestWorkTitleCandidate(candidate, subject, sourceTitle = '') {
     const rawCandidate = String(candidate || '').trim();
     if (!rawCandidate) return false;
 
     const candidateNorm = normalizeAgreementValue(rawCandidate);
     const subjectNorm = normalizeAgreementValue(subject || '');
+    const titleText = String(sourceTitle || '');
     if (!candidateNorm) return false;
     if (subjectNorm && (candidateNorm === subjectNorm || candidateNorm.includes(subjectNorm))) return false;
     if (/\b(imdb|wikipedia|wiki|biography|filmography|discography|official)\b/i.test(rawCandidate)) return false;
+    if (/\b(latest|recent|new|upcoming|current|movie|film|song|album|show|series|project)\b/i.test(rawCandidate)) return false;
+    if (titleText) {
+        const headingPattern = new RegExp(`^\\s*${escapeRegexLiteral(rawCandidate)}\\s*[-|:]\\s*(wikipedia|imdb|wiki|biography|profile|official)\\b`, 'i');
+        if (headingPattern.test(titleText)) return false;
+    }
     if (rawCandidate.split(/\s+/).length < 1 || rawCandidate.split(/\s+/).length > 10) return false;
     return true;
 }
@@ -12247,16 +12296,17 @@ function extractFactCandidate(result, entityIntent) {
 
     if (entityIntent.relationType === 'latest_work') {
         const subject = normalizeEntitySearchText(entityIntent.subject);
+        const sourceTitle = String(result?.title || '');
         const titleFirstPatterns = [
-            /^(?:watch\s+)?([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})\s+(?:\(|-|\|)/,
             /\b(?:latest|recent|new|upcoming|current|future)\s+(?:movie|film|release|song|album|single|show|series|project)\s+(?:is|was|:)\s*([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})/i,
-            /\b(?:starring|stars in|release of)\s+([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})/i
+            /\b(?:starring|stars in|release of|titled|title is)\s+([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})/i,
+            /["“]([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})["”][^.]{0,40}\b(?:film|movie|song|album|series|project|release)\b/i
         ];
         for (const pattern of titleFirstPatterns) {
             const match = combined.match(pattern);
             if (match?.[1]) {
                 const candidate = match[1].trim();
-                if (isLikelyLatestWorkTitleCandidate(candidate, entityIntent.subject) &&
+                if (isLikelyLatestWorkTitleCandidate(candidate, entityIntent.subject, sourceTitle) &&
                     (!subject || !normalizeEntitySearchText(candidate).includes(subject))) {
                     return candidate;
                 }
@@ -12266,7 +12316,7 @@ function extractFactCandidate(result, entityIntent) {
         const subjectLeadMatch = combined.match(subjectLeadPattern);
         if (subjectLeadMatch?.[1]) {
             const candidate = subjectLeadMatch[1].trim();
-            return isLikelyLatestWorkTitleCandidate(candidate, entityIntent.subject) ? candidate : '';
+            return isLikelyLatestWorkTitleCandidate(candidate, entityIntent.subject, sourceTitle) ? candidate : '';
         }
         return '';
     }
@@ -12725,7 +12775,10 @@ async function publishUniversalMixedEvidence(pipeline, results) {
                 const published = extractResultPublishedDate(item);
                 return { item, candidate, published };
             })
-            .filter(entry => isLikelyLatestWorkTitleCandidate(entry.candidate, pipeline.entityIntent.subject))
+            .filter(entry =>
+                isLikelyLatestWorkTitleCandidate(entry.candidate, pipeline.entityIntent.subject, entry?.item?.title || '') &&
+                hasLatestWorkEvidence(entry.item, pipeline.entityIntent)
+            )
             .sort((a, b) => {
                 const aTime = a.published?.getTime?.() || 0;
                 const bTime = b.published?.getTime?.() || 0;
