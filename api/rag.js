@@ -2,927 +2,537 @@ import crypto from 'crypto';
 import { applyApiSecurity } from './security.js';
 import { extractSearchTopic, runVerifiedWebSearch } from './live-search.js';
 
-export const config = {
-    maxDuration: 60,
-    api: { bodyParser: { sizeLimit: '2mb' } }
-};
+export const config = { maxDuration: 60, api: { bodyParser: { sizeLimit: '2mb' } } };
 
-const DEFAULT_EMBED_MODEL = String(
-    process.env.GEMINI_EMBED_MODEL ||
-    process.env.GOOGLE_EMBED_MODEL ||
-    'text-embedding-004'
-).trim();
+const DEFAULT_EMBED_MODEL = String(process.env.GEMINI_EMBED_MODEL || process.env.GOOGLE_EMBED_MODEL || 'text-embedding-004').trim();
 const DEFAULT_TOP_K = 6;
+const ENABLE_LLM_RERANK = String(process.env.RAG_ENABLE_LLM_RERANK || '').trim().toLowerCase() === 'true';
+
+const C = {
+  MAX: 400,
+  EMB_TTL: 10 * 60 * 1000,
+  WEB_TTL: 4 * 60 * 1000,
+  SEARCH_TTL: 2 * 60 * 1000
+};
+const cache = { emb: new Map(), web: new Map(), search: new Map() };
+
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const toPosInt = (v, f) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.floor(n) : f; };
+const now = () => Date.now();
+const hash = (s, n = 20) => crypto.createHash('sha1').update(String(s || '')).digest('hex').slice(0, n);
+const clean = (t) => String(t || '').replace(/\u0000/g, '').replace(/\r\n/g, '\n').replace(/\t/g, ' ').replace(/[ ]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+const toNs = (i) => (String(i || process.env.PINECONE_NAMESPACE || 'default').trim().replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64) || 'default');
+const embKey = (t, type) => `${type}:${hash(clean(t), 40)}`;
+
+function cacheGet(map, key) {
+  const v = map.get(key);
+  if (!v) return null;
+  if (v.exp <= now()) { map.delete(key); return null; }
+  v.last = now();
+  return v.val;
+}
+function cacheSet(map, key, val, ttl) {
+  map.set(key, { val, exp: now() + ttl, last: now() });
+  if (map.size <= C.MAX) return;
+  const old = Array.from(map.entries()).sort((a, b) => (a[1]?.last || 0) - (b[1]?.last || 0));
+  for (let i = 0; i < Math.max(1, map.size - C.MAX); i++) map.delete(old[i][0]);
+}
 
 function assertEnv(name) {
-    const value = String(process.env[name] || '').trim();
-    if (!value) {
-        throw new Error(`Missing required environment variable: ${name}`);
-    }
-    return value;
+  const v = String(process.env[name] || '').trim();
+  if (!v) throw new Error(`Missing required environment variable: ${name}`);
+  return v;
 }
-
 function getGoogleApiKey() {
-    const key = String(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
-    if (!key) {
-        throw new Error('Missing required environment variable: GEMINI_API_KEY or GOOGLE_API_KEY');
+  const key = String(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
+  if (!key) throw new Error('Missing required environment variable: GEMINI_API_KEY or GOOGLE_API_KEY');
+  return key;
+}
+
+function getTerms(q) {
+  const stop = new Set(['a','an','the','and','or','but','if','then','than','is','are','was','were','be','been','being','what','which','who','when','where','why','how','to','of','in','on','for','with','from','by','as','tell','show','give','find','search','lookup','about','please','latest','recent','current','today','now']);
+  return Array.from(new Set(String(q || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(x => x && x.length > 1 && !stop.has(x)).slice(0, 20)));
+}
+
+function splitSentences(text) {
+  const s = clean(text);
+  if (!s) return [];
+  const parts = s.split(/(?<=[.!?])\s+(?=[A-Z0-9"'])/g).map(x => x.trim()).filter(Boolean);
+  return parts.length ? parts : [s];
+}
+function chunkTextForRag(text, o = {}) {
+  const src = clean(text); if (!src) return [];
+  const chunkChars = clamp(toPosInt(o.chunkSize, 1400), 300, 4000);
+  const overlapChars = clamp(toPosInt(o.chunkOverlap, 220), 0, Math.floor(chunkChars * 0.6));
+  const target = clamp(Math.ceil(chunkChars / 4), 100, 1200);
+  const overlap = clamp(Math.ceil(overlapChars / 4), 0, Math.floor(target * 0.5));
+  const sents = splitSentences(src); const out = [];
+  let cur = 0;
+  while (cur < sents.length) {
+    let i = cur; let toks = 0; const buf = [];
+    while (i < sents.length) {
+      const nt = Math.max(1, Math.ceil(sents[i].length / 4));
+      if (buf.length && toks + nt > target) break;
+      buf.push(sents[i]); toks += nt; i++;
+      if (toks >= target) break;
     }
-    return key;
+    const ch = clean(buf.join(' ')); if (ch) out.push(ch);
+    if (i >= sents.length) break;
+    let back = 0; let j = i - 1;
+    while (j >= 0 && back < overlap) { back += Math.max(1, Math.ceil(sents[j].length / 4)); j--; }
+    cur = Math.max(cur + 1, j + 1);
+  }
+  return Array.from(new Map(out.map(x => [hash(x, 28), x])).values());
 }
 
-function toSafeNamespace(input) {
-    const ns = String(input || process.env.PINECONE_NAMESPACE || 'default')
-        .trim()
-        .replace(/[^a-zA-Z0-9_-]/g, '_')
-        .slice(0, 64);
-    return ns || 'default';
+function sanitizeMetadata(m = {}) {
+  const out = {};
+  for (const [k, v] of Object.entries(m || {})) {
+    const key = String(k || '').replace(/[^a-zA-Z0-9_:-]/g, '_').slice(0, 64);
+    if (!key) continue;
+    if (v == null) continue;
+    out[key] = ['string', 'number', 'boolean'].includes(typeof v) ? v : String(v).slice(0, 400);
+  }
+  return out;
 }
 
-function toPositiveInt(value, fallback) {
-    const n = Number(value);
-    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
-}
+function toTask(x) { return String(x || '').toUpperCase().trim() === 'RETRIEVAL_QUERY' ? 'RETRIEVAL_QUERY' : 'RETRIEVAL_DOCUMENT'; }
+function modelCandidates() { return Array.from(new Set([DEFAULT_EMBED_MODEL, 'text-embedding-004', 'gemini-embedding-001'].filter(Boolean))); }
 
-function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-}
+async function googleEmbeddings(inputs, opt = {}) {
+  const taskType = toTask(opt.taskType);
+  const list = (Array.isArray(inputs) ? inputs : []).map(x => clean(String(x || '')));
+  if (!list.length) return [];
 
-function normalizeWhitespace(text) {
-    return String(text || '')
-        .replace(/\u0000/g, '')
-        .replace(/\r\n/g, '\n')
-        .replace(/\t/g, ' ')
-        .replace(/[ ]{2,}/g, ' ')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-}
+  const out = new Array(list.length); const miss = [];
+  for (let i = 0; i < list.length; i++) {
+    const c = cacheGet(cache.emb, embKey(list[i], taskType));
+    if (c) out[i] = c; else miss.push({ i, text: list[i] });
+  }
+  if (!miss.length) return out;
 
-function chunkTextForRag(text, options = {}) {
-    const clean = normalizeWhitespace(text);
-    if (!clean) return [];
-
-    const chunkSize = clamp(toPositiveInt(options.chunkSize, 1400), 300, 4000);
-    const chunkOverlap = clamp(toPositiveInt(options.chunkOverlap, 220), 0, Math.floor(chunkSize * 0.6));
-
-    const chunks = [];
-    let start = 0;
-
-    while (start < clean.length) {
-        let end = Math.min(clean.length, start + chunkSize);
-
-        if (end < clean.length) {
-            const windowStart = Math.max(start + Math.floor(chunkSize * 0.55), start);
-            const slice = clean.slice(windowStart, end);
-            const breakMatch = slice.match(/(?:\n\n|\n|\.\s|\?\s|!\s)(?![\s\S]*(?:\n\n|\n|\.\s|\?\s|!\s))/);
-            if (breakMatch?.index != null) {
-                end = windowStart + breakMatch.index + breakMatch[0].length;
-            }
-        }
-
-        const chunk = clean.slice(start, end).trim();
-        if (chunk) chunks.push(chunk);
-
-        if (end >= clean.length) break;
-        start = Math.max(0, end - chunkOverlap);
-    }
-
-    return chunks;
-}
-
-function sanitizeMetadataValue(value) {
-    if (value == null) return undefined;
-    if (['string', 'number', 'boolean'].includes(typeof value)) return value;
-    return String(value).slice(0, 400);
-}
-
-function sanitizeMetadata(metadata = {}) {
-    const out = {};
-    for (const [k, v] of Object.entries(metadata || {})) {
-        if (!k) continue;
-        const key = String(k).replace(/[^a-zA-Z0-9_:-]/g, '_').slice(0, 64);
-        const val = sanitizeMetadataValue(v);
-        if (val === undefined) continue;
-        out[key] = val;
-    }
+  const apiKey = getGoogleApiKey();
+  let err = 'google_embeddings_failed';
+  for (const model of modelCandidates()) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:batchEmbedContents?key=${apiKey}`;
+    const r = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests: miss.map(m => ({ model: `models/${model}`, taskType, content: { parts: [{ text: m.text }] } })) })
+    });
+    const raw = await r.text();
+    if (!r.ok) { err = `google_embeddings_failed model=${model} status=${r.status} body=${raw.slice(0, 220)}`; continue; }
+    const data = raw ? JSON.parse(raw) : {};
+    const vecs = Array.isArray(data?.embeddings) ? data.embeddings.map(e => Array.isArray(e?.values) ? e.values : null).filter(Boolean) : [];
+    if (vecs.length !== miss.length) { err = `google_embeddings_empty_or_mismatch model=${model}`; continue; }
+    for (let j = 0; j < miss.length; j++) { out[miss[j].i] = vecs[j]; cacheSet(cache.emb, embKey(miss[j].text, taskType), vecs[j], C.EMB_TTL); }
     return out;
-}
-
-function buildDocumentId(seed = '') {
-    if (seed && /^[a-zA-Z0-9:_-]{1,120}$/.test(seed)) return seed;
-    return `doc_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
-}
-
-function getEmbedModelCandidates() {
-    return Array.from(new Set([
-        DEFAULT_EMBED_MODEL,
-        'text-embedding-004',
-        'gemini-embedding-001'
-    ].filter(Boolean)));
-}
-
-function toGoogleTaskType(input) {
-    const raw = String(input || '').toUpperCase().trim();
-    if (raw === 'RETRIEVAL_QUERY') return 'RETRIEVAL_QUERY';
-    return 'RETRIEVAL_DOCUMENT';
-}
-
-async function googleEmbeddings(inputs, options = {}) {
-    const apiKey = getGoogleApiKey();
-    const taskType = toGoogleTaskType(options.taskType);
-    const candidates = getEmbedModelCandidates();
-    let lastError = 'google_embeddings_failed';
-
-    for (const model of candidates) {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:batchEmbedContents?key=${apiKey}`;
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                requests: inputs.map((text) => ({
-                    model: `models/${model}`,
-                    taskType,
-                    content: { parts: [{ text: String(text || '') }] }
-                }))
-            })
-        });
-
-        const raw = await response.text();
-        if (!response.ok) {
-            lastError = `google_embeddings_failed model=${model} status=${response.status} body=${raw.slice(0, 220)}`;
-            continue;
-        }
-
-        const data = raw ? JSON.parse(raw) : {};
-        const vectors = Array.isArray(data?.embeddings)
-            ? data.embeddings.map((item) => Array.isArray(item?.values) ? item.values : null).filter(Boolean)
-            : [];
-
-        if (vectors.length === inputs.length) {
-            return vectors;
-        }
-        lastError = `google_embeddings_empty_or_mismatch model=${model}`;
-    }
-
-    throw new Error(lastError);
+  }
+  throw new Error(err);
 }
 
 async function pineconeRequest(path, body) {
-    const apiKey = assertEnv('PINECONE_API_KEY');
-    const host = assertEnv('PINECONE_INDEX_HOST').replace(/^https?:\/\//i, '');
-
-    const response = await fetch(`https://${host}${path}`, {
-        method: 'POST',
-        headers: {
-            'Api-Key': apiKey,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body || {})
-    });
-
-    const raw = await response.text();
-    if (!response.ok) {
-        throw new Error(`pinecone_request_failed path=${path} status=${response.status} body=${raw.slice(0, 220)}`);
-    }
-
-    return raw ? JSON.parse(raw) : {};
+  const apiKey = assertEnv('PINECONE_API_KEY');
+  const host = assertEnv('PINECONE_INDEX_HOST').replace(/^https?:\/\//i, '');
+  const r = await fetch(`https://${host}${path}`, { method: 'POST', headers: { 'Api-Key': apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`pinecone_request_failed path=${path} status=${r.status} body=${raw.slice(0, 220)}`);
+  return raw ? JSON.parse(raw) : {};
 }
-
 async function upsertDocumentToPinecone(payload = {}) {
-    const text = normalizeWhitespace(payload.text);
-    if (!text) throw new Error('text_required_for_upsert');
+  const text = clean(payload.text);
+  if (!text) throw new Error('text_required_for_upsert');
+  const namespace = toNs(payload.namespace);
+  const documentId = payload.documentId && /^[a-zA-Z0-9:_-]{1,120}$/.test(payload.documentId) ? payload.documentId : `doc_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+  const chunks = chunkTextForRag(text, { chunkSize: payload.chunkSize, chunkOverlap: payload.chunkOverlap });
+  if (!chunks.length) throw new Error('no_chunks_generated');
 
-    const namespace = toSafeNamespace(payload.namespace);
-    const documentId = buildDocumentId(payload.documentId);
-    const chunks = chunkTextForRag(text, {
-        chunkSize: payload.chunkSize,
-        chunkOverlap: payload.chunkOverlap
-    });
+  const batch = clamp(toPosInt(payload.embedBatchSize, 20), 1, 100);
+  const meta = sanitizeMetadata(payload.metadata);
+  const vectors = [];
+  for (let i = 0; i < chunks.length; i += batch) {
+    const part = chunks.slice(i, i + batch);
+    const embeds = await googleEmbeddings(part, { taskType: 'RETRIEVAL_DOCUMENT' });
+    for (let j = 0; j < part.length; j++) vectors.push({ id: `${documentId}#${i + j}`, values: embeds[j], metadata: { ...meta, documentId, chunkIndex: i + j, text: part[j] } });
+  }
 
-    if (!chunks.length) throw new Error('no_chunks_generated');
-
-    const batchSize = clamp(toPositiveInt(payload.embedBatchSize, 20), 1, 100);
-    const sharedMetadata = sanitizeMetadata(payload.metadata);
-    const records = [];
-
-    for (let i = 0; i < chunks.length; i += batchSize) {
-        const part = chunks.slice(i, i + batchSize);
-        const vectors = await googleEmbeddings(part, { taskType: 'RETRIEVAL_DOCUMENT' });
-
-        for (let j = 0; j < part.length; j++) {
-            const chunkIndex = i + j;
-            records.push({
-                id: `${documentId}#${chunkIndex}`,
-                values: vectors[j],
-                metadata: {
-                    ...sharedMetadata,
-                    documentId,
-                    chunkIndex,
-                    text: part[j]
-                }
-            });
-        }
-    }
-
-    const upsertRes = await pineconeRequest('/vectors/upsert', {
-        namespace,
-        vectors: records
-    });
-
-    return {
-        namespace,
-        documentId,
-        chunkCount: chunks.length,
-        upsertedCount: Number(upsertRes?.upsertedCount || records.length)
-    };
+  const up = await pineconeRequest('/vectors/upsert', { namespace, vectors });
+  return { namespace, documentId, chunkCount: chunks.length, upsertedCount: Number(up?.upsertedCount || vectors.length) };
 }
 
 async function queryPineconeMatches(payload = {}) {
-    const query = normalizeWhitespace(payload.query);
-    if (!query) return [];
-
-    const namespace = toSafeNamespace(payload.namespace);
-    const topK = clamp(toPositiveInt(payload.topK, DEFAULT_TOP_K), 1, 40);
-    const [queryVector] = await googleEmbeddings([query], { taskType: 'RETRIEVAL_QUERY' });
-
-    const body = {
-        namespace,
-        vector: queryVector,
-        topK,
-        includeMetadata: true,
-        includeValues: false
-    };
-
-    if (payload.filter && typeof payload.filter === 'object') {
-        body.filter = payload.filter;
-    }
-
-    const data = await pineconeRequest('/query', body);
-    const matches = Array.isArray(data?.matches) ? data.matches : [];
-    return matches.map((m) => ({
-        id: String(m?.id || ''),
-        score: Number(m?.score || 0),
-        metadata: m?.metadata && typeof m.metadata === 'object' ? m.metadata : {},
-        text: String(m?.metadata?.text || '').trim(),
-        sourceType: 'vector'
-    })).filter(m => m.id && m.text);
+  const query = clean(payload.query);
+  if (!query) return [];
+  const namespace = toNs(payload.namespace);
+  const topK = clamp(toPosInt(payload.topK, DEFAULT_TOP_K), 1, 40);
+  const [queryVector] = await googleEmbeddings([query], { taskType: 'RETRIEVAL_QUERY' });
+  const body = { namespace, vector: queryVector, topK, includeMetadata: true, includeValues: false };
+  if (payload.filter && typeof payload.filter === 'object') body.filter = payload.filter;
+  const data = await pineconeRequest('/query', body);
+  return (Array.isArray(data?.matches) ? data.matches : []).map(m => ({ id: String(m?.id || ''), score: Number(m?.score || 0), metadata: m?.metadata && typeof m.metadata === 'object' ? m.metadata : {}, text: String(m?.metadata?.text || '').trim(), sourceType: 'vector' })).filter(m => m.id && m.text);
 }
 
-function getRagQueryTerms(query) {
-    const stop = new Set([
-        'a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'than',
-        'is', 'are', 'was', 'were', 'be', 'been', 'being',
-        'what', 'which', 'who', 'when', 'where', 'why', 'how',
-        'to', 'of', 'in', 'on', 'for', 'with', 'from', 'by', 'as',
-        'tell', 'show', 'give', 'find', 'search', 'lookup', 'about',
-        'please', 'latest', 'recent', 'current', 'today'
-    ]);
-
-    return Array.from(new Set(
-        String(query || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9\s]/g, ' ')
-            .split(/\s+/)
-            .filter(t => t && t.length > 1 && !stop.has(t))
-            .slice(0, 16)
-    ));
+function resolveQueryContext(query, context = []) {
+  const q = clean(query);
+  if (!q) return '';
+  const terms = getTerms(q);
+  const referential = /\b(it|they|that|this|those|these|same|earlier|previous|compare)\b/i.test(q);
+  if (!referential && terms.length >= 4) return q;
+  const turns = (Array.isArray(context) ? context : []).filter(t => String(t?.role || '').toLowerCase() === 'user').slice(-6).map(t => clean(t?.text || '')).filter(Boolean);
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const anchorTerms = getTerms(turns[i]);
+    if (anchorTerms.length < 3) continue;
+    if (terms.some(t => anchorTerms.includes(t))) return q;
+    return clean(`${q} ${anchorTerms.slice(0, 8).join(' ')}`);
+  }
+  return q;
 }
 
-function parseJsonArrayFromText(text) {
-    const raw = String(text || '').trim();
-    if (!raw) return [];
-    try {
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
-    } catch (_) {
-        const match = raw.match(/\[[\s\S]*\]/);
-        if (!match) return [];
-        try {
-            const parsed = JSON.parse(match[0]);
-            return Array.isArray(parsed) ? parsed : [];
-        } catch {
-            return [];
-        }
-    }
-}
-
-async function generateSemanticSearchQueries(query, options = {}) {
-    const clean = normalizeWhitespace(query);
-    if (!clean) return [];
-
-    const base = extractSearchTopic(clean) || clean;
-    const out = [base];
-    const baseUrl = String(options.baseUrl || '').trim();
-    if (!baseUrl) return out;
-
-    try {
-        const response = await fetch(`${baseUrl}/api/chat-groq`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                systemPrompt: 'Generate semantic web-search rewrites. Return ONLY a JSON array of short query strings. No prose.',
-                message: `Rewrite this user query into 3 alternative web search queries that preserve intent and maximize factual retrieval quality.\n\nQuery: "${clean}"\n\nOutput strictly as JSON array of strings.`
-            })
-        });
-        if (!response.ok) return out;
-        const data = await response.json();
-        const rewrites = parseJsonArrayFromText(data?.response || data?.text || '')
-            .map(item => normalizeWhitespace(String(item || '')))
-            .filter(Boolean)
-            .slice(0, 3);
-        out.push(...rewrites);
-    } catch (_) {
-        // Keep baseline query only.
-    }
-
-    return Array.from(new Set(out.filter(Boolean))).slice(0, 4);
+function isBlockedHost(host) {
+  const h = String(host || '').trim().toLowerCase().replace(/\.$/, '');
+  if (!h || h === 'localhost' || h === '0.0.0.0' || h === '::1' || h === '::') return true;
+  if (h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.localhost')) return true;
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(h)) {
+    const o = h.split('.').map(Number);
+    if (o[0] === 10 || o[0] === 127 || o[0] === 0 || (o[0] === 169 && o[1] === 254) || (o[0] === 192 && o[1] === 168) || (o[0] === 172 && o[1] >= 16 && o[1] <= 31)) return true;
+  }
+  return ['metadata', 'metadata.google.internal', 'kubernetes.default.svc'].includes(h);
 }
 
 function sanitizeWebUrl(url) {
-    try {
-        const parsed = new URL(String(url || '').trim());
-        if (!['http:', 'https:'].includes(parsed.protocol)) return '';
-        return parsed.toString();
-    } catch (_) {
-        return '';
-    }
+  try {
+    const p = new URL(String(url || '').trim());
+    if (!['http:', 'https:'].includes(p.protocol)) return '';
+    if (isBlockedHost(p.hostname)) return '';
+    if (p.port && !['80', '443'].includes(p.port)) return '';
+    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid', 'ref', 'ref_src'].forEach(k => p.searchParams.delete(k));
+    p.hash = ''; p.hostname = p.hostname.toLowerCase(); p.pathname = p.pathname.replace(/\/{2,}/g, '/'); if (p.pathname.length > 1) p.pathname = p.pathname.replace(/\/$/, '');
+    return p.toString();
+  } catch (_) { return ''; }
 }
 
-function decodeBasicHtml(text) {
-    return String(text || '')
-        .replace(/&nbsp;/gi, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>');
-}
+const decodeBasicHtml = (t) => String(t || '').replace(/&nbsp;/gi, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+const stripHtmlToText = (h) => decodeBasicHtml(String(h || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, ' ').trim());
+const extractTitleFromHtml = (h) => decodeBasicHtml((String(h || '').match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '')).replace(/\s+/g, ' ').trim();
 
-function stripHtmlToText(html) {
-    return decodeBasicHtml(String(html || '')
-        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-        .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s{2,}/g, ' ')
-        .trim());
-}
-
-function extractTitleFromHtml(html) {
-    const match = String(html || '').match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    return decodeBasicHtml(match?.[1] || '').replace(/\s+/g, ' ').trim();
-}
-
-function parseDateCandidate(value) {
-    const raw = String(value || '').trim();
-    if (!raw) return 0;
-    const ts = Date.parse(raw);
-    if (!Number.isFinite(ts) || ts <= 0) return 0;
-    return ts;
-}
-
-function extractPublishedAtFromHtml(html, text = '') {
-    const doc = String(html || '');
-    const candidates = [];
-    const metaPatterns = [
-        /<meta[^>]+property=["']article:published_time["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-        /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']article:published_time["'][^>]*>/i,
-        /<meta[^>]+name=["']pubdate["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-        /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']pubdate["'][^>]*>/i,
-        /<meta[^>]+name=["']publishdate["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-        /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']publishdate["'][^>]*>/i,
-        /<meta[^>]+name=["']date["'][^>]+content=["']([^"']+)["'][^>]*>/i,
-        /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']date["'][^>]*>/i
-    ];
-
-    for (const p of metaPatterns) {
-        const m = doc.match(p);
-        if (m?.[1]) candidates.push(m[1]);
-    }
-
-    const timeTag = doc.match(/<time[^>]+datetime=["']([^"']+)["'][^>]*>/i);
-    if (timeTag?.[1]) candidates.push(timeTag[1]);
-
-    const textDate = String(text || '').match(
-        /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},\s+\d{4}\b/i
-    );
-    if (textDate?.[0]) candidates.push(textDate[0]);
-
-    for (const c of candidates) {
-        const ts = parseDateCandidate(c);
-        if (ts > 0) return ts;
-    }
-    return 0;
-}
-
-function freshnessScore(publishedAtMs) {
-    const ts = Number(publishedAtMs) || 0;
-    if (!ts) return 0;
-
-    const ageDays = (Date.now() - ts) / (1000 * 60 * 60 * 24);
-    if (!Number.isFinite(ageDays)) return 0;
-    if (ageDays <= 2) return 0.22;
-    if (ageDays <= 7) return 0.18;
-    if (ageDays <= 30) return 0.12;
-    if (ageDays <= 180) return 0.06;
-    if (ageDays <= 365) return 0.01;
-    if (ageDays <= 3 * 365) return -0.03;
-    return -0.08;
+function extractPublishedMs(html, text = '') {
+  const doc = String(html || '');
+  const vals = [];
+  for (const p of [/<meta[^>]+property=["']article:published_time["'][^>]+content=["']([^"']+)["'][^>]*>/i, /<meta[^>]+name=["']pubdate["'][^>]+content=["']([^"']+)["'][^>]*>/i, /<meta[^>]+name=["']publishdate["'][^>]+content=["']([^"']+)["'][^>]*>/i, /<meta[^>]+name=["']date["'][^>]+content=["']([^"']+)["'][^>]*>/i]) { const m = doc.match(p); if (m?.[1]) vals.push(m[1]); }
+  const tm = doc.match(/<time[^>]+datetime=["']([^"']+)["'][^>]*>/i); if (tm?.[1]) vals.push(tm[1]);
+  const tx = String(text || '').match(/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},\s+\d{4}\b/i); if (tx?.[0]) vals.push(tx[0]);
+  for (const v of vals) { const ts = Date.parse(String(v || '')); if (Number.isFinite(ts) && ts > 0) return ts; }
+  return 0;
 }
 
 async function fetchAndExtractWebDocument(url, timeoutMs = 6000) {
-    const safeUrl = sanitizeWebUrl(url);
-    if (!safeUrl) return null;
+  const safeUrl = sanitizeWebUrl(url); if (!safeUrl) return null;
+  const ck = `web:${safeUrl}`; const hit = cacheGet(cache.web, ck); if (hit) return hit;
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(safeUrl, { method: 'GET', headers: { 'User-Agent': 'UnifyAssistantRAG/2.0', 'Accept': 'text/html,application/xhtml+xml' }, signal: ctrl.signal });
+    if (!r.ok) return null;
+    const ctype = String(r.headers.get('content-type') || '').toLowerCase();
+    if (!ctype.includes('text/html') && !ctype.includes('application/xhtml+xml')) return null;
+    const html = await r.text();
+    const text = clean(stripHtmlToText(html)).slice(0, 16000);
+    if (!text || text.length < 200) return null;
+    const publishedAtMs = extractPublishedMs(html, text);
+    const doc = { url: sanitizeWebUrl(r.url || safeUrl) || safeUrl, title: extractTitleFromHtml(html), text, publishedAt: publishedAtMs > 0 ? new Date(publishedAtMs).toISOString() : '', publishedAtMs };
+    cacheSet(cache.web, ck, doc, C.WEB_TTL);
+    return doc;
+  } catch (_) { return null; } finally { clearTimeout(timer); }
+}
+function loadTrustedHostWeights() {
+  const raw = String(process.env.RAG_TRUSTED_HOST_WEIGHTS || '').trim();
+  if (!raw) return {};
+  try {
+    const p = JSON.parse(raw);
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return {};
+    const out = {};
+    for (const [h, v] of Object.entries(p)) { const k = String(h || '').trim().toLowerCase(); const n = Number(v); if (k && Number.isFinite(n)) out[k] = clamp(n, -0.4, 0.4); }
+    return out;
+  } catch (_) { return {}; }
+}
+function trustScore(url, weights = {}) {
+  try {
+    const host = new URL(String(url || '')).hostname.toLowerCase();
+    let best = 0;
+    for (const [d, w] of Object.entries(weights || {})) if (host === d || host.endsWith(`.${d}`)) if (Math.abs(w) > Math.abs(best)) best = w;
+    return best;
+  } catch (_) { return 0; }
+}
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-        const response = await fetch(safeUrl, {
-            method: 'GET',
-            headers: {
-                'User-Agent': 'UnifyAssistantRAG/1.0',
-                'Accept': 'text/html,application/xhtml+xml'
-            },
-            signal: controller.signal
-        });
-        if (!response.ok) return null;
-        const ctype = String(response.headers.get('content-type') || '').toLowerCase();
-        if (!ctype.includes('text/html') && !ctype.includes('application/xhtml+xml')) return null;
+async function generateSemanticSearchQueries(query, options = {}) {
+  const q = clean(query); if (!q) return [];
+  const contextual = resolveQueryContext(q, options.context || []);
+  const base = extractSearchTopic(contextual) || contextual;
+  const out = [base];
+  const baseUrl = String(options.baseUrl || '').trim();
+  if (!baseUrl) return out;
+  try {
+    const r = await fetch(`${baseUrl}/api/chat-groq`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ systemPrompt: 'Generate semantic web-search rewrites. Return ONLY a JSON array of short query strings. No prose.', message: `Rewrite this user query into 4 alternative web search queries that preserve intent and maximize factual retrieval quality.\\n\\nQuery: "${contextual}"\\n\\nOutput strictly as JSON array of strings.` }) });
+    if (!r.ok) return out;
+    const d = await r.json();
+    let rewrites = []; try { rewrites = JSON.parse(String(d?.response || d?.text || '')); } catch { rewrites = []; }
+    out.push(...(Array.isArray(rewrites) ? rewrites : []).map(x => clean(String(x || ''))).filter(Boolean).slice(0, 4));
+  } catch (_) {}
+  return Array.from(new Set(out.filter(Boolean))).slice(0, 5);
+}
 
-        const html = await response.text();
-        const text = normalizeWhitespace(stripHtmlToText(html)).slice(0, 14000);
-        if (!text || text.length < 200) return null;
-        const publishedAtMs = extractPublishedAtFromHtml(html, text);
-
-        return {
-            url: safeUrl,
-            title: extractTitleFromHtml(html),
-            text,
-            publishedAt: publishedAtMs > 0 ? new Date(publishedAtMs).toISOString() : '',
-            publishedAtMs
-        };
-    } catch (_) {
-        return null;
-    } finally {
-        clearTimeout(timer);
-    }
+function parseJsonObjectFromText(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch (_) {}
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  try {
+    const parsed = JSON.parse(m[0]);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchSearchResultsForRag(query, options = {}) {
-    const maxResults = clamp(toPositiveInt(options.maxResults, 6), 1, 10);
-    const baseUrl = String(options.baseUrl || '').trim();
+  const cleanQuery = clean(query);
+  const maxResults = clamp(toPosInt(options.maxResults, 6), 1, 10);
+  const baseUrl = String(options.baseUrl || '').trim();
+  const ck = `search:${hash(`${cleanQuery}|${maxResults}`, 32)}`;
+  const hit = cacheGet(cache.search, ck); if (hit) return hit;
 
-    if (baseUrl) {
-        try {
-            const response = await fetch(`${baseUrl}/api/search`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query, maxResults })
-            });
-            if (response.ok) {
-                const data = await response.json();
-                const items = Array.isArray(data?.results) ? data.results : [];
-                return items.map(item => ({
-                    title: String(item?.title || '').trim(),
-                    url: sanitizeWebUrl(item?.url || ''),
-                    description: String(item?.description || '').trim()
-                })).filter(item => item.url);
-            }
-        } catch (_) {
-            // Fall through to direct live search.
-        }
-    }
-
+  if (baseUrl) {
     try {
-        const queries = await generateSemanticSearchQueries(query, { baseUrl });
-        const verified = await runVerifiedWebSearch(queries, {
-            maxResultsPerQuery: Math.min(maxResults, 6),
-            limit: maxResults
-        });
-        const items = Array.isArray(verified?.results) ? verified.results : [];
-        return items.map(item => ({
-            title: String(item?.title || '').trim(),
-            url: sanitizeWebUrl(item?.url || ''),
-            description: String(item?.description || '').trim()
-        })).filter(item => item.url);
-    } catch (_) {
-        return [];
-    }
-}
-
-function dot(a, b) {
-    let sum = 0;
-    const len = Math.min(Array.isArray(a) ? a.length : 0, Array.isArray(b) ? b.length : 0);
-    for (let i = 0; i < len; i++) {
-        sum += (Number(a[i]) || 0) * (Number(b[i]) || 0);
-    }
-    return sum;
-}
-
-function magnitude(v) {
-    let sum = 0;
-    const arr = Array.isArray(v) ? v : [];
-    for (let i = 0; i < arr.length; i++) {
-        const n = Number(arr[i]) || 0;
-        sum += n * n;
-    }
-    return Math.sqrt(sum);
-}
-
-function cosineSimilarity(a, b) {
-    const denom = magnitude(a) * magnitude(b);
-    if (!denom) return 0;
-    return dot(a, b) / denom;
-}
-
-function lexicalScore(text, terms) {
-    const hay = String(text || '').toLowerCase();
-    if (!hay || !Array.isArray(terms) || !terms.length) return 0;
-    const overlap = terms.reduce((acc, term) => acc + (hay.includes(term) ? 1 : 0), 0);
-    return overlap / terms.length;
-}
-
-function getHostFromUrl(url) {
-    try {
-        return new URL(String(url || '')).hostname.toLowerCase();
-    } catch (_) {
-        return '';
-    }
-}
-
-function loadTrustedHostWeights() {
-    const raw = String(process.env.RAG_TRUSTED_HOST_WEIGHTS || '').trim();
-    if (!raw) return {};
-    try {
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-        const out = {};
-        for (const [host, value] of Object.entries(parsed)) {
-            const key = String(host || '').trim().toLowerCase();
-            const weight = Number(value);
-            if (!key || !Number.isFinite(weight)) continue;
-            out[key] = clamp(weight, -0.4, 0.4);
-        }
+      const r = await fetch(`${baseUrl}/api/search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: cleanQuery, maxResults }) });
+      if (r.ok) {
+        const d = await r.json();
+        const items = (Array.isArray(d?.results) ? d.results : []).map(i => ({ title: String(i?.title || '').trim(), url: sanitizeWebUrl(i?.url || ''), description: String(i?.description || '').trim() })).filter(i => i.url);
+        const out = Array.from(new Map(items.map(i => [i.url, i])).values());
+        cacheSet(cache.search, ck, out, C.SEARCH_TTL);
         return out;
-    } catch (_) {
-        return {};
-    }
+      }
+    } catch (_) {}
+  }
+
+  try {
+    const queries = await generateSemanticSearchQueries(cleanQuery, { baseUrl, context: options.context });
+    const verified = await runVerifiedWebSearch(queries, { maxResultsPerQuery: Math.min(maxResults, 6), limit: maxResults });
+    const items = (Array.isArray(verified?.results) ? verified.results : []).map(i => ({ title: String(i?.title || '').trim(), url: sanitizeWebUrl(i?.url || ''), description: String(i?.description || '').trim() })).filter(i => i.url);
+    const out = Array.from(new Map(items.map(i => [i.url, i])).values());
+    cacheSet(cache.search, ck, out, C.SEARCH_TTL);
+    return out;
+  } catch (_) { return []; }
 }
 
-function sourceTrustScore(url, trustedHostWeights = {}) {
-    const host = getHostFromUrl(url);
-    if (!host) return 0;
-    let best = 0;
-    for (const [domain, weight] of Object.entries(trustedHostWeights || {})) {
-        if (host === domain || host.endsWith(`.${domain}`)) {
-            if (Math.abs(weight) > Math.abs(best)) best = weight;
-        }
-    }
-    return best;
-}
-
-function buildHitTextForEmbedding(hit) {
-    const title = normalizeWhitespace(String(hit?.title || ''));
-    const desc = normalizeWhitespace(String(hit?.description || ''));
-    const url = normalizeWhitespace(String(hit?.url || ''));
-    return [title, desc, url].filter(Boolean).join('\n').slice(0, 1200);
-}
-
-function computeAdaptiveThreshold(scores, floor = 0.12) {
-    const arr = (Array.isArray(scores) ? scores : []).filter(Number.isFinite).sort((a, b) => b - a);
-    if (!arr.length) return floor;
-    if (arr.length === 1) return Math.max(floor, arr[0] - 0.01);
-    const mean = arr.reduce((sum, n) => sum + n, 0) / arr.length;
-    const variance = arr.reduce((sum, n) => sum + (n - mean) * (n - mean), 0) / arr.length;
-    const std = Math.sqrt(Math.max(variance, 0));
-    const dynamic = mean + (0.1 * std);
-    return Math.max(floor, dynamic);
-}
+const isTimeSensitive = (q) => /\b(latest|recent|current|today|now|update|updates|news|headlines|status|price|rates?|score|result|breaking|earnings|quarter|schedule|fixture|as of)\b/i.test(String(q || ''));
+const adaptiveWeights = (q) => isTimeSensitive(q) ? { s: 0.56, l: 0.13, b: 0.1, f: 0.13, t: 0.08 } : { s: 0.7, l: 0.15, b: 0.09, f: 0.01, t: 0.05 };
+const freshScore = (ts) => { const n = Number(ts) || 0; if (!n) return 0; const d = (Date.now() - n) / 86400000; if (d <= 2) return 0.24; if (d <= 7) return 0.2; if (d <= 30) return 0.14; if (d <= 180) return 0.07; if (d <= 365) return 0.02; if (d <= 1095) return -0.04; return -0.09; };
+const norm = (a) => { const v = a.map(x => Number(x) || 0); if (!v.length) return []; const min = Math.min(...v), max = Math.max(...v); return max - min < 1e-9 ? v.map(() => 0.5) : v.map(x => (x - min) / (max - min)); };
+const cos = (a, b) => { const d = a.reduce((s, x, i) => s + (Number(x) || 0) * (Number(b?.[i]) || 0), 0); const ma = Math.sqrt(a.reduce((s, x) => s + (Number(x) || 0) ** 2, 0)); const mb = Math.sqrt((Array.isArray(b) ? b : []).reduce((s, x) => s + (Number(x) || 0) ** 2, 0)); return ma && mb ? d / (ma * mb) : 0; };
+const scoreCut = (arr, floor = 0.12) => { const a = arr.filter(Number.isFinite).sort((x, y) => y - x); if (!a.length) return floor; if (a.length === 1) return Math.max(floor, a[0] - 0.01); const m = a.reduce((s, n) => s + n, 0) / a.length; const v = a.reduce((s, n) => s + (n - m) ** 2, 0) / a.length; return Math.max(floor, m + 0.1 * Math.sqrt(Math.max(v, 0))); };
 
 async function buildLiveWebMatches(query, options = {}) {
-    const webEnabled = options.webSearch !== false;
-    if (!webEnabled) return [];
+  if (options.webSearch === false) return [];
+  const topK = clamp(toPosInt(options.topK, DEFAULT_TOP_K), 1, 20);
+  const maxUrls = clamp(toPosInt(options.webMaxUrls, 4), 1, 6);
+  const hits = await fetchSearchResultsForRag(query, { maxResults: Math.max(maxUrls, topK), baseUrl: options.baseUrl, context: options.context });
+  if (!hits.length) return [];
 
-    const topK = clamp(toPositiveInt(options.topK, DEFAULT_TOP_K), 1, 20);
-    const maxUrls = clamp(toPositiveInt(options.webMaxUrls, 4), 1, 6);
-    const searchResults = await fetchSearchResultsForRag(query, {
-        maxResults: Math.max(maxUrls, topK),
-        baseUrl: options.baseUrl
-    });
-    const trustedHostWeights = loadTrustedHostWeights();
-    const hits = Array.isArray(searchResults) ? searchResults : [];
-    if (!hits.length) return [];
+  const terms = getTerms(query);
+  const trusted = loadTrustedHostWeights();
+  const [qVec] = await googleEmbeddings([query], { taskType: 'RETRIEVAL_QUERY' });
+  const hVec = await googleEmbeddings(hits.map(h => [h.title, h.description, h.url].filter(Boolean).join('\n').slice(0, 1200)), { taskType: 'RETRIEVAL_DOCUMENT' });
+  let ranked = hits.map((h, i) => ({ ...h, __score: (((cos(qVec, hVec[i]) + 1) / 2) * 0.8) + (lexicalScore(`${h.title}\n${h.description}`, terms) * 0.14) + (trustScore(h.url, trusted) * 0.06) })).sort((a, b) => b.__score - a.__score);
+  ranked = ranked.filter(x => x.__score >= scoreCut(ranked.map(r => r.__score), 0.14));
+  if (!ranked.length) ranked = hits.slice(0, Math.min(maxUrls, 3));
 
-    const hitTexts = hits.map(buildHitTextForEmbedding);
-    const [queryVector] = await googleEmbeddings([query], { taskType: 'RETRIEVAL_QUERY' });
-    const hitVectors = await googleEmbeddings(hitTexts, { taskType: 'RETRIEVAL_DOCUMENT' });
+  const urls = Array.from(new Set(ranked.map(x => x.url).filter(Boolean))).slice(0, maxUrls);
+  const docs = Array.from(new Map((await Promise.all(urls.map(u => fetchAndExtractWebDocument(u, 6000)))).filter(Boolean).map(d => [`${d.url}|${hash(d.text.slice(0, 700), 18)}`, d])).values());
+  if (!docs.length) return [];
 
-    const rankedWithScores = hits.map((hit, idx) => {
-        const semantic = clamp((cosineSimilarity(queryVector, hitVectors[idx]) + 1) / 2, 0, 1);
-        const trust = sourceTrustScore(hit?.url, trustedHostWeights);
-        const score = (semantic * 0.9) + (trust * 0.1);
-        return { ...hit, __relevance: score };
-    }).sort((a, b) => b.__relevance - a.__relevance);
+  const chunks = [];
+  for (const doc of docs) {
+    const c = chunkTextForRag(doc.text, { chunkSize: clamp(toPosInt(options.webChunkSize, 900), 300, 1800), chunkOverlap: clamp(toPosInt(options.webChunkOverlap, 140), 0, 500) }).slice(0, 10);
+    for (let i = 0; i < c.length; i++) chunks.push({ id: `web:${doc.url}#${i}`, text: c[i], metadata: { sourceType: 'web', url: doc.url, title: doc.title || '', publishedAt: doc.publishedAt || '', chunkIndex: i, documentId: `web_${hash(doc.url, 16)}` }, sourceType: 'web' });
+  }
+  if (!chunks.length) return [];
 
-    const threshold = computeAdaptiveThreshold(rankedWithScores.map(item => item.__relevance), 0.14);
-    let rankedHits = rankedWithScores.filter(item => Number.isFinite(item.__relevance) && item.__relevance >= threshold);
-    if (!rankedHits.length) {
-        rankedHits = rankedWithScores.slice(0, Math.min(maxUrls, 3));
-    }
-
-    const topUrls = rankedHits.slice(0, maxUrls).map(item => item.url).filter(Boolean);
-    if (!topUrls.length) return [];
-
-    const docs = (await Promise.all(topUrls.map(url => fetchAndExtractWebDocument(url, 6000)))).filter(Boolean);
-    if (!docs.length) return [];
-
-    const allChunks = [];
-    for (const doc of docs) {
-        const chunks = chunkTextForRag(doc.text, {
-            chunkSize: clamp(toPositiveInt(options.webChunkSize, 900), 300, 1500),
-            chunkOverlap: clamp(toPositiveInt(options.webChunkOverlap, 140), 0, 400)
-        }).slice(0, 8);
-        for (let i = 0; i < chunks.length; i++) {
-            allChunks.push({
-                id: `web:${doc.url}#${i}`,
-                text: chunks[i],
-                metadata: {
-                    sourceType: 'web',
-                    url: doc.url,
-                    title: doc.title || '',
-                    publishedAt: doc.publishedAt || '',
-                    chunkIndex: i,
-                    documentId: `web_${crypto.createHash('sha1').update(doc.url).digest('hex').slice(0, 16)}`
-                }
-            });
-        }
-    }
-    if (!allChunks.length) return [];
-
-    const batchSize = 20;
-    const vectors = [];
-    for (let i = 0; i < allChunks.length; i += batchSize) {
-        const part = allChunks.slice(i, i + batchSize).map(item => item.text);
-        const partVectors = await googleEmbeddings(part, { taskType: 'RETRIEVAL_DOCUMENT' });
-        vectors.push(...partVectors);
-    }
-
-    const scored = allChunks.map((chunk, idx) => {
-        const semantic = clamp((cosineSimilarity(queryVector, vectors[idx]) + 1) / 2, 0, 1);
-        const fresh = freshnessScore(chunk?.metadata?.publishedAt);
-        const trust = sourceTrustScore(chunk?.metadata?.url, trustedHostWeights);
-        const score = (semantic * 0.82) + (fresh * 0.1) + (trust * 0.08);
-        return {
-            id: chunk.id,
-            score,
-            metadata: chunk.metadata,
-            text: chunk.text,
-            sourceType: 'web'
-        };
-    }).sort((a, b) => b.score - a.score);
-
-    const cutoff = computeAdaptiveThreshold(scored.map(item => item.score), 0.2);
-    const filtered = scored.filter(item => item.score >= cutoff);
-    const finalList = filtered.length ? filtered : scored.slice(0, clamp(topK, 1, 8));
-    return finalList.slice(0, clamp(topK * 2, topK, 20));
+  const cVec = []; for (let i = 0; i < chunks.length; i += 20) cVec.push(...(await googleEmbeddings(chunks.slice(i, i + 20).map(c => c.text), { taskType: 'RETRIEVAL_DOCUMENT' })));
+  const sem = chunks.map((c, i) => clamp((cos(qVec, cVec[i]) + 1) / 2, 0, 1));
+  const lex = chunks.map(c => lexicalScore(c.text, terms));
+  const fre = norm(chunks.map(c => freshScore(c?.metadata?.publishedAt)));
+  const tr = norm(chunks.map(c => trustScore(c?.metadata?.url, trusted)));
+  const w = adaptiveWeights(query);
+  const scored = chunks.map((c, i) => ({ ...c, score: (sem[i] * w.s) + (lex[i] * w.l) + (fre[i] * w.f) + (tr[i] * w.t), rankSignals: { semantic: sem[i], lexical: lex[i], fresh: fre[i], trust: tr[i] } })).sort((a, b) => b.score - a.score);
+  const cutoff = scoreCut(scored.map(s => s.score), 0.2);
+  const list = (scored.filter(s => s.score >= cutoff).length ? scored.filter(s => s.score >= cutoff) : scored.slice(0, clamp(topK, 1, 8))).slice(0, clamp(topK * 2, topK, 24));
+  return Array.from(new Map(list.map(i => [`${i?.metadata?.documentId}|${hash(i.text.slice(0, 260), 18)}`, i])).values());
+}
+function fuseMatches(primary, secondary, topK) {
+  const merged = [...(Array.isArray(primary) ? primary : []), ...(Array.isArray(secondary) ? secondary : [])].filter(i => i && i.id && i.text).sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+  const out = []; const perDoc = new Map();
+  for (const item of merged) {
+    const docId = String(item?.metadata?.documentId || '').trim() || String(item.id).split('#')[0];
+    const count = perDoc.get(docId) || 0;
+    if (count >= 2) continue;
+    perDoc.set(docId, count + 1); out.push(item);
+    if (out.length >= topK * 3) break;
+  }
+  return out;
 }
 
-function fuseMatches(primary, secondary, topK) {
-    const merged = [...(Array.isArray(primary) ? primary : []), ...(Array.isArray(secondary) ? secondary : [])]
-        .filter(item => item && item.id && item.text)
-        .sort((a, b) => Number(b.score || 0) - Number(a.score || 0));
+function rerankMatches(query, matches) {
+  const terms = getTerms(query); const trusted = loadTrustedHostWeights();
+  return (Array.isArray(matches) ? matches : []).map(m => {
+    const semantic = clamp(Number(m?.score || 0), 0, 1);
+    const lexical = lexicalScore(m?.text || '', terms);
+    const fresh = freshScore(m?.metadata?.publishedAt || '');
+    const trust = trustScore(m?.metadata?.url || '', trusted);
+    return { ...m, score: (semantic * 0.72) + (lexical * 0.18) + (fresh * 0.04) + (trust * 0.06), rerank: { semantic, lexical, fresh, trust } };
+  }).sort((a, b) => b.score - a.score);
+}
 
+async function maybeLlmRerank(query, matches, baseUrl) {
+  if (!ENABLE_LLM_RERANK || !baseUrl || !Array.isArray(matches) || matches.length < 3) return matches;
+  const candidates = matches.slice(0, 18).map((m, i) => ({ id: String(m.id || `c${i}`), sourceType: String(m.sourceType || 'vector'), url: String(m?.metadata?.url || ''), title: String(m?.metadata?.title || ''), text: String(m?.text || '').slice(0, 360) }));
+  try {
+    const r = await fetch(`${baseUrl}/api/chat-groq`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ systemPrompt: 'You are a retrieval reranker. Return JSON only: {"orderedIds":["id1","id2"]}', message: `Query: "${query}"\nCandidates: ${JSON.stringify(candidates)}\nReturn orderedIds by relevance.` }) });
+    if (!r.ok) return matches;
+    const d = await r.json();
+    const obj = parseJsonObjectFromText(String(d?.response || d?.text || ''));
+    const ids = Array.isArray(obj?.orderedIds) ? obj.orderedIds.map(x => String(x || '')).filter(Boolean) : [];
+    if (!ids.length) return matches;
+    const byId = new Map(matches.map(m => [String(m.id), m]));
     const out = [];
-    const perDoc = new Map();
-    for (const item of merged) {
-        const docId = String(item?.metadata?.documentId || '').trim() || String(item.id).split('#')[0];
-        const count = perDoc.get(docId) || 0;
-        if (count >= 2) continue;
-        perDoc.set(docId, count + 1);
-        out.push(item);
-        if (out.length >= topK) break;
-    }
+    for (const id of ids) if (byId.has(id)) out.push(byId.get(id));
+    for (const m of matches) if (!out.includes(m)) out.push(m);
     return out;
+  } catch (_) { return matches; }
+}
+
+function buildCitationArtifacts(matches) {
+  const arr = Array.isArray(matches) ? matches : [];
+  const citationMap = arr.map((m, idx) => ({ index: idx + 1, id: String(m.id || ''), score: Number(m.score || 0), sourceType: String(m.sourceType || m?.metadata?.sourceType || 'vector'), url: String(m?.metadata?.url || ''), title: String(m?.metadata?.title || ''), publishedAt: String(m?.metadata?.publishedAt || '') }));
+  const ragContext = arr.length ? arr.map((m, idx) => {
+    const sourceType = m.sourceType || m?.metadata?.sourceType || 'vector';
+    const sourceUrl = String(m?.metadata?.url || '').trim();
+    const publishedAt = String(m?.metadata?.publishedAt || '').trim();
+    const datePart = publishedAt ? ` [published: ${publishedAt.slice(0, 10)}]` : '';
+    const prefix = sourceUrl ? `[${idx + 1}] (${sourceType}) ${sourceUrl}${datePart}` : `[${idx + 1}] (${sourceType})${datePart}`;
+    return `${prefix}\n${m.text}`;
+  }).join('\n\n') : '';
+  return { citationMap, ragContext };
+}
+
+function extractCitationIndexes(text, max = 14) {
+  const out = []; const seen = new Set(); const re = /\[(\d{1,3})\]/g; let m;
+  while ((m = re.exec(String(text || ''))) && out.length < max) { const n = Number(m[1]); if (Number.isFinite(n) && n > 0 && !seen.has(n)) { seen.add(n); out.push(n); } }
+  return out;
 }
 
 async function queryPineconeRag(payload = {}) {
-    const query = normalizeWhitespace(payload.query);
-    if (!query) throw new Error('query_required');
+  const t0 = now();
+  const originalQuery = clean(payload.query);
+  if (!originalQuery) throw new Error('query_required');
+  const query = resolveQueryContext(originalQuery, payload.context || []);
+  const namespace = toNs(payload.namespace);
+  const topK = clamp(toPosInt(payload.topK, DEFAULT_TOP_K), 1, 20);
 
-    const namespace = toSafeNamespace(payload.namespace);
-    const topK = clamp(toPositiveInt(payload.topK, DEFAULT_TOP_K), 1, 20);
-    const vectorMatches = await queryPineconeMatches({
-        query,
-        namespace,
-        topK: clamp(topK * 2, topK, 30),
-        filter: payload.filter
-    });
-    const webMatches = await buildLiveWebMatches(query, {
-        webSearch: payload.webSearch,
-        topK,
-        baseUrl: payload.baseUrl,
-        webMaxUrls: payload.webMaxUrls,
-        webChunkSize: payload.webChunkSize,
-        webChunkOverlap: payload.webChunkOverlap
-    });
-    const normalized = fuseMatches(vectorMatches, webMatches, topK);
+  const t1 = now();
+  const vectorMatches = await queryPineconeMatches({ query, namespace, topK: clamp(topK * 2, topK, 30), filter: payload.filter });
+  const vectorMs = now() - t1;
 
-    const ragContext = normalized.length
-        ? normalized.map((m, idx) => {
-            const sourceType = m.sourceType || m?.metadata?.sourceType || 'vector';
-            const sourceUrl = String(m?.metadata?.url || '').trim();
-            const publishedAt = String(m?.metadata?.publishedAt || '').trim();
-            const datePart = publishedAt ? ` [published: ${publishedAt.slice(0, 10)}]` : '';
-            const prefix = sourceUrl
-                ? `[${idx + 1}] (${sourceType}) ${sourceUrl}${datePart}`
-                : `[${idx + 1}] (${sourceType})${datePart}`;
-            return `${prefix}\n${m.text}`;
-        }).join('\n\n')
-        : '';
+  const t2 = now();
+  const webMatches = await buildLiveWebMatches(query, { webSearch: payload.webSearch, topK, baseUrl: payload.baseUrl, webMaxUrls: payload.webMaxUrls, webChunkSize: payload.webChunkSize, webChunkOverlap: payload.webChunkOverlap, context: payload.context });
+  const webMs = now() - t2;
 
-    return {
-        namespace,
-        query,
-        topK,
-        webSearchEnabled: payload.webSearch !== false,
-        webSourceCount: webMatches.length,
-        matches: normalized,
-        ragContext
-    };
+  const fused = fuseMatches(vectorMatches, webMatches, topK);
+  const t3 = now();
+  const reranked = await maybeLlmRerank(query, rerankMatches(query, fused), payload.baseUrl);
+  const rerankMs = now() - t3;
+
+  const matches = reranked.slice(0, topK);
+  const { citationMap, ragContext } = buildCitationArtifacts(matches);
+  return {
+    namespace,
+    query: originalQuery,
+    rewrittenQuery: query,
+    topK,
+    webSearchEnabled: payload.webSearch !== false,
+    webSourceCount: webMatches.length,
+    matches,
+    citationMap,
+    ragContext,
+    timings: { totalMs: now() - t0, vectorMs, webMs, rerankMs },
+    retrievalDebug: {
+      vectorCandidateCount: vectorMatches.length,
+      webCandidateCount: webMatches.length,
+      fusedCount: fused.length,
+      finalCount: matches.length,
+      scoreMean: matches.length ? Number((matches.reduce((s, m) => s + (Number(m.score) || 0), 0) / matches.length).toFixed(4)) : 0
+    }
+  };
 }
 
 function ragEnvSummary() {
-    return {
-        hasPineconeApiKey: Boolean(String(process.env.PINECONE_API_KEY || '').trim()),
-        hasPineconeIndexHost: Boolean(String(process.env.PINECONE_INDEX_HOST || '').trim()),
-        hasGoogleApiKey: Boolean(String(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim()),
-        embedModel: DEFAULT_EMBED_MODEL,
-        defaultNamespace: toSafeNamespace(process.env.PINECONE_NAMESPACE || 'default')
-    };
+  return {
+    hasPineconeApiKey: Boolean(String(process.env.PINECONE_API_KEY || '').trim()),
+    hasPineconeIndexHost: Boolean(String(process.env.PINECONE_INDEX_HOST || '').trim()),
+    hasGoogleApiKey: Boolean(String(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim()),
+    embedModel: DEFAULT_EMBED_MODEL,
+    defaultNamespace: toNs(process.env.PINECONE_NAMESPACE || 'default'),
+    llmRerankEnabled: ENABLE_LLM_RERANK
+  };
 }
 
-function getBaseUrl(req) {
-    const host = String(req?.headers?.host || '').trim();
-    if (!host) return '';
-    const proto = String(req?.headers?.['x-forwarded-proto'] || 'https').trim();
-    return `${proto}://${host}`;
-}
-
-function inferAction(body = {}) {
-    const explicit = String(body.action || '').trim().toLowerCase();
-    if (explicit === 'upsert' || explicit === 'query' || explicit === 'chat') return explicit;
-
-    if (String(body.message || '').trim()) return 'chat';
-    if (String(body.query || '').trim() && !String(body.text || '').trim()) return 'query';
-    if (String(body.text || '').trim()) return 'upsert';
-    return '';
-}
+const getBaseUrl = (req) => { const host = String(req?.headers?.host || '').trim(); if (!host) return ''; const proto = String(req?.headers?.['x-forwarded-proto'] || 'https').trim(); return `${proto}://${host}`; };
+function inferAction(body = {}) { const e = String(body.action || '').trim().toLowerCase(); if (e === 'upsert' || e === 'query' || e === 'chat') return e; if (String(body.message || '').trim()) return 'chat'; if (String(body.query || '').trim() && !String(body.text || '').trim()) return 'query'; if (String(body.text || '').trim()) return 'upsert'; return ''; }
+function buildCitationPrompt(base = '') { const strict = ['Citation rules for this answer:', '- Use only Retrieved context for factual claims.', '- Include citations like [1], [2] for each factual sentence.', '- If evidence is missing, say you could not verify it from retrieved sources.', '- Do not invent facts or citations.'].join('\n'); return [String(base || '').trim(), strict].filter(Boolean).join('\n\n'); }
 
 export default async function handler(req, res) {
-    const guard = applyApiSecurity(req, res, {
-        methods: ['POST'],
-        routeKey: 'rag',
-        maxBodyBytes: 2 * 1024 * 1024,
-        rateLimit: { max: 20, windowMs: 60 * 1000 }
-    });
-    if (guard.handled) return;
+  const guard = applyApiSecurity(req, res, { methods: ['POST'], routeKey: 'rag', maxBodyBytes: 2 * 1024 * 1024, rateLimit: { max: 20, windowMs: 60 * 1000 } });
+  if (guard.handled) return;
 
-    try {
-        const body = req.body || {};
-        const action = inferAction(body);
+  try {
+    const body = req.body || {}; const action = inferAction(body);
 
-        if (action === 'upsert') {
-            const { text, documentId, namespace, metadata, chunkSize, chunkOverlap, embedBatchSize } = body;
-            if (!String(text || '').trim()) {
-                return res.status(400).json({ success: false, error: 'text is required' });
-            }
-
-            const result = await upsertDocumentToPinecone({
-                text,
-                documentId,
-                namespace,
-                metadata,
-                chunkSize,
-                chunkOverlap,
-                embedBatchSize
-            });
-            return res.status(200).json({ success: true, action, ...result });
-        }
-
-        if (action === 'query') {
-            const { query, topK, namespace, filter, webSearch = true, webMaxUrls, webChunkSize, webChunkOverlap } = body;
-            if (!String(query || '').trim()) {
-                return res.status(400).json({ success: false, error: 'query is required' });
-            }
-            const result = await queryPineconeRag({
-                query,
-                topK,
-                namespace,
-                filter,
-                webSearch,
-                webMaxUrls,
-                webChunkSize,
-                webChunkOverlap,
-                baseUrl: getBaseUrl(req)
-            });
-            return res.status(200).json({ success: true, action, ...result });
-        }
-
-        if (action === 'chat') {
-            const {
-                message,
-                namespace,
-                topK,
-                filter,
-                userName,
-                context,
-                systemPrompt,
-                ragOnly = false,
-                webSearch = true,
-                webMaxUrls,
-                webChunkSize,
-                webChunkOverlap
-            } = body;
-
-            const cleanMessage = String(message || '').trim();
-            if (!cleanMessage) {
-                return res.status(400).json({ success: false, error: 'message is required' });
-            }
-
-            const retrieval = await queryPineconeRag({
-                query: cleanMessage,
-                namespace,
-                topK,
-                filter,
-                webSearch,
-                webMaxUrls,
-                webChunkSize,
-                webChunkOverlap,
-                baseUrl: getBaseUrl(req)
-            });
-
-            if (ragOnly) {
-                return res.status(200).json({
-                    success: true,
-                    action,
-                    intent: 'rag_retrieval',
-                    response: retrieval.ragContext || 'No relevant context found in vector store.',
-                    rag: retrieval
-                });
-            }
-
-            const baseUrl = getBaseUrl(req);
-            if (!baseUrl) {
-                return res.status(500).json({
-                    success: false,
-                    error: 'rag_chat_failed',
-                    details: 'Could not resolve internal base URL for /api/chat-groq.'
-                });
-            }
-
-            const chatResponse = await fetch(`${baseUrl}/api/chat-groq`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: cleanMessage,
-                    userName,
-                    systemPrompt,
-                    context,
-                    ragContext: retrieval.ragContext
-                })
-            });
-
-            const raw = await chatResponse.text();
-            const parsed = raw ? JSON.parse(raw) : {};
-
-            return res.status(200).json({
-                ...parsed,
-                rag: {
-                    namespace: retrieval.namespace,
-                    topK: retrieval.topK,
-                    webSearchEnabled: retrieval.webSearchEnabled,
-                    webSourceCount: retrieval.webSourceCount,
-                    sourceCount: retrieval.matches.length,
-                    matches: retrieval.matches.map(m => ({
-                        id: m.id,
-                        score: m.score,
-                        sourceType: m.sourceType || m?.metadata?.sourceType || 'vector',
-                        metadata: m.metadata
-                    }))
-                }
-            });
-        }
-
-        return res.status(400).json({
-            success: false,
-            error: 'invalid_action',
-            details: 'Use action: upsert | query | chat'
-        });
-    } catch (error) {
-        return res.status(500).json({
-            success: false,
-            error: 'rag_failed',
-            details: String(error?.message || 'unknown').slice(0, 220),
-            env: ragEnvSummary()
-        });
+    if (action === 'upsert') {
+      const { text, documentId, namespace, metadata, chunkSize, chunkOverlap, embedBatchSize } = body;
+      if (!String(text || '').trim()) return res.status(400).json({ success: false, error: 'text is required' });
+      const result = await upsertDocumentToPinecone({ text, documentId, namespace, metadata, chunkSize, chunkOverlap, embedBatchSize });
+      return res.status(200).json({ success: true, action, ...result });
     }
+
+    if (action === 'query') {
+      const { query, topK, namespace, filter, webSearch = true, webMaxUrls, webChunkSize, webChunkOverlap, context } = body;
+      if (!String(query || '').trim()) return res.status(400).json({ success: false, error: 'query is required' });
+      const result = await queryPineconeRag({ query, topK, namespace, filter, webSearch, webMaxUrls, webChunkSize, webChunkOverlap, context, baseUrl: getBaseUrl(req) });
+      return res.status(200).json({ success: true, action, ...result });
+    }
+
+    if (action === 'chat') {
+      const { message, namespace, topK, filter, userName, context, systemPrompt, ragOnly = false, webSearch = true, webMaxUrls, webChunkSize, webChunkOverlap } = body;
+      const cleanMessage = String(message || '').trim();
+      if (!cleanMessage) return res.status(400).json({ success: false, error: 'message is required' });
+      const retrieval = await queryPineconeRag({ query: cleanMessage, namespace, topK, filter, webSearch, webMaxUrls, webChunkSize, webChunkOverlap, context, baseUrl: getBaseUrl(req) });
+      if (ragOnly) return res.status(200).json({ success: true, action, intent: 'rag_retrieval', response: retrieval.ragContext || 'No relevant context found in vector store.', citations: retrieval.citationMap, rag: retrieval });
+
+      const baseUrl = getBaseUrl(req);
+      if (!baseUrl) return res.status(500).json({ success: false, error: 'rag_chat_failed', details: 'Could not resolve internal base URL for /api/chat-groq.' });
+
+      const chatResponse = await fetch(`${baseUrl}/api/chat-groq`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: cleanMessage, userName, systemPrompt: buildCitationPrompt(systemPrompt), context, ragContext: retrieval.ragContext }) });
+      const raw = await chatResponse.text();
+      const parsed = raw ? JSON.parse(raw) : {};
+      const idx = extractCitationIndexes(parsed?.response || '', 16);
+      const citations = retrieval.citationMap.filter(c => idx.includes(c.index));
+      return res.status(200).json({ ...parsed, citations, rag: { namespace: retrieval.namespace, topK: retrieval.topK, rewrittenQuery: retrieval.rewrittenQuery, webSearchEnabled: retrieval.webSearchEnabled, webSourceCount: retrieval.webSourceCount, sourceCount: retrieval.matches.length, timings: retrieval.timings, retrievalDebug: retrieval.retrievalDebug, citationMap: retrieval.citationMap, matches: retrieval.matches.map(m => ({ id: m.id, score: m.score, sourceType: m.sourceType || m?.metadata?.sourceType || 'vector', rerank: m.rerank, rankSignals: m.rankSignals, metadata: m.metadata })) } });
+    }
+
+    return res.status(400).json({ success: false, error: 'invalid_action', details: 'Use action: upsert | query | chat' });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: 'rag_failed', details: String(error?.message || 'unknown').slice(0, 220), env: ragEnvSummary() });
+  }
 }
