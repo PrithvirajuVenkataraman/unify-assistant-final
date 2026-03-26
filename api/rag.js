@@ -509,6 +509,34 @@ function lexicalScore(text, terms) {
     return overlap / terms.length;
 }
 
+function scoreSearchHitRelevance(hit, query, queryTerms) {
+    const title = String(hit?.title || '');
+    const description = String(hit?.description || '');
+    const url = String(hit?.url || '');
+    const hay = `${title} ${description} ${url}`.toLowerCase();
+    const q = String(query || '').toLowerCase();
+    const terms = Array.isArray(queryTerms) ? queryTerms : [];
+
+    let score = lexicalScore(hay, terms);
+
+    const overlapCount = terms.reduce((acc, t) => acc + (hay.includes(t) ? 1 : 0), 0);
+    if (overlapCount >= 3) score += 0.2;
+    if (overlapCount >= 5) score += 0.2;
+
+    // Prevent obvious topic-drift like "hotel incentive" hijacking model-release queries.
+    const queryHasModelIntent = /\b(model|release|ai|llm|gpt|openai)\b/.test(q);
+    if (queryHasModelIntent && /\b(hotel|real estate|tourism|resort)\b/.test(hay)) {
+        score -= 0.8;
+    }
+
+    // Prefer authoritative model/product pages when query is about AI model releases.
+    if (queryHasModelIntent && /\b(openai\.com|help\.openai\.com|reuters|wsj|bloomberg)\b/.test(hay)) {
+        score += 0.25;
+    }
+
+    return score;
+}
+
 async function buildLiveWebMatches(query, options = {}) {
     const webEnabled = options.webSearch !== false;
     if (!webEnabled) return [];
@@ -519,7 +547,16 @@ async function buildLiveWebMatches(query, options = {}) {
         maxResults: Math.max(maxUrls, topK),
         baseUrl: options.baseUrl
     });
-    const topUrls = searchResults.slice(0, maxUrls).map(item => item.url).filter(Boolean);
+    const queryTerms = getRagQueryTerms(query);
+    const rankedHits = (Array.isArray(searchResults) ? searchResults : [])
+        .map((hit) => ({
+            ...hit,
+            __relevance: scoreSearchHitRelevance(hit, query, queryTerms)
+        }))
+        .filter(hit => Number.isFinite(hit.__relevance) && hit.__relevance >= 0.08)
+        .sort((a, b) => b.__relevance - a.__relevance);
+
+    const topUrls = rankedHits.slice(0, maxUrls).map(item => item.url).filter(Boolean);
     if (!topUrls.length) return [];
 
     const docs = (await Promise.all(topUrls.map(url => fetchAndExtractWebDocument(url, 6000)))).filter(Boolean);
@@ -557,7 +594,7 @@ async function buildLiveWebMatches(query, options = {}) {
         vectors.push(...partVectors);
     }
 
-    const terms = getRagQueryTerms(query);
+    const terms = queryTerms;
     const scored = allChunks.map((chunk, idx) => {
         const semantic = clamp((cosineSimilarity(queryVector, vectors[idx]) + 1) / 2, 0, 1);
         const lexical = lexicalScore(chunk.text, terms);
