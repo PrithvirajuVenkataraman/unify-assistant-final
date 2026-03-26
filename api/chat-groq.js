@@ -28,8 +28,9 @@ export default async function handler(req, res) {
         const isInternalSummary = isInternalSummarizerPrompt(message, clientSystemPrompt);
 
         // Pass 1: model-only (no live search) for speed and cost.
-        const firstPrompt = composeFinalPrompt(systemPrompt, clientRagBlock, contextBlock, message);
-        const firstPass = await runModelWithFallback(firstPrompt);
+        const lengthPolicy = buildLengthPolicy(message, clientSystemPrompt, { isInternalSummary });
+        const firstPrompt = composeFinalPrompt(systemPrompt, clientRagBlock, contextBlock, message, lengthPolicy.instruction);
+        const firstPass = await runModelWithFallback(firstPrompt, lengthPolicy);
         if (!firstPass.ok) {
             return res.status(200).json(firstPass.payload);
         }
@@ -48,16 +49,18 @@ export default async function handler(req, res) {
                     systemPrompt,
                     [clientRagBlock, liveRag.ragText].filter(Boolean).join('\n\n'),
                     contextBlock,
-                    message
+                    message,
+                    lengthPolicy.instruction
                 );
-                const secondPass = await runModelWithFallback(secondPrompt);
+                const secondPass = await runModelWithFallback(secondPrompt, lengthPolicy);
                 if (secondPass.ok) {
                     selectedPass = secondPass;
                 }
             }
         }
 
-        const finalParsed = enforceLiveAnswerStyle(selectedPass.parsedResponse, message, liveRag.sources);
+        let finalParsed = enforceLiveAnswerStyle(selectedPass.parsedResponse, message, liveRag.sources);
+        finalParsed = applyResponseLengthPostCheck(finalParsed, lengthPolicy, message, clientSystemPrompt);
         return res.status(200).json({
             ...finalParsed,
             modelUsed: selectedPass.modelUsed,
@@ -80,16 +83,19 @@ export default async function handler(req, res) {
 }
 
 
-function composeFinalPrompt(systemPrompt, ragBlock, contextBlock, message) {
+function composeFinalPrompt(systemPrompt, ragBlock, contextBlock, message, lengthGuidance = '') {
     return [
         systemPrompt,
         ragBlock ? `Retrieved context (RAG):\n${ragBlock}` : '',
         contextBlock ? `Recent turns:\n${contextBlock}` : '',
-        `User message: ${message}`
+        `User message: ${message}`,
+        lengthGuidance ? `Length guidance:\n${lengthGuidance}` : ''
     ].filter(Boolean).join('\n\n');
 }
 
-async function runModelWithFallback(finalPrompt) {
+async function runModelWithFallback(finalPrompt, lengthPolicy = {}) {
+    const temp = Number.isFinite(Number(lengthPolicy?.temperature)) ? Number(lengthPolicy.temperature) : 0.7;
+    const maxTokens = clampInt(lengthPolicy?.maxTokens, 2500, 256, 7000);
     let groqFailureDetail = '';
     let groqTriedModels = [];
     const groqApiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
@@ -117,8 +123,8 @@ async function runModelWithFallback(finalPrompt) {
                 },
                 body: JSON.stringify({
                     model,
-                    temperature: 0.7,
-                    max_tokens: 2500,
+                    temperature: temp,
+                    max_tokens: maxTokens,
                     messages: [
                         { role: 'user', content: finalPrompt }
                     ]
@@ -189,10 +195,10 @@ async function runModelWithFallback(finalPrompt) {
                         parts: [{ text: finalPrompt }]
                     }],
                     generationConfig: {
-                        temperature: 0.7,
+                        temperature: temp,
                         topK: 40,
                         topP: 0.95,
-                        maxOutputTokens: 2500,
+                        maxOutputTokens: maxTokens,
                     }
                 })
             }
@@ -762,17 +768,20 @@ function buildServerSystemPrompt(userName) {
 
 Your capabilities:
 - Weather
+- Shopping lists
 - Reminders
 - Memory (remembering where things are)
 
 Style rules:
 - Start directly with the answer. No greeting preambles.
 - Avoid generic closing prompts (for example, "Would you like to know more...") unless user asked.
-- For direct fact questions across any domain, answer with the fact immediately in 1-2 sentences. Do not pad with extra commentary, suggestions, or follow-up offers unless the user asked for detail.
+ - For direct fact questions across any domain, answer with the fact immediately and stay concise by default.
 - For person/celebrity queries ("Who is X?"), give a concise factual bio first, then notable works.
 - For "Who is X?" or "Tell me about X" requests, never reply with research steps like "search online/check databases". Give the direct factual answer.
 - If the user asks a "do/can/could/would" question, do not answer with only yes or no unless they explicitly asked for yes/no only; explain the answer.
-- If the user asks to explain further, elaborate, or give more detail, expand the previous answer with more detail instead of repeating the short version.
+- If the user asks to explain further, elaborate, or give more detail, expand the previous answer with meaningful detail instead of repeating the short version.
+- If the user specifies a word-count requirement (for example "in 300 words", "exactly 120 words", "under 200 words"), follow it closely.
+- For OCR/uploaded-document text, do not reveal raw extracted contents by default; acknowledge you read it and give a one-line high-level description first. Share specific details only when the user asks a follow-up question.
 - For latest/news/update/current queries, provide concrete, date-aware answers:
   1) Start with "As of <Month Day, Year>" when timing matters.
   2) Give the latest verified update first.
@@ -782,4 +791,177 @@ Style rules:
 - If retrieved sources are insufficient or conflicting, say that clearly and provide the best verified status with sources.
 
 Respond conversationally and naturally.`;
+}
+
+function clampInt(value, fallback, min, max) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
+function hasStructuredOutputConstraint(systemPrompt, message) {
+    const sp = String(systemPrompt || '').toLowerCase();
+    const msg = String(message || '').toLowerCase();
+    return (
+        /\breturn json\b/.test(sp) ||
+        /\bjson only\b/.test(sp) ||
+        /\boutput strictly as json\b/.test(msg) ||
+        /\borderedids\b/.test(msg)
+    );
+}
+
+function parseWordCountRequest(message) {
+    const text = String(message || '');
+    if (!text) return null;
+
+    let m = text.match(/\b(\d{2,4})\s*(?:-|to)\s*(\d{2,4})\s+words?\b/i);
+    if (m) {
+        const a = Number(m[1]); const b = Number(m[2]);
+        if (Number.isFinite(a) && Number.isFinite(b)) {
+            const low = Math.max(20, Math.min(a, b));
+            const high = Math.max(low, Math.max(a, b));
+            return { mode: 'range', minWords: low, maxWords: high, targetWords: Math.round((low + high) / 2) };
+        }
+    }
+
+    m = text.match(/\b(?:exactly|strictly|no more no less than)\s+(\d{2,4})\s+words?\b/i) || text.match(/\b(\d{2,4})\s+words?\s+exactly\b/i);
+    if (m) {
+        const n = Number(m[1]);
+        if (Number.isFinite(n)) return { mode: 'exact', minWords: n, maxWords: n, targetWords: n };
+    }
+
+    m = text.match(/\b(?:under|within|at most|no more than|max(?:imum)?(?: of)?)\s+(\d{2,4})\s+words?\b/i);
+    if (m) {
+        const n = Number(m[1]);
+        if (Number.isFinite(n)) return { mode: 'max', minWords: 0, maxWords: Math.max(20, n), targetWords: Math.max(20, Math.round(n * 0.9)) };
+    }
+
+    m = text.match(/\b(?:at least|minimum(?: of)?|no less than)\s+(\d{2,4})\s+words?\b/i);
+    if (m) {
+        const n = Number(m[1]);
+        if (Number.isFinite(n)) return { mode: 'min', minWords: Math.max(20, n), maxWords: Math.max(20, Math.round(n * 1.5)), targetWords: Math.max(20, Math.round(n * 1.1)) };
+    }
+
+    m = text.match(/\b(?:in|around|about|approximately|approx(?:\.|imately)?|roughly)\s+(\d{2,4})\s+words?\b/i) || text.match(/\b(\d{2,4})\s+words?\b/i);
+    if (m) {
+        const n = Number(m[1]);
+        if (Number.isFinite(n)) return { mode: 'target', minWords: Math.max(20, Math.round(n * 0.85)), maxWords: Math.max(20, Math.round(n * 1.15)), targetWords: Math.max(20, n) };
+    }
+
+    return null;
+}
+
+function inferDetailLevel(message) {
+    const q = String(message || '').toLowerCase();
+    if (!q) return 'normal';
+    if (/\b(one line|one-liner|brief|briefly|short|tldr|in short|quickly)\b/.test(q)) return 'short';
+    if (/\b(explain|detailed|detail|in depth|deep dive|comprehensive|step by step|walk me through|elaborate|why|how)\b/.test(q)) return 'detailed';
+    return 'normal';
+}
+
+function buildLengthPolicy(message, clientSystemPrompt, options = {}) {
+    const internalSummary = Boolean(options?.isInternalSummary);
+    const structured = hasStructuredOutputConstraint(clientSystemPrompt, message);
+    if (internalSummary || structured) {
+        return { instruction: 'Keep output strictly in the requested machine-readable format.', maxTokens: 900, temperature: 0.3, wordSpec: null };
+    }
+
+    const wordSpec = parseWordCountRequest(message);
+    if (wordSpec) {
+        const instruction = [
+            'Follow the user word-count requirement precisely.',
+            wordSpec.mode === 'exact' ? `Target exactly ${wordSpec.targetWords} words.` : '',
+            wordSpec.mode === 'range' ? `Keep the response between ${wordSpec.minWords} and ${wordSpec.maxWords} words.` : '',
+            wordSpec.mode === 'max' ? `Do not exceed ${wordSpec.maxWords} words.` : '',
+            wordSpec.mode === 'min' ? `Write at least ${wordSpec.minWords} words.` : '',
+            wordSpec.mode === 'target' ? `Aim for about ${wordSpec.targetWords} words.` : '',
+            'Do not add filler; keep content substantive.'
+        ].filter(Boolean).join(' ');
+        const maxTokens = clampInt(Math.round(wordSpec.maxWords * 2.2 + 220), 2500, 400, 7000);
+        return { instruction, maxTokens, temperature: 0.7, wordSpec };
+    }
+
+    const detail = inferDetailLevel(message);
+    if (detail === 'detailed') {
+        return {
+            instruction: 'User asked for detail. Provide a structured, in-depth explanation with enough depth to fully answer.',
+            maxTokens: 4200,
+            temperature: 0.7,
+            wordSpec: null
+        };
+    }
+    if (detail === 'short') {
+        return { instruction: 'Keep the response brief and direct.', maxTokens: 900, temperature: 0.5, wordSpec: null };
+    }
+    return { instruction: 'Match response length to the user intent; concise for simple asks, fuller when needed.', maxTokens: 2500, temperature: 0.7, wordSpec: null };
+}
+
+function applyResponseLengthPostCheck(parsedResponse, lengthPolicy, message, clientSystemPrompt) {
+    if (!parsedResponse || typeof parsedResponse !== 'object') return parsedResponse;
+    if (hasStructuredOutputConstraint(clientSystemPrompt, message)) return parsedResponse;
+    const wordSpec = lengthPolicy?.wordSpec;
+    if (!wordSpec) return parsedResponse;
+
+    const out = { ...parsedResponse };
+    out.response = enforceWordSpec(String(out.response || ''), wordSpec);
+    return out;
+}
+
+function enforceWordSpec(text, spec) {
+    const mode = String(spec?.mode || '');
+    const target = clampInt(spec?.targetWords, 0, 0, 5000);
+    const minWords = clampInt(spec?.minWords, 0, 0, 5000);
+    const maxWords = clampInt(spec?.maxWords, 0, 0, 5000);
+    let out = String(text || '').trim();
+    if (!out) return out;
+
+    const count = countWords(out);
+    if (mode === 'exact' && target > 0) {
+        if (count > target) return trimToWordCount(out, target);
+        if (count < target) return padToWordCount(out, target);
+        return out;
+    }
+    if (mode === 'max' && maxWords > 0 && count > maxWords) {
+        return trimToWordCount(out, maxWords);
+    }
+    if (mode === 'min' && minWords > 0 && count < minWords) {
+        return padToWordCount(out, minWords);
+    }
+    if (mode === 'range') {
+        if (maxWords > 0 && count > maxWords) return trimToWordCount(out, maxWords);
+        if (minWords > 0 && count < minWords) return padToWordCount(out, minWords);
+        return out;
+    }
+    if (mode === 'target') {
+        if (maxWords > 0 && count > maxWords) return trimToWordCount(out, maxWords);
+        if (minWords > 0 && count < minWords) return padToWordCount(out, minWords);
+    }
+    return out;
+}
+
+function countWords(text) {
+    const words = String(text || '').match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g);
+    return Array.isArray(words) ? words.length : 0;
+}
+
+function trimToWordCount(text, target) {
+    if (!target || target < 1) return '';
+    const tokens = String(text || '').trim().split(/\s+/).filter(Boolean);
+    if (tokens.length <= target) return String(text || '').trim();
+    const trimmed = tokens.slice(0, target).join(' ').replace(/[,\s]+$/g, '').trim();
+    return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function padToWordCount(text, target) {
+    let out = String(text || '').trim();
+    if (!out) return out;
+    const filler = 'Additional details are available on request.';
+    while (countWords(out) < target) {
+        out = `${out} ${filler}`.trim();
+        if (countWords(out) > target) {
+            out = trimToWordCount(out, target);
+            break;
+        }
+    }
+    return out;
 }
