@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     });
     if (guard.handled) return;
     try {
-        const mode = resolveMode(req.body);
+        const mode = resolveMode(req.body); 
         if (mode === 'news') {
             return await handleNewsLookup(req, res);
         }
