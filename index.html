@@ -2539,22 +2539,22 @@ body {
         }
 
         .message-action-btn.speaker-btn {
-            background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;
+            background: #0b1220 !important;
             color: #ffffff !important;
-            border-color: rgba(59, 130, 246, 0.75) !important;
-            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35) !important;
+            border-color: rgba(148, 163, 184, 0.7) !important;
+            box-shadow: none !important;
         }
 
         .message-action-btn.speaker-btn:hover {
-            background: linear-gradient(135deg, #0284c7, #1d4ed8) !important;
+            background: #111827 !important;
             color: #ffffff !important;
-            transform: translateY(-1px);
+            transform: none !important;
         }
 
         .message-action-btn.speaker-btn.is-speaking {
-            background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+            background: #b91c1c !important;
             border-color: rgba(239, 68, 68, 0.8) !important;
-            box-shadow: 0 8px 20px rgba(220, 38, 38, 0.38) !important;
+            box-shadow: none !important;
         }
 
         @media (max-width: 768px) {
@@ -11688,6 +11688,54 @@ function scoreSourcePolicy(url, domain) {
     return 0;
 }
 
+function extractResultPublishedDate(result) {
+    const title = String(result?.title || '');
+    const description = String(result?.description || '');
+    const combined = `${title} ${description}`;
+
+    const textual = combined.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b/i);
+    if (textual) {
+        const parsed = Date.parse(textual[0]);
+        if (Number.isFinite(parsed)) return new Date(parsed);
+    }
+
+    const ymd = combined.match(/\b(20\d{2})[-\/.](0?[1-9]|1[0-2])[-\/.](0?[1-9]|[12]\d|3[01])\b/);
+    if (ymd) {
+        const parsed = Date.parse(`${ymd[1]}-${String(ymd[2]).padStart(2, '0')}-${String(ymd[3]).padStart(2, '0')}`);
+        if (Number.isFinite(parsed)) return new Date(parsed);
+    }
+
+    const mdy = combined.match(/\b(0?[1-9]|1[0-2])[-\/.](0?[1-9]|[12]\d|3[01])[-\/.](20\d{2})\b/);
+    if (mdy) {
+        const parsed = Date.parse(`${mdy[3]}-${String(mdy[1]).padStart(2, '0')}-${String(mdy[2]).padStart(2, '0')}`);
+        if (Number.isFinite(parsed)) return new Date(parsed);
+    }
+
+    const yearOnly = combined.match(/\b(20\d{2})\b/);
+    if (yearOnly) {
+        const parsed = Date.parse(`${yearOnly[1]}-01-01`);
+        if (Number.isFinite(parsed)) return new Date(parsed);
+    }
+
+    return null;
+}
+
+function computeRecencyScore(result, queryText = '') {
+    const lowerQuery = String(queryText || '').toLowerCase();
+    const wantsFresh = /\b(latest|recent|current|today|now|upcoming|new|newest|most recent)\b/.test(lowerQuery);
+    if (!wantsFresh) return 0;
+
+    const published = extractResultPublishedDate(result);
+    if (!published) return 0;
+    const ageDays = Math.max(0, (Date.now() - published.getTime()) / (1000 * 60 * 60 * 24));
+    if (ageDays <= 7) return 5;
+    if (ageDays <= 30) return 4;
+    if (ageDays <= 90) return 3;
+    if (ageDays <= 180) return 2;
+    if (ageDays <= 365) return 1;
+    return -1;
+}
+
 function rankSourcesByPolicy(results, domain, queryText = '') {
     const tokens = String(queryText || '')
         .toLowerCase()
@@ -11701,13 +11749,15 @@ function rankSourcesByPolicy(results, domain, queryText = '') {
             const title = String(item?.title || '').toLowerCase();
             const description = String(item?.description || '').toLowerCase();
             const overlap = tokens.reduce((acc, token) => acc + (title.includes(token) || description.includes(token) ? 1 : 0), 0);
+            const recency = computeRecencyScore(item, queryText);
             return {
                 ...item,
-                __policyScore: scoreSourcePolicy(item?.url, domain) + overlap - (index * 0.01)
+                __policyScore: scoreSourcePolicy(item?.url, domain) + overlap + recency - (index * 0.01),
+                __recencyScore: recency
             };
         })
         .sort((a, b) => b.__policyScore - a.__policyScore)
-        .map(({ __policyScore, ...item }) => item);
+        .map(({ __policyScore, __recencyScore, ...item }) => item);
 }
 
 function buildLiveSearchQueries(userText, intent = null) {
@@ -11745,6 +11795,7 @@ function buildLiveSearchQueries(userText, intent = null) {
     if (liveIntent.domain === 'entertainment' && liveIntent.factType === 'latest_work') {
         const subject = extractLatestWorkSubject(raw) || topic;
         const medium = detectLatestWorkMedium(raw);
+        const currentYear = new Date().getFullYear();
         const latestHint = medium === 'song'
             ? 'latest song latest release discography'
             : medium === 'album'
@@ -11752,6 +11803,7 @@ function buildLiveSearchQueries(userText, intent = null) {
                 : 'latest film latest movie most recent release filmography';
         return Array.from(new Set([
             raw,
+            `${subject} ${currentYear} ${latestHint}`.replace(/\s+/g, ' ').trim(),
             `${subject} ${latestHint}`.replace(/\s+/g, ' ').trim(),
             `${subject} imdb ${latestHint}`.replace(/\s+/g, ' ').trim(),
             `${subject} wikipedia ${medium === 'movie' ? 'filmography' : 'discography'}`.replace(/\s+/g, ' ').trim(),
@@ -12291,7 +12343,10 @@ function buildSourceAgreement(results, entityIntent) {
     const rankedVotes = Array.from(votes.values()).sort((a, b) => {
         const aTrusted = a.sources.reduce((acc, item) => acc + scoreSourcePolicy(item?.url, entityIntent.domain), 0);
         const bTrusted = b.sources.reduce((acc, item) => acc + scoreSourcePolicy(item?.url, entityIntent.domain), 0);
+        const aRecent = Math.max(...a.sources.map(src => extractResultPublishedDate(src)?.getTime() || 0), 0);
+        const bRecent = Math.max(...b.sources.map(src => extractResultPublishedDate(src)?.getTime() || 0), 0);
         if (b.count !== a.count) return b.count - a.count;
+        if (entityIntent?.relationType === 'latest_work' && bRecent !== aRecent) return bRecent - aRecent;
         return bTrusted - aTrusted;
     });
 
@@ -12663,6 +12718,39 @@ async function publishUniversalConsensusAnswer(pipeline, agreement) {
 }
 
 async function publishUniversalMixedEvidence(pipeline, results) {
+    if (pipeline?.entityIntent?.relationType === 'latest_work') {
+        const best = (Array.isArray(results) ? results : [])
+            .map(item => {
+                const candidate = extractFactCandidate(item, pipeline.entityIntent);
+                const published = extractResultPublishedDate(item);
+                return { item, candidate, published };
+            })
+            .filter(entry => isLikelyLatestWorkTitleCandidate(entry.candidate, pipeline.entityIntent.subject))
+            .sort((a, b) => {
+                const aTime = a.published?.getTime?.() || 0;
+                const bTime = b.published?.getTime?.() || 0;
+                if (bTime !== aTime) return bTime - aTime;
+                return scoreSourcePolicy(b.item?.url, pipeline.entityIntent.domain) - scoreSourcePolicy(a.item?.url, pipeline.entityIntent.domain);
+            })[0];
+
+        if (best?.candidate) {
+            const medium = detectLatestWorkMedium(pipeline.entityIntent.raw || '');
+            const label = medium === 'song' ? 'latest song' : medium === 'album' ? 'latest album' : medium === 'show' ? 'latest show' : medium === 'project' ? 'upcoming project' : 'latest film';
+            const dateLabel = best.published
+                ? ` (${best.published.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })})`
+                : '';
+            const sourceLines = results
+                .slice(0, 5)
+                .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+                .join('\n');
+            const msg = `${pipeline.entityIntent.subject}'s ${label} appears to be ${best.candidate}${dateLabel}.\n\nSources:\n${sourceLines}`;
+            addVerifiedAssistantMessage(msg, 'Date-ranked live sources');
+            await speakApiReply('verified_answer_found', {}, 'I ranked live sources by recency and selected the latest supported result.');
+            saveToHistory(pipeline.userText, msg);
+            return true;
+        }
+    }
+
     const sourceLines = results
         .slice(0, 5)
         .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
