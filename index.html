@@ -12203,6 +12203,25 @@ function extractUniversalEntityIntent(text, liveIntent = null) {
     return classifyUniversalEntityIntent(text, liveIntent || extractLiveQueryIntent(text));
 }
 
+function getOfficialCompanySourceHints(subject) {
+    const s = normalizeEntitySearchText(subject);
+    if (!s) return [];
+
+    const map = [
+        { match: /\bgoogle|alphabet\b/, domains: ['abc.xyz', 'blog.google'] },
+        { match: /\bamazon\b/, domains: ['aboutamazon.com', 'amazon.com'] },
+        { match: /\bmeta|facebook\b/, domains: ['about.meta.com', 'investor.atmeta.com'] },
+        { match: /\bmicrosoft\b/, domains: ['news.microsoft.com', 'microsoft.com'] },
+        { match: /\bapple\b/, domains: ['apple.com', 'investor.apple.com'] },
+        { match: /\bnvidia\b/, domains: ['nvidia.com', 'investor.nvidia.com'] },
+        { match: /\btesla\b/, domains: ['tesla.com', 'ir.tesla.com'] }
+    ];
+
+    const hit = map.find(item => item.match.test(s));
+    if (!hit) return [];
+    return hit.domains.map(domain => `site:${domain}`);
+}
+
 function buildUniversalEntityQueries(userText, liveIntent = null) { 
     const entityIntent = extractUniversalEntityIntent(userText, liveIntent); 
     const subject = entityIntent.subject || userText; 
@@ -12228,6 +12247,9 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
     };
     const relationHint = relationHints[entityIntent.relationType] || relationHints.general; 
     const sourceBias = getDomainSourcePolicy(entityIntent.domain).preferredDomains.join(' ') || 'official Reuters AP BBC'; 
+    const officialCompanyHints = entityIntent.domain === 'companies_finance'
+        ? getOfficialCompanySourceHints(subject).join(' ')
+        : '';
     const politicalRole = entityIntent.relationType === 'role' && /\b(president|prime minister|governor|mayor|minister|chief minister)\b/.test(roleLabel);
  
     return Array.from(new Set([ 
@@ -12240,6 +12262,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} Reuters OR AP OR BBC` : '',
         `${subjectWithCompetition} ${relationHint}`.replace(/\s+/g, ' ').trim(), 
         `${subjectWithCompetition} ${entityIntent.timeframe || ''} ${relationHint} ${sourceBias}`.replace(/\s+/g, ' ').trim(), 
+        officialCompanyHints ? `${subjectWithCompetition} ${relationHint} ${officialCompanyHints}`.replace(/\s+/g, ' ').trim() : '',
         expandedSubject && expandedSubject.toLowerCase() !== subject.toLowerCase() 
             ? `${expandedSubjectWithCompetition} ${relationHint}`.replace(/\s+/g, ' ').trim() 
             : '', 
@@ -12492,7 +12515,7 @@ function detectEntityIdentityAmbiguity(results, entityIntent) {
     const singleTokenSubject = subjectTokens.length === 1;
     const anchorToken = subjectTokens[0] || '';
     const likelyPersonEntity = entityIntent?.entityType === 'profession_person' || entityIntent?.domain === 'entertainment';
-    const ambiguitySensitiveRelation = relationType === 'latest_work' || relationType === 'role' || relationType === 'general';
+    const ambiguitySensitiveRelation = relationType === 'latest_work' || relationType === 'role' || relationType === 'stats' || relationType === 'general';
     if (!likelyPersonEntity || !ambiguitySensitiveRelation || !singleTokenSubject || !anchorToken) {
         return { isAmbiguous: false, variants: [] };
     }
@@ -12530,6 +12553,13 @@ function detectEntityIdentityAmbiguity(results, entityIntent) {
         isAmbiguous: true,
         variants: rankedVariants.slice(0, 4).map(v => v.value)
     };
+}
+
+function looksLikeStatsAnswerText(text) {
+    const value = String(text || '').trim();
+    if (!value) return false;
+    if (!/\d/.test(value)) return false;
+    return /\b(run|runs|wicket|wickets|match|matches|innings|average|strike rate|century|centuries|fifty|fifties|highest|odi|test|t20|record|records|stat|stats)\b/i.test(value);
 }
 
 async function publishUniversalEntityAmbiguity(pipeline, ambiguity, results) {
@@ -12664,7 +12694,7 @@ function requiresStrictLiveVerification(userText, liveIntent = null, entityInten
         return true;
     }
 
-    if (['winner', 'score', 'standings', 'qualification', 'price'].includes(entity.relationType)) {
+    if (['winner', 'score', 'standings', 'qualification', 'price', 'stats'].includes(entity.relationType)) {
         return true;
     }
 
@@ -13015,6 +13045,15 @@ ${snippets}`
     const finalAnswer = answer || cleanLiveAnswerText(`Direct answer: ${results[0].title}${results[0].description ? `\n\nKey points:\n- ${results[0].description}` : ''}`);
     if (isDegenerateLatestWorkAnswer(finalAnswer, pipeline.entityIntent)) {
         return publishUniversalVerificationFallback(pipeline, 'I found profile pages but could not verify the exact latest release.');
+    }
+    if (pipeline?.entityIntent?.relationType === 'stats' && !looksLikeStatsAnswerText(finalAnswer)) {
+        const statsFallback = `I could not verify clean numeric stats for ${pipeline.entityIntent.subject || 'that player'} from the current sources.\n\nPlease specify the format you want, for example:\n1. Career totals\n2. Format-wise (Tests, ODIs, T20Is)\n3. A specific season/year\n\nSources:\n${sourceLines}`;
+        addVerifiedAssistantMessage(statsFallback, 'Stats need clarification');
+        await speakApiReply('stats_clarify_needed', {
+            subject: pipeline.entityIntent.subject || ''
+        }, 'I need one more detail to fetch the exact stats format you want.');
+        saveToHistory(pipeline.userText, statsFallback);
+        return true;
     }
     const finalMsg = `${finalAnswer}\n\nSources:\n${sourceLines}`;
     addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
@@ -17044,6 +17083,3 @@ function addTravelHintsToPlan(places){
 
 </body>
 </html>
-
-
-
