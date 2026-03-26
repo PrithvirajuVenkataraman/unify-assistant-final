@@ -2204,6 +2204,10 @@ body {
             display: none !important;
         }
 
+        #utility-panel.utility-panel-visible {
+            display: block !important;
+        }
+
         #chat-panel {
             display: flex;
             flex-direction: column;
@@ -2532,6 +2536,25 @@ body {
         body.dark .message-action-btn:hover {
             background: #0f172a !important;
             color: #ffffff !important;
+        }
+
+        .message-action-btn.speaker-btn {
+            background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;
+            color: #ffffff !important;
+            border-color: rgba(59, 130, 246, 0.75) !important;
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35) !important;
+        }
+
+        .message-action-btn.speaker-btn:hover {
+            background: linear-gradient(135deg, #0284c7, #1d4ed8) !important;
+            color: #ffffff !important;
+            transform: translateY(-1px);
+        }
+
+        .message-action-btn.speaker-btn.is-speaking {
+            background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+            border-color: rgba(239, 68, 68, 0.8) !important;
+            box-shadow: 0 8px 20px rgba(220, 38, 38, 0.38) !important;
         }
 
         @media (max-width: 768px) {
@@ -5121,7 +5144,13 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
     const looksLikeResearchSteps =
         /\b(here(?:'s| are)?\s+(?:the\s+)?steps?\b|steps?\s+you\s+can\s+follow|check\s+online\b|search\s+engines\b|look\s+for\s+(?:his|her|their)\s+biography|you\s+can\s+search\b|to\s+find\s+information\s+about\b)\b/.test(rawLower) ||
         (/(\n|^)\s*\d+\s*[\).:-]\s+/.test(raw) && /\b(check|search|look|find)\b/.test(rawLower));
+    const looksLikeWeakExplainerTemplate =
+        /follow these steps|quick recap|next thing to learn|to understand (its|the|this) meaning/i.test(raw) ||
+        (/(\n|^)\s*1[\).:-]\s+/.test(raw) && /(\n|^)\s*2[\).:-]\s+/.test(raw));
     if (directQuery && looksLikeResearchSteps) {
+        return '';
+    }
+    if (directQuery && looksLikeWeakExplainerTemplate) {
         return '';
     }
     if (freshnessQuery && looksLikeResearchSteps) {
@@ -5580,6 +5609,8 @@ async function handleNameCorrection(text) {
             etaMinutes: null,
             offRouteDetections: 0,
             closeAlertSent: false,
+            preArrivalAlarmMinutes: null,
+            preArrivalAlarmTriggered: false,
             routeLabel: '',
             lastUpdatedAt: null,
             routeGeometryLatLngs: null
@@ -5592,6 +5623,14 @@ async function handleNameCorrection(text) {
         let tripRouteNextFetchAt = 0;
         let tripRouteLastFrom = null;
         let tripRouteLastTo = null;
+        let tripAlarmState = {
+            enabled: false,
+            minutesBefore: 30,
+            ringing: false,
+            triggeredAt: null,
+            audioContext: null,
+            ringIntervalId: null
+        };
         let safetyProfile = {
             womenSafetyMode: false,
             trustedContact: '',
@@ -6832,12 +6871,13 @@ async function handleNameCorrection(text) {
                                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                                 </svg>
                             </button>
-                            <button data-speech-id="${speechId}" onclick="toggleSpeakById(this.dataset.speechId, this)" class="message-action-btn flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white transition-all shadow-md hover:shadow-lg speaker-btn flex items-center justify-center">
-                                <svg class="play-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                            <button data-speech-id="${speechId}" onclick="toggleSpeakById(this.dataset.speechId, this)" class="message-action-btn speaker-btn flex-shrink-0 w-8 h-8 rounded-full transition-all flex items-center justify-center" title="Speak">
+                                <svg class="play-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 6 8.4 9H5v6h3.4L12 18V6z"></path>
+                                    <path d="M15.2 9.5a3.6 3.6 0 0 1 0 5"></path>
+                                    <path d="M17.8 7.2a6.8 6.8 0 0 1 0 9.6"></path>
                                 </svg>
-                                <svg class="stop-icon hidden" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
+                                <svg class="stop-icon hidden" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8">
                                     <rect x="6" y="6" width="12" height="12" rx="2"></rect>
                                 </svg>
                             </button>
@@ -9127,7 +9167,7 @@ function isDebateIntent(text) {
 
 function isMentalHealthConversation(text) { 
     const t = String(text || '').toLowerCase(); 
-    return /\b(sad|depress|depressed|anxious|anxiety|panic|lonely|hopeless|overwhelmed|stressed|burnout|mental health|not okay|feeling low|empty|worthless)\b/.test(t); 
+    return /\b(sad|depress|depressed|anxious|anxiety|panic|lonely|hopeless|overwhelmed|stressed|burnout|mental health|not okay|feeling low|empty|worthless|guilty|guilt|procrastinat(?:e|ing|ion)|unproductive)\b/.test(t); 
 } 
 
 function isMotivationStoryRequest(text) {
@@ -12122,6 +12162,28 @@ function normalizeAgreementValue(value) {
     return normalizeEntitySearchText(value).replace(/\b(the|a|an)\b/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function isLikelyLatestWorkTitleCandidate(candidate, subject) {
+    const rawCandidate = String(candidate || '').trim();
+    if (!rawCandidate) return false;
+
+    const candidateNorm = normalizeAgreementValue(rawCandidate);
+    const subjectNorm = normalizeAgreementValue(subject || '');
+    if (!candidateNorm) return false;
+    if (subjectNorm && (candidateNorm === subjectNorm || candidateNorm.includes(subjectNorm))) return false;
+    if (/\b(imdb|wikipedia|wiki|biography|filmography|discography|official)\b/i.test(rawCandidate)) return false;
+    if (rawCandidate.split(/\s+/).length < 1 || rawCandidate.split(/\s+/).length > 10) return false;
+    return true;
+}
+
+function isDegenerateLatestWorkAnswer(answer, entityIntent) {
+    if (entityIntent?.relationType !== 'latest_work') return false;
+    const normalizedAnswer = normalizeAgreementValue(answer || '');
+    const normalizedSubject = normalizeAgreementValue(entityIntent?.subject || '');
+    if (!normalizedAnswer || !normalizedSubject) return false;
+    if (!normalizedAnswer.includes(normalizedSubject)) return false;
+    return /\b(latest|recent|current|upcoming)\s+(movie|film|song|album|show|series|project)\b/.test(normalizedAnswer);
+}
+
 function extractFactCandidate(result, entityIntent) { 
     const combined = `${result?.title || ''} ${result?.description || ''}`.replace(/\s+/g, ' ').trim(); 
     if (!combined) return ''; 
@@ -12142,12 +12204,19 @@ function extractFactCandidate(result, entityIntent) {
             const match = combined.match(pattern);
             if (match?.[1]) {
                 const candidate = match[1].trim();
-                if (!subject || !normalizeEntitySearchText(candidate).includes(subject)) return candidate;
+                if (isLikelyLatestWorkTitleCandidate(candidate, entityIntent.subject) &&
+                    (!subject || !normalizeEntitySearchText(candidate).includes(subject))) {
+                    return candidate;
+                }
             }
         }
         const subjectLeadPattern = new RegExp(`\\b${subject.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\b[^.]{0,40}\\b(?:latest|recent|new|current|upcoming|future)\\s+(?:movie|film|release|song|album|single|show|series|project)\\b[^A-Za-z0-9]{0,10}([A-Z][A-Za-z0-9:&'().,\\-]+(?:\\s+[A-Z0-9][A-Za-z0-9:&'().,\\-]+){0,6})`, 'i');
         const subjectLeadMatch = combined.match(subjectLeadPattern);
-        return subjectLeadMatch?.[1] ? subjectLeadMatch[1].trim() : '';
+        if (subjectLeadMatch?.[1]) {
+            const candidate = subjectLeadMatch[1].trim();
+            return isLikelyLatestWorkTitleCandidate(candidate, entityIntent.subject) ? candidate : '';
+        }
+        return '';
     }
  
     if (entityIntent.relationType === 'winner') { 
@@ -12243,6 +12312,9 @@ function formatConsensusAnswer(entityIntent, agreement) {
         return `${entityIntent.subject} ${verb} won ${value} ${noun} in total.`; 
     } 
     if (entityIntent.relationType === 'latest_work') {
+        if (!isLikelyLatestWorkTitleCandidate(value, entityIntent.subject)) {
+            return '';
+        }
         const medium = detectLatestWorkMedium(entityIntent.raw || '');
         const label = medium === 'song' ? 'latest song' : medium === 'album' ? 'latest album' : medium === 'show' ? 'latest show' : medium === 'project' ? 'upcoming project' : 'latest film';
         return `${entityIntent.subject}'s ${label} is ${value}.`;
@@ -12648,6 +12720,9 @@ ${snippets}`
     const answer = cleanLiveAnswerText(String(summaryData?.response || summaryData?.text || '').trim());
     const sourceLines = results.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
     const finalAnswer = answer || cleanLiveAnswerText(`Direct answer: ${results[0].title}${results[0].description ? `\n\nKey points:\n- ${results[0].description}` : ''}`);
+    if (isDegenerateLatestWorkAnswer(finalAnswer, pipeline.entityIntent)) {
+        return publishUniversalVerificationFallback(pipeline, 'I found profile pages but could not verify the exact latest release.');
+    }
     const finalMsg = `${finalAnswer}\n\nSources:\n${sourceLines}`;
     addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
     await speakApiReply('verified_answer_found', {}, 'I checked verified sources and found the answer.');
@@ -12991,7 +13066,15 @@ ${snippets}`
                 return;
             }
 
-            const startTripMatch = text.match(/\bstart\s+trip\s+to\s+(.+)$/i);
+            const setTripAlarmMatch = text.match(/\b(?:set|add|enable|turn on)\s+(?:an?\s+)?alarm\b.*\bbefore\b.*\b(destination|reaching)\b/i) ||
+                text.match(/\balarm\b.*\bbefore\b.*\b(destination|reaching)\b/i);
+            if (setTripAlarmMatch) {
+                const alarmMinutes = extractTripAlarmMinutes(text) ?? 30;
+                configureTripArrivalAlarm(alarmMinutes);
+                return;
+            }
+
+            const startTripMatch = text.match(/\b(?:start|track)\s+(?:my\s+)?(?:a\s+)?trip\s+to\s+(.+)$/i);
             if (startTripMatch) {
                 await startForegroundTrip(startTripMatch[1].replace(/[?.!,]$/g, '').trim());
                 return;
@@ -14688,6 +14771,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
             const hasData = !!(commuteProfile.home || commuteProfile.office);
             section.classList.toggle('hidden', !hasData);
+            updateUtilityPanelVisibility();
             if (!hasData) return;
 
             const rows = [];
@@ -14698,12 +14782,21 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             summary.innerHTML = rows.join('');
         }
 
+        function updateUtilityPanelVisibility() {
+            const panel = document.getElementById('utility-panel');
+            if (!panel) return;
+            const showTrip = Boolean(tripState.active || tripState.destinationText);
+            const showCommute = Boolean(commuteProfile.home || commuteProfile.office);
+            panel.classList.toggle('utility-panel-visible', showTrip || showCommute);
+        }
+
         function renderTripCard() {
             const section = document.getElementById('trip-section');
             const summary = document.getElementById('trip-summary');
             if (!section || !summary) return;
 
             section.classList.toggle('hidden', !tripState.active && !tripState.destinationText);
+            updateUtilityPanelVisibility();
             if (!tripState.active && !tripState.destinationText) {
                 summary.innerHTML = '';
                 renderTripLiveMap();
@@ -14730,6 +14823,9 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             }
             if (tripState.lastUpdatedAt) {
                 rows.push(`<p><strong>Last update:</strong> ${new Date(tripState.lastUpdatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</p>`);
+            }
+            if (tripState.preArrivalAlarmMinutes) {
+                rows.push(`<p><strong>Arrival alarm:</strong> ${tripState.preArrivalAlarmMinutes} minutes before destination ${tripState.preArrivalAlarmTriggered ? '(triggered)' : '(armed)'}</p>`);
             }
             summary.innerHTML = rows.join('');
             renderTripLiveMap();
@@ -15038,6 +15134,101 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             return String(raw || '').trim();
         }
 
+        function extractTripAlarmMinutes(text) {
+            const raw = String(text || '').toLowerCase();
+            const match = raw.match(/\b(\d{1,3})\s*(?:min|mins|minute|minutes)\b/);
+            if (!match) return null;
+            const minutes = Number(match[1]);
+            if (!Number.isFinite(minutes)) return null;
+            return Math.min(120, Math.max(1, Math.round(minutes)));
+        }
+
+        function getTripAlarmAudioContext() {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return null;
+            if (!tripAlarmState.audioContext) {
+                tripAlarmState.audioContext = new Ctx();
+            }
+            return tripAlarmState.audioContext;
+        }
+
+        function playTripAlarmBurst() {
+            const ctx = getTripAlarmAudioContext();
+            if (!ctx) return;
+            if (ctx.state === 'suspended') {
+                try { ctx.resume(); } catch (e) {}
+            }
+
+            const now = ctx.currentTime;
+            const gain = ctx.createGain();
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.15, now + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+            gain.connect(ctx.destination);
+
+            [880, 1174].forEach((freq, idx) => {
+                const osc = ctx.createOscillator();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+                osc.connect(gain);
+                osc.start(now + idx * 0.08);
+                osc.stop(now + 0.28 + idx * 0.08);
+            });
+        }
+
+        function hideTripAlarmOverlay() {
+            const overlay = document.getElementById('alarm-overlay');
+            const card = document.getElementById('alarm-notification');
+            if (overlay) overlay.classList.add('hidden');
+            if (card) {
+                card.classList.add('hidden');
+                card.innerHTML = '';
+                card.classList.remove('alarm-notification');
+            }
+        }
+
+        function stopTripAlarmRinging() {
+            if (tripAlarmState.ringIntervalId) {
+                clearInterval(tripAlarmState.ringIntervalId);
+                tripAlarmState.ringIntervalId = null;
+            }
+            tripAlarmState.ringing = false;
+            hideTripAlarmOverlay();
+        }
+
+        function endTripArrivalAlarm() {
+            stopTripAlarmRinging();
+            showTemporaryMessage('Trip alarm dismissed.');
+        }
+
+        function startTripAlarmRinging(destinationLabel, thresholdMinutes, etaMinutesNow) {
+            if (tripAlarmState.ringing) return;
+            tripAlarmState.ringing = true;
+            tripAlarmState.triggeredAt = Date.now();
+
+            const overlay = document.getElementById('alarm-overlay');
+            const card = document.getElementById('alarm-notification');
+            if (overlay) overlay.classList.remove('hidden');
+            if (card) {
+                card.className = 'alarm-notification';
+                card.innerHTML = `
+                    <div class="max-w-sm w-[92vw] rounded-2xl border border-red-300 bg-white px-5 py-4 shadow-2xl">
+                        <p class="text-xs font-semibold text-red-600 uppercase tracking-wide">Trip alarm</p>
+                        <p class="mt-1 text-base font-bold text-slate-900">Time to wrap up for ${escapeHtml(destinationLabel || 'your destination')}</p>
+                        <p class="mt-1 text-sm text-slate-600">ETA is about ${Math.max(1, Math.round(etaMinutesNow || 0))} min. Alarm set for ${thresholdMinutes} min before arrival.</p>
+                        <button type="button" onclick="endTripArrivalAlarm()" class="mt-4 w-full rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">End alarm</button>
+                    </div>
+                `;
+                card.classList.remove('hidden');
+            }
+
+            playTripAlarmBurst();
+            tripAlarmState.ringIntervalId = setInterval(() => {
+                if (!tripAlarmState.ringing) return;
+                playTripAlarmBurst();
+            }, 1100);
+        }
+
         function getCurrentPositionAsync(options = {}) {
             return new Promise((resolve, reject) => {
                 if (!navigator.geolocation) {
@@ -15260,6 +15451,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 etaMinutes: initialEta,
                 offRouteDetections: 0,
                 closeAlertSent: false,
+                preArrivalAlarmMinutes: tripAlarmState.enabled ? tripAlarmState.minutesBefore : null,
+                preArrivalAlarmTriggered: false,
                 routeLabel: destination.label || destinationText,
                 lastUpdatedAt: Date.now(),
                 routeGeometryLatLngs: null
@@ -15289,6 +15482,29 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
         function startTripToOffice() {
             startForegroundTrip('office');
+        }
+
+        function configureTripArrivalAlarm(minutesInput = null) {
+            const minutes = Number(minutesInput || 30);
+            if (!Number.isFinite(minutes) || minutes < 1) {
+                addChatMessage('Trip alarm time should be between 1 and 120 minutes.', false);
+                speak('Trip alarm time should be between one and one hundred twenty minutes.', true);
+                return;
+            }
+
+            const normalized = Math.min(120, Math.max(1, Math.round(minutes)));
+            tripAlarmState.enabled = true;
+            tripAlarmState.minutesBefore = normalized;
+
+            if (tripState.active) {
+                tripState.preArrivalAlarmMinutes = normalized;
+                tripState.preArrivalAlarmTriggered = false;
+                renderTripCard();
+            }
+
+            const msg = `Trip alarm set: I will ring ${normalized} minutes before you reach the destination.`;
+            addChatMessage(msg, false);
+            speak(msg, true);
         }
 
         function maybeNotifyTripEvent(title, body) {
@@ -15338,6 +15554,16 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 maybeNotifyTripEvent('Near destination', closeMsg);
             }
 
+            const alarmThreshold = Number(tripState.preArrivalAlarmMinutes || 0);
+            if (alarmThreshold > 0 && !tripState.preArrivalAlarmTriggered && etaMinutes <= alarmThreshold) {
+                tripState.preArrivalAlarmTriggered = true;
+                const alertLine = `Trip alarm: ${tripState.destinationText} is about ${Math.max(1, Math.round(etaMinutes))} minutes away.`;
+                addChatMessage(alertLine, false);
+                speak(alertLine, true);
+                maybeNotifyTripEvent('Trip alarm', alertLine);
+                startTripAlarmRinging(tripState.destinationText, alarmThreshold, etaMinutes);
+            }
+
             renderTripCard();
         }
 
@@ -15348,6 +15574,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 } catch (e) {}
             }
             const hadTrip = tripState.active;
+            stopTripAlarmRinging();
             tripState = {
                 active: false,
                 watchId: null,
@@ -15360,6 +15587,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 etaMinutes: null,
                 offRouteDetections: 0,
                 closeAlertSent: false,
+                preArrivalAlarmMinutes: null,
+                preArrivalAlarmTriggered: false,
                 routeLabel: '',
                 lastUpdatedAt: null,
                 routeGeometryLatLngs: null
@@ -15749,6 +15978,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 document.querySelectorAll('.speaker-btn').forEach(btn => {
                     btn.querySelector('.play-icon')?.classList.remove('hidden');
                     btn.querySelector('.stop-icon')?.classList.add('hidden');
+                    btn.classList.remove('is-speaking');
                 });
                 currentSpeakerButton = null;
                 return;
@@ -15758,6 +15988,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             currentSpeakerButton = button;
             button.querySelector('.play-icon')?.classList.add('hidden');
             button.querySelector('.stop-icon')?.classList.remove('hidden');
+            button.classList.add('is-speaking');
             speak(text, true);
         }
 
@@ -15855,6 +16086,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     if (currentSpeakerButton) { 
                         currentSpeakerButton.querySelector('.play-icon')?.classList.remove('hidden');
                         currentSpeakerButton.querySelector('.stop-icon')?.classList.add('hidden');
+                        currentSpeakerButton.classList.remove('is-speaking');
                         currentSpeakerButton = null;
                     }
                     if (converseMode && listeningRequested && !isListening && !isProcessing) {
@@ -15872,8 +16104,13 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             currentSpeechTextLower = '';
             if (typeof responsiveVoice !== 'undefined') { 
                 responsiveVoice.cancel(); 
-            } 
+            }
             synth.cancel();
+            document.querySelectorAll('.speaker-btn').forEach(btn => {
+                btn.querySelector('.play-icon')?.classList.remove('hidden');
+                btn.querySelector('.stop-icon')?.classList.add('hidden');
+                btn.classList.remove('is-speaking');
+            });
             currentUtterance = null;
         }
 
