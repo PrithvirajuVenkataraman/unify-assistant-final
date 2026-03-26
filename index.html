@@ -7359,8 +7359,8 @@ function normalizeUiTokens(text) {
 
                 const resultCard = formatDocumentResultCard(data);
                 addChatMessage(resultCard, false, false);
-                speak('Here is a short summary.');
-                saveToHistory(`uploaded ${data.fileName}`, `Summary:\n${buildShortDocumentSummary(String(data.summary || ''), 600)}`);
+                speak('I have read the uploaded file.');
+                saveToHistory(`uploaded ${data.fileName}`, 'I have read the uploaded file. Details will be shared only on follow-up questions.');
 
                 // Best-effort vector indexing for persistent document memory (no user-facing failure).
                 const ragIndex = await indexUploadedDocumentInRag(data);
@@ -7512,13 +7512,31 @@ function normalizeUiTokens(text) {
 
         function formatDocumentResultCard(data) {
             const fileName = escapeHtml(String(data?.fileName || 'document'));
-            const shortSummary = escapeHtml(buildShortDocumentSummary(String(data?.summary || ''))).replace(/\n/g, '<br>');
+            const oneLiner = escapeHtml(buildUploadedDocumentOneLiner(data));
             return `
 <div class="p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70">
   <p class="text-xs font-semibold text-slate-500 dark:text-slate-300 mb-1">Uploaded file</p>
   <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-2">${fileName}</p>
-  <p class="text-sm text-slate-700 dark:text-slate-200">${shortSummary}</p>
+  <p class="text-sm text-slate-700 dark:text-slate-200">${oneLiner}</p>
 </div>`;
+        }
+
+        function buildUploadedDocumentOneLiner(data) {
+            const fileName = String(data?.fileName || 'uploaded file').trim();
+            const kind = String(data?.kind || '').trim().toLowerCase();
+            const summary = String(data?.summary || '').toLowerCase();
+            const hay = `${fileName} ${summary}`.toLowerCase();
+
+            let topic = 'a general document';
+            if (/\b(vaccin|immuni|covid|certificate|health id|uhid)\b/.test(hay)) topic = 'a vaccination/health certificate';
+            else if (/\b(invoice|receipt|bill|payment|tax|subtotal|total)\b/.test(hay)) topic = 'a bill or receipt';
+            else if (/\b(passport|visa|aadhaar|pan|id|identity)\b/.test(hay)) topic = 'an identity-related document';
+            else if (/\b(report|result|test|diagnos|prescription|medical)\b/.test(hay)) topic = 'a medical report/document';
+            else if (kind === 'pdf') topic = 'a PDF document';
+            else if (kind === 'image') topic = 'an image-based document';
+            else if (kind === 'docx' || kind === 'text' || kind === 'pptx') topic = 'a text document';
+
+            return `I have read the contents. This looks like ${topic}. Ask a follow-up question if you want details.`;
         }
 
         function isDocumentRawTextRequest(lowerText) {
