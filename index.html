@@ -1079,7 +1079,7 @@ body {
             overflow: hidden;
         }
 
-        .map-message .map-container iframe {
+        .map-message .map-container #map {
             width: 100% !important;
             height: 350px !important;
             min-height: 300px;
@@ -17721,5 +17721,44 @@ function addTravelHintsToPlan(places){
 })();
 </script>
 
+
+<script>
+let jarvisMap = null;
+let jarvisMarker = null;
+
+function jarvisInitMap(lat, lng) {
+    if (jarvisMap) return;
+
+    jarvisMap = L.map('map').setView([lat, lng], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(jarvisMap);
+
+    jarvisMarker = L.marker([lat, lng]).addTo(jarvisMap);
+}
+
+function jarvisStartTracking() {
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.watchPosition(
+        (pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+
+            if (!jarvisMap) {
+                jarvisInitMap(lat, lng);
+            } else {
+                jarvisMap.setView([lat, lng], 15);
+                jarvisMarker.setLatLng([lat, lng]);
+            }
+        },
+        (err) => console.error(err),
+        { enableHighAccuracy: true }
+    );
+}
+</script>
+
+<script>jarvisStartTracking();</script>
 </body>
 </html>
