@@ -3349,11 +3349,81 @@ function isChemistryReactionQuery(text) {
     return reactionTerm && askTerm;
 }
 
+function isPhysicsFormulaQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    const askTerm = /^(what is|what's|explain|define|derive|show|write|give)\b/.test(t) || /\b(formula|equation|law)\b/.test(t);
+    const physicsTerm = /\b(physics|newton|force|momentum|velocity|acceleration|gravity|gravitational|kinetic energy|potential energy|work done|power|pressure|ohm|voltage|current|resistance|capacitance|frequency|wavelength|optics|lens|snell|thermodynamics|entropy)\b/.test(t);
+    return askTerm && physicsTerm;
+}
+
+function isMathFormulaQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    const askTerm = /^(what is|what's|explain|define|derive|show|write|give)\b/.test(t) || /\b(formula|equation|identity|theorem)\b/.test(t);
+    const mathTerm = /\b(math|mathematics|algebra|calculus|trigonometry|trig|geometry|probability|statistics|quadratic|binomial|derivative|integral|permutation|combination|area|volume|slope|pythagoras)\b/.test(t);
+    return askTerm && mathTerm;
+}
+
+function requiresAutoFormula(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    if (/\b(formula|equation|derive|derivation|reaction)\b/.test(t)) return true;
+    return isChemistryReactionQuery(t) || isPhysicsFormulaQuery(t) || isMathFormulaQuery(t);
+}
+
+function hasFormulaLikeExpression(text) {
+    const t = String(text || '');
+    if (!t.trim()) return false;
+    if (/\bformula\s*[:\-]/i.test(t) || /\bequation\s*[:\-]/i.test(t)) return true;
+    if (/[A-Za-z0-9)\]]\s*=\s*[-+A-Za-z0-9(]/.test(t)) return true;
+    if (/[A-Za-z0-9)\]]\s*->\s*[A-Za-z0-9(]/.test(t)) return true;
+    if (/\b[a-z]\s*=\s*[a-z0-9/*+\-^().]+\b/i.test(t)) return true;
+    return false;
+}
+
+function ensureStructuredFormulaResponse(answer, userText, reactionNeeded = false) {
+    const raw = String(answer || '').trim();
+    if (!raw) return raw;
+    if (!requiresAutoFormula(userText)) return raw;
+
+    const hasDefinition = /\bdefinition\s*:/i.test(raw);
+    const hasFormula = /\b(formula|equation)\s*:/i.test(raw) || hasFormulaLikeExpression(raw);
+    const hasUnits = /\bunits\s*:/i.test(raw);
+    const hasExample = /\bexample\s*:/i.test(raw);
+    const hasRecap = /\b(quick recap|recap)\s*:/i.test(raw);
+
+    const lines = [];
+    if (hasDefinition || hasFormula || hasUnits || hasExample || hasRecap) {
+        if (hasDefinition && hasFormula && hasUnits && hasExample) return raw;
+        lines.push(raw);
+    } else {
+        lines.push(`Definition: ${raw.split('\n')[0].trim()}`);
+    }
+
+    if (!hasFormula) {
+        lines.push(reactionNeeded ? 'Formula: R-CHO + OH- -> R-COO- + R-CH2OH (generalized Cannizzaro form when applicable)' : 'Formula: [formula]');
+    }
+    if (!hasUnits) {
+        lines.push('Units: Not applicable unless the formula contains measurable physical quantities.');
+    }
+    if (!hasExample) {
+        lines.push('Example: Replace symbols with known values to compute the required result.');
+    }
+    if (!hasRecap) {
+        lines.push('Quick recap: Use the formula above with correct symbols and units.');
+    }
+    return lines.join('\n');
+}
+
 function isUniversalExplainerRequest(text) {
     const t = String(text || '').trim().toLowerCase();
     if (!t) return false;
     if (isCurrentInfoQuery(t) || isNewsworthyLiveTopic(t) || isLiveRetrievalQuery(t)) return false;
-    return /^(what is|what's|who is|who's|tell me about|define|meaning of|explain)\b/.test(t) || isChemistryReactionQuery(t);
+    return /^(what is|what's|who is|who's|tell me about|define|meaning of|explain)\b/.test(t) ||
+        isChemistryReactionQuery(t) ||
+        isPhysicsFormulaQuery(t) ||
+        isMathFormulaQuery(t);
 }
 
 function buildConversationRecallSummary(limit = 6) {
@@ -3393,10 +3463,11 @@ function buildReactionFallbackByName(text) {
 async function handleUniversalExplainerQuery(userText, historyKey = '') {
     const fallback = buildReactionFallbackByName(userText);
     const reactionNeeded = isChemistryReactionQuery(userText);
+    const formulaNeeded = requiresAutoFormula(userText);
     const recentMemory = buildConversationRecallSummary(5);
     const schoolModeEnabled = typeof schoolMode !== 'undefined' ? !!schoolMode : false;
 
-    showThinkingIndicator(reactionNeeded ? 'Explaining reaction...' : 'Building explanation...');
+    showThinkingIndicator(reactionNeeded ? 'Explaining reaction...' : (formulaNeeded ? 'Building explanation with formula...' : 'Building explanation...'));
     try {
         const schoolModeSection = schoolModeEnabled
             ? `\n\nSchool mode is ON. Use this exact structure whenever relevant:\n1) Definition\n2) Formula/Equation (if applicable)\n3) Worked Example\n4) Quick recap in one line`
@@ -3411,6 +3482,13 @@ Rules:
 - Then give a precise explanation in 2-5 concise lines.
 - Keep it on-point; no generic advice.
 - If this is a chemistry reaction query, include a clear reaction equation line using arrow notation.
+- If the question is chemistry/physics/math (or asks formula/equation), ALWAYS include an explicit "Formula:" or "Equation:" line.
+- If chemistry/physics/math formula is involved, use this strict structure:
+Definition: ...
+Formula: ...
+Units: ...
+Example: ...
+Quick recap: ...
 - If user asked for formula/equation, include it explicitly.
 - If term is misspelled, infer the most likely intended term and answer that directly.
 - Do not ask follow-up questions unless ambiguity is high.${schoolModeSection}`;
@@ -3430,10 +3508,32 @@ Rules:
         }
 
         if (!answer) answer = fallback || '';
-        if (reactionNeeded && !/(->|=>|⇌|=)/.test(answer)) {
+        if (reactionNeeded && !/(->|=>|=)/.test(answer)) {
             answer = `${answer}\n${fallback || 'Reaction equation: [equation not available]'}`
                 .replace(/\n{3,}/g, '\n\n')
                 .trim();
+        }
+        if (formulaNeeded && !hasFormulaLikeExpression(answer)) {
+            try {
+                const formulaOnlyRes = await fetch('/api/chat-groq', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        systemPrompt: 'Return only one short formula/equation line, no explanation.',
+                        message: `Question: "${userText}"\nReturn exactly one line in this format:\nFormula: <equation>\nIf it is chemistry reaction, use arrow notation.`
+                    })
+                });
+                if (formulaOnlyRes.ok) {
+                    const data = await formulaOnlyRes.json();
+                    const line = String(data?.response || data?.text || '').split('\n').find(Boolean) || '';
+                    if (line && hasFormulaLikeExpression(line)) {
+                        answer = `${answer}\n${line}`.trim();
+                    }
+                }
+            } catch (e) {}
+        }
+        if (formulaNeeded) {
+            answer = ensureStructuredFormulaResponse(answer, userText, reactionNeeded);
         }
         if (!answer) return false;
 
@@ -9695,7 +9795,11 @@ Format:
 
 function isLearningIntent(text) {
     const t = String(text || '').toLowerCase().trim();
-    return /\b(what is|what are|explain|teach me|help me understand|how does|difference between|compare|why does|meaning of|overview of)\b/.test(t);
+    if (/\b(what is|what are|explain|teach me|help me understand|how does|difference between|compare|why does|meaning of|overview of)\b/.test(t)) {
+        return true;
+    }
+    if (requiresAutoFormula(t)) return true;
+    return false;
 }
 
 function isArtistSongRequest(text) {
@@ -14202,6 +14306,7 @@ Do not use repetitive filler or generic wording.`;
             }
 
             if (isLearningIntent(cleanText)) {
+                const formulaNeededInLearning = requiresAutoFormula(text);
                 const learningPrompt = `User asked: "${text}"
 
 Teach this clearly for a beginner.
@@ -14210,13 +14315,43 @@ Rules:
 - Cover any domain (tech, science, finance, history, life skills, etc.) based on user question.
 - Start with a plain definition.
 - Explain in simple steps with one real-world example.
+- For chemistry reactions, physics, or math questions, always include a clear formula/equation line.
+- For chemistry/physics/math formula questions, use this strict structure:
+Definition: ...
+Formula: ...
+Units: ...
+Example: ...
+Quick recap: ...
 - End with a short "quick recap".
 - If useful, add "next thing to learn" in one line.
 - Avoid jargon unless you define it immediately.
 - Keep it accurate and practical.`;
                 const learningResponse = await callAIWithTyping(learningPrompt, 'Preparing a clear explanation...');
                 if (learningResponse?.aborted) return;
-                await publishResolvedModelMessage(text, learningResponse.response, {
+                let learningAnswer = learningResponse.response;
+                if (formulaNeededInLearning && !hasFormulaLikeExpression(learningAnswer)) {
+                    try {
+                        const formulaOnlyRes = await fetch('/api/chat-groq', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                systemPrompt: 'Return only one short formula/equation line, no explanation.',
+                                message: `Question: "${text}"\nReturn exactly one line in this format:\nFormula: <equation>\nIf it is chemistry reaction, use arrow notation.`
+                            })
+                        });
+                        if (formulaOnlyRes.ok) {
+                            const data = await formulaOnlyRes.json();
+                            const line = String(data?.response || data?.text || '').split('\n').find(Boolean) || '';
+                            if (line && hasFormulaLikeExpression(line)) {
+                                learningAnswer = `${String(learningAnswer || '').trim()}\n${line}`.trim();
+                            }
+                        }
+                    } catch (e) {}
+                }
+                if (formulaNeededInLearning) {
+                    learningAnswer = ensureStructuredFormulaResponse(learningAnswer, text, isChemistryReactionQuery(text));
+                }
+                await publishResolvedModelMessage(text, learningAnswer, {
                     label: 'Model answer',
                     speechText: "Here is a clear explanation."
                 });
