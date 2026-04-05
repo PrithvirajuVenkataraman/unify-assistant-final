@@ -3050,11 +3050,13 @@ function extractReferenceSubject(text) {
 
     const patterns = [
         /^\s*(?:what\s+is|what's|define|meaning\s+of)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
+        /^\s*(?:explain)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
         /^\s*(?:tell\s+me\s+about)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
         /^\s*(?:who\s+is|who's)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
         /^\s*(?:show\s+me)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
         /^\s*(?:image|picture|photo)\s+(?:of)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
-        /^\s*(?:what\s+does)\s+(?:a|an|the)?\s*([^?.!]+?)\s+(?:look\s+like)\s*\??\s*$/i
+        /^\s*(?:what\s+does)\s+(?:a|an|the)?\s*([^?.!]+?)\s+(?:look\s+like)\s*\??\s*$/i,
+        /^\s*(?:what\s+is|explain)\s+([^?.!]+?)\s+reaction\s*\??\s*$/i
     ];
 
     for (const p of patterns) {
@@ -3095,8 +3097,11 @@ function shouldTryReferenceImage(userText, assistantText = '') {
     const explicitImageAsk = /\b(image|picture|photo|show me|looks like|look like)\b/;
     if (explicitImageAsk.test(q)) return true;
 
-    const explainerAsk = /\b(what is|what's|who is|who's|tell me about|define|meaning of)\b/;
+    const explainerAsk = /\b(what is|what's|who is|who's|tell me about|define|meaning of|explain)\b/;
     if (explainerAsk.test(q)) return true;
+
+    const peopleFoodPlaceCue = /\b(person|people|actor|actress|scientist|founder|chef|city|country|place|location|landmark|food|dish|recipe|cuisine)\b/;
+    if (peopleFoodPlaceCue.test(q) && q.split(/\s+/).filter(Boolean).length <= 8) return true;
 
     const shortEntityQuery = q.split(/\s+/).filter(Boolean).length <= 4;
     const assistantLooksExplanatory = /\b(is a|is an|traditional|dish|animal|city|country|festival|language|object|meaning)\b/.test(a);
@@ -3316,6 +3321,138 @@ function isAgendaTodayRequest(text) {
     if (!t.trim()) return false;
     return /\b(agenda|schedule|calendar|events?|appointments?|meetings?)\b/.test(t) &&
         /\b(today|for today|this day|today's|todays)\b/.test(t);
+}
+
+function isConversationRecallRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    return /\b(what did i (say|ask)|what was my (last|previous) (question|message)|repeat what i said|what were we talking about|summarize (our|the) chat|recap (our|the) chat)\b/.test(t);
+}
+
+function isMemoryStorageRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    return /\b(my\s+.+\s+(?:is|are)\s+(?:in|on|at)\s+.+|i\s+(?:put|left)\s+(?:my\s+)?.+\s+(?:in|on|at)\s+.+|remember\s+that\s+my\s+.+\s+(?:is|are)\s+(?:in|on|at)\s+.+)\b/.test(t);
+}
+
+function isMemoryRecallRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    return /\b(where\s+(?:is|are)\s+(?:my|the)\s+.+|where\s+did\s+i\s+(?:put|leave)\s+(?:my|the)\s+.+|where'?s\s+(?:my|the)\s+.+)\b/.test(t);
+}
+
+function isChemistryReactionQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    const reactionTerm = /\breaction\b/.test(t) || /\b(cannizzaro|cannizarro|aldol|friedel[-\s]?crafts|wurtz|sandmeyer|hell[-\s]?volhard[-\s]?zelinsky|hvz)\b/.test(t);
+    const askTerm = /^(what is|what's|explain|define|tell me about|write|show)\b/.test(t) || /\b(formula|equation|mechanism)\b/.test(t);
+    return reactionTerm && askTerm;
+}
+
+function isUniversalExplainerRequest(text) {
+    const t = String(text || '').trim().toLowerCase();
+    if (!t) return false;
+    if (isCurrentInfoQuery(t) || isNewsworthyLiveTopic(t) || isLiveRetrievalQuery(t)) return false;
+    return /^(what is|what's|who is|who's|tell me about|define|meaning of|explain)\b/.test(t) || isChemistryReactionQuery(t);
+}
+
+function buildConversationRecallSummary(limit = 6) {
+    const items = Array.isArray(conversationHistory) ? conversationHistory.slice(-limit) : [];
+    if (!items.length) return '';
+    const lines = items.map((entry, index) => {
+        const user = String(entry?.user || '').replace(/\s+/g, ' ').trim();
+        const ai = String(entry?.ai || '').replace(/\s+/g, ' ').trim();
+        return `${index + 1}. You: ${user || '...'} | JARVIS: ${(ai || '...').slice(0, 140)}`;
+    });
+    return lines.join('\n');
+}
+
+async function handleConversationRecallRequest(originalText = '') {
+    const summary = buildConversationRecallSummary(8);
+    const message = summary
+        ? `Here is a quick recap of this chat:\n${summary}`
+        : 'I do not have enough prior messages in this session to recap yet.';
+    addChatMessage(message, false);
+    speak(message);
+    saveToHistory(originalText || 'chat recap', message);
+}
+
+function buildReactionFallbackByName(text) {
+    const t = String(text || '').toLowerCase();
+    if (!/\b(cannizzaro|cannizarro)\b/.test(t)) return '';
+    return [
+        'Ah, classic high-school organic chemistry.',
+        'Cannizzaro reaction is the disproportionation of an aldehyde with no alpha-hydrogen in concentrated base.',
+        'Reaction:',
+        '2 R-CHO + OH- -> R-COO- + R-CH2OH',
+        'Example:',
+        '2 C6H5CHO + KOH -> C6H5COOK + C6H5CH2OH'
+    ].join('\n');
+}
+
+async function handleUniversalExplainerQuery(userText, historyKey = '') {
+    const fallback = buildReactionFallbackByName(userText);
+    const reactionNeeded = isChemistryReactionQuery(userText);
+    const recentMemory = buildConversationRecallSummary(5);
+    const schoolModeEnabled = typeof schoolMode !== 'undefined' ? !!schoolMode : false;
+
+    showThinkingIndicator(reactionNeeded ? 'Explaining reaction...' : 'Building explanation...');
+    try {
+        const schoolModeSection = schoolModeEnabled
+            ? `\n\nSchool mode is ON. Use this exact structure whenever relevant:\n1) Definition\n2) Formula/Equation (if applicable)\n3) Worked Example\n4) Quick recap in one line`
+            : '';
+        const explainerPrompt = `User question: "${userText}"
+
+Recent conversation context:
+${recentMemory || 'None'}
+
+Rules:
+- Start with one short natural hook line (friendly, not cheesy).
+- Then give a precise explanation in 2-5 concise lines.
+- Keep it on-point; no generic advice.
+- If this is a chemistry reaction query, include a clear reaction equation line using arrow notation.
+- If user asked for formula/equation, include it explicitly.
+- If term is misspelled, infer the most likely intended term and answer that directly.
+- Do not ask follow-up questions unless ambiguity is high.${schoolModeSection}`;
+        const response = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                systemPrompt: 'You are JARVIS. Give direct, accurate explanations with no filler.',
+                message: explainerPrompt
+            })
+        });
+
+        let answer = '';
+        if (response.ok) {
+            const data = await response.json();
+            answer = postProcessAssistantResponse(String(data?.response || data?.text || '').trim(), userText);
+        }
+
+        if (!answer) answer = fallback || '';
+        if (reactionNeeded && !/(->|=>|⇌|=)/.test(answer)) {
+            answer = `${answer}\n${fallback || 'Reaction equation: [equation not available]'}`
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+        }
+        if (!answer) return false;
+
+        addModelAssistantMessage(answer, 'Model answer');
+        speak(answer);
+        await maybeShowReferenceImageForQuery(userText, answer);
+        saveToHistory(historyKey || userText, answer);
+        suggestQuickReplies(answer);
+        addFeedbackButtons(historyKey || userText, answer);
+        return true;
+    } catch (error) {
+        if (!fallback) return false;
+        addModelAssistantMessage(fallback, 'Model answer');
+        speak(fallback);
+        saveToHistory(historyKey || userText, fallback);
+        return true;
+    } finally {
+        hideThinkingIndicator();
+    }
 }
 
 async function handleVerifiedPlacesMode(text) {
@@ -4600,6 +4737,23 @@ function getTopicMemoryHint(userText) {
     return `Active topic: ${activeConversationTopic.label}. Keep continuity for this thread. If user switches topic, follow the new topic. If user references an earlier topic, resume that thread.${initialHint} Recent known topics: ${recentTopics || activeConversationTopic.label}.`;
 }
 
+function getRecentMemoryHint() {
+    const recentTurns = Array.isArray(conversationHistory) ? conversationHistory.slice(-6) : [];
+    const compactTurns = recentTurns
+        .map(entry => `User: ${String(entry?.user || '').replace(/\s+/g, ' ').trim()}`)
+        .filter(Boolean)
+        .slice(-4)
+        .join(' | ');
+    const pinnedMemory = Object.entries(memoryStore || {})
+        .slice(0, 4)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('; ');
+    const blocks = [];
+    if (compactTurns) blocks.push(`Recent user turns: ${compactTurns}`);
+    if (pinnedMemory) blocks.push(`Saved memory items: ${pinnedMemory}`);
+    return blocks.join('\n');
+}
+
 async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
     
     showThinkingIndicator(loadingMessage);
@@ -5461,10 +5615,11 @@ async function askGeminiAI(userMessage) {
         maybeCaptureKnowledgeEntity(normalizedUserMessage);
         updateTopicMemory(normalizedUserMessage);
         const topicHint = getTopicMemoryHint(normalizedUserMessage);
+        const memoryHint = getRecentMemoryHint();
 
         conversationContext.push({ role: 'user', text: normalizedUserMessage }); 
-        if (conversationContext.length > 20) { 
-            conversationContext = conversationContext.slice(-20); 
+        if (conversationContext.length > 40) { 
+            conversationContext = conversationContext.slice(-40); 
         } 
         
         const contextMessages = conversationContext.map(msg => 
@@ -5511,9 +5666,10 @@ Recent conversation:
 ${contextMessages}
 
 Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
-        const systemPromptWithTopic = topicHint
-            ? `${systemPrompt}\n\nTOPIC CONTINUITY:\n- ${topicHint}`
-            : systemPrompt;
+        const extraHints = [topicHint ? `TOPIC CONTINUITY:\n- ${topicHint}` : '', memoryHint ? `MEMORY CONTINUITY:\n- ${memoryHint}` : '']
+            .filter(Boolean)
+            .join('\n\n');
+        const systemPromptWithTopic = extraHints ? `${systemPrompt}\n\n${extraHints}` : systemPrompt;
         const intent = getUserIntent(normalizedUserMessage); 
         window.__intentContext = { 
           allowHotels: intent.wantsHotels,
@@ -5697,6 +5853,7 @@ async function handleNameCorrection(text) {
         let supportConversationMode = false;
         let responseLength = 'normal';
         let responseFormat = 'paragraph';
+        let schoolMode = false;
         let medicalMode = false;
         let converseMode = false;
         let lastUploadedDocument = null;
@@ -6070,13 +6227,20 @@ async function handleNameCorrection(text) {
                                     </div>
                                 </div>
                                 <div>
+                                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">School mode</p>
+                                    <div class="flex gap-2 flex-wrap">
+                                        <button onclick="setSchoolMode(true)" data-mode-group="school-mode" data-mode-value="on" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-emerald-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${schoolMode ? 'bg-emerald-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">On</button>
+                                        <button onclick="setSchoolMode(false)" data-mode-group="school-mode" data-mode-value="off" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${!schoolMode ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Off</button>
+                                    </div>
+                                </div>
+                                <div>
                                     <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Medical mode</p>
                                     <div class="flex gap-2 flex-wrap">
                                         <button onclick="setMedicalMode(true)" data-mode-group="medical-mode" data-mode-value="on" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-rose-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${medicalMode ? 'bg-rose-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">On</button>
                                         <button onclick="setMedicalMode(false)" data-mode-group="medical-mode" data-mode-value="off" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${!medicalMode ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Off</button>
                                     </div>
                                 </div>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Voice commands: "set support mode supportive", "set response length detailed", "set response format bullet points", or "turn medical mode on".</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Voice commands: "set support mode supportive", "set response length detailed", "set response format bullet points", "set school mode on", or "turn medical mode on".</p>
                             </div>
                         </section>
 
@@ -6227,6 +6391,7 @@ async function handleNameCorrection(text) {
                     supportModeLock,
                     responseLength,
                     responseFormat,
+                    schoolMode,
                     medicalMode,
                     converseMode
                 }));
@@ -6408,6 +6573,7 @@ async function handleNameCorrection(text) {
             updateModeButtonGroup('support-mode', supportModeLock);
             updateModeButtonGroup('response-length', responseLength);
             updateModeButtonGroup('response-format', responseFormat);
+            updateModeButtonGroup('school-mode', schoolMode ? 'on' : 'off');
             updateModeButtonGroup('medical-mode', medicalMode ? 'on' : 'off');
         }
 
@@ -6415,6 +6581,7 @@ async function handleNameCorrection(text) {
             supportModeLock = 'balanced';
             responseLength = 'normal';
             responseFormat = 'paragraph';
+            schoolMode = false;
             medicalMode = false;
             converseMode = false;
             supportConversationMode = false;
@@ -6425,6 +6592,7 @@ async function handleNameCorrection(text) {
                     supportModeLock = parsed.supportModeLock || 'balanced';
                     responseLength = parsed.responseLength || 'normal';
                     responseFormat = ['paragraph', 'bullet', 'steps'].includes(parsed.responseFormat) ? parsed.responseFormat : 'paragraph';
+                    schoolMode = !!parsed.schoolMode;
                     medicalMode = !!parsed.medicalMode;
                     // Always start with Converse mode OFF unless user explicitly presses it.
                     converseMode = false;
@@ -6433,6 +6601,7 @@ async function handleNameCorrection(text) {
             window.supportModeLock = supportModeLock;
             window.responseLength = responseLength;
             window.responseFormat = responseFormat;
+            window.schoolMode = schoolMode;
             window.medicalMode = medicalMode;
             updateAssistantModeUI();
             // Do not auto-start listening on load.
@@ -6476,6 +6645,20 @@ async function handleNameCorrection(text) {
                 label: labelMap[responseFormat] || 'Paragraph'
             }, {
                 fallbackText: `Response format set to ${labelMap[responseFormat] || 'Paragraph'}.`
+            });
+        }
+
+        async function setSchoolMode(enabled) {
+            schoolMode = !!enabled;
+            window.schoolMode = schoolMode;
+            saveAssistantModes();
+            updateAssistantModeUI();
+            await deliverApiReply('school_mode_changed', {
+                enabled: schoolMode
+            }, {
+                fallbackText: schoolMode
+                    ? 'School mode is ON. I will answer explainers with definition, formula/equation where relevant, and a worked example.'
+                    : 'School mode is OFF. Normal explainer style restored.'
             });
         }
 
@@ -11342,6 +11525,7 @@ function decideAnswerPath(classification) {
     if (!classification || !classification.raw) return 'default_model';
 
     const flags = classification.flags || {};
+    const medicalModeEnabled = typeof window !== 'undefined' ? !!window.medicalMode : false;
 
     if (flags.inappropriate) return 'moderation';
     if (flags.profileIdentity || flags.stableBiography) return 'live_retrieval';
@@ -11367,7 +11551,7 @@ function decideAnswerPath(classification) {
     if (flags.supportRequest) return 'support_intro'; 
     if (flags.medicalEmergency) return 'medical_emergency';
     if (flags.supportContinuation) return 'support_continue';
-    if (flags.medicalAdvice) return 'medical_advice';
+    if (flags.medicalAdvice && medicalModeEnabled) return 'medical_advice';
     if (flags.mentalHealth) return 'mental_health';
     if (flags.debate) return 'debate';
 
@@ -13644,6 +13828,11 @@ ${snippets}`
                 return;
             }
 
+            if (answerPath === 'default_model' && isUniversalExplainerRequest(cleanText)) {
+                const handled = await handleUniversalExplainerQuery(cleanText, text);
+                if (handled) return;
+            }
+
             if (immediateKnowledgeFallback && isDirectExplainerQuery(cleanText)) {
                 addModelAssistantMessage(immediateKnowledgeFallback, 'Model answer');
                 speak(immediateKnowledgeFallback);
@@ -14065,6 +14254,32 @@ Rules:
                 return;
             }
 
+            const schoolModeMatch = cleanText.match(/\b(?:set|change|switch|turn)\s+school\s+mode\s+(on|off|enable|disable|start|stop)\b/i);
+            if (schoolModeMatch) {
+                const raw = schoolModeMatch[1].toLowerCase();
+                const enabled = raw === 'on' || raw === 'enable' || raw === 'start';
+                await setSchoolMode(enabled);
+                return;
+            }
+
+            if (/\bschool\s+mode\s+(on|off)\b/i.test(cleanText)) {
+                await setSchoolMode(/\bschool\s+mode\s+on\b/i.test(cleanText));
+                return;
+            }
+
+            const medicalModeMatch = cleanText.match(/\b(?:set|change|switch|turn)\s+medical\s+mode\s+(on|off|enable|disable|start|stop)\b/i);
+            if (medicalModeMatch) {
+                const raw = medicalModeMatch[1].toLowerCase();
+                const enabled = raw === 'on' || raw === 'enable' || raw === 'start';
+                await setMedicalMode(enabled);
+                return;
+            }
+
+            if (/\bmedical\s+mode\s+(on|off)\b/i.test(cleanText)) {
+                await setMedicalMode(/\bmedical\s+mode\s+on\b/i.test(cleanText));
+                return;
+            }
+
             if (/^\s*hey\s+(jarvis|davis)\s*[.!?]*$/i.test(cleanText)) { 
                 const wakeReply = "Yes, sir?"; 
                 addChatMessage(wakeReply, false); 
@@ -14178,6 +14393,11 @@ Rules:
 
             if (isAgendaTodayRequest(cleanText)) {
                 await handleAgendaTodayAgent(text);
+                return;
+            }
+
+            if (isConversationRecallRequest(cleanText)) {
+                await handleConversationRecallRequest(text);
                 return;
             }
 
@@ -14333,9 +14553,15 @@ Rules:
                 return;
             }
             
-            // Memory feature temporarily disabled - will be implemented in future
-            // else if (memory recall patterns...) { handleMemoryRecall(cleanText); }
-            // else if (memory storage patterns...) { handleMemoryStorage(cleanText); }
+            else if (isMemoryRecallRequest(cleanText)) {
+                handleMemoryRecall(cleanText);
+                return;
+            }
+
+            else if (isMemoryStorageRequest(cleanText)) {
+                handleMemoryStorage(cleanText);
+                return;
+            }
 
             // ========== NEWS HANDLING ==========
             else if (lower.match(/\b(news|headlines?|what'?s happening|current events?|latest updates?)\b/i) &&
