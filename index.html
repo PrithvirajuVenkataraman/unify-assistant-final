@@ -3311,6 +3311,13 @@ function isCalendarSyncRequest(text) {
            t.includes('save trip to calendar');
 }
 
+function isAgendaTodayRequest(text) {
+    const t = String(text || '').toLowerCase();
+    if (!t.trim()) return false;
+    return /\b(agenda|schedule|calendar|events?|appointments?|meetings?)\b/.test(t) &&
+        /\b(today|for today|this day|today's|todays)\b/.test(t);
+}
+
 async function handleVerifiedPlacesMode(text) {
     const type = text.toLowerCase().includes('restaurant') ? 'restaurants' : 'hotels';
     const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(type + ' near me')}`;
@@ -3791,6 +3798,79 @@ function loadSavedEmail() {
     } catch (e) {
         return '';
     }
+}
+
+function formatAgendaTimeHint(value) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const m = text.match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/);
+    if (!m) return text;
+    const hours = Number(m[1]);
+    const minutes = m[2];
+    const suffix = hours >= 12 ? 'PM' : 'AM';
+    const normalizedHours = ((hours + 11) % 12) + 1;
+    return `${normalizedHours}:${minutes} ${suffix}`;
+}
+
+function collectAgendaItemsForToday() {
+    const items = [];
+    const todayLocal = new Date().toLocaleDateString();
+
+    if (commuteProfile?.office) {
+        items.push(`Commute to ${commuteProfile.office}${commuteProfile.arrivalTime ? ` by ${formatAgendaTimeHint(commuteProfile.arrivalTime)}` : ''}`);
+    }
+
+    if (tripState?.active && tripState?.destinationText) {
+        const etaText = tripState.etaMinutes != null ? ` (ETA ${Math.max(1, Math.round(tripState.etaMinutes))} min)` : '';
+        items.push(`Live trip to ${tripState.destinationText}${etaText}`);
+    } else if (tripState?.destinationText) {
+        items.push(`Planned trip destination: ${tripState.destinationText}`);
+    }
+
+    const keywordPattern = /\b(meeting|call|appointment|agenda|schedule|event|deadline|reminder|task|doctor|interview)\b/i;
+    const todayHistory = Array.isArray(conversationHistory)
+        ? conversationHistory.filter(entry => String(entry?.date || '') === todayLocal)
+        : [];
+
+    for (const entry of todayHistory.slice(-16)) {
+        const userLine = String(entry?.user || '').trim();
+        if (!userLine || !keywordPattern.test(userLine)) continue;
+        const cleaned = userLine.replace(/\s+/g, ' ').slice(0, 120);
+        items.push(cleaned);
+        if (items.length >= 8) break;
+    }
+
+    return Array.from(new Set(items)).slice(0, 8);
+}
+
+function openEmailDraft(toEmail, subject, bodyText) {
+    const safeTo = encodeURIComponent(String(toEmail || '').trim());
+    const safeSubject = encodeURIComponent(String(subject || '').trim());
+    const safeBody = encodeURIComponent(String(bodyText || '').trim());
+    window.location.href = `mailto:${safeTo}?subject=${safeSubject}&body=${safeBody}`;
+}
+
+async function handleAgendaTodayAgent(userText = '') {
+    const agendaItems = collectAgendaItemsForToday();
+    const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const summaryLines = agendaItems.length
+        ? agendaItems.map((item, index) => `${index + 1}. ${item}`)
+        : ['No specific agenda items found in your saved context yet.'];
+
+    const responseText = `Your agenda for ${dateLabel}:\n${summaryLines.join('\n')}`;
+    addChatMessage(responseText, false);
+    speak(responseText);
+    saveToHistory(userText || 'agenda today', responseText);
+
+    const savedEmail = loadSavedEmail();
+    if (!savedEmail) {
+        addChatMessage('I can email this agenda too. Save your email once using any "Email this ..." button, then ask again.', false);
+        return;
+    }
+
+    const emailBody = `Hi,\n\nHere is your agenda for ${dateLabel}:\n\n${summaryLines.join('\n')}\n\nSent via JARVIS agenda agent.`;
+    openEmailDraft(savedEmail, `Your agenda for ${dateLabel}`, emailBody);
+    showTemporaryMessage(`Preparing agenda email for ${savedEmail}`);
 }
 
 // ============ END EMAIL FUNCTIONALITY ============
@@ -14096,6 +14176,11 @@ Rules:
                 return;
             }
 
+            if (isAgendaTodayRequest(cleanText)) {
+                await handleAgendaTodayAgent(text);
+                return;
+            }
+
             // Handle transport location follow-up
             if (window.waitingForTransportLocation) {
                 window.waitingForTransportLocation = false;
@@ -15538,7 +15623,9 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const patterns = [
                 /\b(?:start|track)\s+(?:my\s+)?(?:a\s+)?trip\s+to\s+(.+)$/i,
                 /\b(?:start|open|show)\s+(?:the\s+)?map\s+to\s+(.+)$/i,
+                /\b(?:start|open|show)\s+(?:the\s+)?map\s+for\s+(.+)$/i,
                 /\b(?:navigate|route)\s+(?:me\s+)?to\s+(.+)$/i,
+                /\broute\s+for\s+(.+)$/i,
                 /\b(?:get\s+)?directions?\s+(?:to|for)\s+(.+)$/i,
                 /\bnavigation\s+(?:to|for)\s+(.+)$/i,
                 /\b(?:start|begin)\s+(?:live\s+)?navigation\s+(?:to|for)\s+(.+)$/i
@@ -16389,6 +16476,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         }
         let currentUtterance = null; 
         let currentSpeakerButton = null; 
+        let currentExternalAudio = null;
+        let currentElevenLabsAbortController = null;
         
         // Toggle speak using stored text ID (safer for special characters)
         function toggleSpeakById(speechId, button) {
@@ -16401,7 +16490,9 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
         function toggleSpeak(text, button) {
             // Check if currently speaking
-            const isSpeaking = synth.speaking || (typeof responsiveVoice !== 'undefined' && responsiveVoice.isPlaying());
+            const isSpeaking = synth.speaking ||
+                (typeof responsiveVoice !== 'undefined' && responsiveVoice.isPlaying()) ||
+                !!(currentExternalAudio && !currentExternalAudio.paused);
 
             if (isSpeaking) {
                 stopSpeaking();
@@ -16477,6 +16568,122 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             }
             return best || pool[0] || null;
         }
+
+        function getElevenLabsConfig() {
+            try {
+                const enabledRaw = localStorage.getItem('jarvis_elevenlabs_enabled');
+                const apiKey = localStorage.getItem('jarvis_elevenlabs_api_key') || window.ELEVENLABS_API_KEY || '';
+                const voiceId = localStorage.getItem('jarvis_elevenlabs_voice_id') || window.ELEVENLABS_VOICE_ID || '';
+                const modelId = localStorage.getItem('jarvis_elevenlabs_model_id') || 'eleven_turbo_v2_5';
+                const enabled = enabledRaw == null ? true : enabledRaw !== 'false';
+                return {
+                    enabled,
+                    apiKey: String(apiKey || '').trim(),
+                    voiceId: String(voiceId || '').trim(),
+                    modelId: String(modelId || '').trim() || 'eleven_turbo_v2_5'
+                };
+            } catch (e) {
+                return { enabled: false, apiKey: '', voiceId: '', modelId: 'eleven_turbo_v2_5' };
+            }
+        }
+
+        function onSpeechPlaybackEnded() {
+            isAssistantSpeaking = false;
+            currentSpeechTextLower = '';
+            currentUtterance = null;
+            currentExternalAudio = null;
+            currentElevenLabsAbortController = null;
+            if (currentSpeakerButton) {
+                currentSpeakerButton.querySelector('.play-icon')?.classList.remove('hidden');
+                currentSpeakerButton.querySelector('.stop-icon')?.classList.add('hidden');
+                currentSpeakerButton.classList.remove('is-speaking');
+                currentSpeakerButton = null;
+            }
+            if (converseMode && listeningRequested && !isListening && !isProcessing) {
+                setTimeout(() => startListening(), 180);
+            }
+        }
+
+        function speakWithWebSpeech(cleanText, speechProfile) {
+            synth.cancel();
+            setTimeout(() => {
+                const utterance = new SpeechSynthesisUtterance(cleanText);
+                const voices = synth.getVoices();
+                const preferredVoice = chooseBestEnglishVoice(voices);
+
+                if (preferredVoice) {
+                    utterance.voice = preferredVoice;
+                    utterance.lang = preferredVoice.lang || 'en-US';
+                } else {
+                    utterance.lang = 'en-US';
+                }
+
+                utterance.rate = speechProfile.rate;
+                utterance.pitch = speechProfile.pitch;
+                utterance.volume = 1.0;
+
+                currentUtterance = utterance;
+                utterance.onend = () => onSpeechPlaybackEnded();
+                utterance.onerror = () => onSpeechPlaybackEnded();
+                synth.speak(utterance);
+            }, 30);
+        }
+
+        async function speakWithElevenLabs(cleanText, speechProfile) {
+            const cfg = getElevenLabsConfig();
+            if (!cfg.enabled || !cfg.apiKey || !cfg.voiceId) return false;
+
+            try {
+                if (currentElevenLabsAbortController) {
+                    try { currentElevenLabsAbortController.abort(); } catch (e) {}
+                }
+                currentElevenLabsAbortController = new AbortController();
+
+                const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(cfg.voiceId)}`, {
+                    method: 'POST',
+                    signal: currentElevenLabsAbortController.signal,
+                    headers: {
+                        'Accept': 'audio/mpeg',
+                        'Content-Type': 'application/json',
+                        'xi-api-key': cfg.apiKey
+                    },
+                    body: JSON.stringify({
+                        text: cleanText,
+                        model_id: cfg.modelId,
+                        voice_settings: {
+                            stability: 0.45,
+                            similarity_boost: 0.9,
+                            style: 0.35,
+                            use_speaker_boost: true
+                        }
+                    })
+                });
+
+                if (!response.ok) return false;
+                const audioBlob = await response.blob();
+                if (!audioBlob || !audioBlob.size) return false;
+
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
+                audio.playbackRate = Math.max(0.9, Math.min(1.05, speechProfile.rate));
+                currentExternalAudio = audio;
+
+                audio.onended = () => {
+                    URL.revokeObjectURL(audioUrl);
+                    onSpeechPlaybackEnded();
+                };
+                audio.onerror = () => {
+                    URL.revokeObjectURL(audioUrl);
+                    onSpeechPlaybackEnded();
+                };
+                await audio.play();
+                return true;
+            } catch (error) {
+                if (String(error?.name || '').toLowerCase() !== 'aborterror') {
+                }
+                return false;
+            }
+        }
         
         function speak(text, force = false) { 
             // Speech is allowed only in Converse mode or via explicit user click (force=true).
@@ -16488,51 +16695,29 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const speechProfile = getSpeechProfile(cleanText, converseMode);
             currentSpeechTextLower = cleanText.toLowerCase();
             isAssistantSpeaking = true;
-             
-             
-            synth.cancel();
-            setTimeout(() => {
-                const utterance = new SpeechSynthesisUtterance(cleanText);
-                
-                
-                const voices = synth.getVoices();
-                const preferredVoice = chooseBestEnglishVoice(voices);
-                
-                if (preferredVoice) {
-                    utterance.voice = preferredVoice;
-                    utterance.lang = preferredVoice.lang || 'en-US';
-                } else {
-                    utterance.lang = 'en-US';
+
+            void (async () => {
+                const spokenByElevenLabs = await speakWithElevenLabs(cleanText, speechProfile);
+                if (!isAssistantSpeaking) return;
+                if (!spokenByElevenLabs) {
+                    speakWithWebSpeech(cleanText, speechProfile);
                 }
-                
-                utterance.rate = speechProfile.rate;
-                utterance.pitch = speechProfile.pitch;
-                utterance.volume = 1.0;
-                
-                currentUtterance = utterance;
-                utterance.onend = () => { 
-                    isAssistantSpeaking = false;
-                    currentSpeechTextLower = '';
-                    currentUtterance = null; 
-                    if (currentSpeakerButton) { 
-                        currentSpeakerButton.querySelector('.play-icon')?.classList.remove('hidden');
-                        currentSpeakerButton.querySelector('.stop-icon')?.classList.add('hidden');
-                        currentSpeakerButton.classList.remove('is-speaking');
-                        currentSpeakerButton = null;
-                    }
-                    if (converseMode && listeningRequested && !isListening && !isProcessing) {
-                        setTimeout(() => startListening(), 180);
-                    }
-                };
-                
-                synth.speak(utterance);
-            }, 30);
+            })();
         }
         
         
         function stopSpeaking() { 
             isAssistantSpeaking = false;
             currentSpeechTextLower = '';
+            if (currentElevenLabsAbortController) {
+                try { currentElevenLabsAbortController.abort(); } catch (e) {}
+                currentElevenLabsAbortController = null;
+            }
+            if (currentExternalAudio) {
+                try { currentExternalAudio.pause(); } catch (e) {}
+                try { currentExternalAudio.currentTime = 0; } catch (e) {}
+                currentExternalAudio = null;
+            }
             if (typeof responsiveVoice !== 'undefined') { 
                 responsiveVoice.cancel(); 
             }
