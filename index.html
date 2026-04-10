@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="en"> 
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -934,16 +934,27 @@
 body {
                 font-size: 14px;
             }
-            
-            #main-card {
+
+            /* Mobile map fixes */
+            .map-container {
+                min-height: 250px !important;
+                max-height: 60vh !important;
+            }
+
+            .map-container iframe {
+                min-height: 250px !important;
+                max-height: 60vh !important;
+            }
+        }
+
+        #main-card {
                 padding: 16px;
             }
             
             #chat-container {
                 
             }
-        }
-
+            
         @media (max-width: 640px) {
             #input-bar-container .max-w-5xl {
                 padding-left: 0.5rem;
@@ -1077,17 +1088,47 @@ body {
             width: 100% !important;
             min-width: 0;
             overflow: hidden;
+            /* iOS Safari fixes */
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+            /* Prevent iOS bounce scrolling on map containers */
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
         }
 
-        .map-message .map-container #map {
+        .map-message .map-container iframe {
             width: 100% !important;
             height: 350px !important;
             min-height: 300px;
+            /* iOS Safari iframe fixes */
+            border: 0;
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
         }
 
         @media (min-width: 768px) {
             .map-message .map-container iframe {
                 height: 400px !important;
+            }
+        }
+
+        /* iOS Safari specific map fixes */
+        @supports (-webkit-touch-callout: none) {
+            .map-container {
+                /* Force hardware acceleration */
+                -webkit-transform: translate3d(0, 0, 0);
+                transform: translate3d(0, 0, 0);
+                /* Prevent text selection on map */
+                -webkit-user-select: none;
+                user-select: none;
+                /* Prevent callouts on links */
+                -webkit-touch-callout: none;
+            }
+
+            .map-container iframe {
+                /* Ensure iframe renders properly on iOS */
+                -webkit-transform: translate3d(0, 0, 0);
+                transform: translate3d(0, 0, 0);
             }
         }
 
@@ -3520,7 +3561,7 @@ Quick recap: ...
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         systemPrompt: 'Return only one short formula/equation line, no explanation.',
-                        message: `Question: "${userText}"\nReturn exactly one line in this format:\nFormula: <equation>\nIf it is chemistry reaction, use arrow notation.`
+                        message: `Question: "${userText}"\nReturn exactly one line in this format:\nFormula: &lt;equation&gt;\nIf it is chemistry reaction, use arrow notation.`
                     })
                 });
                 if (formulaOnlyRes.ok) {
@@ -5112,10 +5153,10 @@ async function handleTamilJokeSearch(queryText) {
         const jokePrompt = `Use the web snippets below only as support and give one VERY SIMPLE Tamil joke.
 
 STRICT FORMAT (exactly 4 lines):
-Tamil: <Tamil script>
-Pronunciation: <simple English letters>
-Meaning: <plain English sentence>
-Why funny: <one short plain-English sentence>
+Tamil: &lt;Tamil script&gt;
+Pronunciation: &lt;simple English letters&gt;
+Meaning: &lt;plain English sentence&gt;
+Why funny: &lt;one short plain-English sentence&gt;
 
 Rules:
 - Keep vocabulary very simple.
@@ -5149,10 +5190,10 @@ ${snippetBlock}`;
             const directPrompt = `Give one very simple, family-friendly Tamil joke.
 
 STRICT FORMAT (exactly 4 lines):
-Tamil: <Tamil script>
-Pronunciation: <simple English letters>
-Meaning: <plain English sentence>
-Why funny: <one short plain-English sentence>
+Tamil: &lt;Tamil script&gt;
+Pronunciation: &lt;simple English letters&gt;
+Meaning: &lt;plain English sentence&gt;
+Why funny: &lt;one short plain-English sentence&gt;
 
 Rules:
 - Easy words only
@@ -7552,10 +7593,10 @@ function normalizeUiTokens(text) {
 
             const allowedTags = new Set(['A', 'BR', 'DIV', 'IFRAME', 'IMG', 'LI', 'OL', 'P', 'SPAN', 'STRONG', 'TABLE', 'TBODY', 'TD', 'TH', 'THEAD', 'TR', 'UL']);
             const allowedAttrs = {
-                A: new Set(['href', 'target', 'rel', 'class']),
-                DIV: new Set(['class']),
-                IFRAME: new Set(['src', 'width', 'height', 'loading', 'allowfullscreen', 'class']),
-                IMG: new Set(['src', 'alt', 'class']),
+                A: new Set(['href', 'target', 'rel', 'class', 'style']),
+                DIV: new Set(['class', 'style', 'id']),
+                IFRAME: new Set(['src', 'width', 'height', 'loading', 'allowfullscreen', 'class', 'style', 'referrerpolicy', 'frameborder']),
+                IMG: new Set(['src', 'alt', 'class', 'style']),
                 P: new Set(['class']),
                 SPAN: new Set(['class']),
                 TABLE: new Set(['class']),
@@ -14336,7 +14377,7 @@ Quick recap: ...
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 systemPrompt: 'Return only one short formula/equation line, no explanation.',
-                                message: `Question: "${text}"\nReturn exactly one line in this format:\nFormula: <equation>\nIf it is chemistry reaction, use arrow notation.`
+                                message: `Question: "${text}"\nReturn exactly one line in this format:\nFormula: &lt;equation&gt;\nIf it is chemistry reaction, use arrow notation.`
                             })
                         });
                         if (formulaOnlyRes.ok) {
@@ -15923,7 +15964,44 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             if (!tripMapInstance) {
                 tripMapInstance = L.map(mapCanvas, {
                     zoomControl: true,
-                    attributionControl: true
+                    attributionControl: true,
+                    // Mobile-friendly options
+                    tap: true,
+                    tapTolerance: 15,
+                    touchZoom: true,
+                    bounceAtZoomLimits: false,
+                    maxBoundsViscosity: 1.0,
+                    // Improve performance on mobile
+                    preferCanvas: false,
+                    // Better touch handling
+                    inertia: true,
+                    inertiaDeceleration: 3000,
+                    inertiaMaxSpeed: 1500,
+                    easeLinearity: 0.2,
+                    worldCopyJump: false,
+                    maxBounds: null,
+                    // Additional mobile options
+                    closePopupOnClick: false,
+                    doubleClickZoom: true,
+                    boxZoom: false,
+                    keyboard: false,
+                    dragging: true,
+                    scrollWheelZoom: false // Prevent accidental zoom on scroll
+                });
+
+                // Add touch event handlers for better mobile experience
+                tripMapInstance.on('load', function() {
+                    // Force hardware acceleration on mobile
+                    if (L.Browser.mobile) {
+                        mapCanvas.style.transform = 'translateZ(0)';
+                        mapCanvas.style.webkitTransform = 'translateZ(0)';
+                    }
+                });
+
+                // Handle touch events to prevent conflicts
+                tripMapInstance.on('touchstart', function(e) {
+                    // Allow map to handle touch events
+                    e.originalEvent.stopPropagation();
                 });
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     maxZoom: 19,
@@ -15947,9 +16025,30 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
             const bounds = tripMapRouteLine?.getBounds?.() || L.latLngBounds([currentLatLng, destinationLatLng]);
             tripMapInstance.fitBounds(bounds.pad(0.3), { animate: false });
+
+            // Multiple invalidateSize calls for mobile compatibility
             setTimeout(() => {
-                try { tripMapInstance?.invalidateSize(); } catch (e) {}
+                try {
+                    tripMapInstance?.invalidateSize();
+                    // Additional calls for mobile devices
+                    setTimeout(() => tripMapInstance?.invalidateSize(), 100);
+                    setTimeout(() => tripMapInstance?.invalidateSize(), 300);
+                } catch (e) {}
             }, 0);
+
+            // Handle orientation changes on mobile
+            const handleOrientationChange = () => {
+                setTimeout(() => {
+                    try { tripMapInstance?.invalidateSize(); } catch (e) {}
+                }, 500);
+            };
+
+            window.addEventListener('orientationchange', handleOrientationChange);
+            window.addEventListener('resize', () => {
+                setTimeout(() => {
+                    try { tripMapInstance?.invalidateSize(); } catch (e) {}
+                }, 100);
+            });
 
             mapMeta.innerHTML = `
                 Live origin: ${curLat}, ${curLon}
@@ -17721,44 +17820,5 @@ function addTravelHintsToPlan(places){
 })();
 </script>
 
-
-<script>
-let jarvisMap = null;
-let jarvisMarker = null;
-
-function jarvisInitMap(lat, lng) {
-    if (jarvisMap) return;
-
-    jarvisMap = L.map('map').setView([lat, lng], 13);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(jarvisMap);
-
-    jarvisMarker = L.marker([lat, lng]).addTo(jarvisMap);
-}
-
-function jarvisStartTracking() {
-    if (!navigator.geolocation) return;
-
-    navigator.geolocation.watchPosition(
-        (pos) => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-
-            if (!jarvisMap) {
-                jarvisInitMap(lat, lng);
-            } else {
-                jarvisMap.setView([lat, lng], 15);
-                jarvisMarker.setLatLng([lat, lng]);
-            }
-        },
-        (err) => console.error(err),
-        { enableHighAccuracy: true }
-    );
-}
-</script>
-
-<script>jarvisStartTracking();</script>
 </body>
 </html>
