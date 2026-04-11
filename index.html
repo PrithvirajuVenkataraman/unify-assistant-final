@@ -3543,8 +3543,6 @@ async function handleNameCorrection(text) {
 
                 body.classList.remove('light');
                 body.classList.add('dark');
-                body.style.background = '#000';
-                body.style.filter = 'none';
                 card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
                 title.className = 'text-4xl font-black jarvis-title';
                 subtitle.className = 'text-sm text-gray-400 font-medium';
@@ -3569,8 +3567,6 @@ async function handleNameCorrection(text) {
                 setTimeout(() => {
                     body.classList.remove('dark');
                     body.classList.add('light');
-                        body.style.background = 'linear-gradient(to bottom right, #fce7f3, #e9d5ff, #c7d2fe)';
-                        body.style.filter = 'none';
 
                     card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
                     title.className = 'text-4xl font-black jarvis-title';
