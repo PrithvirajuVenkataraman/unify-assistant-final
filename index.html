@@ -99,6 +99,27 @@
                             </div>
                         </div>
 
+                        <!-- Trip Tracking Card -->
+                        <div id="trip-section" class="hidden bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-slate-800 dark:to-slate-900 p-6 rounded-2xl mt-6 border border-indigo-100 dark:border-slate-700">
+                            <div class="flex items-center gap-3 mb-4">
+                                <div class="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-600 dark:text-indigo-400">
+                                        <path d="M17 14V2H7v12l5 5 5-5z"></path>
+                                        <path d="M12 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+                                    </svg>
+                                </div>
+                                <h2 class="text-xl font-bold text-gray-800 dark:text-white">Live Trip Tracking</h2>
+                            </div>
+                            <div id="trip-summary" class="space-y-2 text-sm text-gray-700 dark:text-gray-300"></div>
+                            <div class="mt-4" id="trip-live-map">
+                                <!-- Live map will be rendered here by JS -->
+                            </div>
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <button onclick="stopForegroundTrip(true)" class="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all">Stop Trip</button>
+                                <button onclick="configureTripArrivalAlarm()" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-slate-900/70 border border-indigo-200 dark:border-slate-600 text-indigo-700 dark:text-indigo-300 text-sm font-semibold transition-all">Set Alarm</button>
+                            </div>
+                        </div>
+
                     </div>
 
                     <!-- Right Column: Chat -->
@@ -160,6 +181,15 @@
                     </svg>
                     <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
                         Upload PDF/DOCX/PPTX/Bill
+                    </div>
+                </button>
+                <button onclick="toggleContinuousVision()" id="vision-toggle-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all" title="Toggle Continuous Vision">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-blue-600 transition-all">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                    </svg>
+                    <!-- Tooltip -->
+                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
+                        Toggle Continuous Vision
                     </div>
                 </button>
                 <input
@@ -227,6 +257,28 @@
         onchange="handleDocumentSelection(event)"
     />
 
+    <!-- Floating Trip Panel (Fixed at top for live tracking) -->
+    <div id="floating-trip-panel" class="fixed top-0 left-0 right-0 z-40 p-3 bg-gradient-to-r from-indigo-800 to-purple-800 text-white shadow-xl hidden flex-col items-center gap-3">
+        <div class="flex items-center justify-between w-full">
+            <div class="flex items-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 14V2H7v12l5 5 5-5z"></path>
+                    <path d="M12 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"></path>
+                </svg>
+                <span class="font-bold text-sm">Trip to <span id="floating-trip-dest"></span></span>
+            </div>
+            <div class="flex items-center gap-3 text-xs">
+                <span id="floating-trip-dist"></span>
+                <span class="opacity-70">|</span>
+                <span id="floating-trip-eta"></span>
+                <span class="opacity-70">|</span>
+                <span id="floating-trip-speed"></span>
+            </div>
+        </div>
+        <div class="flex items-center justify-between w-full text-xs text-indigo-200">
+            <span id="floating-trip-area"></span>
+            <div class="flex gap-2">
+                <button onclick="stopForegroundTrip(true)" class="px-2 py-1 bg-red-600/70 hover
     <div id="safety-panel-backdrop" class="side-panel-backdrop hidden" onclick="closeSafetyPanel()"></div>
     <aside id="safety-panel" class="side-panel hidden" aria-hidden="true" aria-label="Safety panel">
         <div class="flex items-start justify-between gap-4 mb-6">
