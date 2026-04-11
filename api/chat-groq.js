@@ -788,6 +788,7 @@ Style rules:
   3) Include 1-3 source links.
   4) Prefer official/primary sources from Retrieved context (RAG) when available.
 - Never answer a latest/update query with only generic advice like "check the official website" unless the user explicitly asked where to check.
+- If the user's request is too vague, ambiguous, or lacks context, DO NOT guess or hallucinate. Politely ask the user to clarify.
 - If retrieved sources are insufficient or conflicting, say that clearly and provide the best verified status with sources.
 
 Respond conversationally and naturally.`;
