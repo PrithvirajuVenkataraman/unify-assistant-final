@@ -65,19 +65,23 @@ const SOURCE_POLICIES = {
             'bbc.com',
             'bbc.co.uk',
             'aljazeera.com',
-            'npr.org'
+            'npr.org',
+            'whitehouse.gov',
+            'state.gov'
         ],
         preferredDomains: [
             'gov.in',
             'eci.gov.in',
             'parliament.uk',
-            'congress.gov'
+            'congress.gov',
+            'whitehouse.gov',
+            'state.gov'
         ]
     },
     finance: {
         trustedDomains: [
             'ecb.europa.eu',
-            'frankfurter.dev',
+            'frankfurter.app',
             'xe.com',
             'oanda.com',
             'x-rates.com',
@@ -87,63 +91,14 @@ const SOURCE_POLICIES = {
             'wsj.com',
             'ft.com',
             'cnbc.com',
-            'reuters.com',
-            'nasdaq.com',
-            'nyse.com',
-            'nseindia.com',
-            'bseindia.com',
-            'spglobal.com',
-            'wfe.org',
-            'cmegroup.com',
-            'lme.com',
-            'kitco.com',
-            'mcxindia.com',
-            'iocl.com',
-            'hindustanpetroleum.com',
-            'bharatpetroleum.in',
-            'eia.gov'
+            'reuters.com'
         ],
         preferredDomains: [
             'ecb.europa.eu',
-            'frankfurter.dev',
+            'frankfurter.app',
             'xe.com',
             'oanda.com',
-            'x-rates.com',
-            'bloomberg.com',
-            'nasdaq.com',
-            'nyse.com',
-            'nseindia.com',
-            'bseindia.com',
-            'kitco.com',
-            'mcxindia.com',
-            'iocl.com',
-            'hindustanpetroleum.com',
-            'bharatpetroleum.in'
-        ]
-    },
-    space_science: {
-        trustedDomains: [
-            'nasa.gov',
-            'isro.gov.in',
-            'esa.int',
-            'jaxa.jp',
-            'spacex.com',
-            'space.com',
-            'scientificamerican.com',
-            'nature.com',
-            'science.org',
-            'reuters.com',
-            'apnews.com',
-            'bbc.com'
-        ],
-        preferredDomains: [
-            'isro.gov.in',
-            'nasa.gov',
-            'esa.int',
-            'jaxa.jp',
-            'spacex.com',
-            'nature.com',
-            'science.org'
+            'x-rates.com'
         ]
     },
     tech: {
@@ -151,6 +106,8 @@ const SOURCE_POLICIES = {
             'openai.com',
             'microsoft.com',
             'google.com',
+            'blog.google',
+            'alphabet.com',
             'nvidia.com',
             'amd.com',
             'ibm.com',
@@ -163,33 +120,11 @@ const SOURCE_POLICIES = {
             'openai.com',
             'microsoft.com',
             'google.com',
+            'blog.google',
+            'alphabet.com',
             'nvidia.com',
             'amd.com',
             'ibm.com'
-        ]
-    },
-    entertainment: {
-        trustedDomains: [
-            'imdb.com',
-            'wikipedia.org',
-            'rottentomatoes.com',
-            'metacritic.com',
-            'netflix.com',
-            'primevideo.com',
-            'disneyplus.com',
-            'hotstar.com',
-            'zee5.com',
-            'sonyliv.com',
-            'reuters.com',
-            'bbc.com'
-        ],
-        preferredDomains: [
-            'imdb.com',
-            'wikipedia.org',
-            'rottentomatoes.com',
-            'netflix.com',
-            'primevideo.com',
-            'disneyplus.com'
         ]
     }
 };
@@ -204,9 +139,7 @@ const SEARCH_STOP_WORDS = new Set([
     'please', 'kindly', 'just', 'about', 'on', 'for', 'to', 'of', 'in',
     'at', 'by', 'with', 'from', 'into', 'as', 'per', 'tell', 'show',
     'give', 'find', 'search', 'look', 'lookup', 'check', 'know', 'explain',
-    'describe', 'summarize', 'summary', 'information', 'info',
-    'provide', 'include', 'exact', 'please', 'sources', 'source', 'link', 'links',
-    'bullet', 'bullets', 'list', 'listed', 'showing'
+    'describe', 'summarize', 'summary', 'information', 'info'
 ]);
 
 const LEADING_QUERY_PATTERNS = [
@@ -222,78 +155,94 @@ const TRAILING_QUERY_PATTERNS = [
     /\b(?:please|for me|per se)\b/gi
 ];
 
-const PROMPT_DECORATOR_PATTERNS = [
-    /\b(?:give|provide|show|include)\s+(?:me\s+)?(?:the\s+)?/gi,
-    /\b(?:with|and)\s+\d+\s+(?:source\s+)?links?\b/gi,
-    /\b\d+\s+(?:source\s+)?links?\b/gi,
-    /\b(?:source|sources)\s+links?\b/gi,
-    /\b(?:in|as)\s+(?:short\s+)?bullet\s+points?\b/gi,
-    /\b(?:in|as)\s+(?:a\s+)?(?:single\s+)?line\b/gi,
-    /\b(?:exact|accurate)\s+(?:date|time|score|venue|teams?)\b/gi,
-    /\b(?:only|just)\s+(?:answer|result|score)\b/gi
-];
+const PROVIDER_TIMEOUT_MS = 2500;
+const MAX_RESULTS_PER_SEARCH = 10;
+const MAX_VERIFIED_RESULTS = 15;
+const MAX_VERIFIED_QUERY_COUNT = 4;
+const MAX_PROVIDER_ATTEMPTS = 3;
 
+/**
+ * General-purpose web search.
+ * Safe for:
+ * - live questions
+ * - entity lookups
+ * - user's normal questions
+ */
 export async function searchWeb(query, maxResults = 8) {
-    const searchQuery = extractSearchTopic(query) || String(query || '').trim();
-    const normalizedMax = Math.min(Math.max(Number(maxResults || 8), 1), 10);
-    const serperKey = getSerperApiKey();
-    const attempts = [];
+    const rawQuery = String(query || '').trim();
+    const searchQuery = extractSearchTopic(rawQuery) || rawQuery;
+    if (!searchQuery) return [];
 
-    if (serperKey) {
-        attempts.push(() => searchWithSerper(searchQuery, normalizedMax, serperKey));
-    }
-    attempts.push(() => searchWithDuckDuckGoHtml(searchQuery, normalizedMax));
-    attempts.push(() => searchWithDuckDuckGo(searchQuery, normalizedMax));
-    attempts.push(() => searchWithWikipedia(searchQuery, normalizedMax));
-    if (isLikelyNewsQuery(query)) {
-        attempts.push(() => searchWithGoogleNewsRss(searchQuery, normalizedMax));
-    }
+    const normalizedMax = clampNumber(maxResults, 1, MAX_RESULTS_PER_SEARCH, 8);
+    const attempts = buildSearchProviders(searchQuery, normalizedMax, rawQuery).slice(0, MAX_PROVIDER_ATTEMPTS);
 
     const merged = [];
     const seen = new Set();
+
     for (const run of attempts) {
         try {
-            const current = await run();
-            if (!Array.isArray(current) || !current.length) continue;
-            for (const item of current) {
-                const url = String(item?.url || '').trim();
-                if (!url || seen.has(url)) continue;
-                seen.add(url);
-                merged.push(item);
+            const current = normalizeSearchResults(await withTimeout(run(), PROVIDER_TIMEOUT_MS));
+            mergeUniqueResults(merged, current, seen);
+
+            if (merged.length >= normalizedMax) {
+                break;
             }
-        } catch (e) {
-            // Try next provider.
+        } catch (error) {
+            console.error('searchWeb provider failed:', error?.message || error);
         }
     }
 
     if (!merged.length) return [];
-    return rerankResults(merged, query).slice(0, normalizedMax);
+    return rerankResults(merged, rawQuery).slice(0, normalizedMax);
 }
 
+/**
+ * Verified multi-query search.
+ * Uses only a few search variants to avoid Vercel/serverless overload.
+ */
 export async function runVerifiedWebSearch(queries, options = {}) {
-    const maxResultsPerQuery = Math.min(Math.max(Number(options.maxResultsPerQuery || 6), 1), 10);
-    const limit = Math.min(Math.max(Number(options.limit || 10), 1), 15);
-    const queryList = Array.isArray(queries) ? queries.filter(Boolean) : [];
-    const resultSets = await Promise.all(queryList.map(q => searchWeb(q, maxResultsPerQuery)));
+    const maxResultsPerQuery = clampNumber(options.maxResultsPerQuery, 1, MAX_RESULTS_PER_SEARCH, 4);
+    const limit = clampNumber(options.limit, 1, MAX_VERIFIED_RESULTS, 8);
+
+    const queryList = Array.isArray(queries)
+        ? queries
+            .map(item => String(item || '').trim())
+            .filter(Boolean)
+            .slice(0, MAX_VERIFIED_QUERY_COUNT)
+        : [];
+
+    if (!queryList.length) {
+        return {
+            results: [],
+            distinctDomains: [],
+            trustedCount: 0
+        };
+    }
+
+    const resultSets = [];
+
+    for (const item of queryList) {
+        try {
+            console.log('runVerifiedWebSearch query:', item);
+            const results = await searchWeb(item, maxResultsPerQuery);
+            resultSets.push(results);
+        } catch (error) {
+            console.error('runVerifiedWebSearch failed for query:', item, error?.message || error);
+            resultSets.push([]);
+        }
+    }
 
     const merged = [];
     const seen = new Set();
-    for (const item of resultSets.flat()) {
-        const url = String(item?.url || '').trim();
-        if (!url || seen.has(url)) continue;
-        seen.add(url);
-        merged.push(item);
-    }
+    mergeUniqueResults(merged, resultSets.flat(), seen);
 
     const reranked = rerankResults(merged, queryList.join(' ')).slice(0, limit);
     const distinctDomains = Array.from(new Set(reranked.map(item => getDomainFromUrl(item.url)).filter(Boolean)));
-    const providerBreakdown = countByProvider(reranked);
+
     return {
         results: reranked,
         distinctDomains,
-        trustedCount: reranked.filter(item => isTrustedLiveSource(item.url)).length,
-        providerBreakdown,
-        serperConfigured: Boolean(getSerperApiKey())
+        trustedCount: reranked.filter(item => isTrustedLiveSource(item.url)).length
     };
 }
 
@@ -302,21 +251,29 @@ export function rerankResults(results, query) {
     const queryText = String(query || '').toLowerCase();
     const wantsRecency = /\b(latest|recent|current|today|right now|as of now|breaking|update|news|headlines?)\b/.test(queryText);
     const queryDomain = detectQueryDomain(queryText);
+
     const scored = [...(Array.isArray(results) ? results : [])]
         .map((item, index) => {
-            const title = String(item?.title || '');
-            const description = String(item?.description || '');
+            const normalizedItem = normalizeSearchResult(item);
+            if (!normalizedItem) return null;
+
+            const title = normalizedItem.title;
+            const description = normalizedItem.description;
             const haystack = `${title} ${description}`.toLowerCase();
+
             const overlap = queryTerms.reduce((acc, term) => acc + (haystack.includes(term) ? 1 : 0), 0);
-            const trustedBoost = scoreSourcePolicy(item?.url, queryDomain);
             const titleBoost = queryTerms.reduce((acc, term) => acc + (title.toLowerCase().includes(term) ? 1 : 0), 0);
-            const recencyBoost = wantsRecency ? scoreRecency(`${title} ${description} ${item?.url || ''}`) : 0;
-            const providerBoost = scoreProvider(item?.provider);
+            const trustedBoost = scoreSourcePolicy(normalizedItem.url, queryDomain);
+            const recencyBoost = wantsRecency
+                ? scoreRecency(`${title} ${description} ${normalizedItem.url || ''}`)
+                : 0;
+
             return {
-                ...item,
-                __score: trustedBoost + overlap + titleBoost + recencyBoost + providerBoost - (index * 0.01)
+                ...normalizedItem,
+                __score: trustedBoost + overlap + titleBoost + recencyBoost - (index * 0.01)
             };
         })
+        .filter(Boolean)
         .sort((a, b) => b.__score - a.__score);
 
     return diversifyResults(scored).map(({ __score, ...item }) => item);
@@ -325,7 +282,7 @@ export function rerankResults(results, query) {
 export function getDomainFromUrl(url) {
     try {
         return new URL(String(url || '')).hostname.replace(/^www\./i, '').toLowerCase();
-    } catch (e) {
+    } catch (error) {
         return '';
     }
 }
@@ -343,17 +300,13 @@ export function extractSearchTopic(text) {
     for (const pattern of LEADING_QUERY_PATTERNS) {
         cleaned = cleaned.replace(pattern, '');
     }
+
     for (const pattern of TRAILING_QUERY_PATTERNS) {
-        cleaned = cleaned.replace(pattern, ' ');
-    }
-    for (const pattern of PROMPT_DECORATOR_PATTERNS) {
         cleaned = cleaned.replace(pattern, ' ');
     }
 
     cleaned = cleaned
         .replace(/[?!]/g, ' ')
-        // Keep 4-digit years (e.g., 2026) so time-specific queries stay precise.
-        .replace(/\b\d+\b/g, (digits) => (/^(19|20)\d{2}$/.test(digits) ? digits : ' '))
         .replace(/\s+/g, ' ')
         .trim();
 
@@ -364,6 +317,111 @@ export function extractSearchTopic(text) {
         .filter(token => token && !SEARCH_STOP_WORDS.has(token));
 
     return meaningfulTokens.join(' ').trim() || cleaned;
+}
+
+function buildSearchProviders(searchQuery, maxResults, rawQuery) {
+    const serperKey = process.env.SERPER_API_KEY || '';
+    const braveKey = process.env.BRAVE_SEARCH_API_KEY || process.env.BRAVE_API_KEY || '';
+    const attempts = [];
+
+    if (serperKey) {
+        attempts.push(() => searchWithSerper(searchQuery, maxResults, serperKey));
+    }
+
+    if (braveKey) {
+        attempts.push(() => searchWithBrave(searchQuery, maxResults, braveKey));
+    }
+
+    attempts.push(() => searchWithDuckDuckGoHtml(searchQuery, maxResults));
+    attempts.push(() => searchWithDuckDuckGo(searchQuery, maxResults));
+
+    if (isLikelyNewsQuery(rawQuery)) {
+        attempts.push(() => searchWithGoogleNewsRss(searchQuery, maxResults));
+    }
+
+    return attempts;
+}
+
+function mergeUniqueResults(target, items, seen) {
+    for (const item of Array.isArray(items) ? items : []) {
+        const normalizedItem = normalizeSearchResult(item);
+        if (!normalizedItem) continue;
+
+        const key = getResultDedupKey(normalizedItem.url);
+        if (!key || seen.has(key)) continue;
+
+        seen.add(key);
+        target.push(normalizedItem);
+    }
+}
+
+function normalizeSearchResults(items) {
+    if (!Array.isArray(items)) return [];
+    return items.map(normalizeSearchResult).filter(Boolean);
+}
+
+function normalizeSearchResult(item) {
+    if (!item || typeof item !== 'object') return null;
+
+    const title = String(item.title || item.name || '').trim();
+    const url = sanitizeExternalUrl(item.url || item.link || '');
+    const description = String(item.description || item.snippet || item.summary || '').trim();
+
+    if (!url || !title) return null;
+
+    return {
+        title,
+        url,
+        description
+    };
+}
+
+function getResultDedupKey(url) {
+    try {
+        const parsed = new URL(String(url || '').trim());
+        if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+
+        parsed.hash = '';
+
+        const trackingParams = [
+            'utm_source',
+            'utm_medium',
+            'utm_campaign',
+            'utm_term',
+            'utm_content',
+            'gclid',
+            'fbclid'
+        ];
+
+        for (const param of trackingParams) {
+            parsed.searchParams.delete(param);
+        }
+
+        const normalizedPath = parsed.pathname.replace(/\/+$/, '') || '/';
+        return `${parsed.hostname.toLowerCase()}${normalizedPath}${parsed.search}`;
+    } catch (error) {
+        return '';
+    }
+}
+
+function clampNumber(value, min, max, fallback) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(Math.max(parsed, min), max);
+}
+
+function withTimeout(promise, timeoutMs) {
+    let timeoutId;
+
+    const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+            reject(new Error(`Timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+    });
+
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+        clearTimeout(timeoutId);
+    });
 }
 
 function tokenize(text) {
@@ -383,58 +441,64 @@ function isLikelyNewsQuery(text) {
 function scoreRecency(text) {
     const t = String(text || '').toLowerCase();
     let score = 0;
+
     if (/\b(live|breaking|just in|minutes? ago|hours? ago)\b/.test(t)) score += 3;
     if (/\b(today|latest|current|recent|updated?)\b/.test(t)) score += 2;
     if (/\b(yesterday)\b/.test(t)) score += 1;
     if (/\b(2026)\b/.test(t)) score += 2;
     if (/\b(2025)\b/.test(t)) score += 1;
+
     return score;
 }
 
 function detectQueryDomain(queryText) {
     const text = String(queryText || '').toLowerCase();
-    if (/\b(isro|nasa|esa|jaxa|spacex|rocket|mission|orbiter|lunar|moon|mars|satellite|space station|astronaut)\b/.test(text)) {
-        return 'space_science';
-    }
-    if (/\b(ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup|score|winner|standings|rankings|player|team|coach|captain)\b/.test(text)) {
+
+    if (/\b(ipl|f1|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup|score|winner|standings|rankings|player|team|coach|captain)\b/.test(text)) {
         return 'sports';
     }
+
     if (/\b(president|prime minister|minister|senator|mp|mla|election|party|government|parliament|chief minister|mayor)\b/.test(text)) {
         return 'politics';
     }
-    if (/\b(stock|shares|price|market cap|repo rate|interest rate|inflation|bank|rbi|sebi|nasdaq|dow|gold|silver|platinum|diamond|palladium|petrol|diesel|gasoline|brent|wti|crude|commodity|fuel)\b/.test(text)) {
+
+    if (/\b(stock|shares|price|market cap|repo rate|interest rate|inflation|bank|rbi|sebi|nasdaq|dow)\b/.test(text)) {
         return 'finance';
     }
+
     if (/\b(ceo|founder|company|startup|ai|llm|gpu|cpu|software|chip|nvidia|microsoft|openai|google)\b/.test(text)) {
         return 'tech';
     }
-    if (/\b(actor|actress|movie|film|films|cinema|director|producer|singer|song|songs|album|albums|show|series|web series|filmography|discography|imdb|box office|release)\b/.test(text)) {
-        return 'entertainment';
-    }
+
     return 'general';
 }
 
 function domainMatches(domain, list) {
-    return Array.isArray(list) && list.some(d => domain === d || domain.endsWith(`.${d}`));
+    return Array.isArray(list) && list.some(item => domain === item || domain.endsWith(`.${item}`));
 }
 
 function scoreSourcePolicy(url, domain) {
     const host = getDomainFromUrl(url);
     const policy = SOURCE_POLICIES[domain] || SOURCE_POLICIES.general;
+
     if (!host) return 0;
     if (domainMatches(host, policy.preferredDomains)) return 7;
     if (domainMatches(host, policy.trustedDomains)) return 4;
     if (domainMatches(host, SOURCE_POLICIES.general.trustedDomains)) return 2;
+
     return 0;
 }
 
 function diversifyResults(results) {
     const out = [];
     const publisherCounts = new Map();
+
     for (const item of results) {
         const publisher = getPublisherKey(item?.url);
         const count = publisherCounts.get(publisher) || 0;
+
         if (count >= 2) continue;
+
         publisherCounts.set(publisher, count + 1);
         out.push(item);
     }
@@ -442,14 +506,17 @@ function diversifyResults(results) {
     if (out.length >= Math.min(results.length, 3)) {
         return out;
     }
+
     return results;
 }
 
 function getPublisherKey(url) {
     const domain = getDomainFromUrl(url);
     if (!domain) return '';
+
     const parts = domain.split('.');
     if (parts.length <= 2) return domain;
+
     return parts.slice(-2).join('.');
 }
 
@@ -472,46 +539,75 @@ async function searchWithSerper(query, maxResults, apiKey) {
         },
         body: JSON.stringify({ q: query, num: maxResults })
     });
+
     if (!response.ok) return [];
+
     const data = await response.json();
     const organic = Array.isArray(data?.organic) ? data.organic : [];
+
     return organic.slice(0, maxResults).map(item => ({
         title: item?.title || 'Untitled',
-        url: sanitizeExternalUrl(item?.link || ''),
-        description: item?.snippet || '',
-        provider: 'serper'
-    })).filter(item => item.url);
+        url: item?.link || '',
+        description: item?.snippet || ''
+    }));
+}
+
+async function searchWithBrave(query, maxResults, apiKey) {
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults}`;
+    const response = await fetch(url, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Subscription-Token': apiKey
+        }
+    });
+
+    if (!response.ok) return [];
+
+    const data = await response.json();
+    const list = Array.isArray(data?.web?.results) ? data.web.results : [];
+
+    return list.slice(0, maxResults).map(item => ({
+        title: item?.title || 'Untitled',
+        url: item?.url || '',
+        description: item?.description || ''
+    }));
 }
 
 async function searchWithDuckDuckGo(query, maxResults) {
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
     const response = await fetch(url);
+
     if (!response.ok) return [];
+
     const data = await response.json();
     const out = [];
 
     const pushTopic = (topic) => {
         if (!topic || out.length >= maxResults) return;
+
         const safeUrl = sanitizeExternalUrl(topic.FirstURL);
         if (safeUrl && topic.Text) {
             out.push({
                 title: topic.Text.split(' - ')[0] || topic.Text.slice(0, 80),
                 url: safeUrl,
-                description: topic.Text,
-                provider: 'duckduckgo-api'
+                description: topic.Text
             });
         }
     };
 
     const related = Array.isArray(data?.RelatedTopics) ? data.RelatedTopics : [];
     for (const item of related) {
-        if (item?.Topics && Array.isArray(item.Topics)) {
-            for (const sub of item.Topics) pushTopic(sub);
+        if (Array.isArray(item?.Topics)) {
+            for (const sub of item.Topics) {
+                pushTopic(sub);
+            }
         } else {
             pushTopic(item);
         }
+
         if (out.length >= maxResults) break;
     }
+
     return out.slice(0, maxResults);
 }
 
@@ -521,66 +617,28 @@ async function searchWithDuckDuckGoHtml(query, maxResults) {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: `q=${encodeURIComponent(query)}`
     });
+
     if (!response.ok) return [];
+
     const html = await response.text();
     const out = [];
     const re = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
     let match;
+
     while ((match = re.exec(html)) && out.length < maxResults) {
-        const rawHref = decodeHtmlEntities(String(match[1] || '').trim());
-        const resolvedHref = normalizeDuckDuckGoResultUrl(rawHref);
-        const url = sanitizeExternalUrl(resolvedHref);
+        const url = sanitizeExternalUrl(decodeHtmlEntities(String(match[1] || '').trim()));
         const title = decodeHtmlEntities(stripTags(String(match[2] || '').trim()));
+
         if (!url || !title) continue;
-        out.push({ title, url, description: title, provider: 'duckduckgo-html' });
+
+        out.push({
+            title,
+            url,
+            description: title
+        });
     }
+
     return out;
-}
-
-function normalizeDuckDuckGoResultUrl(href) {
-    let candidate = String(href || '').trim();
-    if (!candidate) return '';
-
-    if (candidate.startsWith('//')) {
-        candidate = `https:${candidate}`;
-    } else if (candidate.startsWith('/')) {
-        candidate = `https://duckduckgo.com${candidate}`;
-    }
-
-    try {
-        const parsed = new URL(candidate);
-        const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
-        const isDuckRedirect = host === 'duckduckgo.com' && parsed.pathname.startsWith('/l/');
-        if (isDuckRedirect) {
-            const encodedTarget = parsed.searchParams.get('uddg');
-            if (encodedTarget) {
-                return decodeURIComponent(encodedTarget);
-            }
-        }
-    } catch (error) {
-        return '';
-    }
-
-    return candidate;
-}
-
-async function searchWithWikipedia(query, maxResults) {
-    const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=${Math.min(maxResults, 10)}&format=json`;
-    const response = await fetch(url);
-    if (!response.ok) return [];
-    const data = await response.json();
-    const hits = Array.isArray(data?.query?.search) ? data.query.search : [];
-
-    return hits.slice(0, maxResults).map((item) => {
-        const title = String(item?.title || '').trim();
-        const snippet = decodeHtmlEntities(stripTags(String(item?.snippet || '').trim()));
-        return {
-            title: title || 'Wikipedia result',
-            url: `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/\s+/g, '_'))}`,
-            description: snippet || title,
-            provider: 'wikipedia'
-        };
-    }).filter(item => item.url);
 }
 
 async function searchWithGoogleNewsRss(query, maxResults) {
@@ -590,25 +648,29 @@ async function searchWithGoogleNewsRss(query, maxResults) {
             'Accept': 'application/rss+xml, application/xml, text/xml'
         }
     });
+
     if (!response.ok) return [];
 
     const xml = await response.text();
     const out = [];
     const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
     let match;
+
     while ((match = itemRegex.exec(xml)) && out.length < maxResults) {
         const block = match[1];
         const title = cleanGoogleNewsTitle(decodeXml(getTag(block, 'title')));
         const urlValue = sanitizeExternalUrl(decodeXml(getTag(block, 'link')));
         const description = decodeXml(stripTags(getTag(block, 'description')));
+
         if (!title || !urlValue) continue;
+
         out.push({
             title,
             url: urlValue,
-            description: description || title,
-            provider: 'google-news-rss'
+            description: description || title
         });
     }
+
     return out;
 }
 
@@ -646,29 +708,4 @@ function decodeHtmlEntities(input) {
 
 function cleanGoogleNewsTitle(title) {
     return String(title || '').replace(/\s+-\s+[^-]+$/, '').trim();
-}
-
-function getSerperApiKey() {
-    return String(
-        process.env.SERPER_API_KEY ||
-        process.env.SERPER_KEY ||
-        process.env.SERPER_API ||
-        ''
-    ).trim();
-}
-
-function scoreProvider(provider) {
-    const p = String(provider || '').toLowerCase();
-    if (p === 'serper') return 2.5;
-    if (p === 'google-news-rss') return 1.25;
-    return 0;
-}
-
-function countByProvider(results) {
-    const out = {};
-    for (const item of Array.isArray(results) ? results : []) {
-        const key = String(item?.provider || 'unknown').trim() || 'unknown';
-        out[key] = (out[key] || 0) + 1;
-    }
-    return out;
 }
