@@ -99,60 +99,10 @@
                             </div>
                         </div>
 
-                        <div id="trip-section" class="hidden bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-slate-800 dark:to-slate-700 p-6 rounded-2xl mt-6 border border-emerald-100 dark:border-slate-600">
-                            <div class="flex items-center gap-3 mb-4">
-                                <div class="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-600 dark:text-emerald-400">
-                                        <path d="M3 12h3l3-8 4 16 3-8h5"></path>
-                                    </svg>
-                                </div>
-                                <h2 class="text-xl font-bold text-gray-800 dark:text-white">Live Trip</h2>
-                            </div>
-                            <div id="trip-summary" class="space-y-2 text-sm text-gray-700 dark:text-gray-300"></div>
-                            <div id="trip-live-map" class="hidden mt-4 rounded-xl overflow-hidden border border-emerald-200 dark:border-slate-600 shadow-sm bg-white/70 dark:bg-slate-900/60"></div>
-                            <div class="mt-4 flex flex-wrap gap-2">
-                                <button onclick="promptTripDestination()" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-slate-900/70 border border-emerald-200 dark:border-slate-600 text-emerald-700 dark:text-emerald-300 text-sm font-semibold transition-all">Start custom trip</button>
-                                <button onclick="stopForegroundTrip()" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-slate-900/70 border border-emerald-200 dark:border-slate-600 text-emerald-700 dark:text-emerald-300 text-sm font-semibold transition-all">Stop trip</button>
-                            </div>
-                        </div>
-
                     </div>
 
                     <!-- Right Column: Chat -->
                     <div id="chat-panel" class="w-full order-1 relative flex flex-col">
-                        <!-- FLOATING TRIP PANEL -->
-                        <div id="floating-trip-panel" class="hidden shrink-0 mx-0 sm:mx-4 mb-4 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-emerald-300 dark:border-slate-600 rounded-2xl shadow-xl overflow-hidden flex-col transition-all duration-300">
-                            <div class="flex justify-between items-center px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 border-b border-emerald-100 dark:border-slate-700">
-                                <div class="flex items-center gap-2">
-                                    <div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
-                                    <span class="font-bold text-sm text-emerald-800 dark:text-emerald-200">Live Trip: <span id="floating-trip-dest"></span></span>
-                                </div>
-                                <button onclick="stopForegroundTrip(true)" class="p-1.5 rounded-full hover:bg-emerald-200 dark:hover:bg-slate-700 text-emerald-700 dark:text-emerald-300 transition-colors" title="Stop Trip">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                </button>
-                            </div>
-                            <div class="flex flex-col sm:flex-row">
-                                <div id="floating-trip-map" class="w-full sm:w-1/2 h-36 sm:h-44 bg-slate-100 dark:bg-slate-800 relative"></div>
-                                <div class="w-full sm:w-1/2 p-3 grid grid-cols-2 gap-2 text-sm content-start">
-                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
-                                        <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Distance Left</span>
-                                        <span id="floating-trip-dist" class="font-semibold text-slate-800 dark:text-slate-100 text-base leading-tight">--</span>
-                                    </div>
-                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
-                                        <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">ETA</span>
-                                        <span id="floating-trip-eta" class="font-semibold text-slate-800 dark:text-slate-100 text-base leading-tight">--</span>
-                                    </div>
-                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
-                                        <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Speed (Sensor)</span>
-                                        <span id="floating-trip-speed" class="font-semibold text-slate-800 dark:text-slate-100 text-base leading-tight">--</span>
-                                    </div>
-                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
-                                        <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Area</span>
-                                        <span id="floating-trip-area" class="font-semibold text-slate-800 dark:text-slate-100 text-xs leading-tight truncate" title="Updating...">--</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
                         <!-- Chat History - Claude/ChatGPT style compact view -->
                         <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height">
                             <!-- Welcome message -->
@@ -3292,44 +3242,6 @@ async function handleNameCorrection(text) {
             arrivalTime: '09:00',
             mode: 'drive'
         };
-        let tripState = {
-            active: false,
-            watchId: null,
-            destinationText: '',
-            destinationCoords: null,
-            currentCoords: null,
-            startedAt: null,
-            baselineDistanceMiles: 0,
-            lastDistanceMiles: null,
-            etaMinutes: null,
-            offRouteDetections: 0,
-            closeAlertSent: false,
-            preArrivalAlarmMinutes: null,
-            preArrivalAlarmTriggered: false,
-            routeLabel: '',
-            lastUpdatedAt: null,
-            routeGeometryLatLngs: null,
-            currentSpeedMph: null,
-            lastPlaceName: 'Detecting...',
-            lastPlaceFetchTime: 0
-        };
-        let tripMapInstance = null;
-        let tripMapCurrentMarker = null;
-        let tripMapDestinationMarker = null;
-        let tripMapRouteLine = null;
-        let tripRouteFetchInFlight = false;
-        let tripRouteNextFetchAt = 0;
-        let tripRouteLastFrom = null;
-        let tripRouteLastTo = null;
-        let rawDeviceAccel = 0;
-        let tripAlarmState = {
-            enabled: false,
-            minutesBefore: 30,
-            ringing: false,
-            triggeredAt: null,
-            audioContext: null,
-            ringIntervalId: null
-        };
         let safetyProfile = {
             womenSafetyMode: false,
             trustedContact: '',
@@ -3368,18 +3280,6 @@ async function handleNameCorrection(text) {
             window.addEventListener('online', updateOnlineStatus);
             window.addEventListener('offline', updateOnlineStatus);
             updateOnlineStatus();
-            renderCommuteCard();
-            renderTripCard();
-            renderSafetyCard();
-
-            window.addEventListener('devicemotion', (e) => {
-                if (e.acceleration) {
-                    const a = e.acceleration;
-                    const mag = Math.sqrt((a.x || 0)**2 + (a.y || 0)**2 + (a.z || 0)**2);
-                    if (!isNaN(mag)) rawDeviceAccel = mag;
-                }
-            });
-
             const chatContainer = document.getElementById('chat-container');
             const hasRenderedMessages = !!chatContainer?.querySelector('[data-role]');
             if (!hasRenderedMessages) {
@@ -3531,7 +3431,6 @@ async function handleNameCorrection(text) {
                                 <p><strong>Weather:</strong> "What's the weather in Seattle tomorrow?"</p>
                                 <p><strong>General Medical Guidance:</strong> "What should I do for a sore throat?" or "When is a fever serious?"</p>
                                 <p><strong>Live Trip Mode:</strong> "start trip to office" or "start trip to Times Square"</p>
-                                <p><strong>Leave-Time Estimate:</strong> "when should I leave for work?"</p>
                                 <p><strong>Safety Tools:</strong> "share my location", "nearest hospital", or "nearest police"</p>
                                 <p><strong>Translator:</strong> "Speak in Tamil" or "Translate this to Hindi"</p>
                                 <p><strong>Budget Planner:</strong> "budget trip to Seattle for 3 days under 900 USD"</p>
@@ -3548,7 +3447,6 @@ async function handleNameCorrection(text) {
                                 <p><strong>For news lists:</strong> Ask for "latest headlines" or "breaking news" if you want a headline-style response.</p>
                                 <p><strong>For recipes:</strong> Include the dish and style. Example: "How to make Andhra chicken biryani" or "Recipe for veg fried rice".</p>
                                 <p><strong>Example:</strong> "Remind me to take medicine tomorrow at 9 PM."</p>
-                                <p><strong>For commute:</strong> Set context first. Example: "my office is 1 Apple Park Way", "my home is Sunnyvale", "arrive by 9 AM".</p>
                                 <p><strong>For live trip tracking:</strong> Use a direct destination. Example: "start trip to office" or "start trip to JFK Airport".</p>
                             </div>
                         </section>
@@ -3610,7 +3508,6 @@ async function handleNameCorrection(text) {
                                 <p><strong>Regional Food:</strong> I suggest cuisine ideas by destination.</p>
                                 <p><strong>Recipe Help:</strong> I can generate ingredients and step-by-step cooking instructions for many dishes and styles. For obscure or highly regional dishes, I may give a best-effort version and say when it is approximate.</p>
                                 <p><strong>Converse Mode:</strong> Hands-free conversation with auto speaking.</p>
-                                <p><strong>Foreground Live Trip:</strong> I can track your trip, ETA drift, "you are close", and possible off-route movement while this website stays open.</p>
                                 <p><strong>Traffic-Aware Leave Estimate:</strong> I can use a route API for live leave-time estimates when configured, with a fallback estimate if not.</p>
                                 <p><strong>Safety Mode:</strong> Women-focused safety shortcuts, trusted contact storage, and location sharing.</p>
                             </div>
@@ -3664,10 +3561,6 @@ async function handleNameCorrection(text) {
                         <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Settings</h3>
                             <div class="space-y-4">
-                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                                    <p class="font-semibold text-gray-900 dark:text-white">Commute Setup</p>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Use chat commands: "my home is ...", "my office is ...", "arrive by 9 AM", and "commute mode is drive/transit/walk".</p>
-                                </div>
                                 <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                     <p class="font-semibold text-gray-900 dark:text-white">Safety Setup</p>
                                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Use "enable women's safety mode" and "trusted contact is ..." to personalize fast safety actions.</p>
