@@ -2305,3 +2305,26 @@ body.dark .message-action-btn.speaker-btn:focus-visible {
     border-color: rgba(100, 116, 139, 0.75) !important;
     box-shadow: none !important;
 }
+
+/* Dark mode for header-enhanced border */
+body.dark .header-enhanced {
+    border-bottom-color: rgba(71, 85, 105, 0.44);
+}
+
+/* Dark mode for typing indicator background */
+body.dark .typing-indicator {
+    background: rgba(30, 41, 59, 0.8);
+}
+
+/* Dark mode for alarm notification */
+body.dark #alarm-notification > div {
+    background: rgba(15, 23, 42, 0.95);
+    color: #e2e8f0;
+    border-color: rgba(239, 68, 68, 0.6);
+}
+
+/* Dark mode for offline banner */
+body.dark .offline-banner {
+    background: #b91c1c; /* A darker red for dark mode */
+    color: #ffffff;
+}
