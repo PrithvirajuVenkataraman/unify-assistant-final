@@ -3523,6 +3523,8 @@ async function handleNameCorrection(text) {
 
                 body.classList.remove('light');
                 body.classList.add('dark');
+                body.classList.add('bg-black', 'text-white');
+                body.classList.remove('bg-white', 'text-black');
                 card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
                 title.className = 'text-4xl font-black jarvis-title';
                 subtitle.className = 'text-sm text-gray-400 font-medium';
@@ -3547,6 +3549,8 @@ async function handleNameCorrection(text) {
                 setTimeout(() => {
                     body.classList.remove('dark');
                     body.classList.add('light');
+                    body.classList.add('bg-white', 'text-black');
+                    body.classList.remove('bg-black', 'text-white');
 
                     card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
                     title.className = 'text-4xl font-black jarvis-title';
