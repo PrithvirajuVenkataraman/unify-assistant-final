@@ -741,11 +741,13 @@
     /* Prevent iOS bounce scrolling on map containers */
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch; /* Consider if this is still needed with overscroll-behavior */
+    overscroll-behavior: contain; /* Modern alternative for scroll chaining */
 }
 
 .map-message .map-container iframe {
     width: 100% !important;
-    height: 350px !important;
+    height: 350px;
     min-height: 300px;
     /* iOS Safari iframe fixes */
     border: 0;
@@ -756,6 +758,7 @@
 @media (min-width: 768px) {
     .map-message .map-container iframe {
         height: 400px !important;
+        height: 400px;
     }
 }
 
@@ -776,6 +779,8 @@
         /* Ensure iframe renders properly on iOS */
         -webkit-transform: translate3d(0, 0, 0);
         transform: translate3d(0, 0, 0);
+        -webkit-transform: translate3d(0, 0, 0); /* Redundant if parent has it */
+        transform: translate3d(0, 0, 0); /* Redundant if parent has it */
     }
 }
 
