@@ -159,20 +159,23 @@
                                     </div>
                                 </div>
                                 <button id="expand-forecast-btn" onclick="toggleForecast()" class="p-2 rounded-full hover:bg-white/20 transition-all" title="Show 5-day forecast">
-                                    <svg id="expand-forecast-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="transition-transform">
-                                        <polyline points="6 9 12 15 18 9"></polyline>
-                                    </svg>
-                                </button>
-                            </div>
-                            <p id="temperature" class="text-5xl font-bold mb-2 text-white relative z-10">--&#176;F / --&#176;C</p>
-                            <p id="weather-advice" class="text-white/90 text-lg relative z-10"></p>
-                            <div id="aqi-section" class="mt-4 pt-4 border-t border-white/20 relative z-10 hidden">
-                                <p class="text-white/90 text-sm font-semibold">Air Quality Index</p>
-                                <div class="flex items-center gap-
-                            <div id="forecast-container" class="hidden mt-4 pt-4 border-t border-white/20 relative z-10">
-                                <!-- 5-day forecast will be injected here -->
-                            </div>
+                                <svg id="expand-forecast-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="transition-transform">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </button>
                         </div>
+                        <p id="temperature" class="text-5xl font-bold mb-2 text-white relative z-10">--&#176;F / --&#176;C</p>
+                        <p id="weather-advice" class="text-white/90 text-lg relative z-10"></p>
+                        <div id="aqi-section" class="mt-4 pt-4 border-t border-white/20 relative z-10 hidden">
+                                <p class="text-white/90 text-sm font-semibold">Air Quality Index</p>
+                                <div class="flex items-center gap-2 mt-2">
+                                    <!-- AQI details will be injected here -->
+                                </div>
+                            </div>
+                        <div id="forecast-container" class="hidden mt-4 pt-4 border-t border-white/20 relative z-10">
+                            <!-- 5-day forecast will be injected here -->
+                        </div>
+                    </div>
 
                         <div id="commute-section" class="hidden bg-gradient-to-br from-sky-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 p-6 rounded-2xl mt-6 border border-sky-100 dark:border-slate-600">
                             <div class="flex items-center gap-3 mb-4">
@@ -215,7 +218,7 @@
                         <div id="floating-trip-panel" class="hidden shrink-0 mx-0 sm:mx-4 mb-4 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-emerald-300 dark:border-slate-600 rounded-2xl shadow-xl overflow-hidden flex-col transition-all duration-300">
                             <div class="flex justify-between items-center px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 border-b border-emerald-100 dark:border-slate-700">
                                 <div class="flex items-center gap-2">
-                                    <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                                    <div class="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
                                     <span class="font-bold text-sm text-emerald-800 dark:text-emerald-200">Live Trip: <span id="floating-trip-dest"></span></span>
                                 </div>
                                 <button onclick="stopForegroundTrip(true)" class="p-1.5 rounded-full hover:bg-emerald-200 dark:hover:bg-slate-700 text-emerald-700 dark:text-emerald-300 transition-colors" title="Stop Trip">
@@ -225,20 +228,20 @@
                             <div class="flex flex-col sm:flex-row">
                                 <div id="floating-trip-map" class="w-full sm:w-1/2 h-36 sm:h-44 bg-slate-100 dark:bg-slate-800 relative"></div>
                                 <div class="w-full sm:w-1/2 p-3 grid grid-cols-2 gap-2 text-sm content-start">
-                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700">
+                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
                                         <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Distance Left</span>
                                         <span id="floating-trip-dist" class="font-semibold text-slate-800 dark:text-slate-100 text-base leading-tight">--</span>
                                     </div>
-                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700">
+                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
                                         <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">ETA</span>
                                         <span id="floating-trip-eta" class="font-semibold text-slate-800 dark:text-slate-100 text-base leading-tight">--</span>
                                     </div>
-                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700">
+                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
                                         <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Speed (Sensor)</span>
                                         <span id="floating-trip-speed" class="font-semibold text-slate-800 dark:text-slate-100 text-base leading-tight">--</span>
                                     </div>
-                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700">
-                                        <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Last Area</span>
+                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700 overflow-hidden">
+                                        <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Area</span>
                                         <span id="floating-trip-area" class="font-semibold text-slate-800 dark:text-slate-100 text-xs leading-tight truncate" title="Updating...">--</span>
                                     </div>
                                 </div>
@@ -12978,8 +12981,73 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         }
 
         async function getWeatherAdvice(weatherData) {
-            const code = weatherData.current.weather_code;
-            const temp = weatherData.current.temperature_2m;
+            const code = weatherData?.current?.weather_code;
+            const temp = weatherData?.current?.temperature_2m;
+
+            if (code === undefined || temp === undefined) {
+                return 'Weather data is incomplete.';
+            }
+
+            const weatherClassMap = {
+                // Clear sky, few clouds
+                0: 'bg-gradient-to-br from-blue-400 to-blue-600', // Sunny/Clear
+                1: 'bg-gradient-to-br from-blue-400 to-blue-600',
+                2: 'bg-gradient-to-br from-blue-300 to-blue-500',
+                3: 'bg-gradient-to-br from-gray-400 to-gray-600', // Overcast
+
+                // Fog, deposition
+                45: 'bg-gradient-to-br from-gray-500 to-gray-700',
+                48: 'bg-gradient-to-br from-gray-500 to-gray-700',
+
+                // Drizzle, rain, showers
+                51: 'bg-gradient-to-br from-blue-600 to-blue-800',
+                53: 'bg-gradient-to-br from-blue-600 to-blue-800',
+                55: 'bg-gradient-to-br from-blue-600 to-blue-800',
+                56: 'bg-gradient-to-br from-blue-700 to-blue-900',
+                57: 'bg-gradient-to-br from-blue-700 to-blue-900',
+                61: 'bg-gradient-to-br from-blue-700 to-blue-900',
+                63: 'bg-gradient-to-br from-blue-700 to-blue-900',
+                65: 'bg-gradient-to-br from-blue-700 to-blue-900',
+                66: 'bg-gradient-to-br from-blue-800 to-blue-900',
+                67: 'bg-gradient-to-br from-blue-800 to-blue-900',
+
+                // Snow fall
+                71: 'bg-gradient-to-br from-gray-300 to-gray-500',
+                73: 'bg-gradient-to-br from-gray-300 to-gray-500',
+                75: 'bg-gradient-to-br from-gray-300 to-gray-500',
+                77: 'bg-gradient-to-br from-gray-400 to-gray-600',
+
+                // Rain showers
+                80: 'bg-gradient-to-br from-blue-600 to-blue-800',
+                81: 'bg-gradient-to-br from-blue-600 to-blue-800',
+                82: 'bg-gradient-to-br from-blue-700 to-blue-900',
+
+                // Snow showers
+                85: 'bg-gradient-to-br from-gray-300 to-gray-500',
+                86: 'bg-gradient-to-br from-gray-400 to-gray-600',
+
+                // Thunderstorm
+                95: 'bg-gradient-to-br from-gray-700 to-gray-900',
+                96: 'bg-gradient-to-br from-gray-700 to-gray-900',
+                99: 'bg-gradient-to-br from-gray-800 to-black'
+            };
+
+            const defaultClass = 'bg-gradient-to-br from-gray-400 to-gray-600'; // Default for unknown codes
+            const weatherBgClass = weatherClassMap[code] || defaultClass;
+
+            const container = document.getElementById('weather-card');
+            if (container) {
+                // Remove existing background classes and add the new one
+                container.className = container.className.split(' ').filter(cls => !cls.startsWith('bg-gradient-to-')).join(' ');
+                container.classList.add(weatherBgClass);
+
+                // Handle temperature-based adjustments
+                if (temp > 30) { // Hot
+                    container.classList.add('from-orange-400', 'to-red-600');
+                } else if (temp < 5) { // Cold
+                    container.classList.add('from-blue-600', 'to-blue-800');
+                }
+            }
 
             return await composeApiReply('weather_advice', {
                 weatherCode: code,
@@ -12990,7 +13058,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         }
 
         function willItRain(weatherCode) {
-            
+
             return (weatherCode >= 51 && weatherCode <= 67) || 
                    (weatherCode >= 80 && weatherCode <= 82) || 
                    (weatherCode >= 95 && weatherCode <= 99);
@@ -15168,15 +15236,23 @@ function addTravelHintsToPlan(places){
     return places.map((place, index) => {
         if(index === 0){
             return {
-                ...place,
+                    ...place, // Ensure place is not null/undefined
                 travelFromPreviousKm: 0,
                 travelMinutes: 0,
                 travelMode: "start",
                 travelHint: "Start here"
             };
         }
-
-        const prev = places[index - 1];
+            const prev = places[index - 1];
+            if (!prev || !place || typeof prev.lat !== "number" || typeof prev.lon !== "number" || typeof place.lat !== "number" || typeof place.lon !== "number") {
+                return {
+                    ...place,
+                    travelFromPreviousKm: null,
+                    travelMinutes: 15, // Default fallback
+                    travelMode: "drive",
+                    travelHint: "Transit - ~15 min"
+                };
+            }
 
         if(
             typeof prev.lat === "number" && typeof prev.lon === "number" &&
