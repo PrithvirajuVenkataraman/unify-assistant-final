@@ -3117,6 +3117,7 @@ async function askGeminiAI(userMessage) {
         const topicHint = getTopicMemoryHint(normalizedUserMessage);
         const memoryHint = getRecentMemoryHint();
 
+        const requestedQuantity = classification?.requestedQuantity; // Get from classification
         conversationContext.push({ role: 'user', text: normalizedUserMessage }); 
         if (conversationContext.length > 40) { 
             conversationContext = conversationContext.slice(-40); 
@@ -3128,7 +3129,9 @@ async function askGeminiAI(userMessage) {
         
         const systemPrompt = `You are JARVIS, a helpful voice assistant.${userName ? ` The user's name is ${userName}. Use their name naturally and occasionally.` : ' Be friendly and conversational.'}
 
-CRITICAL ANTI-HALLUCINATION RULES:
+CRITICAL RULES:
+- If the user explicitly asked for a specific number of items (e.g., "10 facts", "5 tips"), provide exactly that many items. Do not give more or less.
+- CRITICAL ANTI-HALLUCINATION RULES:
 1. NEVER make up or invent names of places, hotels, restaurants, or attractions
 2. If you're not 100% CERTAIN something exists, DO NOT mention it
 3. For location-based queries, only mention places you're ABSOLUTELY SURE are real
@@ -3171,6 +3174,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             .filter(Boolean)
             .join('\n\n');
         const systemPromptWithTopic = extraHints ? `${systemPrompt}\n\n${extraHints}` : systemPrompt;
+        const quantityHint = requestedQuantity ? `\n\nUser explicitly requested ${requestedQuantity} items. Provide exactly ${requestedQuantity} items.` : '';
         const intent = getUserIntent(normalizedUserMessage); 
         window.__intentContext = { 
           allowHotels: intent.wantsHotels,
@@ -3193,7 +3197,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         const directExplainerHint = isDirectExplainerQuery(normalizedUserMessage)
             ? 'This is a direct explainer/identity query. Do not give research steps or suggestions to search online. Answer directly with concise factual content.'
             : '';
-        const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\n${conciseFactHint}\n${directExplainerHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
+        const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}${quantityHint}\n${conciseFactHint}\n${directExplainerHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
 
          
         const response = await fetch('/api/chat-groq', { 
@@ -7279,6 +7283,37 @@ function isArtistSongRequest(text) {
            /\b[a-z][a-z0-9.'&\-\s]{2,}\s+songs?\b/.test(t);
 }
 
+// New generic quantity extraction function
+function extractRequestedQuantity(text, defaultCount = 5, min = 1, max = 20) {
+    const raw = String(text || '').trim().toLowerCase();
+    const wordToNum = {
+        one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+        seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+        thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
+        eighteen: 18, nineteen: 19, twenty: 20
+    };
+
+    // More flexible regex to capture numbers before or after keywords
+    const quantityRegex = /(?:(?:top|best|suggest|recommend|give|show|list|tell me|how many|number of)\s+(?:a\s+|an\s+)?(?:about\s+)?(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b)|(?:(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s+(?:top|best|songs?|facts?|items?|things?|places?|tips?|ways?|reasons?|steps?|ideas?))/i;
+
+    const match = raw.match(quantityRegex);
+    let extractedNum = null;
+
+    if (match) {
+        // Check both capturing groups for the number
+        const rawCount = match[1] || match[2];
+        if (rawCount) {
+            extractedNum = /^\d+$/.test(rawCount) ? Number(rawCount) : (wordToNum[rawCount] || null);
+        }
+    }
+
+    if (extractedNum === null || !Number.isFinite(extractedNum)) {
+        return defaultCount;
+    }
+
+    return Math.max(min, Math.min(max, extractedNum));
+}
+
 function isClassicSongDiscoveryRequest(text) {
     const t = String(text || '').toLowerCase();
     if (!t.trim()) return false;
@@ -7289,7 +7324,7 @@ function isClassicSongDiscoveryRequest(text) {
 
 function parseClassicSongDiscoveryIntent(text) {
     const t = String(text || '').toLowerCase();
-    const requestedCount = extractRequestedSongCount(t);
+    const requestedCount = extractRequestedQuantity(t, 5, 1, 12); // Max 12 for songs
     const languages = [];
     const unsupported = [];
     let hasAnyLanguageMention = false;
@@ -7328,7 +7363,7 @@ function parseClassicSongDiscoveryIntent(text) {
     }
 
     return {
-        requestedCount: clampSongCount(requestedCount, 8),
+        requestedCount: requestedCount, // Clamping already handled by extractRequestedQuantity
         languages: Array.from(new Set(languages)),
         unsupported: Array.from(new Set(unsupported))
     };
@@ -8039,13 +8074,12 @@ function extractEraLanguageBlendIntent(text) {
     const languages = extractRequestedMusicLanguages(text);
     const artist = extractArtistForEraBlend(text);
     const exactMatch = String(text || '').match(/\b(?:exactly|strictly)\s+(\d{1,2})\b/i);
-    const explicitCount = exactMatch ? Number(exactMatch[1]) : null;
-    const requestedCount = clampSongCount(explicitCount || extractRequestedSongCount(text) || 4, 4);
+    const explicitCount = exactMatch ? Number(exactMatch[1]) : extractRequestedQuantity(text, 4, 1, 4); // Max 4 for blend
     return {
         eras: eras.length ? eras : [1990, 2000],
         languages: languages.length ? languages : ['tamil'],
         artist,
-        requestedCount
+        requestedCount: explicitCount // Clamping already handled by extractRequestedQuantity
     };
 }
 
@@ -8167,7 +8201,7 @@ User text:
         const parsed = extractJsonObject(data?.response || data?.text || '');
 
         const artist = sanitizeArtistName(parsed?.artist);
-        const requestedCount = clampSongCount(parsed?.count ?? fallbackCount, fallbackCount);
+        const requestedCount = extractRequestedQuantity(text, parsed?.count ?? fallbackCount, 1, 12); // Max 12 for songs
 
         if (artist) {
             return { artist, requestedCount };
@@ -8177,8 +8211,8 @@ User text:
     }
 
     return {
-        artist: fallbackArtist,
-        requestedCount: clampSongCount(fallbackCount, 5)
+        artist: fallbackArtist, // This will be null if not found by regex
+        requestedCount: extractRequestedQuantity(text, 5, 1, 12) // Max 12 for songs
     };
 }
 
@@ -9054,6 +9088,7 @@ function classifyUserMessage(text) {
     const raw = String(text || '').trim();
     const lower = raw.toLowerCase();
     const liveIntent = extractLiveQueryIntent(raw);
+    const requestedQuantity = extractRequestedQuantity(raw, null, 1, 20); // Max 20 for general facts
     const entityIntent = classifyUniversalEntityIntent(raw, liveIntent);
     const translatorRequest = detectTranslatorRequest(raw);
 
@@ -9062,6 +9097,7 @@ function classifyUserMessage(text) {
         lower,
         liveIntent,
         entityIntent,
+        requestedQuantity,
         translatorRequest,
         flags: {
             inappropriate: isInappropriateContent(raw),
@@ -14548,7 +14584,18 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             currentSpeechTextLower = cleanText.toLowerCase();
             isAssistantSpeaking = true;
 
-            speakWithWebSpeech(cleanText, speechProfile);
+            // Prioritize ResponsiveVoice for English if available, otherwise fallback to Web Speech API
+            if (typeof responsiveVoice !== 'undefined' && responsiveVoice.getVoices().length > 0) {
+                const voice = chooseBestEnglishResponsiveVoice(responsiveVoice.getVoices());
+                responsiveVoice.speak(cleanText, voice.name, {
+                    pitch: speechProfile.pitch,
+                    rate: speechProfile.rate,
+                    volume: 1,
+                    onend: onSpeechPlaybackEnded
+                });
+            } else {
+                speakWithWebSpeech(cleanText, speechProfile);
+            }
         }
         
         
@@ -14570,6 +14617,32 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 btn.classList.remove('is-speaking');
             });
             currentUtterance = null;
+        }
+
+        function chooseBestEnglishResponsiveVoice(voices) {
+            if (!Array.isArray(voices) || !voices.length) return null;
+            const englishVoices = voices.filter(v => /^en(-|_)/i.test(String(v.lang || '')));
+            const pool = englishVoices.length ? englishVoices : voices;
+
+            const preferredNames = [
+                /uk english male/i,
+                /us english male/i,
+                /google/i,
+                /microsoft/i,
+                /neural/i,
+                /natural/i,
+                /enhanced/i
+            ];
+
+            let best = null;
+            let bestScore = -1;
+            for (const voice of pool) {
+                const name = String(voice.name || '');
+                let score = 0;
+                preferredNames.forEach((re, idx) => { if (re.test(name)) score += (preferredNames.length - idx) * 10; });
+                if (score > bestScore) { best = voice; bestScore = score; }
+            }
+            return best || pool[0] || null;
         }
 
         function stopAllSpeechPlayback() {
