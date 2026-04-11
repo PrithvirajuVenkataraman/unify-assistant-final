@@ -1,12 +1,12 @@
-import askHandler from '../controllers/ask.js';
-import chatGroqHandler from '../controllers/chat-groq.js';
-import commoditiesHandler from '../controllers/commodities.js';
-import documentIngestHandler from '../controllers/document-ingest.js';
-import exchangeHandler from '../controllers/exchange.js';
-import marketsHandler from '../controllers/markets.js';
-import placesHandler from '../controllers/places.js';
-import ragHandler from '../controllers/rag.js';
-import searchHandler from '../controllers/search.js';
+import askHandler from './ask.js';
+import chatGroqHandler from './chat-groq.js';
+import commoditiesHandler from './commodities.js';
+import documentIngestHandler from './document-ingest.js';
+import exchangeHandler from './exchange.js';
+import marketsHandler from './markets.js';
+import placesHandler from './places.js';
+import ragHandler from './rag.js';
+import searchHandler from './search.js';
 
 // Unified API Handler to bypass Vercel's Serverless Function limits
 export default async function handler(req, res) {
