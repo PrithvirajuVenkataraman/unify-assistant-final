@@ -1123,32 +1123,9 @@ async function handleCalendarSync(text) {
         return;
     }
 
-    try {
-        showLoading('Creating calendar event...');
-        const response = await fetch('/api/calendar-sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ plan: lastBudgetPlan })
-        });
-
-        if (!response.ok) throw new Error('calendar sync request failed');
-
-        const data = await response.json();
-        if (!data.success) throw new Error('calendar sync failed');
-
-        downloadIcsFromBase64(data.icsBase64, data.fileName || 'trip-plan.ics');
-
-        await deliverApiReply('calendar_sync_success', {
-            fileName: data.fileName,
-            googleCalendarUrl: data.googleCalendarUrl
-        });
-    } catch (error) {
-        await deliverApiReply('calendar_sync_error', {
-            error: String(error?.message || '')
-        });
-    } finally {
-        hideLoading();
-    }
+    const msg = 'Calendar sync is currently unavailable in this deployment.';
+    addChatMessage(msg, false);
+    speak(msg);
 }
 
 function downloadIcsFromBase64(base64, fileName) {
