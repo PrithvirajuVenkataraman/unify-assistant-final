@@ -8,8 +8,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>JARVIS - Just A Rather Very Intelligent System</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js"></script>
     <style>
         :root {
@@ -1146,17 +1144,11 @@
         /* Enhanced header title */
         .jarvis-title {
             font-family: 'Space Grotesk', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: -0.5px;
+            color: #1e293b;
         }
 
         body.dark .jarvis-title {
-            background: linear-gradient(135deg, #00d9ff 0%, #00ffcc 50%, #a78bfa 100%);
-            -webkit-background-clip: text;
-            background-clip: text;
+            color: #e2e8f0;
         }
 
         /* Glassmorphism card effect */
@@ -2181,9 +2173,9 @@
 
         .page-shell {
             width: 100%;
-            min-height: 100vh;
-            min-height: 100dvh;
             height: 100dvh;
+            display: flex;
+            flex-direction: column;
             padding-bottom: 0 !important;
             overflow: hidden;
         }
@@ -2194,11 +2186,11 @@
         }
 
         .app-shell {
+            flex: 1 1 auto;
             width: 100%;
             max-width: var(--app-max-width) !important;
             min-width: 0;
             min-height: 0;
-            height: 100%;
             padding: calc(16px + env(safe-area-inset-top)) var(--app-gutter-x) calc(88px + env(safe-area-inset-bottom));
             display: flex;
             flex-direction: column;
@@ -2212,11 +2204,10 @@
         }
 
         #main-card {
-            flex: 0 0 auto;
+            flex: 1 1 auto;
             width: 100%;
             min-width: 0;
-            min-height: auto;
-            height: auto !important;
+            min-height: 0;
             margin-bottom: 0 !important;
             padding: 0 !important;
             background: transparent !important;
@@ -2231,41 +2222,56 @@
         #chat-layout {
             display: flex;
             flex-direction: column;
-            flex: 0 0 auto;
+            flex: 1 1 auto;
             width: 100%;
             min-width: 0;
-            min-height: auto;
-            height: auto;
-            gap: 0;
+            min-height: 0;
+            gap: 16px;
         }
 
         #utility-panel {
             display: none !important;
-            padding-bottom: calc(108px + env(safe-area-inset-bottom));
+            flex: 0 0 auto;
+            max-height: 40vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
         }
 
         #utility-panel.utility-panel-visible {
             display: block !important;
         }
 
+        @media (min-width: 768px) {
+            #chat-layout {
+                flex-direction: row;
+            }
+            #utility-panel {
+                max-height: none;
+                flex: 0 0 320px;
+                order: 1;
+            }
+            #chat-panel {
+                order: 2;
+            }
+        }
+
         #chat-panel {
             display: flex;
             flex-direction: column;
-            flex: 0 0 auto;
+            flex: 1 1 auto;
             width: 100%;
             min-width: 0;
-            min-height: auto;
-            height: auto;
+            min-height: 0;
         }
 
         .chat-panel-height,
         #chat-container {
-            flex: 0 0 auto;
+            flex: 1 1 auto;
             width: 100% !important;
             min-width: 0 !important;
             min-height: 0 !important;
-            height: clamp(260px, 50vh, 520px) !important;
-            max-height: 58vh !important;
+            height: 100% !important;
+            max-height: none !important;
         }
 
         #chat-container {
@@ -2274,8 +2280,6 @@
             overflow-x: hidden;
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
-            min-height: 0;
-            scroll-padding-bottom: calc(132px + env(safe-area-inset-bottom));
         }
 
         #input-bar-container {
@@ -2637,43 +2641,9 @@
             box-shadow: none !important;
         }
 
-        @media (max-width: 768px) {
-            .chat-panel-height,
-            #chat-container {
-                height: clamp(240px, 46vh, 396px) !important;
-                min-height: 240px !important;
-                max-height: 53vh !important;
-            }
-        }
-
-        @media (max-width: 1024px) and (min-width: 769px) {
-            .chat-panel-height,
-            #chat-container {
-                height: clamp(240px, 46vh, 430px) !important;
-                max-height: 52vh !important;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .chat-panel-height,
-            #chat-container {
-                height: clamp(220px, 42vh, 330px) !important;
-                min-height: 220px !important;
-                max-height: 48vh !important;
-            }
-        }
-
     </style>
 </head>
 <body class="light min-h-screen transition-all duration-500">
-    <!-- Weather Effects Container -->
-    <div id="weather-effects" class="weather-effect"></div>
-    
-    <!-- Tube Light -->
-    <div class="tube-light-container">
-        <div id="tube-light" class="tube-light"></div>
-        <div class="tube-light-glow"></div>
-    </div>
 
     <!-- Alarm Notification Overlay -->
     <div id="alarm-overlay" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50"></div>
@@ -2682,32 +2652,17 @@
         Offline mode: some features may be unavailable
     </div>
     <div class="page-shell">
-        <div id="bg-effects" class="fixed inset-0 overflow-hidden pointer-events-none">
-            <div class="absolute top-20 left-20 w-72 h-72 bg-slate-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-            <div class="absolute bottom-20 right-20 w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style="animation-delay: 1s;"></div>
-            <div class="absolute top-1/2 left-1/2 w-72 h-72 bg-violet-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style="animation-delay: 2s;"></div>
-        </div>
-
         <div class="app-shell max-w-5xl mx-auto relative z-10 p-6">
             <!-- Header - Enhanced -->
             <div class="header-enhanced mb-6">
                 <div class="flex items-center gap-4">
-                    <div class="logo-container">
-                        <!-- Arc Reactor Icon -->
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" class="text-white">
-                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/>
-                            <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="1.5"/>
-                            <circle cx="12" cy="12" r="3" fill="currentColor"/>
-                            <line x1="12" y1="2" x2="12" y2="6" stroke="currentColor" stroke-width="1.5"/>
-                            <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" stroke-width="1.5"/>
-                            <line x1="2" y1="12" x2="6" y2="12" stroke="currentColor" stroke-width="1.5"/>
-                            <line x1="18" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="1.5"/>
-                        </svg>
-                    </div>
                     <div>
                         <h1 id="title" class="text-4xl font-black jarvis-title">JARVIS</h1>
                         <div class="flex items-center gap-3 mt-1">
                             <p id="subtitle" class="text-sm text-gray-500 font-medium">AI Personal Assistant</p>
+                            <button onclick="handleAgendaTodayAgent('daily briefing')" class="px-3 py-1 rounded-full bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/30 dark:hover:bg-purple-800/50 text-purple-700 dark:text-purple-300 text-xs font-bold shadow-sm transition-all flex items-center gap-1">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Play Briefing
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -2744,9 +2699,17 @@
                                         <p id="location-name" class="text-sm text-white/80">Loading...</p>
                                     </div>
                                 </div>
+                                <button id="expand-forecast-btn" onclick="toggleForecast()" class="p-2 rounded-full hover:bg-white/20 transition-all" title="Show 5-day forecast">
+                                    <svg id="expand-forecast-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="transition-transform">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </button>
                             </div>
                             <p id="temperature" class="text-5xl font-bold mb-2 text-white relative z-10">--&#176;F / --&#176;C</p>
                             <p id="weather-advice" class="text-white/90 text-lg relative z-10"></p>
+                            <div id="forecast-container" class="hidden mt-4 pt-4 border-t border-white/20 relative z-10">
+                                <!-- 5-day forecast will be injected here -->
+                            </div>
                         </div>
 
                         <div id="commute-section" class="hidden bg-gradient-to-br from-sky-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 p-6 rounded-2xl mt-6 border border-sky-100 dark:border-slate-600">
@@ -2785,7 +2748,40 @@
                     </div>
 
                     <!-- Right Column: Chat -->
-                    <div id="chat-panel" class="w-full order-1 relative">
+                    <div id="chat-panel" class="w-full order-1 relative flex flex-col">
+                        <!-- FLOATING TRIP PANEL -->
+                        <div id="floating-trip-panel" class="hidden shrink-0 mx-0 sm:mx-4 mb-4 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-emerald-300 dark:border-slate-600 rounded-2xl shadow-xl overflow-hidden flex-col transition-all duration-300">
+                            <div class="flex justify-between items-center px-4 py-2 bg-emerald-50 dark:bg-emerald-900/30 border-b border-emerald-100 dark:border-slate-700">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                                    <span class="font-bold text-sm text-emerald-800 dark:text-emerald-200">Live Trip: <span id="floating-trip-dest"></span></span>
+                                </div>
+                                <button onclick="stopForegroundTrip(true)" class="p-1.5 rounded-full hover:bg-emerald-200 dark:hover:bg-slate-700 text-emerald-700 dark:text-emerald-300 transition-colors" title="Stop Trip">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                </button>
+                            </div>
+                            <div class="flex flex-col sm:flex-row">
+                                <div id="floating-trip-map" class="w-full sm:w-1/2 h-36 sm:h-44 bg-slate-100 dark:bg-slate-800 relative"></div>
+                                <div class="w-full sm:w-1/2 p-3 grid grid-cols-2 gap-2 text-sm content-start">
+                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700">
+                                        <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Distance Left</span>
+                                        <span id="floating-trip-dist" class="font-semibold text-slate-800 dark:text-slate-100 text-base leading-tight">--</span>
+                                    </div>
+                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700">
+                                        <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">ETA</span>
+                                        <span id="floating-trip-eta" class="font-semibold text-slate-800 dark:text-slate-100 text-base leading-tight">--</span>
+                                    </div>
+                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700">
+                                        <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Speed (Sensor)</span>
+                                        <span id="floating-trip-speed" class="font-semibold text-slate-800 dark:text-slate-100 text-base leading-tight">--</span>
+                                    </div>
+                                    <div class="flex flex-col bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-700">
+                                        <span class="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Last Area</span>
+                                        <span id="floating-trip-area" class="font-semibold text-slate-800 dark:text-slate-100 text-xs leading-tight truncate" title="Updating...">--</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         <!-- Chat History - Claude/ChatGPT style compact view -->
                         <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height">
                             <!-- Welcome message -->
@@ -3358,8 +3354,8 @@ function isCalendarSyncRequest(text) {
 function isAgendaTodayRequest(text) {
     const t = String(text || '').toLowerCase();
     if (!t.trim()) return false;
-    return /\b(agenda|schedule|calendar|events?|appointments?|meetings?)\b/.test(t) &&
-        /\b(today|for today|this day|today's|todays)\b/.test(t);
+    return (/\b(agenda|schedule|calendar|events?|appointments?|meetings?|briefing|update|status)\b/.test(t) && /\b(today|for today|this day|today's|todays|daily|morning|my day)\b/.test(t)) ||
+           /\b(daily briefing|morning briefing|brief me|my schedule|overall briefing)\b/.test(t);
 }
 
 function isConversationRecallRequest(text) {
@@ -4127,26 +4123,92 @@ function openEmailDraft(toEmail, subject, bodyText) {
 }
 
 async function handleAgendaTodayAgent(userText = '') {
+    showThinkingIndicator('Preparing your daily briefing...');
+    try {
     const agendaItems = collectAgendaItemsForToday();
     const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     const summaryLines = agendaItems.length
         ? agendaItems.map((item, index) => `${index + 1}. ${item}`)
         : ['No specific agenda items found in your saved context yet.'];
 
-    const responseText = `Your agenda for ${dateLabel}:\n${summaryLines.join('\n')}`;
-    addChatMessage(responseText, false);
+    let weatherContext = 'Weather data not currently loaded.';
+    if (weather && weather.current) {
+        const celsius = Math.round(weather.current.temperature_2m);
+        const fahrenheit = Math.round((celsius * 9/5) + 32);
+        weatherContext = `Current temperature is ${fahrenheit}°F (${celsius}°C).`;
+    }
+
+    let commuteContext = 'Not configured.';
+    if (commuteProfile && commuteProfile.office) {
+        commuteContext = `Home: ${commuteProfile.home || 'Unknown'}, Office: ${commuteProfile.office}, Arrive by: ${commuteProfile.arrivalTime || '09:00'}, Mode: ${commuteProfile.mode}.`;
+    }
+
+    let newsContext = 'Could not fetch latest news.';
+    try {
+        const newsRes = await fetch('/api/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: 'top news headlines today US World', maxResults: 4 })
+        });
+        if (newsRes.ok) {
+            const newsData = await newsRes.json();
+            const results = Array.isArray(newsData?.results) ? newsData.results : [];
+            if (results.length > 0) {
+                newsContext = results.map(r => `- ${r.title}`).join('\n');
+            }
+        }
+    } catch(e) {}
+
+    const prompt = `You are JARVIS, providing a morning/daily briefing to the user.
+
+Date: ${dateLabel}
+Weather: ${weatherContext}
+Commute: ${commuteContext}
+Agenda:
+${summaryLines.join('\n')}
+Top News Headlines:
+${newsContext}
+
+Write a natural, conversational daily briefing. Start with a warm greeting. Mention the weather, summarize their schedule/commute, and give a quick 1-2 sentence wrap-up of the top news. Keep it under 6-8 sentences. Make it sound like an AI assistant briefing its boss. Do not use asterisks or markdown, as it will be spoken out loud.`;
+
+    const response = await fetch('/api/chat-groq', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt: 'You are JARVIS. Give a concise, professional daily briefing.', message: prompt })
+    });
+
+    let responseText = `Your agenda for ${dateLabel}:\n${summaryLines.join('\n')}`;
+    if (response.ok) {
+        const data = await response.json();
+        if (data.response || data.text) {
+            responseText = String(data.response || data.text).trim();
+        }
+    }
+
+    addModelAssistantMessage(responseText, 'Daily Briefing');
     speak(responseText);
-    saveToHistory(userText || 'agenda today', responseText);
+    saveToHistory(userText || 'daily briefing', responseText);
 
     const savedEmail = loadSavedEmail();
     if (!savedEmail) {
-        addChatMessage('I can email this agenda too. Save your email once using any "Email this ..." button, then ask again.', false);
+        setTimeout(() => {
+            addChatMessage('I can email this briefing too. Save your email once using any "Email this ..." button, then ask again.', false, false);
+        }, 2000);
         return;
     }
 
-    const emailBody = `Hi,\n\nHere is your agenda for ${dateLabel}:\n\n${summaryLines.join('\n')}\n\nSent via JARVIS agenda agent.`;
-    openEmailDraft(savedEmail, `Your agenda for ${dateLabel}`, emailBody);
-    showTemporaryMessage(`Preparing agenda email for ${savedEmail}`);
+    const emailBody = `Hi,\n\nHere is your daily briefing for ${dateLabel}:\n\n${responseText}\n\nSent via JARVIS.`;
+    setTimeout(() => {
+        openEmailDraft(savedEmail, `Daily Briefing - ${dateLabel}`, emailBody);
+        showTemporaryMessage(`Preparing briefing email for ${savedEmail}`);
+    }, 3500);
+    } catch (error) {
+        const fallback = "I encountered an error compiling your daily briefing.";
+        addChatMessage(fallback, false);
+        speak(fallback);
+    } finally {
+        hideThinkingIndicator();
+    }
 }
 
 // ============ END EMAIL FUNCTIONALITY ============
@@ -5776,6 +5838,7 @@ CRITICAL ANTI-HALLUCINATION RULES:
 6. DO NOT invent hotel names, restaurant names, or attraction names
 7. For small/unknown towns, admit you don't have specific info rather than guessing
 8. Do NOT suggest hills/treks/mountain hikes for flat towns (example: Chidambaram)
+9. If a prompt is vague, ambiguous, or lacks context, DO NOT hallucinate an answer. Politely ask the user to clarify.
 
 RULES:
 - ${userName ? `The user's name is ${userName} - use it!` : 'You do NOT know the user\'s name. NEVER say "User" or "Hi User!" - just say "Hi!" or be friendly without using a name.'}
@@ -5980,6 +6043,12 @@ async function handleNameCorrection(text) {
             popoverEl: null
         };
         let micPermissionGranted = false;
+        let isPassiveListening = false;
+        let passiveWakeWordEnabled = true;
+        let activeWakeSession = false;
+        let currentSpeechContext = 'none'; // 'wake_ack', 'normal_answer', 'followup_ask', 'sleep_ack'
+        let awaitingFollowUpResponse = false;
+        let followUpTimer = null;
         
         
         let userName = null;
@@ -6030,7 +6099,10 @@ async function handleNameCorrection(text) {
             preArrivalAlarmTriggered: false,
             routeLabel: '',
             lastUpdatedAt: null,
-            routeGeometryLatLngs: null
+            routeGeometryLatLngs: null,
+            currentSpeedMph: null,
+            lastPlaceName: 'Detecting...',
+            lastPlaceFetchTime: 0
         };
         let tripMapInstance = null;
         let tripMapCurrentMarker = null;
@@ -6040,6 +6112,7 @@ async function handleNameCorrection(text) {
         let tripRouteNextFetchAt = 0;
         let tripRouteLastFrom = null;
         let tripRouteLastTo = null;
+        let rawDeviceAccel = 0;
         let tripAlarmState = {
             enabled: false,
             minutesBefore: 30,
@@ -6069,6 +6142,22 @@ async function handleNameCorrection(text) {
             'hindi': { code: 'hi', name: 'Hindi', nativeName: 'Hindi', voiceLang: 'hi-IN' }
         };
 
+        function checkAndTriggerMorningBriefing() {
+            const now = new Date();
+            const hour = now.getHours();
+            
+            if (hour >= 5 && hour < 12) {
+                const todayStr = now.toLocaleDateString();
+                const lastBriefingDate = localStorage.getItem('jarvis_last_morning_briefing');
+                
+                if (lastBriefingDate !== todayStr) {
+                    localStorage.setItem('jarvis_last_morning_briefing', todayStr);
+                    setTimeout(() => handleAgendaTodayAgent('daily briefing'), 1500);
+                    return true;
+                }
+            }
+            return false;
+        }
 
         window.onload = async () => {
             // Ensure no queued/leftover speech survives a refresh.
@@ -6091,19 +6180,30 @@ async function handleNameCorrection(text) {
             renderTripCard();
             renderSafetyCard();
 
+            window.addEventListener('devicemotion', (e) => {
+                if (e.acceleration) {
+                    const a = e.acceleration;
+                    const mag = Math.sqrt((a.x || 0)**2 + (a.y || 0)**2 + (a.z || 0)**2);
+                    if (!isNaN(mag)) rawDeviceAccel = mag;
+                }
+            });
+
             const chatContainer = document.getElementById('chat-container');
             const hasRenderedMessages = !!chatContainer?.querySelector('[data-role]');
             if (!hasRenderedMessages) {
-                const welcomeOptions = [
-                    'Hi! How can I help today?',
-                    'Hello! How can I help today?',
-                    'Hola, amigo! How can I help today?',
-                    'Vanakkam! How can I help today?',
-                    'Hey there! How can I help today?'
-                ];
-                const welcomeMessage = welcomeOptions[Math.floor(Math.random() * welcomeOptions.length)];
-                addInitialGreetingMessage(welcomeMessage);
-                speak(welcomeMessage);
+                const triggeredBriefing = checkAndTriggerMorningBriefing();
+                if (!triggeredBriefing) {
+                    const welcomeOptions = [
+                        'Hi! How can I help today?',
+                        'Hello! How can I help today?',
+                        'Hola, amigo! How can I help today?',
+                        'Vanakkam! How can I help today?',
+                        'Hey there! How can I help today?'
+                    ];
+                    const welcomeMessage = welcomeOptions[Math.floor(Math.random() * welcomeOptions.length)];
+                    addInitialGreetingMessage(welcomeMessage);
+                    speak(welcomeMessage);
+                }
             }
             
         };
@@ -6114,6 +6214,7 @@ async function handleNameCorrection(text) {
                 stream.getTracks().forEach(track => track.stop());
                 micPermissionGranted = true;
                 initializeSpeechRecognition();
+                startPassiveListening();
             } catch (error) {
                 micPermissionGranted = false;
                 await deliverApiReply('microphone_permission_denied', {
@@ -6131,8 +6232,6 @@ async function handleNameCorrection(text) {
             const subtitle = document.getElementById('subtitle');
             const chatContainer = document.getElementById('chat-container');
             const lightSwitch = document.getElementById('light-switch');
-            const tubeLight = document.getElementById('tube-light');
-            const weatherEffects = document.getElementById('weather-effects');
 
             const inputBarContainer = document.getElementById('input-bar-container');
             const inputBarInner = document.getElementById('input-bar-inner');
@@ -6142,9 +6241,6 @@ async function handleNameCorrection(text) {
             if (darkMode) {
                 // Dark mode
                 lightSwitch.classList.remove('on');
-                tubeLight.classList.remove('on', 'starting');
-
-                if (weatherEffects) weatherEffects.innerHTML = '';
 
                 body.classList.remove('light');
                 body.classList.add('dark');
@@ -6170,21 +6266,12 @@ async function handleNameCorrection(text) {
             } else {
                 // Light mode
                 lightSwitch.classList.add('on');
-                tubeLight.classList.add('starting');
 
                 setTimeout(() => {
-                    tubeLight.classList.remove('starting');
-                    tubeLight.classList.add('on');
-
                     body.classList.remove('dark');
                     body.classList.add('light');
-
-                    if (weather && weather.current) {
-                        createWeatherEffect(weather.current.weather_code, Math.round(weather.current.temperature_2m));
-                    } else {
                         body.style.background = 'linear-gradient(to bottom right, #fce7f3, #e9d5ff, #c7d2fe)';
                         body.style.filter = 'none';
-                    }
 
                     card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
                     title.className = 'text-4xl font-black jarvis-title';
@@ -6816,6 +6903,12 @@ async function handleNameCorrection(text) {
         }
 
         function toggleConverseMode() {
+            if (activeWakeSession) {
+                clearTimeout(followUpTimer);
+                activeWakeSession = false;
+                awaitingFollowUpResponse = false;
+                currentSpeechContext = 'none';
+            }
             converseMode = !converseMode;
             saveAssistantModes();
             updateAssistantModeUI();
@@ -6824,18 +6917,15 @@ async function handleNameCorrection(text) {
                 listeningRequested = true;
                 wakeWordMode = false;
                 commandMode = false;
-                if (isListening) {
+                isPassiveListening = false;
+                if (isListening || continuousRecognition) {
                     stopListening();
                 }
                 const greet = getConverseWelcomeLine();
-                speak(greet);
-                setTimeout(() => {
-                    if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking) {
-                        startListening();
-                    }
-                }, 500);
-            } else if (isListening) {
+                speak(greet, true);
+            } else {
                 stopListening();
+                startPassiveListening();
             }
         }
 
@@ -8644,6 +8734,33 @@ async function handleMarketLookup(text) {
             return stripped.replace(/^(and|then)\s+/i, '').trim();
         }
 
+        function startPassiveListening() {
+            if (!continuousRecognition) return;
+            passiveWakeWordEnabled = true;
+            isPassiveListening = true;
+            wakeWordMode = true;
+            commandMode = false;
+            
+            const voiceBtn = document.getElementById('voice-btn');
+            document.getElementById('mic-icon-bottom')?.classList.remove('hidden');
+            document.getElementById('waveform-bottom')?.classList.add('hidden');
+            voiceBtn?.classList.remove('voice-listening');
+            voiceBtn?.classList.add('gradient-btn');
+
+            if (!isListening) {
+                try { continuousRecognition.start(); } catch(e){}
+            }
+        }
+
+        function endActiveWakeSession(isTimeout = false) {
+            clearTimeout(followUpTimer);
+            awaitingFollowUpResponse = false;
+            currentSpeechContext = 'sleep_ack';
+            activeWakeSession = true; 
+            try { continuousRecognition.stop(); } catch(e) {}
+            speak(isTimeout ? "Going to sleep." : "Okay, going to sleep.", true);
+        }
+
         function isLikelyTtsEcho(text) {
             const t = String(text || '').toLowerCase().trim();
             if (!t || !currentSpeechTextLower) return false;
@@ -8670,6 +8787,18 @@ async function handleMarketLookup(text) {
             const finalText = String(finalTranscript || '').trim();
             if (!finalText) return;
             const lowerText = finalText.toLowerCase();
+
+            if (awaitingFollowUpResponse) {
+                if (/\b(no|nothing|nope|i'm good|im good|that's all)\b/.test(lowerText)) {
+                    endActiveWakeSession(false);
+                    return;
+                } else {
+                    clearTimeout(followUpTimer);
+                    awaitingFollowUpResponse = false;
+                    currentSpeechContext = 'none';
+                }
+            }
+
             const wakeOnly = /^hey\s+(jarvis|davis)\s*[.!?]*$/i.test(finalText);
             const now = Date.now();
             if (wakeOnly && (now - lastWakeAckTime < 5000)) {
@@ -8762,8 +8891,7 @@ async function handleMarketLookup(text) {
             
             
             continuousRecognition.onstart = () => {
-                // In converse mode we allow barge-in handling instead of hard-stopping speech on mic start.
-                if (!converseMode) {
+                if (!converseMode && !activeWakeSession && !isPassiveListening) {
                     stopSpeaking();
                 }
             };
@@ -8776,6 +8904,8 @@ async function handleMarketLookup(text) {
                 const confidence = result[0].confidence || 0;
 
                 if (!text) return;
+
+                if (activeWakeSession && currentSpeechContext === 'sleep_ack') return;
 
                 if (isAssistantSpeaking && isHardStopSpeechCommand(text)) {
                     stopSpeaking();
@@ -8863,7 +8993,7 @@ async function handleMarketLookup(text) {
                 }
                 
                 
-                if (converseMode) {
+                if (converseMode || activeWakeSession) {
                     const transcript = String(result[0].transcript || '').trim();
                     if (isAssistantSpeaking && (isHardStopSpeechCommand(transcript) || isMeaningfulInterruption(transcript, result.isFinal, confidence))) {
                         stopSpeaking();
@@ -8899,34 +9029,33 @@ async function handleMarketLookup(text) {
                         }
                     }, 300);
                     return;
+                } else if (activeWakeSession) {
+                    if (!isAssistantSpeaking) {
+                        setTimeout(() => {
+                            try { continuousRecognition.start(); } catch(e){}
+                        }, 300);
+                    }
+                } else if (passiveWakeWordEnabled && isPassiveListening) {
+                    setTimeout(() => {
+                        try { continuousRecognition.start(); } catch(e){}
+                    }, 300);
                 }
                 stopListening(); 
             }; 
         } 
  
         async function toggleListening() { 
-            if (isListening && wakeWordMode) { 
-                 
+            if (isListening && !isPassiveListening) { 
                 listeningRequested = false;
                 stopListening(); 
-                wakeWordMode = false; 
-                await deliverApiReply('wake_word_mode_disabled', {}, {
-                    fallbackText: 'Wake word mode disabled.'
+                startPassiveListening();
+                await deliverApiReply('listening_stopped', {}, {
+                    fallbackText: 'Listening stopped.'
                 });
-            } else if (isListening) { 
-                listeningRequested = false;
-                stopListening(); 
             } else { 
-                 
                 listeningRequested = true;
-                wakeWordMode = true; 
-                commandMode = false; 
+                isPassiveListening = false;
                 startListening(); 
-                await deliverApiReply('listening_started', {
-                    wakeWordEnabled: true
-                }, {
-                    fallbackText: 'Listening. Say "Hey JARVIS" or speak directly.'
-                });
             } 
         }
 
@@ -14116,7 +14245,13 @@ ${snippets}`
             }
 
             if (answerPath === 'recipe') {
-                const requestedDish = extractRequestedDish(text) || 'the requested dish';
+                const requestedDish = extractRequestedDish(text);
+                if (!requestedDish || requestedDish.length < 3 || /^(a |the )?(recipe|dish|food|meal)$/i.test(requestedDish)) {
+                    const promptMsg = "What dish would you like the recipe for?";
+                    addChatMessage(promptMsg, false);
+                    speak(promptMsg);
+                    return;
+                }
                 const styleHint = extractRecipeStylePreference(text) || 'not specified';
                 const recipePrompt = `${userName ? `The user's name is ${userName}.` : ''} Answer this cooking request: "${text}"
 
@@ -14827,7 +14962,7 @@ Quick recap: ...
                 
                 const itineraryPrompt = `${userName ? `The user's name is ${userName}.` : ''} Create a rich, engaging, practical itinerary for: "${text}".
 
-LOCATION: ${itineraryLocation || 'Extract from user query'}
+LOCATION: ${itineraryLocation}
 ${placeSearchResults}
 
 IMPORTANT STYLE TARGET:
@@ -15910,19 +16045,21 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
         function renderTripLiveMap() {
             const mapContainer = document.getElementById('trip-live-map');
-            if (!mapContainer) return;
+            const floatingPanel = document.getElementById('floating-trip-panel');
 
             if (!tripState.active || !tripState.currentCoords || !tripState.destinationCoords) {
                 if (tripMapInstance) {
-                    try { tripMapInstance.remove(); } catch (e) {}
+                    tripMapInstance = null;
                 }
-                tripMapInstance = null;
-                tripMapCurrentMarker = null;
-                tripMapDestinationMarker = null;
-                tripMapRouteLine = null;
                 resetTripRouteGeometryCache();
-                mapContainer.classList.add('hidden');
-                mapContainer.innerHTML = '';
+                if (mapContainer) {
+                    mapContainer.classList.add('hidden');
+                    mapContainer.innerHTML = '';
+                }
+                if (floatingPanel) {
+                    floatingPanel.classList.add('hidden');
+                    floatingPanel.classList.remove('flex');
+                }
                 return;
             }
 
@@ -15931,133 +16068,63 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const destLat = Number(tripState.destinationCoords.lat).toFixed(6);
             const destLon = Number(tripState.destinationCoords.lon).toFixed(6);
             const directionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${curLat},${curLon}`)}&destination=${encodeURIComponent(`${destLat},${destLon}`)}&travelmode=driving`;
-            if (!mapContainer.querySelector('#trip-live-map-canvas')) {
-                mapContainer.innerHTML = `
-                    <div id="trip-live-map-canvas" class="trip-live-map-canvas"></div>
-                    <div id="trip-live-map-meta" class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300"></div>
-                `;
+
+            // Update Floating Panel
+            if (floatingPanel) {
+                floatingPanel.classList.remove('hidden');
+                floatingPanel.classList.add('flex');
+                
+                document.getElementById('floating-trip-dest').textContent = tripState.destinationText || '';
+                document.getElementById('floating-trip-dist').textContent = tripState.lastDistanceMiles != null ? tripState.lastDistanceMiles.toFixed(1) + ' mi' : '--';
+                document.getElementById('floating-trip-eta').textContent = tripState.etaMinutes != null ? `${Math.max(1, Math.round(tripState.etaMinutes))} min` : '--';
+                
+                let speedText = '--';
+                if (tripState.currentSpeedMph != null) {
+                    speedText = Math.round(tripState.currentSpeedMph) + ' mph';
+                }
+                document.getElementById('floating-trip-speed').textContent = speedText;
+                document.getElementById('floating-trip-area').textContent = tripState.lastPlaceName || '--';
+                
+                const floatingMap = document.getElementById('floating-trip-map');
+                if (floatingMap && !floatingMap.innerHTML.includes('iframe')) {
+                    floatingMap.innerHTML = `
+                        <iframe
+                            src="https://maps.google.com/maps?saddr=${curLat},${curLon}&daddr=${destLat},${destLon}&output=embed"
+                            width="100%"
+                            height="100%"
+                            style="border:0; display:block;"
+                            loading="lazy"
+                            allowfullscreen>
+                        </iframe>
+                    `;
+                }
             }
 
-            const mapCanvas = mapContainer.querySelector('#trip-live-map-canvas');
-            const mapMeta = mapContainer.querySelector('#trip-live-map-meta');
-            if (!mapCanvas || !mapMeta) return;
-
-            const currentLatLng = [Number(tripState.currentCoords.lat), Number(tripState.currentCoords.lon)];
-            const destinationLatLng = [Number(tripState.destinationCoords.lat), Number(tripState.destinationCoords.lon)];
-            const routeLatLngs = Array.isArray(tripState.routeGeometryLatLngs) && tripState.routeGeometryLatLngs.length >= 2
-                ? tripState.routeGeometryLatLngs
-                : [currentLatLng, destinationLatLng];
-
-            if (typeof window.L === 'undefined') {
+            if (mapContainer) {
                 mapContainer.innerHTML = `
-                    <div class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
-                        Live map failed to load.
-                        <a class="underline ml-1" href="${directionsUrl}" target="_blank" rel="noopener noreferrer">Open navigation</a>
-                    </div>
+                    <div class="map-container" style="width: 100%; height: 260px; border-radius: 12px; overflow: hidden;">
+                    <iframe
+                        src="https://maps.google.com/maps?saddr=${curLat},${curLon}&daddr=${destLat},${destLon}&output=embed"
+                        width="100%"
+                        height="100%"
+                        style="border:0; display:block;"
+                        loading="lazy"
+                        allowfullscreen>
+                    </iframe>
+                </div>
+                <div id="trip-live-map-meta" class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+                    Live origin: ${curLat}, ${curLon}
+                    <span class="mx-1">-</span>
+                    Destination: ${escapeHtml(tripState.destinationText || '')}
+                    <span class="mx-1">-</span>
+                    Distance: ${tripState.lastDistanceMiles != null ? formatDistanceKmWithMiles(tripState.lastDistanceMiles) : '--'}
+                    <span class="mx-1">-</span>
+                    <a class="underline" href="${directionsUrl}" target="_blank" rel="noopener noreferrer">Open navigation</a>
+                </div>
                 `;
                 mapContainer.classList.remove('hidden');
-                return;
             }
-
-            if (!tripMapInstance) {
-                tripMapInstance = L.map(mapCanvas, {
-                    zoomControl: true,
-                    attributionControl: true,
-                    // Mobile-friendly options
-                    tap: true,
-                    tapTolerance: 15,
-                    touchZoom: true,
-                    bounceAtZoomLimits: false,
-                    maxBoundsViscosity: 1.0,
-                    // Improve performance on mobile
-                    preferCanvas: false,
-                    // Better touch handling
-                    inertia: true,
-                    inertiaDeceleration: 3000,
-                    inertiaMaxSpeed: 1500,
-                    easeLinearity: 0.2,
-                    worldCopyJump: false,
-                    maxBounds: null,
-                    // Additional mobile options
-                    closePopupOnClick: false,
-                    doubleClickZoom: true,
-                    boxZoom: false,
-                    keyboard: false,
-                    dragging: true,
-                    scrollWheelZoom: false // Prevent accidental zoom on scroll
-                });
-
-                // Add touch event handlers for better mobile experience
-                tripMapInstance.on('load', function() {
-                    // Force hardware acceleration on mobile
-                    if (L.Browser.mobile) {
-                        mapCanvas.style.transform = 'translateZ(0)';
-                        mapCanvas.style.webkitTransform = 'translateZ(0)';
-                    }
-                });
-
-                // Handle touch events to prevent conflicts
-                tripMapInstance.on('touchstart', function(e) {
-                    // Allow map to handle touch events
-                    e.originalEvent.stopPropagation();
-                });
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(tripMapInstance);
-
-                tripMapCurrentMarker = L.marker(currentLatLng).addTo(tripMapInstance).bindPopup('Your current location');
-                tripMapDestinationMarker = L.marker(destinationLatLng).addTo(tripMapInstance).bindPopup(escapeHtml(tripState.destinationText || 'Destination'));
-                tripMapRouteLine = L.polyline(routeLatLngs, {
-                    color: '#10b981',
-                    weight: 4,
-                    opacity: 0.9,
-                    dashArray: tripState.routeGeometryLatLngs ? undefined : '8 6'
-                }).addTo(tripMapInstance);
-            } else {
-                tripMapCurrentMarker?.setLatLng(currentLatLng);
-                tripMapDestinationMarker?.setLatLng(destinationLatLng);
-                tripMapRouteLine?.setStyle({ dashArray: tripState.routeGeometryLatLngs ? undefined : '8 6' });
-                tripMapRouteLine?.setLatLngs(routeLatLngs);
-            }
-
-            const bounds = tripMapRouteLine?.getBounds?.() || L.latLngBounds([currentLatLng, destinationLatLng]);
-            tripMapInstance.fitBounds(bounds.pad(0.3), { animate: false });
-
-            // Multiple invalidateSize calls for mobile compatibility
-            setTimeout(() => {
-                try {
-                    tripMapInstance?.invalidateSize();
-                    // Additional calls for mobile devices
-                    setTimeout(() => tripMapInstance?.invalidateSize(), 100);
-                    setTimeout(() => tripMapInstance?.invalidateSize(), 300);
-                } catch (e) {}
-            }, 0);
-
-            // Handle orientation changes on mobile
-            const handleOrientationChange = () => {
-                setTimeout(() => {
-                    try { tripMapInstance?.invalidateSize(); } catch (e) {}
-                }, 500);
-            };
-
-            window.addEventListener('orientationchange', handleOrientationChange);
-            window.addEventListener('resize', () => {
-                setTimeout(() => {
-                    try { tripMapInstance?.invalidateSize(); } catch (e) {}
-                }, 100);
-            });
-
-            mapMeta.innerHTML = `
-                Live origin: ${curLat}, ${curLon}
-                <span class="mx-1">-</span>
-                Destination: ${escapeHtml(tripState.destinationText || '')}
-                <span class="mx-1">-</span>
-                Distance: ${tripState.lastDistanceMiles != null ? formatDistanceKmWithMiles(tripState.lastDistanceMiles) : '--'}
-                <span class="mx-1">-</span>
-                <a class="underline" href="${directionsUrl}" target="_blank" rel="noopener noreferrer">Open navigation</a>
-            `;
-            mapContainer.classList.remove('hidden');
+            tripMapInstance = true;
         }
 
         function getCommuteSpeedMph(mode) {
@@ -16241,26 +16308,9 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                             null;
 
                         if (cityName) {
-                            if (addr.country_code === 'us' && addr.state) {
-                                cityName = `${cityName}, ${addr.state}`;
-                            } else if (addr.state && addr.state !== cityName) {
-                                cityName = `${cityName}, ${addr.state}, ${addr.country || ''}`.replace(/,\s*$/, '');
-                            } else if (addr.country && addr.country_code !== 'us') {
-                                cityName = `${cityName}, ${addr.country}`;
-                            }
-                            locationName = cityName;
-                        } else {
-                            locationName = addr.state || addr.country || locationName;
                         }
-
-                        const exactParts = [
-                            addr.road || addr.pedestrian || addr.footway || '',
-                            addr.suburb || addr.neighbourhood || '',
-                            addr.city || addr.town || addr.village || addr.hamlet || '',
-                            addr.state || '',
-                            addr.country || ''
-                        ].filter(Boolean);
-                        exactAddress = (exactParts.join(', ') || reverseData?.display_name || '').trim();
+                        exactAddress = reverseData?.display_name || '';
+                        locationName = exactAddress || 'your current location';
                     }
                 } catch (error) {}
 
@@ -16500,6 +16550,36 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const etaMinutes = Math.max(1, Math.round((roadMilesLeft / getCommuteSpeedMph(commuteProfile.mode || 'drive')) * 60));
             const distanceLabel = formatDistanceKmWithMiles(roadMilesLeft);
 
+            // Calculate speed
+            let speedMph = null;
+            if (position.coords.speed !== null && position.coords.speed >= 0) {
+                speedMph = position.coords.speed * 2.23694; // m/s to mph
+            } else {
+                // Fallback using devicemotion (accelerometer) if moving, or manual distance
+                if (rawDeviceAccel > 0.5) {
+                    speedMph = rawDeviceAccel * 2.23694; 
+                } else if (tripState.lastUpdatedAt && tripState.currentCoords) {
+                    const hoursPassed = (Date.now() - tripState.lastUpdatedAt) / 3600000;
+                    const milesMoved = haversineMiles(tripState.currentCoords.lat, tripState.currentCoords.lon, lat, lon);
+                    if (hoursPassed > 0) speedMph = milesMoved / hoursPassed;
+                }
+            }
+            tripState.currentSpeedMph = speedMph;
+
+            // Reverse geocode occasionally (every 60s)
+            const now = Date.now();
+            if (now - (tripState.lastPlaceFetchTime || 0) > 60000) {
+                tripState.lastPlaceFetchTime = now;
+                fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, {
+                    headers: { 'User-Agent': 'JARVISVoiceAssistant/1.0' }
+                }).then(r => r.json()).then(data => {
+                    const addr = data?.address || {};
+                    const place = addr.suburb || addr.neighbourhood || addr.road || addr.village || addr.city || addr.town || 'Route';
+                    tripState.lastPlaceName = place;
+                    renderTripLiveMap();
+                }).catch(() => {});
+            }
+
             if (tripState.lastDistanceMiles != null && roadMilesLeft > tripState.lastDistanceMiles + 0.22) {
                 tripState.offRouteDetections += 1;
                 if (tripState.offRouteDetections <= 2) {
@@ -16567,7 +16647,10 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 preArrivalAlarmTriggered: false,
                 routeLabel: '',
                 lastUpdatedAt: null,
-                routeGeometryLatLngs: null
+                routeGeometryLatLngs: null,
+                currentSpeedMph: null,
+                lastPlaceName: 'Detecting...',
+                lastPlaceFetchTime: 0
             };
             renderTripCard();
             if (announce && hadTrip) {
@@ -16988,7 +17071,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
             return {
                 rate: Math.max(0.88, Math.min(1.04, rate)),
-                pitch: isConverse ? 1.0 : 0.98
+                pitch: isConverse ? 0.92 : 0.90
             };
         }
 
@@ -16998,11 +17081,11 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const pool = englishVoices.length ? englishVoices : voices;
 
             const preferredNames = [
-                /aria/i,
-                /jenny/i,
+                /daniel/i,
+                /arthur/i,
+                /brian/i,
+                /google uk english male/i,
                 /guy/i,
-                /samantha/i,
-                /google us english/i,
                 /neural/i,
                 /natural/i,
                 /online/i,
@@ -17017,7 +17100,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 preferredNames.forEach((re, idx) => {
                     if (re.test(name)) score += (preferredNames.length - idx) * 10;
                 });
-                if (/en-us/i.test(String(voice.lang || ''))) score += 8;
+                if (/en-gb/i.test(String(voice.lang || ''))) score += 15;
+                if (/male/i.test(name)) score += 5;
                 if (voice.localService) score += 3;
                 if (score > bestScore) {
                     best = voice;
@@ -17057,7 +17141,30 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 currentSpeakerButton.classList.remove('is-speaking');
                 currentSpeakerButton = null;
             }
-            if (converseMode && listeningRequested && !isListening && !isProcessing) {
+
+            if (activeWakeSession) {
+                if (currentSpeechContext === 'wake_ack') {
+                    currentSpeechContext = 'none';
+                    startListening();
+                } else if (currentSpeechContext === 'normal_answer') {
+                    currentSpeechContext = 'followup_ask';
+                    awaitingFollowUpResponse = true;
+                    speak("Is there anything else you need?", true);
+                } else if (currentSpeechContext === 'followup_ask') {
+                    currentSpeechContext = 'none';
+                    startListening();
+                    followUpTimer = setTimeout(() => {
+                        endActiveWakeSession(true);
+                    }, 10000);
+                } else if (currentSpeechContext === 'sleep_ack') {
+                    currentSpeechContext = 'none';
+                    activeWakeSession = false;
+                    stopListening();
+                    startPassiveListening();
+                } else {
+                    startListening();
+                }
+            } else if (converseMode && listeningRequested && !isListening && !isProcessing) {
                 setTimeout(() => startListening(), 180);
             }
         }
@@ -17144,10 +17251,13 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         }
         
         function speak(text, force = false) { 
-            // Speech is allowed only in Converse mode or via explicit user click (force=true).
-            const shouldAutoSpeak = converseMode;
+            const shouldAutoSpeak = converseMode || activeWakeSession;
             if (!shouldAutoSpeak && !force) return; 
              
+            if (activeWakeSession && currentSpeechContext !== 'wake_ack' && currentSpeechContext !== 'followup_ask' && currentSpeechContext !== 'sleep_ack') {
+                currentSpeechContext = 'normal_answer';
+            }
+
             const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim(); 
             if (!cleanText) return;
             const speechProfile = getSpeechProfile(cleanText, converseMode);
