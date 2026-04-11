@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1900,12 +1900,6 @@
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
         }
 
-        /* Keep content clear of the fixed bottom input bar across screen sizes */
-        .page-shell {
-            min-height: 100vh;
-            padding-bottom: 14rem;
-        }
-
         .offline-banner {
             position: fixed;
             top: 12px;
@@ -2150,13 +2144,19 @@
 
         /* Full-screen chat layout patch */
         html,
-        body,
-        #root {
+        body {
             width: 100%;
-            min-height: 100%;
             height: 100%;
+            height: 100dvh;
             margin: 0;
             padding: 0;
+            overflow: hidden;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overscroll-behavior-y: none;
         }
 
         *,
@@ -2165,15 +2165,9 @@
             box-sizing: border-box;
         }
 
-        body {
-            min-height: 100vh;
-            min-height: 100dvh;
-            overflow: hidden;
-        }
-
         .page-shell {
-            width: 100%;
-            height: 100dvh;
+            position: absolute;
+            inset: 0;
             display: flex;
             flex-direction: column;
             padding-bottom: 0 !important;
@@ -2188,10 +2182,11 @@
         .app-shell {
             flex: 1 1 auto;
             width: 100%;
+            height: 100%;
             max-width: var(--app-max-width) !important;
             min-width: 0;
             min-height: 0;
-            padding: calc(16px + env(safe-area-inset-top)) var(--app-gutter-x) calc(88px + env(safe-area-inset-bottom));
+            padding: calc(16px + env(safe-area-inset-top)) var(--app-gutter-x) calc(100px + env(safe-area-inset-bottom));
             display: flex;
             flex-direction: column;
             margin: 0 auto;
@@ -2337,7 +2332,7 @@
             }
 
             .app-shell {
-                padding: calc(10px + env(safe-area-inset-top)) var(--app-gutter-x) calc(84px + env(safe-area-inset-bottom));
+                padding: calc(10px + env(safe-area-inset-top)) var(--app-gutter-x) calc(90px + env(safe-area-inset-bottom));
             }
 
             .header-enhanced {
@@ -2660,9 +2655,6 @@
                         <h1 id="title" class="text-4xl font-black jarvis-title">JARVIS</h1>
                         <div class="flex items-center gap-3 mt-1">
                             <p id="subtitle" class="text-sm text-gray-500 font-medium">AI Personal Assistant</p>
-                            <button onclick="handleAgendaTodayAgent('daily briefing')" class="px-3 py-1 rounded-full bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/30 dark:hover:bg-purple-800/50 text-purple-700 dark:text-purple-300 text-xs font-bold shadow-sm transition-all flex items-center gap-1">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Play Briefing
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -3349,13 +3341,6 @@ function isCalendarSyncRequest(text) {
            t.includes('sync to calendar') ||
            t.includes('add to calendar') ||
            t.includes('save trip to calendar');
-}
-
-function isAgendaTodayRequest(text) {
-    const t = String(text || '').toLowerCase();
-    if (!t.trim()) return false;
-    return (/\b(agenda|schedule|calendar|events?|appointments?|meetings?|briefing|update|status)\b/.test(t) && /\b(today|for today|this day|today's|todays|daily|morning|my day)\b/.test(t)) ||
-           /\b(daily briefing|morning briefing|brief me|my schedule|overall briefing)\b/.test(t);
 }
 
 function isConversationRecallRequest(text) {
@@ -4069,145 +4054,6 @@ function loadSavedEmail() {
         return localStorage.getItem('jarvis_user_email') || '';
     } catch (e) {
         return '';
-    }
-}
-
-function formatAgendaTimeHint(value) {
-    const text = String(value || '').trim();
-    if (!text) return '';
-    const m = text.match(/\b([01]?\d|2[0-3])[:.]([0-5]\d)\b/);
-    if (!m) return text;
-    const hours = Number(m[1]);
-    const minutes = m[2];
-    const suffix = hours >= 12 ? 'PM' : 'AM';
-    const normalizedHours = ((hours + 11) % 12) + 1;
-    return `${normalizedHours}:${minutes} ${suffix}`;
-}
-
-function collectAgendaItemsForToday() {
-    const items = [];
-    const todayLocal = new Date().toLocaleDateString();
-
-    if (commuteProfile?.office) {
-        items.push(`Commute to ${commuteProfile.office}${commuteProfile.arrivalTime ? ` by ${formatAgendaTimeHint(commuteProfile.arrivalTime)}` : ''}`);
-    }
-
-    if (tripState?.active && tripState?.destinationText) {
-        const etaText = tripState.etaMinutes != null ? ` (ETA ${Math.max(1, Math.round(tripState.etaMinutes))} min)` : '';
-        items.push(`Live trip to ${tripState.destinationText}${etaText}`);
-    } else if (tripState?.destinationText) {
-        items.push(`Planned trip destination: ${tripState.destinationText}`);
-    }
-
-    const keywordPattern = /\b(meeting|call|appointment|agenda|schedule|event|deadline|reminder|task|doctor|interview)\b/i;
-    const todayHistory = Array.isArray(conversationHistory)
-        ? conversationHistory.filter(entry => String(entry?.date || '') === todayLocal)
-        : [];
-
-    for (const entry of todayHistory.slice(-16)) {
-        const userLine = String(entry?.user || '').trim();
-        if (!userLine || !keywordPattern.test(userLine)) continue;
-        const cleaned = userLine.replace(/\s+/g, ' ').slice(0, 120);
-        items.push(cleaned);
-        if (items.length >= 8) break;
-    }
-
-    return Array.from(new Set(items)).slice(0, 8);
-}
-
-function openEmailDraft(toEmail, subject, bodyText) {
-    const safeTo = encodeURIComponent(String(toEmail || '').trim());
-    const safeSubject = encodeURIComponent(String(subject || '').trim());
-    const safeBody = encodeURIComponent(String(bodyText || '').trim());
-    window.location.href = `mailto:${safeTo}?subject=${safeSubject}&body=${safeBody}`;
-}
-
-async function handleAgendaTodayAgent(userText = '') {
-    showThinkingIndicator('Preparing your daily briefing...');
-    try {
-    const agendaItems = collectAgendaItemsForToday();
-    const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-    const summaryLines = agendaItems.length
-        ? agendaItems.map((item, index) => `${index + 1}. ${item}`)
-        : ['No specific agenda items found in your saved context yet.'];
-
-    let weatherContext = 'Weather data not currently loaded.';
-    if (weather && weather.current) {
-        const celsius = Math.round(weather.current.temperature_2m);
-        const fahrenheit = Math.round((celsius * 9/5) + 32);
-        weatherContext = `Current temperature is ${fahrenheit}°F (${celsius}°C).`;
-    }
-
-    let commuteContext = 'Not configured.';
-    if (commuteProfile && commuteProfile.office) {
-        commuteContext = `Home: ${commuteProfile.home || 'Unknown'}, Office: ${commuteProfile.office}, Arrive by: ${commuteProfile.arrivalTime || '09:00'}, Mode: ${commuteProfile.mode}.`;
-    }
-
-    let newsContext = 'Could not fetch latest news.';
-    try {
-        const newsRes = await fetch('/api/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: 'top news headlines today US World', maxResults: 4 })
-        });
-        if (newsRes.ok) {
-            const newsData = await newsRes.json();
-            const results = Array.isArray(newsData?.results) ? newsData.results : [];
-            if (results.length > 0) {
-                newsContext = results.map(r => `- ${r.title}`).join('\n');
-            }
-        }
-    } catch(e) {}
-
-    const prompt = `You are JARVIS, providing a morning/daily briefing to the user.
-
-Date: ${dateLabel}
-Weather: ${weatherContext}
-Commute: ${commuteContext}
-Agenda:
-${summaryLines.join('\n')}
-Top News Headlines:
-${newsContext}
-
-Write a natural, conversational daily briefing. Start with a warm greeting. Mention the weather, summarize their schedule/commute, and give a quick 1-2 sentence wrap-up of the top news. Keep it under 6-8 sentences. Make it sound like an AI assistant briefing its boss. Do not use asterisks or markdown, as it will be spoken out loud.`;
-
-    const response = await fetch('/api/chat-groq', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ systemPrompt: 'You are JARVIS. Give a concise, professional daily briefing.', message: prompt })
-    });
-
-    let responseText = `Your agenda for ${dateLabel}:\n${summaryLines.join('\n')}`;
-    if (response.ok) {
-        const data = await response.json();
-        if (data.response || data.text) {
-            responseText = String(data.response || data.text).trim();
-        }
-    }
-
-    addModelAssistantMessage(responseText, 'Daily Briefing');
-    speak(responseText);
-    saveToHistory(userText || 'daily briefing', responseText);
-
-    const savedEmail = loadSavedEmail();
-    if (!savedEmail) {
-        setTimeout(() => {
-            addChatMessage('I can email this briefing too. Save your email once using any "Email this ..." button, then ask again.', false, false);
-        }, 2000);
-        return;
-    }
-
-    const emailBody = `Hi,\n\nHere is your daily briefing for ${dateLabel}:\n\n${responseText}\n\nSent via JARVIS.`;
-    setTimeout(() => {
-        openEmailDraft(savedEmail, `Daily Briefing - ${dateLabel}`, emailBody);
-        showTemporaryMessage(`Preparing briefing email for ${savedEmail}`);
-    }, 3500);
-    } catch (error) {
-        const fallback = "I encountered an error compiling your daily briefing.";
-        addChatMessage(fallback, false);
-        speak(fallback);
-    } finally {
-        hideThinkingIndicator();
     }
 }
 
@@ -6142,23 +5988,6 @@ async function handleNameCorrection(text) {
             'hindi': { code: 'hi', name: 'Hindi', nativeName: 'Hindi', voiceLang: 'hi-IN' }
         };
 
-        function checkAndTriggerMorningBriefing() {
-            const now = new Date();
-            const hour = now.getHours();
-            
-            if (hour >= 5 && hour < 12) {
-                const todayStr = now.toLocaleDateString();
-                const lastBriefingDate = localStorage.getItem('jarvis_last_morning_briefing');
-                
-                if (lastBriefingDate !== todayStr) {
-                    localStorage.setItem('jarvis_last_morning_briefing', todayStr);
-                    setTimeout(() => handleAgendaTodayAgent('daily briefing'), 1500);
-                    return true;
-                }
-            }
-            return false;
-        }
-
         window.onload = async () => {
             // Ensure no queued/leftover speech survives a refresh.
             stopAllSpeechPlayback();
@@ -6191,19 +6020,16 @@ async function handleNameCorrection(text) {
             const chatContainer = document.getElementById('chat-container');
             const hasRenderedMessages = !!chatContainer?.querySelector('[data-role]');
             if (!hasRenderedMessages) {
-                const triggeredBriefing = checkAndTriggerMorningBriefing();
-                if (!triggeredBriefing) {
-                    const welcomeOptions = [
-                        'Hi! How can I help today?',
-                        'Hello! How can I help today?',
-                        'Hola, amigo! How can I help today?',
-                        'Vanakkam! How can I help today?',
-                        'Hey there! How can I help today?'
-                    ];
-                    const welcomeMessage = welcomeOptions[Math.floor(Math.random() * welcomeOptions.length)];
-                    addInitialGreetingMessage(welcomeMessage);
-                    speak(welcomeMessage);
-                }
+                const welcomeOptions = [
+                    'Hi! How can I help today?',
+                    'Hello! How can I help today?',
+                    'Hola, amigo! How can I help today?',
+                    'Vanakkam! How can I help today?',
+                    'Hey there! How can I help today?'
+                ];
+                const welcomeMessage = welcomeOptions[Math.floor(Math.random() * welcomeOptions.length)];
+                addInitialGreetingMessage(welcomeMessage);
+                speak(welcomeMessage);
             }
             
         };
@@ -14697,11 +14523,6 @@ Quick recap: ...
 
             if (isCalendarSyncRequest(cleanText)) {
                 await handleCalendarSync(cleanText);
-                return;
-            }
-
-            if (isAgendaTodayRequest(cleanText)) {
-                await handleAgendaTodayAgent(text);
                 return;
             }
 
