@@ -3349,7 +3349,10 @@ async function handleNameCorrection(text) {
             if (converseMode) {
                 btn.classList.add('active-converse', 'bg-purple-600', 'text-white');
                 visualizer.classList.remove('hidden-wave');
-                startConverseSession();
+                // Only starts when explicitly toggled by user
+                if (arguments.length > 0 || btn === document.activeElement || btn.contains(document.activeElement)) {
+                    startConverseSession();
+                }
             } else {
                 btn.classList.remove('active-converse', 'bg-purple-600', 'text-white');
                 visualizer.classList.add('hidden-wave');
@@ -3387,6 +3390,24 @@ async function handleNameCorrection(text) {
             if (converseRecognition) converseRecognition.stop();
             stopSpeaking();
         }
+
+        // Jump to latest functionality
+        function jumpToLatest() {
+            const chatContainer = document.getElementById('chat-container');
+            if (chatContainer) {
+                chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+                document.getElementById('jump-to-latest-btn').classList.add('hidden');
+            }
+        }
+
+        // Monitor scroll to show/hide jump button
+        document.getElementById('chat-container').addEventListener('scroll', function(e) {
+            const btn = document.getElementById('jump-to-latest-btn');
+            const threshold = 200;
+            const isNearBottom = e.target.scrollHeight - e.target.scrollTop - e.target.clientHeight < threshold;
+            if (isNearBottom) btn.classList.add('hidden');
+            else btn.classList.remove('hidden');
+        });
 
         // Update visualizer state based on TTS
         function updateTTSVisualizer(isSpeaking) {
