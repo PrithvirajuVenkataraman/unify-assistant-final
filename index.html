@@ -6,7 +6,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>JARVIS - Just A Rather Very Intelligent System</title>
+    <title>AI Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.responsivevoice.org/responsivevoice.js"></script>
     <link rel="stylesheet" href="styles.css">
@@ -25,9 +25,9 @@
             <div class="header-enhanced mb-6">
                 <div class="flex items-center gap-4">
                     <div>
-                        <h1 id="title" class="text-4xl font-black jarvis-title">JARVIS</h1>
+                        <h1 id="title" class="text-4xl font-black jarvis-title">Assistant</h1>
                         <div class="flex items-center gap-3 mt-1">
-                            <p id="subtitle" class="text-sm text-gray-500 font-medium">AI Personal Assistant</p>
+                            <p id="subtitle" class="text-sm text-gray-500 font-medium">Voice, text, and vision</p>
                         </div>
                     </div>
                 </div>
@@ -35,11 +35,11 @@
                 <!-- Theme Switch -->
                 <div class="flex items-center gap-3">
                     <!-- Light Switch -->
-                    <div class="light-switch-container" onclick="toggleDarkMode()">
+                    <button type="button" class="light-switch-container" onclick="toggleDarkMode()" title="Toggle light/dark mode" aria-label="Toggle light and dark mode" aria-pressed="false">
                         <div id="light-switch" class="light-switch on">
                             <div class="switch-toggle"></div>
                         </div>
-                    </div>
+                    </button>
                 </div>
             </div>
 
@@ -156,12 +156,12 @@
                 <div class="typing-dot"></div>
                 <div class="typing-dot"></div>
             </div>
-            <div class="loading-text text-gray-700 dark:text-gray-200 font-medium" id="loading-text">JARVIS is thinking...</div>
+            <div class="loading-text text-gray-700 dark:text-gray-200 font-medium" id="loading-text">Assistant is thinking...</div>
         </div>
     </div>
 
     <!-- ChatGPT-style Input at Bottom - Enhanced -->
-    <div id="input-bar-container" class="sticky bottom-0 left-0 right-0 floating-input-bar z-40 bg-white dark:bg-slate-900 pb-4">
+    <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 floating-input-bar z-40 bg-white dark:bg-slate-900 pb-4">
         <div class="max-w-5xl mx-auto px-3 py-1">
             <div class="max-w-xl sm:max-w-3xl mx-auto">
             <div id="input-bar-inner" class="flex items-center gap-1.5 modern-input px-2 py-1">
@@ -206,7 +206,7 @@
                 <input
                     type="text"
                     id="text-input"
-                    placeholder="Ask JARVIS anything..."
+                    placeholder="Ask anything..."
                     class="flex-1 bg-transparent outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm font-medium"
                     onkeydown="if(event.key === 'Enter'){ event.preventDefault(); sendTextInput(); }"
                     oninput="toggleSendButton()"
@@ -249,12 +249,12 @@
             </div>
             
             </div>
-            <p id="footer-disclaimer" class="mt-2 text-xs text-gray-400 font-medium text-center">JARVIS can make mistakes. Check important info.</p>
+            <p id="footer-disclaimer" class="mt-2 text-xs text-gray-400 font-medium text-center">AI can make mistakes. Check important info.</p>
             <!-- Footer controls -->
             <div class="mt-2 space-y-2">
                 <div id="ai-thinking-indicator" class="hidden flex justify-center" aria-live="polite">
                     <div class="inline-flex items-center gap-2">
-                        <span id="ai-thinking-text" class="text-xs font-semibold text-purple-600 dark:text-purple-300">JARVIS is thinking</span>
+                        <span id="ai-thinking-text" class="text-xs font-semibold text-purple-600 dark:text-purple-300">Assistant is thinking</span>
                         <span class="thinking-dots">
                             <span class="thinking-dot"></span>
                             <span class="thinking-dot"></span>
@@ -282,7 +282,7 @@
             <div class="p-6 space-y-4">
                 <div class="flex flex-col gap-2">
                     <label class="text-xs font-bold text-slate-400 uppercase tracking-wider">Optional Instruction (e.g. "Translate to Tamil")</label>
-                    <input type="text" id="ocr-comment-input" placeholder="What should JARVIS do with this image?" 
+                    <input type="text" id="ocr-comment-input" placeholder="What should I do with this image?" 
                            class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
                 </div>
                 
@@ -296,6 +296,8 @@
             </div>
         </div>
     </div>
+    <video id="continuous-vision-video" class="hidden" autoplay playsinline muted></video>
+    <canvas id="continuous-vision-canvas" class="hidden"></canvas>
 
     <div id="safety-panel-backdrop" class="side-panel-backdrop hidden" onclick="closeSafetyPanel()"></div>
     <aside id="safety-panel" class="side-panel hidden" aria-hidden="true" aria-label="Safety panel">
@@ -2162,7 +2164,7 @@ function getRecentMemoryHint() {
     return blocks.join('\n');
 }
 
-async function callAIWithTyping(message, loadingMessage = 'JARVIS is thinking...') {
+async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking...') {
     
     showThinkingIndicator(loadingMessage);
     try {
@@ -3306,7 +3308,7 @@ async function handleNameCorrection(text) {
         };
         let micPermissionGranted = false;
         let isPassiveListening = false;
-        let passiveWakeWordEnabled = true;
+        let passiveWakeWordEnabled = false;
         let activeWakeSession = false;
         let currentSpeechContext = 'none'; // 'wake_ack', 'normal_answer', 'followup_ask', 'sleep_ack'
         let awaitingFollowUpResponse = false;
@@ -3407,7 +3409,6 @@ async function handleNameCorrection(text) {
                 stream.getTracks().forEach(track => track.stop());
                 micPermissionGranted = true;
                 initializeSpeechRecognition();
-                startPassiveListening();
             } catch (error) {
                 micPermissionGranted = false;
                 await deliverApiReply('microphone_permission_denied', {
@@ -3518,11 +3519,14 @@ async function handleNameCorrection(text) {
             const subtitle = document.getElementById('subtitle');
             const chatContainer = document.getElementById('chat-container');
             const lightSwitch = document.getElementById('light-switch');
+            const lightSwitchContainer = document.querySelector('.light-switch-container');
 
             const inputBarContainer = document.getElementById('input-bar-container');
             const inputBarInner = document.getElementById('input-bar-inner');
             const textInput = document.getElementById('text-input');
             const footerDisclaimer = document.getElementById('footer-disclaimer');
+
+            lightSwitchContainer?.setAttribute('aria-pressed', darkMode ? 'true' : 'false');
 
             if (darkMode) {
                 // Dark mode
@@ -4207,7 +4211,8 @@ async function handleNameCorrection(text) {
                 speak(greet, true);
             } else {
                 stopListening();
-                startPassiveListening();
+                passiveWakeWordEnabled = false;
+                isPassiveListening = false;
             }
         }
 
@@ -6035,6 +6040,7 @@ async function handleMarketLookup(text) {
         }
 
         function startPassiveListening() {
+            if (!passiveWakeWordEnabled) return;
             if (!continuousRecognition) return;
             passiveWakeWordEnabled = true;
             isPassiveListening = true;
@@ -6081,6 +6087,22 @@ async function handleMarketLookup(text) {
             if (confidence > 0 && confidence < 0.42) return false;
             if (isLikelyTtsEcho(lower)) return false;
             return true;
+        }
+
+        function shouldIgnoreConverseNoise(text, confidence, isFinal) {
+            const t = String(text || '').trim().toLowerCase();
+            if (!isFinal) return false;
+            if (!t) return true;
+            if (isLikelyTtsEcho(t)) return true;
+
+            const allowedShort = /^(yes|yeah|yep|no|nope|stop|wait|hold on|continue|next)$/;
+            if (allowedShort.test(t)) return false;
+
+            const words = t.split(/\s+/).filter(Boolean);
+            if (/^(uh|um|ah|eh|hmm|hm|mm+|noise|background)$/.test(t)) return true;
+            if (confidence > 0 && confidence < 0.55 && words.length < 4) return true;
+            if (words.length < 2 && t.length < 8) return true;
+            return false;
         }
 
         async function handleFinalTranscript(finalTranscript) {
@@ -6299,6 +6321,9 @@ async function handleMarketLookup(text) {
                         stopSpeaking();
                     }
                     if (result.isFinal) {
+                        if (converseMode && shouldIgnoreConverseNoise(transcript, confidence, result.isFinal)) {
+                            return;
+                        }
                         queueConverseFinalTranscript(transcript);
                     }
                     return;
@@ -11211,6 +11236,18 @@ ${snippets}`
         async function processCommand(text) {
             const lower = text.toLowerCase();
 
+            if (isContinuousVisionQuestion(lower)) {
+                if (!isContinuousVisionActive) {
+                    const msg = 'Vision mode is off. Tap the vision icon first, then ask again.';
+                    addChatMessage(msg, false);
+                    speak(msg);
+                    saveToHistory(text, msg);
+                    return;
+                }
+                await handleContinuousVisionQuery(text);
+                return;
+            }
+
             if (isRoutingRegressionCommand(text)) {
                 const report = formatRoutingRegressionReport(runRoutingRegressionSuite());
                 addChatMessage(report, false);
@@ -14848,10 +14885,15 @@ let isContinuousVisionActive = false;
 async function toggleContinuousVision() {
     const videoEl = document.getElementById('continuous-vision-video');
     const btn = document.getElementById('vision-toggle-btn');
+    if (!videoEl) {
+        showError('Vision preview element is missing from the page.');
+        return;
+    }
     if (isContinuousVisionActive) {
         if (continuousVisionStream) {
             continuousVisionStream.getTracks().forEach(t => t.stop());
         }
+        videoEl.srcObject = null;
         isContinuousVisionActive = false;
         btn.classList.remove('bg-blue-100', 'text-blue-600', 'dark:bg-blue-900/30');
         showTemporaryMessage('Continuous Vision deactivated.');
@@ -14859,6 +14901,7 @@ async function toggleContinuousVision() {
         try {
             continuousVisionStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
             videoEl.srcObject = continuousVisionStream;
+            videoEl.muted = true;
             isContinuousVisionActive = true;
             btn.classList.add('bg-blue-100', 'text-blue-600', 'dark:bg-blue-900/30');
             showTemporaryMessage('Continuous Vision activated! Ask "What do you see?" or "What am I looking at?"');
@@ -14913,6 +14956,11 @@ async function handleContinuousVisionQuery(text) {
     } finally {
         hideThinkingIndicator();
     }
+}
+
+function isContinuousVisionQuestion(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(what do you see|what am i looking at|what am i seeing|describe what you see|describe this|read this image|analyze this image|what's in front of me|what is in front of me)\b/.test(t);
 }
 
 // ============ MULTI-AGENT PERSONA DEBATE ============
