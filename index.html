@@ -23,15 +23,13 @@
         <div class="app-shell max-w-5xl mx-auto relative z-10 p-6">
             <!-- Header - Enhanced -->
             <div class="header-enhanced mb-6">
-                <div class="flex items-center gap-3">
-                    <!-- Light Switch -->
-                    <button type="button" class="light-switch-container" onclick="toggleDarkMode()" title="Toggle light/dark mode" aria-label="Toggle light and dark mode" aria-pressed="false">
-                        <div id="light-switch" class="light-switch on">
-                            <div class="switch-toggle"></div>
-                        </div>
-                    </button>
-                </div>
-                <h1 id="title" class="hidden"></h1>
+                <h1 id="title" class="jarvis-top-title">JARVIS</h1>
+                <!-- Light Switch -->
+                <button type="button" class="light-switch-container" onclick="toggleDarkMode()" title="Toggle light/dark mode" aria-label="Toggle light and dark mode" aria-pressed="false">
+                    <div id="light-switch" class="light-switch on">
+                        <div class="switch-toggle"></div>
+                    </div>
+                </button>
                 <p id="subtitle" class="hidden"></p>
             </div>
 
@@ -126,7 +124,7 @@
 
                     <!-- Right Column: Chat -->
                     <!-- Mobile UI/UX Fix: Ensure chat panel height is responsive -->
-                    <div id="chat-panel" class="w-full order-1 relative flex flex-col min-h-[calc(100vh-200px)] sm:min-h-[calc(100vh-160px)]">
+                    <div id="chat-panel" class="w-full order-1 relative flex flex-col">
                         <!-- Chat History - Claude/ChatGPT style compact view -->
                         <div id="chat-container" class="bg-gray-50/80 dark:bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height">
                             <!-- Welcome message -->
@@ -3529,8 +3527,8 @@ async function handleNameCorrection(text) {
                 body.classList.add('bg-black', 'text-white');
                 body.classList.remove('bg-white', 'text-black');
                 card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
-                title.className = 'text-4xl font-black jarvis-title';
-                subtitle.className = 'text-sm text-gray-400 font-medium';
+                title.className = 'jarvis-top-title';
+                subtitle.className = 'hidden';
                 if (chatContainer) chatContainer.className = 'bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height';
 
                 if (inputBarContainer) {
@@ -3556,8 +3554,8 @@ async function handleNameCorrection(text) {
                     body.classList.remove('bg-black', 'text-white');
 
                     card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
-                    title.className = 'text-4xl font-black jarvis-title';
-                    subtitle.className = 'text-sm text-gray-500 font-medium';
+                    title.className = 'jarvis-top-title';
+                    subtitle.className = 'hidden';
                     if (chatContainer) chatContainer.className = 'bg-gray-50/80 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height';
 
                     if (inputBarContainer) {
