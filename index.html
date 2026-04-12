@@ -1842,56 +1842,38 @@ function speakInLanguage(text, langCode) {
         const voice = voiceMap[langCode];
 
         if (voice) {
-            // Check if voice is available
-            const availableVoices = responsiveVoice.getVoices();
-            const voiceExists = availableVoices.some(v => v.name === voice);
-
-            if (voiceExists) {
-                responsiveVoice.speak(text, voice, {
-                    pitch: 1,
-                    rate: 0.85,
-                    volume: 1,
-                });
-                return;
+                if (responsiveVoice.voiceSupport()) {
+                    responsiveVoice.speak(text, voice, {
+                        pitch: 1.05,
+                        rate: 0.95,
+                        volume: 1,
+                    });
+                    return;
+                }
             }
-        }
 
-        // Fallback: Use Hindi Female as it's widely supported
-        responsiveVoice.speak(text, 'Hindi Female', {
-            pitch: 1,
-            rate: 0.85,
+        // Default Human-like English Voice
+        responsiveVoice.speak(text, "UK English Female", {
+            pitch: 1.05,
+            rate: 0.95,
             volume: 1
         });
     } else {
-        // Fallback to Web Speech API
+        // Fallback to Web Speech API with better parameters
         const synth = window.speechSynthesis;
-
-        // Wait for voices to load
         const speakWithVoices = () => {
             const utterance = new SpeechSynthesisUtterance(text);
             const voices = synth.getVoices();
-
-            // Try to find a voice for the language
-            const langVoice = voices.find(v =>
-                v.lang === langCode ||
-                v.lang.startsWith(langCode.split('-')[0])
-            );
-
-            if (langVoice) {
-                utterance.voice = langVoice;
-            }
-            utterance.lang = langCode;
-            utterance.rate = 0.85;
-            utterance.volume = 1;
-
+            const preferredVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Natural')) || voices[0];
+            
+            utterance.voice = preferredVoice;
+            utterance.lang = langCode || 'en-US';
+            utterance.rate = 0.9;
+            utterance.pitch = 1.1;
             synth.speak(utterance);
         };
-
-        if (synth.getVoices().length > 0) {
-            speakWithVoices();
-        } else {
-            synth.onvoiceschanged = speakWithVoices;
-        }
+        if (synth.getVoices().length > 0) speakWithVoices();
+        else synth.onvoiceschanged = speakWithVoices;
     }
 }
 
