@@ -226,6 +226,10 @@
                             <line x1="12" y1="19" x2="12" y2="22"></line>
                             <line x1="8" y1="22" x2="16" y2="22"></line>
                         </svg>
+                        <!-- Sine Wave Visualizer -->
+                        <div id="tts-visualizer" class="tts-wave-container hidden-wave not-speaking">
+                            <div class="tts-wave-line"></div>
+                        </div>
                     </button>
                     <button
                         id="converse-mode-btn"
@@ -243,6 +247,7 @@
                     </button>
                 </div>
             </div>
+            
             </div>
             <p id="footer-disclaimer" class="mt-2 text-xs text-gray-400 font-medium text-center">JARVIS can make mistakes. Check important info.</p>
             <!-- Footer controls -->
@@ -3247,6 +3252,7 @@ async function handleNameCorrection(text) {
         let medicalMode = false;
         let converseMode = false;
         let lastUploadedDocument = null;
+        let converseRecognition = null;
         let inputHistory = [];
         let inputHistoryIndex = -1;
         let songMoodGameState = null;
@@ -3334,6 +3340,78 @@ async function handleNameCorrection(text) {
                 }, { speak: false });
             }
         }
+
+        function toggleConverseMode() {
+            converseMode = !converseMode;
+            const btn = document.getElementById('converse-mode-btn');
+            const visualizer = document.getElementById('tts-visualizer');
+            
+            if (converseMode) {
+                btn.classList.add('active-converse', 'bg-purple-600', 'text-white');
+                visualizer.classList.remove('hidden-wave');
+                startConverseSession();
+            } else {
+                btn.classList.remove('active-converse', 'bg-purple-600', 'text-white');
+                visualizer.classList.add('hidden-wave');
+                stopConverseSession();
+            }
+        }
+
+        function startConverseSession() {
+            const welcome = getConverseWelcomeLine();
+            addChatMessage(welcome, false);
+            speak(welcome);
+            
+            if (!converseRecognition) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                converseRecognition = new SpeechRecognition();
+                converseRecognition.continuous = true;
+                converseRecognition.interimResults = false;
+                
+                converseRecognition.onresult = (event) => {
+                    const text = event.results[event.results.length - 1][0].transcript.trim();
+                    if (text) {
+                        document.getElementById('text-input').value = text;
+                        sendTextInput();
+                    }
+                };
+                
+                converseRecognition.onend = () => {
+                    if (converseMode) converseRecognition.start();
+                };
+            }
+            try { converseRecognition.start(); } catch(e) {}
+        }
+
+        function stopConverseSession() {
+            if (converseRecognition) converseRecognition.stop();
+            stopSpeaking();
+        }
+
+        // Update visualizer state based on TTS
+        function updateTTSVisualizer(isSpeaking) {
+            const visualizer = document.getElementById('tts-visualizer');
+            if (!visualizer) return;
+            if (isSpeaking) {
+                visualizer.classList.replace('not-speaking', 'speaking');
+            } else {
+                visualizer.classList.replace('speaking', 'not-speaking');
+            }
+        }
+
+        // Override speak to trigger visualizer
+        const originalSpeak = window.speak;
+        window.speak = function(text) {
+            updateTTSVisualizer(true);
+            if (typeof responsiveVoice !== 'undefined') {
+                responsiveVoice.speak(text, "UK English Female", {
+                    onend: () => updateTTSVisualizer(false)
+                });
+            } else {
+                // Fallback logic...
+                updateTTSVisualizer(false);
+            }
+        };
 
         
         function toggleDarkMode() {
