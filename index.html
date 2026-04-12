@@ -161,7 +161,7 @@
     </div>
 
     <!-- ChatGPT-style Input at Bottom - Enhanced -->
-    <div id="input-bar-container" class="fixed bottom-0 left-0 right-0 floating-input-bar z-40">
+    <div id="input-bar-container" class="sticky bottom-0 left-0 right-0 floating-input-bar z-40 bg-white dark:bg-slate-900 pb-4">
         <div class="max-w-5xl mx-auto px-3 py-1">
             <div class="max-w-xl sm:max-w-3xl mx-auto">
             <div id="input-bar-inner" class="flex items-center gap-1.5 modern-input px-2 py-1">
@@ -1871,39 +1871,39 @@ function speakInLanguage(text, langCode) {
         const voice = voiceMap[langCode];
 
         if (voice) {
-                if (responsiveVoice.voiceSupport()) {
-                    responsiveVoice.speak(text, voice, {
-                        pitch: 1.05,
-                        rate: 0.95,
-                        volume: 1,
-                    });
-                    return;
-                }
-            }
+        if (responsiveVoice.voiceSupport()) {
+            responsiveVoice.speak(text, voice, {
+                pitch: 1.05,
+                rate: 0.95,
+                volume: 1,
+            });
+            return;
+        }
+        }
 
         // Default Human-like English Voice
         responsiveVoice.speak(text, "UK English Female", {
             pitch: 1.05,
             rate: 0.95,
             volume: 1
-        });
+    });
     } else {
-        // Fallback to Web Speech API with better parameters
-        const synth = window.speechSynthesis;
-        const speakWithVoices = () => {
-            const utterance = new SpeechSynthesisUtterance(text);
-            const voices = synth.getVoices();
-            const preferredVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Natural')) || voices[0];
-            
-            utterance.voice = preferredVoice;
-            utterance.lang = langCode || 'en-US';
-            utterance.rate = 0.9;
-            utterance.pitch = 1.1;
-            synth.speak(utterance);
-        };
-        if (synth.getVoices().length > 0) speakWithVoices();
-        else synth.onvoiceschanged = speakWithVoices;
-    }
+    // Fallback to Web Speech API with better parameters
+    const synth = window.speechSynthesis;
+    const speakWithVoices = () => {
+        const utterance = new SpeechSynthesisUtterance(text);
+        const voices = synth.getVoices();
+        const preferredVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Natural')) || voices[0];
+        
+        utterance.voice = preferredVoice;
+        utterance.lang = langCode || 'en-US';
+        utterance.rate = 0.9;
+        utterance.pitch = 1.1;
+        synth.speak(utterance);
+    };
+    if (synth.getVoices().length > 0) speakWithVoices();
+    else synth.onvoiceschanged = speakWithVoices;
+}
 }
 
 // ============ END TRANSLATOR MODE ============
@@ -2162,11 +2162,66 @@ function getRecentMemoryHint() {
     return blocks.join('\n');
 }
 
-async function callAIWithTyping(message, loadingMessage = 'Thinking...') {
+async function callAIWithTyping(message, loadingMessage = 'JARVIS is thinking...') {
     
     showThinkingIndicator(loadingMessage);
     try {
-        const responsePromise = askGeminiAI(message);
+        const responsePromise = processUserQuery(message);
+async function processUserQuery(text) {
+    const t = String(text || '').trim();
+    if (!t) return;
+
+    // 1. Check for Live Search / News Intent
+    if (isLiveRetrievalQuery(t) || isHeadlineListQuery(t)) {
+        await fetchAndDisplayNews(t);
+        return { intent: 'news' };
+    }
+
+    // 2. Check for Universal Explainer (Wikipedia/Reference)
+    if (isUniversalExplainerRequest(t)) {
+        const handled = await handleUniversalExplainerQuery(t);
+        if (handled) return { intent: 'explainer' };
+    }
+
+    // 3. Check for Weather
+    if (isWeatherIntentText(t)) {
+        // Logic to trigger weather card
+        return { intent: 'weather' };
+    }
+
+    // 4. Default to LLM Chat
+    return await askGeminiAI(t);
+}
+
+function isCurrentInfoQuery(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(current|latest|today|now|live|status|update)\b/.test(t);
+}
+
+function hasExplicitFreshnessLanguage(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(news|headlines|breaking|recent events|what happened today)\b/.test(t);
+}
+
+function scoreSourcePolicy(url, type) {
+    if (!url) return 0;
+    const trusted = ['reuters.com', 'apnews.com', 'bbc.com', 'nytimes.com', 'theguardian.com', 'wikipedia.org'];
+    const isTrusted = trusted.some(domain => url.includes(domain));
+    if (type === 'general') return isTrusted ? 10 : 1;
+    return isTrusted ? 5 : 0;
+}
+
+function beginAbortableRequest() {
+    return new AbortController();
+}
+
+function clearActiveRequest(controller) {
+    // Cleanup logic
+}
+
+function isAbortError(error) {
+    return error.name === 'AbortError';
+}
         await Promise.all([
             responsePromise,
             new Promise(resolve => setTimeout(resolve, 2000))
