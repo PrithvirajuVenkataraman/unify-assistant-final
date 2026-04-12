@@ -23,16 +23,6 @@
         <div class="app-shell max-w-5xl mx-auto relative z-10 p-6">
             <!-- Header - Enhanced -->
             <div class="header-enhanced mb-6">
-                <div class="flex items-center gap-4">
-                    <div>
-                        <h1 id="title" class="text-4xl font-black jarvis-title">Assistant</h1>
-                        <div class="flex items-center gap-3 mt-1">
-                            <p id="subtitle" class="text-sm text-gray-500 font-medium">Voice, text, and vision</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Theme Switch -->
                 <div class="flex items-center gap-3">
                     <!-- Light Switch -->
                     <button type="button" class="light-switch-container" onclick="toggleDarkMode()" title="Toggle light/dark mode" aria-label="Toggle light and dark mode" aria-pressed="false">
@@ -41,6 +31,8 @@
                         </div>
                     </button>
                 </div>
+                <h1 id="title" class="hidden"></h1>
+                <p id="subtitle" class="hidden"></p>
             </div>
 
             <!-- Main Content Area -->
