@@ -2313,3 +2313,21 @@ body.dark .offline-banner {
     background: #b91c1c; /* A darker red for dark mode */
     color: #ffffff;
 }
+
+/* Accessibility + layout stability overrides */
+.light-switch-container {
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+}
+
+#input-bar-container {
+    position: fixed !important;
+    bottom: 0;
+}
+
+.header-enhanced {
+    padding-top: 8px !important;
+    padding-bottom: 10px !important;
+    margin-bottom: 6px !important;
+}
