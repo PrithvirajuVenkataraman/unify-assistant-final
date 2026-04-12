@@ -2327,7 +2327,20 @@ body.dark .offline-banner {
 }
 
 .header-enhanced {
-    padding-top: 8px !important;
-    padding-bottom: 10px !important;
-    margin-bottom: 6px !important;
+    justify-content: flex-end !important;
+    padding-top: 0 !important;
+    padding-bottom: 2px !important;
+    margin-bottom: 2px !important;
+    min-height: 0 !important;
+    border-bottom: none !important;
+}
+
+.app-shell {
+    padding-top: calc(4px + env(safe-area-inset-top)) !important;
+}
+
+@media (max-width: 768px) {
+    .app-shell {
+        padding-top: calc(2px + env(safe-area-inset-top)) !important;
+    }
 }
