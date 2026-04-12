@@ -1832,6 +1832,7 @@ body {
 :root {
     --app-max-width: 1180px;
     --app-gutter-x: 20px;
+    --input-bar-safe-height: 128px;
 }
 
 .app-shell {
@@ -1912,6 +1913,8 @@ body {
     width: 100%;
     min-width: 0;
     min-height: 0;
+    max-height: calc(100dvh - var(--input-bar-safe-height));
+    overflow: hidden;
 }
 
 .chat-panel-height,
@@ -1920,8 +1923,8 @@ body {
     width: 100% !important;
     min-width: 0 !important;
     min-height: 0 !important;
-    height: 100% !important;
-    max-height: none !important;
+    height: auto !important;
+    max-height: calc(100dvh - var(--input-bar-safe-height) - 8px) !important;
 }
 
 #chat-container {
@@ -1984,6 +1987,7 @@ body {
 @media (max-width: 768px) {
     :root {
         --app-gutter-x: 10px;
+        --input-bar-safe-height: 148px;
     }
 
     .app-shell {
@@ -2319,6 +2323,10 @@ body.dark .offline-banner {
     appearance: none;
     -webkit-appearance: none;
     cursor: pointer;
+    position: absolute !important;
+    right: 0 !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
 }
 
 #input-bar-container {
@@ -2327,12 +2335,29 @@ body.dark .offline-banner {
 }
 
 .header-enhanced {
-    justify-content: flex-end !important;
-    padding-top: 0 !important;
-    padding-bottom: 2px !important;
-    margin-bottom: 2px !important;
+    position: relative !important;
+    justify-content: center !important;
+    align-items: center !important;
+    padding-top: 2px !important;
+    padding-bottom: 4px !important;
+    margin-bottom: 4px !important;
     min-height: 0 !important;
     border-bottom: none !important;
+}
+
+.jarvis-top-title {
+    margin: 0 !important;
+    text-align: center !important;
+    font-family: "Space Grotesk", "Inter", sans-serif !important;
+    font-size: clamp(1.5rem, 4.8vw, 2rem) !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.04em !important;
+    color: #e2e8f0 !important;
+    line-height: 1.1 !important;
+}
+
+body.light .jarvis-top-title {
+    color: #0f172a !important;
 }
 
 .app-shell {
