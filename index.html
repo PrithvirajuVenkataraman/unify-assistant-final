@@ -337,7 +337,7 @@
     };
 })();
 
-const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'}; 
+const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'};
 const SUPPORT_MODE_HINTS = {
     balanced: 'Be clear, practical, and warm. Keep a neutral supportive tone.',
     supportive: 'Use an empathetic and motivating tone while staying concrete and direct.',
@@ -1900,7 +1900,7 @@ function speakInLanguage(text, langCode) {
 
 // ============ END TRANSLATOR MODE ============
 
-let conversationContext = []; 
+let conversationContext = [];
 let lastDiscussedEntity = '';
 let activeConversationTopic = null;
 let conversationTopicTimeline = [];
@@ -2537,7 +2537,7 @@ Rules:
     }
 }
 
-function extractKnowledgeSubject(text) { 
+function extractKnowledgeSubject(text) {
     const raw = normalizeIntentTypos(String(text || '').trim());
     if (!raw) return '';
     const patterns = [
@@ -2706,7 +2706,7 @@ function maybeCaptureKnowledgeEntity(text) {
     lastDiscussedEntity = candidate;
 }
  
-async function buildSearchFallbackAnswer(userMessage) { 
+async function buildSearchFallbackAnswer(userMessage) {
     const resolvedMessage = resolveKnowledgeFollowupQuery(userMessage);
     const subject = normalizeKnowledgeSubject(extractKnowledgeSubject(resolvedMessage));
     const query = subject || String(resolvedMessage || '').trim();
@@ -2899,7 +2899,7 @@ async function resolveFinalAssistantAnswer(userMessage, answerText) {
     const strictApiFallback = await buildStrictApiKnowledgeFallback(userMessage);
     if (strictApiFallback) return strictApiFallback;
 
-    const directKnowledgeFallback = buildDirectKnowledgeFallback(userMessage);
+    const directKnowledgeFallback = await buildDirectKnowledgeFallback(userMessage);
     if (directKnowledgeFallback) return directKnowledgeFallback;
 
     return await buildUniversalSoftFallback(userMessage);
@@ -2912,7 +2912,8 @@ async function publishResolvedModelMessage(userMessage, answerText, options = {}
     const finalized = await resolveFinalAssistantAnswer(userMessage, answerText);
     const safeText = String(finalized || '').trim();
     if (!safeText) return false;
-    addModelAssistantMessage(safeText, label);
+    const readableText = formatAssistantTextForReadability(safeText);
+    addModelAssistantMessage(readableText, label);
     if (speechText) {
         speak(speechText);
     } else {
@@ -2955,7 +2956,8 @@ Rules:
         });
         if (!response.ok) return '';
         const result = await response.json();
-        return postProcessAssistantResponse(String(result?.response || result?.text || '').trim(), intent);
+        const processed = postProcessAssistantResponse(String(result?.response || result?.text || '').trim(), intent);
+        return formatAssistantTextForReadability(processed);
     } catch (error) {
         return '';
     }
@@ -2966,13 +2968,14 @@ async function deliverApiReply(intent, data = {}, options = {}) {
     const fallbackText = String(options?.fallbackText || '').trim();
     const finalText = reply || fallbackText;
     if (!finalText) return '';
+    const readableText = formatAssistantTextForReadability(finalText);
 
     if (options?.label) {
-        addModelAssistantMessage(finalText, options.label);
+        addModelAssistantMessage(readableText, options.label);
     } else if (options?.verifiedLabel) {
-        addVerifiedAssistantMessage(finalText, options.verifiedLabel);
+        addVerifiedAssistantMessage(readableText, options.verifiedLabel);
     } else {
-        addChatMessage(finalText, false);
+        addChatMessage(readableText, false);
     }
 
     if (options?.speak !== false) {
@@ -3051,7 +3054,7 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
     return text;
 }
 
-async function askGeminiAI(userMessage) { 
+async function askGeminiAI(userMessage) {
     let normalizedUserMessage = String(userMessage || '');
     const controller = beginAbortableRequest();
     const hadExistingThinkingIndicator = Boolean(document.getElementById('chat-thinking-indicator'));
@@ -3270,101 +3273,146 @@ async function handleNameCorrection(text) {
 }
 
         
-        let darkMode = false;
-        let autoSpeak = false; 
-        let recognition = null;
-        let continuousRecognition = null;
-        let wakeWordMode = false;
-        let commandMode = false;
-        let isListening = false; 
-        let listeningRequested = false;
-        let isVoiceTyping = false;
-        let voiceTypingRecognition = null;
-        let voiceTypingFinalText = '';
-        let voiceTypingInterimText = '';
-        let voiceTypingBaseText = '';
-        let voiceTypingCommitOnEnd = false;
-        let wakeWordCooldown = false; // Prevent double "Hey JARVIS" detection 
-        let lastWakeWordTime = 0; // Track when wake word was last triggered 
-        let lastWakeAckTime = 0; // Prevent duplicate wake acknowledgments from STT repeats 
-        let isAssistantSpeaking = false;
-        let synth = window.speechSynthesis; 
-        let weather = null;
-        let waitingForLocation = false;
-        let chatHistory = [];
-        let selectionHelperState = {
-            selectedText: '',
-            popoverEl: null
+        // Encapsulated Application State
+        const AppState = {
+            settings: {
+                darkMode: false,
+                autoSpeak: false,
+                noiseFilter: { enabled: false, level: 'medium' },
+                schoolMode: false,
+                medicalMode: false
+            },
+            user: {
+                name: null,
+                email: '',
+                memory: {},
+                commute: { home: '', office: '', arrivalTime: '09:00', mode: 'drive' },
+                safety: { womenSafetyMode: false, trustedContact: '', checkInMinutes: 30 }
+            },
+            voice: {
+                recognition: null,
+                continuousRecognition: null,
+                isListening: false,
+                isSpeaking: false,
+                wakeWordMode: false,
+                cooldown: false,
+                lastWakeTime: 0
+            },
+            conversation: {
+                history: [],
+                context: [],
+                activeTopic: null,
+                lastEntity: '',
+                mode: 'balanced' // balanced, supportive, debate
+            },
+            translator: {
+                active: false,
+                language: null
+            }
         };
-        let micPermissionGranted = false;
-        let isPassiveListening = false;
-        let passiveWakeWordEnabled = false;
-        let activeWakeSession = false;
-        let currentSpeechContext = 'none'; // 'wake_ack', 'normal_answer', 'followup_ask', 'sleep_ack'
-        let awaitingFollowUpResponse = false;
-        let followUpTimer = null;
-        
-        
-        let userName = null;
-        let waitingForName = false;
-        let memoryStore = {};
-        let lastBudgetPlan = null;
-        let lastVerifiedPlaces = null; 
-        let lastResolvedTravelLocation = null; 
-        let supportModeLock = 'balanced';
-        let supportConversationMode = false;
-        let responseLength = 'normal';
-        let responseFormat = 'paragraph';
-        let schoolMode = false;
-        let medicalMode = false;
-        let converseMode = false;
-        let lastUploadedDocument = null;
-        let converseRecognition = null;
-        let inputHistory = [];
-        let inputHistoryIndex = -1;
-        let songMoodGameState = null;
-        let autoScrollLocked = false;
-        let lockedScrollTop = 0;
-        let suppressScrollLockHandler = false;
-        let userInitiatedScroll = false;
-        let userScrollIntentTimer = null;
 
-        // Noise filter settings for public places
-        let noiseFilterEnabled = false;
-        let noiseFilterLevel = 'medium'; // 'low', 'medium', 'high'
-        let commuteProfile = {
-            home: '',
-            office: '',
-            arrivalTime: '09:00',
-            mode: 'drive'
-        };
-        let safetyProfile = {
-            womenSafetyMode: false,
-            trustedContact: '',
-            checkInMinutes: 30
-        };
+        // Legacy global aliases for compatibility with existing functions
+        // (Gradually refactor these out)
+        let darkMode = AppState.settings.darkMode;
+        let userName = AppState.user.name;
+        let memoryStore = AppState.user.memory;
+        
+        // Optimized Levenshtein for performance
+        function levenshteinDistance(a, b) {
+            if (a.length === 0) return b.length;
+            if (b.length === 0) return a.length;
+            const matrix = Array.from({ length: b.length + 1 }, (_, i) => [i]);
+            for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+            for (let i = 1; i <= b.length; i++) {
+                for (let j = 1; j <= a.length; j++) {
+                    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                    matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
+                }
+            }
+            return matrix[b.length][a.length];
+        }
+
+        // Performance-optimized normalizeIntentTypos
+        const INTENT_DICTIONARY = [
+            'what', 'whats', 'who', 'tell', 'about', 'define', 'meaning', 'show',
+            'image', 'picture', 'photo', 'look', 'like', 'weather', 'forecast',
+            'news', 'reminder', 'shopping', 'grocery', 'itinerary', 'hotel',
+            'restaurants', 'transport', 'route', 'translate', 'translator', 'joke',
+            'calendar', 'budget', 'sync'
+        ];
+
+        function normalizeIntentTypos(text) {
+            const raw = String(text || '');
+            if (!raw.trim()) return '';
+
+            return raw
+                .split(/(\s+)/)
+                .map(token => {
+                    const lower = token.toLowerCase().trim();
+                    if (lower.length < 3 || INTENT_DICTIONARY.includes(lower) || !/^[a-z]+$/.test(lower)) return token;
+
+                    let best = lower;
+                    let min = 3; 
+                    
+                    for (const word of INTENT_DICTIONARY) {
+                        if (Math.abs(lower.length - word.length) > 1) continue;
+                        const d = levenshteinDistance(lower, word);
+                        if (d < min) {
+                            min = d;
+                            best = word;
+                        }
+                    }
+                    return min <= (lower.length <= 4 ? 1 : 2) ? best : token;
+                })
+                .join('');
+        }
+
+        /**
+         * Robust Speech Synthesis with state management
+         */
+        function stopAllSpeechPlayback() {
+            if (typeof responsiveVoice !== 'undefined' && responsiveVoice.isPlaying()) {
+                responsiveVoice.cancel();
+            }
+            if (window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+            }
+            updateTTSVisualizer(false);
+            AppState.voice.isSpeaking = false;
+        }
+
+        function speak(text, options = {}) {
+            if (!text) return;
+            stopAllSpeechPlayback();
+            
+            AppState.voice.isSpeaking = true;
+            updateTTSVisualizer(true);
+
+            const onEnd = () => {
+                AppState.voice.isSpeaking = false;
+                updateTTSVisualizer(false);
+                if (options.onEnd) options.onEnd();
+            };
+
+            if (typeof responsiveVoice !== 'undefined') {
+                responsiveVoice.speak(text, options.voice || "UK English Female", { ...options, onend: onEnd });
+            } else {
+                speakInLanguage(text, options.lang || 'en-GB');
+            }
+        }
+
         const NOISE_THRESHOLDS = {
             low: { confidence: 0.6, minWords: 1 },
             medium: { confidence: 0.75, minWords: 2 },
             high: { confidence: 0.85, minWords: 2 }
         };
 
-        // Translator mode variables
-        let translatorMode = false;
-        let translatorLanguage = null;
-        const supportedLanguages = {
-            'tamil': { code: 'ta', name: 'Tamil', nativeName: 'Tamil', voiceLang: 'ta-IN' },
-            'kannada': { code: 'kn', name: 'Kannada', nativeName: 'Kannada', voiceLang: 'kn-IN' },
-            'telugu': { code: 'te', name: 'Telugu', nativeName: 'Telugu', voiceLang: 'te-IN' },
-            'hindi': { code: 'hi', name: 'Hindi', nativeName: 'Hindi', voiceLang: 'hi-IN' }
-        };
-
         window.onload = async () => {
             // Ensure no queued/leftover speech survives a refresh.
             stopAllSpeechPlayback();
             requestMicrophonePermission().catch(() => {});
-            loadUserData(); 
-            loadNoiseFilterSettings(); 
+            loadUserData();
+            loadNoiseFilterSettings();
             loadAssistantModes();
             loadCommuteProfile();
             loadSafetyProfile();
@@ -3430,13 +3478,13 @@ async function handleNameCorrection(text) {
             const welcome = getConverseWelcomeLine();
             addChatMessage(welcome, false);
             speak(welcome);
-            
+
             if (!converseRecognition) {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 converseRecognition = new SpeechRecognition();
                 converseRecognition.continuous = true;
                 converseRecognition.interimResults = false;
-                
+
                 converseRecognition.onresult = (event) => {
                     const text = event.results[event.results.length - 1][0].transcript.trim();
                     if (text) {
@@ -3444,12 +3492,12 @@ async function handleNameCorrection(text) {
                         sendTextInput();
                     }
                 };
-                
+
                 converseRecognition.onend = () => {
                     if (converseMode) converseRecognition.start();
                 };
             }
-            try { converseRecognition.start(); } catch(e) {}
+            try { converseRecognition.start(); } catch(e) { console.error("Converse start error:", e); }
         }
 
         function stopConverseSession() {
@@ -3500,7 +3548,7 @@ async function handleNameCorrection(text) {
             }
         };
 
-        
+
         function toggleDarkMode() {
             darkMode = !darkMode;
             const body = document.body;
