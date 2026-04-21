@@ -3403,6 +3403,26 @@ async function handleNameCorrection(text) {
             high: { confidence: 0.85, minWords: 2 }
         };
 
+        function hasAnyRenderedChatMessages() {
+            const chatContainer = document.getElementById('chat-container');
+            return !!chatContainer?.querySelector('[data-role]');
+        }
+
+        function ensureStartupGreeting(forceSpeak = false) {
+            if (hasAnyRenderedChatMessages()) return false;
+            const welcomeOptions = [
+                'Hi! How can I help today?',
+                'Hello! How can I help today?',
+                'Hola, amigo! How can I help today?',
+                'Vanakkam! How can I help today?',
+                'Hey there! How can I help today?'
+            ];
+            const welcomeMessage = welcomeOptions[Math.floor(Math.random() * welcomeOptions.length)];
+            addInitialGreetingMessage(welcomeMessage);
+            speak(welcomeMessage, forceSpeak);
+            return true;
+        }
+
         window.onload = async () => {
             // Ensure no queued/leftover speech survives a refresh.
             stopAllSpeechPlayback();
@@ -3420,21 +3440,9 @@ async function handleNameCorrection(text) {
             window.addEventListener('online', updateOnlineStatus);
             window.addEventListener('offline', updateOnlineStatus);
             updateOnlineStatus();
-            const chatContainer = document.getElementById('chat-container');
-            const hasRenderedMessages = !!chatContainer?.querySelector('[data-role]');
-            if (!hasRenderedMessages) {
-                const welcomeOptions = [
-                    'Hi! How can I help today?',
-                    'Hello! How can I help today?',
-                    'Hola, amigo! How can I help today?',
-                    'Vanakkam! How can I help today?',
-                    'Hey there! How can I help today?'
-                ];
-                const welcomeMessage = welcomeOptions[Math.floor(Math.random() * welcomeOptions.length)];
-                addInitialGreetingMessage(welcomeMessage);
-                speak(welcomeMessage);
-            }
-            
+            ensureStartupGreeting(true);
+            setTimeout(() => ensureStartupGreeting(false), 900);
+
         };
 
         async function requestMicrophonePermission() {
@@ -3451,73 +3459,9 @@ async function handleNameCorrection(text) {
             }
         }
 
-        function toggleConverseMode() {
-            converseMode = !converseMode;
-            const btn = document.getElementById('converse-mode-btn');
-            const visualizer = document.getElementById('tts-visualizer');
-            
-            if (converseMode) {
-                btn.classList.add('active-converse', 'bg-purple-600', 'text-white');
-                visualizer.classList.remove('hidden-wave');
-                // Only starts when explicitly toggled by user
-                if (arguments.length > 0 || btn === document.activeElement || btn.contains(document.activeElement)) {
-                    startConverseSession();
-                }
-            } else {
-                btn.classList.remove('active-converse', 'bg-purple-600', 'text-white');
-                visualizer.classList.add('hidden-wave');
-                stopConverseSession();
-            }
-        }
+        // Legacy Converse handlers removed; unified handler is defined later.
 
-        function startConverseSession() {
-            const welcome = getConverseWelcomeLine();
-            addChatMessage(welcome, false);
-            speak(welcome);
-
-            if (!converseRecognition) {
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                converseRecognition = new SpeechRecognition();
-                converseRecognition.continuous = true;
-                converseRecognition.interimResults = false;
-
-                converseRecognition.onresult = (event) => {
-                    const text = event.results[event.results.length - 1][0].transcript.trim();
-                    if (text) {
-                        document.getElementById('text-input').value = text;
-                        sendTextInput();
-                    }
-                };
-
-                converseRecognition.onend = () => {
-                    if (converseMode) converseRecognition.start();
-                };
-            }
-            try { converseRecognition.start(); } catch(e) { console.error("Converse start error:", e); }
-        }
-
-        function stopConverseSession() {
-            if (converseRecognition) converseRecognition.stop();
-            stopSpeaking();
-        }
-
-        // Jump to latest functionality
-        function jumpToLatest() {
-            const chatContainer = document.getElementById('chat-container');
-            if (chatContainer) {
-                chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
-                document.getElementById('jump-to-latest-btn').classList.add('hidden');
-            }
-        }
-
-        // Monitor scroll to show/hide jump button
-        document.getElementById('chat-container').addEventListener('scroll', function(e) {
-            const btn = document.getElementById('jump-to-latest-btn');
-            const threshold = 200;
-            const isNearBottom = e.target.scrollHeight - e.target.scrollTop - e.target.clientHeight < threshold;
-            if (isNearBottom) btn.classList.add('hidden');
-            else btn.classList.remove('hidden');
-        });
+        // Jump-to-latest behavior is managed by the unified chat scroll-lock module below.
 
         // Update visualizer state based on TTS
         function updateTTSVisualizer(isSpeaking) {
@@ -5083,6 +5027,182 @@ function normalizeUiTokens(text) {
             const input = document.getElementById('document-upload-input');
             if (!input) return;
             input.click();
+        }
+
+        let cameraStream = null;
+
+        async function openCameraMode() {
+            const modal = document.getElementById('camera-modal');
+            const video = document.getElementById('camera-preview');
+            if (!modal || !video) {
+                showError('Camera OCR UI is unavailable right now.');
+                return;
+            }
+
+            try {
+                const tryConstraints = async (constraints) => {
+                    return await navigator.mediaDevices.getUserMedia(constraints);
+                };
+
+                let stream = null;
+                try {
+                    stream = await tryConstraints({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+                } catch (_) {
+                    try {
+                        stream = await tryConstraints({ video: { facingMode: 'user' }, audio: false });
+                    } catch (_) {
+                        stream = await tryConstraints({ video: true, audio: false });
+                    }
+                }
+
+                cameraStream = stream;
+                video.srcObject = stream;
+                modal.classList.remove('hidden');
+                document.body.classList.add('overflow-hidden');
+
+                const input = document.getElementById('ocr-comment-input');
+                if (input) {
+                    input.value = '';
+                    input.focus();
+                }
+            } catch (error) {
+                const msg = 'Camera access is blocked or unavailable. Please allow camera permission and try again.';
+                addChatMessage(msg, false);
+                speak(msg);
+            }
+        }
+
+        function closeCameraMode() {
+            const modal = document.getElementById('camera-modal');
+            const video = document.getElementById('camera-preview');
+            if (modal) modal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+
+            if (video) {
+                try { video.pause(); } catch (_) {}
+                video.srcObject = null;
+            }
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+        }
+
+        function setCaptureButtonBusy(isBusy) {
+            const btn = document.getElementById('capture-btn');
+            if (!btn) return;
+            btn.disabled = !!isBusy;
+            btn.classList.toggle('opacity-70', !!isBusy);
+            btn.classList.toggle('cursor-not-allowed', !!isBusy);
+            if (isBusy) {
+                btn.dataset.originalLabel = btn.innerHTML;
+                btn.innerHTML = '<span>Analyzing...</span>';
+            } else if (btn.dataset.originalLabel) {
+                btn.innerHTML = btn.dataset.originalLabel;
+            }
+        }
+
+        async function captureAndProcessOCR() {
+            const video = document.getElementById('camera-preview');
+            const canvas = document.getElementById('camera-canvas');
+            if (!video || !canvas) {
+                showError('Camera capture is unavailable.');
+                return;
+            }
+
+            const width = video.videoWidth || 1280;
+            const height = video.videoHeight || 720;
+            if (!width || !height) {
+                const msg = 'Camera is not ready yet. Please wait a moment and try again.';
+                addChatMessage(msg, false);
+                speak(msg);
+                return;
+            }
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                showError('Canvas context is unavailable for OCR.');
+                return;
+            }
+
+            setCaptureButtonBusy(true);
+            showThinkingIndicator('Reading text from image...');
+            try {
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(video, 0, 0, width, height);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+                const imageBase64 = dataUrl.split(',')[1];
+                const userInstruction = String(document.getElementById('ocr-comment-input')?.value || '').trim();
+                const prompt = userInstruction
+                    ? `First extract the visible text accurately with line breaks. Then answer this user instruction based only on the image: "${userInstruction}".`
+                    : 'Extract all visible text accurately with line breaks and provide a short practical summary.';
+
+                const response = await fetch('/api/vision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        task: 'text_extract',
+                        prompt,
+                        mimeType: 'image/jpeg',
+                        imageBase64
+                    })
+                });
+
+                const rawBody = await response.text();
+                let data = {};
+                try {
+                    data = rawBody ? JSON.parse(rawBody) : {};
+                } catch (_) {
+                    data = {};
+                }
+
+                if (!response.ok || !data?.success) {
+                    const errMsg = String(data?.error || 'OCR analysis failed. Please try again.').trim();
+                    addChatMessage(errMsg, false);
+                    speak(errMsg);
+                    return;
+                }
+
+                const details = data?.details && typeof data.details === 'object' ? data.details : {};
+                const extractedLines = Array.isArray(details?.textDetected)
+                    ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean)
+                    : [];
+                const extractedText = extractedLines.join('\n').trim();
+                const visionAnswer = String(data?.response || details?.summary || '').trim();
+
+                const card = `
+<div class="p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70">
+  <p class="text-xs font-semibold text-slate-500 dark:text-slate-300 mb-1">Camera OCR</p>
+  <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-2">${userInstruction ? 'OCR + instruction result' : 'OCR result'}</p>
+  ${extractedText ? `<div class="mb-2"><p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Extracted text</p><p class="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">${escapeHtml(extractedText.slice(0, 3500))}</p></div>` : '<p class="text-sm text-slate-600 dark:text-slate-300 mb-2">No clear text detected.</p>'}
+  ${visionAnswer ? `<div><p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Answer</p><p class="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">${escapeHtml(visionAnswer)}</p></div>` : ''}
+</div>`;
+                addChatMessage(card, false, false);
+
+                const spoken = extractedText
+                    ? 'I captured the image and extracted text for you.'
+                    : 'I captured the image and analyzed it.';
+                speak(spoken);
+
+                lastUploadedDocument = {
+                    fileName: `camera_capture_${Date.now()}.jpg`,
+                    kind: 'image',
+                    extractedText: extractedText || visionAnswer,
+                    summary: visionAnswer || 'Camera OCR analysis',
+                    bill: null,
+                    uploadedAt: Date.now()
+                };
+
+                closeCameraMode();
+            } catch (error) {
+                const msg = 'OCR capture failed. Please try again.';
+                addChatMessage(msg, false);
+                speak(msg);
+            } finally {
+                setCaptureButtonBusy(false);
+                hideThinkingIndicator();
+            }
         }
 
         async function handleDocumentSelection(event) {
@@ -11268,6 +11388,11 @@ ${snippets}`
         async function processCommand(text) {
             const lower = text.toLowerCase();
 
+            if (/\b(open|start|launch|enable)\s+(camera|ocr|scan)\b|\b(scan|read)\s+(this|text|document)\b/i.test(lower)) {
+                await openCameraMode();
+                return;
+            }
+
             if (isContinuousVisionQuestion(lower)) {
                 if (!isContinuousVisionActive) {
                     const msg = 'Vision mode is off. Tap the vision icon first, then ask again.';
@@ -14950,7 +15075,19 @@ async function toggleContinuousVision() {
         showTemporaryMessage('Continuous Vision deactivated.');
     } else {
         try {
-            continuousVisionStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            const getCamera = async () => {
+                try {
+                    return await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+                } catch (_) {
+                    try {
+                        return await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+                    } catch (_) {
+                        return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                    }
+                }
+            };
+
+            continuousVisionStream = await getCamera();
             videoEl.srcObject = continuousVisionStream;
             videoEl.muted = true;
             isContinuousVisionActive = true;
@@ -14976,6 +15113,10 @@ function captureVisionFrame() {
 }
 
 async function handleContinuousVisionQuery(text) {
+    const videoEl = document.getElementById('continuous-vision-video');
+    if (videoEl && (videoEl.videoWidth || 0) === 0) {
+        await new Promise(resolve => setTimeout(resolve, 350));
+    }
     const base64 = captureVisionFrame();
     if (!base64) {
         const msg = 'I cannot see anything. Make sure the camera is active and has permissions.';
@@ -14985,18 +15126,31 @@ async function handleContinuousVisionQuery(text) {
     }
     showThinkingIndicator('Analyzing your view...');
     try {
+        const isTextReadIntent = /\b(read|text|ocr|bill|receipt|invoice|sign|label|menu|document)\b/i.test(String(text || ''));
         const response = await fetch('/api/vision', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                task: 'text_extract',
-                prompt: `Analyze this image from the user's camera based on their question: "${text}". Be concise and conversational.`,
+                task: isTextReadIntent ? 'text_extract' : 'general_vision',
+                prompt: `Analyze this live camera image and answer the user question directly: "${text}". Keep the answer concise and practical.`,
                 mimeType: 'image/jpeg',
                 imageBase64: base64
             })
         });
-        const data = await response.json();
-        const answer = data.response || 'I see the image, but I could not describe it properly.';
+        const rawBody = await response.text();
+        let data = {};
+        try {
+            data = rawBody ? JSON.parse(rawBody) : {};
+        } catch (_) {
+            data = {};
+        }
+        if (!response.ok || !data?.success) {
+            const failMsg = String(data?.error || 'Vision analysis failed. Please try again.').trim();
+            addChatMessage(failMsg, false);
+            speak(failMsg);
+            return;
+        }
+        const answer = String(data.response || data?.details?.summary || '').trim() || 'I can see the image, but I could not generate a clear answer.';
         addChatMessage(answer, false);
         speak(answer);
         saveToHistory(text, answer);
