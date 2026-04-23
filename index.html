@@ -3312,6 +3312,31 @@ async function handleNameCorrection(text) {
         let inputHistoryIndex = -1;
         let lastSubmissionFingerprint = '';
         let lastSubmissionTimestamp = 0;
+        let chatHistory = [];
+        let lastBudgetPlan = null;
+        let commuteProfile = { home: '', office: '', arrivalTime: '09:00', mode: 'drive' };
+        let safetyProfile = { womenSafetyMode: false, trustedContact: '', checkInMinutes: 30 };
+        let tripState = {
+            active: false,
+            watchId: null,
+            destinationText: '',
+            destinationCoords: null,
+            currentCoords: null,
+            startedAt: null,
+            baselineDistanceMiles: 0,
+            lastDistanceMiles: null,
+            etaMinutes: null,
+            offRouteDetections: 0,
+            closeAlertSent: false,
+            preArrivalAlarmMinutes: null,
+            preArrivalAlarmTriggered: false,
+            routeLabel: '',
+            lastUpdatedAt: null,
+            routeGeometryLatLngs: null,
+            currentSpeedMph: null,
+            lastPlaceName: 'Detecting...',
+            lastPlaceFetchTime: 0
+        };
 
         // Assistant mode defaults
         let supportModeLock = 'balanced';
@@ -14372,8 +14397,10 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 const position = await getCurrentPositionAsync();
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
-                const mapsUrl = `https://maps.google.com/?q=${lat},${lon}`;
+                const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`;
                 const shareText = `My current location: ${mapsUrl}`;
+
+                window.open(mapsUrl, '_blank', 'noopener,noreferrer');
 
                 if (navigator.share) {
                     await navigator.share({
@@ -14397,10 +14424,10 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 const position = await getCurrentPositionAsync();
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
-                const url = `https://www.google.com/maps/search/${encodeURIComponent(query)}/@${lat},${lon},15z`;
+                const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${query} near ${lat},${lon}`)}`;
                 window.open(url, '_blank', 'noopener,noreferrer');
             } catch (error) {
-                const fallback = `https://www.google.com/maps/search/${encodeURIComponent(`${query} near me`)}`;
+                const fallback = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${query} near me`)}`;
                 window.open(fallback, '_blank', 'noopener,noreferrer');
             }
         }
