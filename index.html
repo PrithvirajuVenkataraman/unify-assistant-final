@@ -8,7 +8,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>AI Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://code.responsivevoice.org/responsivevoice.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="light min-h-screen transition-all duration-500">
@@ -251,6 +250,16 @@
                             <span class="thinking-dot"></span>
                         </span>
                     </div>
+                </div>
+                <div id="voice-state-indicator" class="voice-state-indicator" data-state="idle" aria-live="polite">
+                    <span id="voice-state-orb" class="voice-state-orb" aria-hidden="true"></span>
+                    <span id="voice-state-bars" class="voice-state-bars" aria-hidden="true">
+                        <span class="bar"></span>
+                        <span class="bar"></span>
+                        <span class="bar"></span>
+                        <span class="bar"></span>
+                    </span>
+                    <span id="voice-state-label" class="voice-state-label">Idle</span>
                 </div>
             </div>
         </div>
@@ -1849,52 +1858,33 @@ function speakInLanguage(text, langCode) {
     // Stop any current speech first
     stopSpeaking();
 
-    // Try ResponsiveVoice first for better language support
-    if (typeof responsiveVoice !== 'undefined') {
-        // ResponsiveVoice supported Indian language voices
-        const voiceMap = {
-            'ta-IN': 'Tamil India Female',
-            'kn-IN': 'Kannada India Female',
-            'te-IN': 'Telugu India Female',
-            'hi-IN': 'Hindi India Female'
-        };
-
-        const voice = voiceMap[langCode];
-
-        if (voice) {
-        if (responsiveVoice.voiceSupport()) {
-            responsiveVoice.speak(text, voice, {
-                pitch: 1.05,
-                rate: 0.95,
-                volume: 1,
-            });
-            return;
-        }
-        }
-
-        // Default Human-like English Voice
-        responsiveVoice.speak(text, "UK English Female", {
-            pitch: 1.05,
-            rate: 0.95,
-            volume: 1
-    });
-    } else {
-    // Fallback to Web Speech API with better parameters
+    // Free browser-native TTS path (no paid/provider dependency).
     const synth = window.speechSynthesis;
+    if (!synth) return;
+
     const speakWithVoices = () => {
-        const utterance = new SpeechSynthesisUtterance(text);
+        const utterance = new SpeechSynthesisUtterance(String(text || ''));
         const voices = synth.getVoices();
-        const preferredVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Natural')) || voices[0];
-        
-        utterance.voice = preferredVoice;
-        utterance.lang = langCode || 'en-US';
-        utterance.rate = 0.9;
-        utterance.pitch = 1.1;
+        const preferredVoice =
+            voices.find(v => String(v.lang || '').toLowerCase() === String(langCode || '').toLowerCase()) ||
+            voices.find(v => String(v.lang || '').toLowerCase().startsWith(String(langCode || '').slice(0, 2).toLowerCase())) ||
+            voices.find(v => /^en(-|_)/i.test(String(v.lang || ''))) ||
+            voices[0];
+
+        if (preferredVoice) {
+            utterance.voice = preferredVoice;
+            utterance.lang = preferredVoice.lang || langCode || 'en-US';
+        } else {
+            utterance.lang = langCode || 'en-US';
+        }
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
         synth.speak(utterance);
     };
+
     if (synth.getVoices().length > 0) speakWithVoices();
     else synth.onvoiceschanged = speakWithVoices;
-}
 }
 
 // ============ END TRANSLATOR MODE ============
@@ -3355,6 +3345,8 @@ async function handleNameCorrection(text) {
         let currentSpeechContext = 'none';
         let lastWakeAckTime = 0;
         let waitingForLocation = false;
+        let isAssistantSpeaking = false;
+        const synth = window.speechSynthesis || null;
 
         // Optimized Levenshtein for performance
         function levenshteinDistance(a, b) {
@@ -3410,11 +3402,8 @@ async function handleNameCorrection(text) {
          * Robust Speech Synthesis with state management
          */
         function stopAllSpeechPlayback() {
-            if (typeof responsiveVoice !== 'undefined' && responsiveVoice.isPlaying()) {
-                responsiveVoice.cancel();
-            }
-            if (window.speechSynthesis) {
-                window.speechSynthesis.cancel();
+            if (synth) {
+                synth.cancel();
             }
             updateTTSVisualizer(false);
             AppState.voice.isSpeaking = false;
@@ -3433,10 +3422,12 @@ async function handleNameCorrection(text) {
                 if (options.onEnd) options.onEnd();
             };
 
-            if (typeof responsiveVoice !== 'undefined') {
-                responsiveVoice.speak(text, options.voice || "UK English Female", { ...options, onend: onEnd });
-            } else {
-                speakInLanguage(text, options.lang || 'en-GB');
+            speakInLanguage(text, options.lang || 'en-GB');
+            if (typeof options.onEnd === 'function') {
+                // Browser TTS does not always expose exact callbacks uniformly.
+                // Keep a conservative timeout fallback for state cleanup.
+                const estimatedMs = Math.max(900, Math.min(12000, String(text).split(/\s+/).length * 280));
+                setTimeout(onEnd, estimatedMs);
             }
         }
 
@@ -3514,6 +3505,38 @@ async function handleNameCorrection(text) {
                 visualizer.classList.replace('not-speaking', 'speaking');
             } else {
                 visualizer.classList.replace('speaking', 'not-speaking');
+            }
+            updateVoiceInteractionGraphics();
+        }
+
+        function getVoiceInteractionState() {
+            if (isVoiceTyping || isListening) return 'user-listening';
+            if (isAssistantSpeaking) return 'assistant-speaking';
+            return 'idle';
+        }
+
+        function updateVoiceInteractionGraphics() {
+            const state = getVoiceInteractionState();
+            const indicator = document.getElementById('voice-state-indicator');
+            const label = document.getElementById('voice-state-label');
+            const micBtn = document.getElementById('voice-to-text-btn');
+            const converseBtn = document.getElementById('converse-mode-btn');
+            if (!indicator || !label) return;
+
+            indicator.dataset.state = state;
+            if (state === 'assistant-speaking') {
+                label.textContent = 'Assistant speaking';
+            } else if (state === 'user-listening') {
+                label.textContent = 'Listening to you';
+            } else {
+                label.textContent = converseMode ? 'Converse ready' : 'Idle';
+            }
+
+            if (micBtn) {
+                micBtn.classList.toggle('is-listening', state === 'user-listening');
+            }
+            if (converseBtn) {
+                converseBtn.classList.toggle('is-assistant-speaking', state === 'assistant-speaking');
             }
         }
 
@@ -4278,6 +4301,7 @@ async function handleNameCorrection(text) {
                 `;
                 btn.setAttribute('title', 'Stop voice capture');
                 btn.setAttribute('aria-label', 'Stop voice capture');
+                updateVoiceInteractionGraphics();
                 return;
             }
             btn.classList.remove('is-active');
@@ -4293,6 +4317,7 @@ async function handleNameCorrection(text) {
             `;
             btn.setAttribute('title', 'Voice to text');
             btn.setAttribute('aria-label', 'Voice to text');
+            updateVoiceInteractionGraphics();
         }
 
         function initializeVoiceToTextRecognition() {
@@ -6601,6 +6626,7 @@ async function handleMarketLookup(text) {
                 waveform?.classList.remove('hidden');
                 voiceBtn?.classList.add('voice-listening');
                 voiceBtn?.classList.remove('voice-pulse', 'gradient-btn');
+                updateVoiceInteractionGraphics();
 
             } catch (e) {
                 stopListening();
@@ -6624,6 +6650,7 @@ async function handleMarketLookup(text) {
             document.getElementById('waveform-bottom')?.classList.add('hidden');
             voiceBtn?.classList.remove('voice-listening');
             voiceBtn?.classList.add('gradient-btn');
+            updateVoiceInteractionGraphics();
         }
 
         
@@ -14659,9 +14686,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
         function toggleSpeak(text, button) {
             // Check if currently speaking
-            const isSpeaking = synth.speaking ||
-                (typeof responsiveVoice !== 'undefined' && responsiveVoice.isPlaying()) ||
-                !!(currentExternalAudio && !currentExternalAudio.paused);
+            const isSpeaking = !!(synth && synth.speaking) || !!(currentExternalAudio && !currentExternalAudio.paused);
 
             if (isSpeaking) {
                 stopSpeaking();
@@ -14688,18 +14713,18 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const words = content ? content.split(/\s+/).filter(Boolean).length : 0;
 
             // Tune rate by utterance length so speech feels close to natural conversation.
-            let rate = 0.98;
-            if (words <= 8) rate = 1.0;
-            else if (words <= 22) rate = 0.98;
-            else if (words <= 45) rate = 0.95;
-            else rate = 0.92;
+            let rate = 0.99;
+            if (words <= 10) rate = 1.01;
+            else if (words <= 24) rate = 0.99;
+            else if (words <= 46) rate = 0.96;
+            else rate = 0.93;
 
-            // Slightly crisper style for Converse mode.
-            if (isConverse) rate += 0.01;
+            // Slightly faster in Converse mode for a more natural dialog rhythm.
+            if (isConverse) rate += 0.015;
 
             return {
-                rate: Math.max(0.88, Math.min(1.04, rate)),
-                pitch: isConverse ? 0.92 : 0.90
+                rate: Math.max(0.9, Math.min(1.04, rate)),
+                pitch: isConverse ? 0.98 : 0.99
             };
         }
 
@@ -14780,28 +14805,44 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         }
 
         function speakWithWebSpeech(cleanText, speechProfile) {
+            if (!synth) {
+                onSpeechPlaybackEnded();
+                return;
+            }
             synth.cancel();
-            setTimeout(() => {
-                const utterance = new SpeechSynthesisUtterance(cleanText);
-                const voices = synth.getVoices();
-                const preferredVoice = chooseBestEnglishVoice(voices);
+            const chunks = String(cleanText || '')
+                .split(/(?<=[.!?])\s+/)
+                .map(s => s.trim())
+                .filter(Boolean);
+            if (!chunks.length) {
+                onSpeechPlaybackEnded();
+                return;
+            }
 
+            const voices = synth.getVoices();
+            const preferredVoice = chooseBestEnglishVoice(voices);
+            let index = 0;
+            const speakNext = () => {
+                if (index >= chunks.length) {
+                    onSpeechPlaybackEnded();
+                    return;
+                }
+                const utterance = new SpeechSynthesisUtterance(chunks[index++]);
                 if (preferredVoice) {
                     utterance.voice = preferredVoice;
                     utterance.lang = preferredVoice.lang || 'en-US';
                 } else {
                     utterance.lang = 'en-US';
                 }
-
                 utterance.rate = speechProfile.rate;
                 utterance.pitch = speechProfile.pitch;
                 utterance.volume = 1.0;
-
                 currentUtterance = utterance;
-                utterance.onend = () => onSpeechPlaybackEnded();
+                utterance.onend = speakNext;
                 utterance.onerror = () => onSpeechPlaybackEnded();
                 synth.speak(utterance);
-            }, 30);
+            };
+            setTimeout(speakNext, 30);
         }
 
         function sanitizeTextForSpeech(text) {
@@ -14835,18 +14876,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             isAssistantSpeaking = true;
             updateTTSVisualizer(true);
 
-            // Prioritize ResponsiveVoice for English if available, otherwise fallback to Web Speech API
-            if (typeof responsiveVoice !== 'undefined' && responsiveVoice.getVoices().length > 0) {
-                const voice = chooseBestEnglishResponsiveVoice(responsiveVoice.getVoices());
-                responsiveVoice.speak(cleanText, voice?.name || "UK English Female", {
-                    pitch: speechProfile.pitch,
-                    rate: speechProfile.rate,
-                    volume: 1,
-                    onend: onSpeechPlaybackEnded
-                });
-            } else {
-                speakWithWebSpeech(cleanText, speechProfile);
-            }
+            speakWithWebSpeech(cleanText, speechProfile);
         }
         
         
@@ -14859,10 +14889,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 try { currentExternalAudio.currentTime = 0; } catch (e) {}
                 currentExternalAudio = null;
             }
-            if (typeof responsiveVoice !== 'undefined') { 
-                responsiveVoice.cancel(); 
-            }
-            synth.cancel();
+            if (synth) synth.cancel();
             document.querySelectorAll('.speaker-btn').forEach(btn => {
                 btn.querySelector('.play-icon')?.classList.remove('hidden');
                 btn.querySelector('.stop-icon')?.classList.add('hidden');
@@ -14871,41 +14898,10 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             currentUtterance = null;
         }
 
-        function chooseBestEnglishResponsiveVoice(voices) {
-            if (!Array.isArray(voices) || !voices.length) return null;
-            const englishVoices = voices.filter(v => /^en(-|_)/i.test(String(v.lang || '')));
-            const pool = englishVoices.length ? englishVoices : voices;
-
-            const preferredNames = [
-                /uk english male/i,
-                /us english male/i,
-                /google/i,
-                /microsoft/i,
-                /neural/i,
-                /natural/i,
-                /enhanced/i
-            ];
-
-            let best = null;
-            let bestScore = -1;
-            for (const voice of pool) {
-                const name = String(voice.name || '');
-                let score = 0;
-                preferredNames.forEach((re, idx) => { if (re.test(name)) score += (preferredNames.length - idx) * 10; });
-                if (score > bestScore) { best = voice; bestScore = score; }
-            }
-            return best || pool[0] || null;
-        }
-
         function stopAllSpeechPlayback() {
             try { stopSpeaking(); } catch (e) {}
             try {
-                if (window.speechSynthesis) window.speechSynthesis.cancel();
-            } catch (e) {}
-            try {
-                if (typeof responsiveVoice !== 'undefined' && responsiveVoice?.cancel) {
-                    responsiveVoice.cancel();
-                }
+                if (synth) synth.cancel();
             } catch (e) {}
         }
 
