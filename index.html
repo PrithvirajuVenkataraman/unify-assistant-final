@@ -3310,6 +3310,8 @@ async function handleNameCorrection(text) {
         let voiceTypingInterimText = '';
         let inputHistory = [];
         let inputHistoryIndex = -1;
+        let lastSubmissionFingerprint = '';
+        let lastSubmissionTimestamp = 0;
 
         // Assistant mode defaults
         let supportModeLock = 'balanced';
@@ -3740,6 +3742,26 @@ async function handleNameCorrection(text) {
                                 <p><strong>Converse Mode:</strong> Hands-free conversation with auto speaking.</p>
                                 <p><strong>Traffic-Aware Leave Estimate:</strong> I can use a route API for live leave-time estimates when configured, with a fallback estimate if not.</p>
                                 <p><strong>Safety Mode:</strong> Women-focused safety shortcuts, trusted contact storage, and location sharing.</p>
+                            </div>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">How RLAIF Works</h3>
+                            <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                                <p><strong>RLAIF</strong> means Reinforcement Learning from AI Feedback: stronger evaluator models rank candidate answers for quality, safety, and usefulness.</p>
+                                <p>Training loop: model generates multiple answers -> evaluator AI scores/ranks them -> reward signal is learned -> policy is optimized to prefer higher-ranked behavior.</p>
+                                <p>This improves consistency and safety, but live facts still require retrieval + source verification.</p>
+                            </div>
+                        </section>
+
+                        <section>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Tech Stack</h3>
+                            <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                                <p><strong>Frontend:</strong> HTML, CSS, vanilla JavaScript, Tailwind utility classes.</p>
+                                <p><strong>Voice:</strong> Browser-native Web Speech API for TTS + speech recognition.</p>
+                                <p><strong>Backend:</strong> Vercel serverless routes (/api/chat-groq, /api/search, /api/markets, /api/vision, /api/document-ingest, /api/rag).</p>
+                                <p><strong>Model/Retrieval layer:</strong> Groq/Gemini routing, live web search aggregation, and RAG retrieval with vector search (Pinecone-backed in api/rag.js).</p>
+                                <p><strong>Document parsing:</strong> pdf-parse, mammoth, jszip, plus OCR/vision fallbacks.</p>
                             </div>
                         </section>
 
@@ -5809,6 +5831,24 @@ async function sendTextInput() {
             if (!input) return;
             const text = input.value.trim();
             if (text) {
+                const fingerprint = String(text || '')
+                    .toLowerCase()
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                const now = Date.now();
+                if (
+                    fingerprint &&
+                    fingerprint === lastSubmissionFingerprint &&
+                    (now - lastSubmissionTimestamp) < 1800
+                ) {
+                    // Ignore rapid duplicate submit (double Enter/click).
+                    input.value = '';
+                    toggleSendButton();
+                    return;
+                }
+                lastSubmissionFingerprint = fingerprint;
+                lastSubmissionTimestamp = now;
+
                 const outgoingText = text;
                 const normalizedOutgoingText = isLikelyCodeInput(outgoingText)
                     ? outgoingText
@@ -6329,6 +6369,17 @@ async function handleMarketLookup(text) {
             const finalText = String(finalTranscript || '').trim();
             if (!finalText) return;
             const lowerText = finalText.toLowerCase();
+            const transcriptFingerprint = finalText.toLowerCase().replace(/\s+/g, ' ').trim();
+            const transcriptNow = Date.now();
+            if (
+                transcriptFingerprint &&
+                transcriptFingerprint === lastSubmissionFingerprint &&
+                (transcriptNow - lastSubmissionTimestamp) < 1800
+            ) {
+                return;
+            }
+            lastSubmissionFingerprint = transcriptFingerprint;
+            lastSubmissionTimestamp = transcriptNow;
 
             if (awaitingFollowUpResponse) {
                 if (/\b(no|nothing|nope|i'm good|im good|that's all)\b/.test(lowerText)) {
