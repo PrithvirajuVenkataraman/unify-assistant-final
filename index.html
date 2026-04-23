@@ -3318,6 +3318,43 @@ async function handleNameCorrection(text) {
         let isVoiceTyping = false;
         let voiceTypingFinalText = '';
         let voiceTypingInterimText = '';
+        let inputHistory = [];
+        let inputHistoryIndex = -1;
+
+        // Assistant mode defaults
+        let supportModeLock = 'balanced';
+        let responseLength = 'normal';
+        let responseFormat = 'paragraph';
+        let schoolMode = false;
+        let medicalMode = false;
+        let converseMode = false;
+        let supportConversationMode = false;
+
+        // UI/settings state
+        let noiseFilterEnabled = false;
+        let noiseFilterLevel = 'medium';
+        let selectionHelperState = { popoverEl: null, selectedText: '' };
+
+        // Chat scroll-lock state
+        let autoScrollLocked = false;
+        let lockedScrollTop = 0;
+        let suppressScrollLockHandler = false;
+        let userInitiatedScroll = false;
+        let userScrollIntentTimer = null;
+
+        // Voice/wake-flow state
+        let listeningRequested = false;
+        let isListening = false;
+        let passiveWakeWordEnabled = false;
+        let isPassiveListening = false;
+        let wakeWordMode = false;
+        let commandMode = false;
+        let activeWakeSession = false;
+        let awaitingFollowUpResponse = false;
+        let followUpTimer = null;
+        let currentSpeechContext = 'none';
+        let lastWakeAckTime = 0;
+        let waitingForLocation = false;
 
         // Optimized Levenshtein for performance
         function levenshteinDistance(a, b) {
