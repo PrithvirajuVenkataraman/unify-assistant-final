@@ -3312,6 +3312,12 @@ async function handleNameCorrection(text) {
         let darkMode = AppState.settings.darkMode;
         let userName = AppState.user.name;
         let memoryStore = AppState.user.memory;
+        let continuousRecognition = null;
+        let recognition = null;
+        let voiceTypingRecognition = null;
+        let isVoiceTyping = false;
+        let voiceTypingFinalText = '';
+        let voiceTypingInterimText = '';
 
         // Optimized Levenshtein for performance
         function levenshteinDistance(a, b) {
