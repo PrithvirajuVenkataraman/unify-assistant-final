@@ -17,7 +17,7 @@
                    "rewrites":  [
                                     {
                                         "source":  "/",
-                                        "destination":  "/index.html"
+                                        "destination":  "/index.full_with_map_preview.html"
                                     },
                                     {
                                         "source":  "/api/:path*",
