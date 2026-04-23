@@ -239,13 +239,35 @@ function parseModelText(modelText) {
     const text = String(modelText || '').trim();
     if (!text) {
         return {
-            intent: 'casual_chat',
-            response: '',
+            intent: 'service_unavailable',
+            response: 'I could not generate a response this time. Please try again.',
             action: null
         };
     }
     try {
-        return JSON.parse(text);
+        const parsed = JSON.parse(text);
+        if (!parsed || typeof parsed !== 'object') {
+            return {
+                intent: 'casual_chat',
+                response: text,
+                action: null
+            };
+        }
+
+        const normalized = { ...parsed };
+        normalized.intent = typeof normalized.intent === 'string' && normalized.intent.trim()
+            ? normalized.intent
+            : 'casual_chat';
+
+        const primaryResponse = typeof normalized.response === 'string' ? normalized.response.trim() : '';
+        const alternateResponse = typeof normalized.text === 'string' ? normalized.text.trim() : '';
+        normalized.response = primaryResponse || alternateResponse || 'I could not generate a response this time. Please try again.';
+
+        if (!Object.prototype.hasOwnProperty.call(normalized, 'action')) {
+            normalized.action = null;
+        }
+
+        return normalized;
     } catch (_) {
         return {
             intent: 'casual_chat',
