@@ -295,7 +295,14 @@
             </div>
         </div>
     </div>
-    <video id="continuous-vision-video" class="hidden" autoplay playsinline muted></video>
+    <div id="continuous-vision-preview-shell" class="continuous-vision-preview hidden" aria-live="polite">
+        <div class="continuous-vision-preview-header">
+            <span class="continuous-vision-pill">Live Vision</span>
+            <button type="button" class="continuous-vision-close" onclick="toggleContinuousVision()" aria-label="Close live vision preview">Close</button>
+        </div>
+        <video id="continuous-vision-video" class="continuous-vision-video hidden" autoplay playsinline muted></video>
+        <p id="continuous-vision-hint" class="continuous-vision-hint">Camera is on. Ask: "What do you see?"</p>
+    </div>
     <canvas id="continuous-vision-canvas" class="hidden"></canvas>
 
     <div id="safety-panel-backdrop" class="side-panel-backdrop hidden" onclick="closeSafetyPanel()"></div>
@@ -3313,6 +3320,10 @@ async function handleNameCorrection(text) {
         let lastSubmissionFingerprint = '';
         let lastSubmissionTimestamp = 0;
         let chatHistory = [];
+        let lastUploadedDocument = null;
+        let songMoodGameState = null;
+        let translatorMode = false;
+        let translatorLanguage = null;
         let lastBudgetPlan = null;
         let commuteProfile = { home: '', office: '', arrivalTime: '09:00', mode: 'drive' };
         let safetyProfile = { womenSafetyMode: false, trustedContact: '', checkInMinutes: 30 };
@@ -5919,6 +5930,11 @@ async function sendTextInput() {
                     } else {
                         await processCommand(normalizedOutgoingText);
                     }
+                } catch (error) {
+                    console.error('sendTextInput failed:', error);
+                    const fallback = 'I hit a temporary issue while processing that. Please try again.';
+                    addChatMessage(fallback, false);
+                    speak('I hit a temporary issue. Please try again.');
                 } finally {
                     endAssistantProcessing();
                 }
@@ -13322,16 +13338,19 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             showLoading('Checking weather');
             try {
                 const weatherResponse = await fetch(
-                    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,precipitation&timezone=auto`
+                    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,precipitation&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto`
                 );
-                weather = await weatherResponse.json();
+                const weather = await weatherResponse.json();
                 
                 const celsius = Math.round(weather.current.temperature_2m);
                 const fahrenheit = Math.round((celsius * 9/5) + 32);
                 const advice = await getWeatherAdvice(weather);
+                const aqi = await fetchAQI(lat, lon);
                 
                 
                 createWeatherEffect(weather.current.weather_code, celsius);
+                renderAQISection(aqi);
+                renderForecast(weather?.daily || null);
                 
                 
                 
@@ -13348,7 +13367,9 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     fahrenheit,
                     celsius,
                     advice,
-                    weatherCode: weather?.current?.weather_code
+                    weatherCode: weather?.current?.weather_code,
+                    aqiIndex: aqi?.usAqi ?? null,
+                    aqiLabel: aqi?.label ?? null
                 });
                 
             } catch (error) {
@@ -13447,6 +13468,110 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             
             return (weatherCode >= 71 && weatherCode <= 77) || 
                    (weatherCode >= 85 && weatherCode <= 86);
+        }
+
+        async function fetchAQI(lat, lon) {
+            try {
+                const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`;
+                const response = await fetch(url);
+                if (!response.ok) return null;
+                const data = await response.json();
+                const raw = Number(data?.current?.us_aqi);
+                if (!Number.isFinite(raw)) return null;
+                const usAqi = Math.round(raw);
+                return {
+                    usAqi,
+                    ...classifyAqi(usAqi)
+                };
+            } catch (_) {
+                return null;
+            }
+        }
+
+        function classifyAqi(usAqi) {
+            if (usAqi <= 50) return { label: 'Good', color: '#22c55e' };
+            if (usAqi <= 100) return { label: 'Moderate', color: '#eab308' };
+            if (usAqi <= 150) return { label: 'Unhealthy for Sensitive Groups', color: '#f97316' };
+            if (usAqi <= 200) return { label: 'Unhealthy', color: '#ef4444' };
+            if (usAqi <= 300) return { label: 'Very Unhealthy', color: '#a855f7' };
+            return { label: 'Hazardous', color: '#7f1d1d' };
+        }
+
+        function renderAQISection(aqi) {
+            const section = document.getElementById('aqi-section');
+            if (!section) return;
+            if (!aqi || !Number.isFinite(aqi.usAqi)) {
+                section.classList.add('hidden');
+                return;
+            }
+
+            section.classList.remove('hidden');
+            section.innerHTML = `
+                <p class="text-white/90 text-sm font-semibold">Air Quality Index (US AQI)</p>
+                <div class="flex items-center gap-2 mt-2">
+                    <span class="inline-flex items-center justify-center min-w-[44px] px-2 py-1 rounded-lg text-sm font-bold text-white" style="background:${aqi.color};">${aqi.usAqi}</span>
+                    <span class="text-white/90 text-sm font-medium">${escapeHtml(aqi.label)}</span>
+                </div>
+            `;
+        }
+
+        function mapWeatherCodeToLabel(code) {
+            const c = Number(code);
+            if (c === 0) return 'Clear';
+            if (c === 1 || c === 2) return 'Partly cloudy';
+            if (c === 3) return 'Overcast';
+            if (c === 45 || c === 48) return 'Fog';
+            if ([51,53,55,56,57].includes(c)) return 'Drizzle';
+            if ([61,63,65,66,67].includes(c)) return 'Rain';
+            if ([71,73,75,77,85,86].includes(c)) return 'Snow';
+            if ([80,81,82].includes(c)) return 'Showers';
+            if ([95,96,99].includes(c)) return 'Thunderstorm';
+            return 'Conditions';
+        }
+
+        function renderForecast(daily) {
+            const container = document.getElementById('forecast-container');
+            if (!container) return;
+            if (!daily || !Array.isArray(daily.time) || !daily.time.length) {
+                container.innerHTML = '<p class="text-white/80 text-sm">Forecast unavailable right now.</p>';
+                return;
+            }
+
+            const rows = [];
+            const days = Math.min(5, daily.time.length);
+            for (let i = 0; i < days; i++) {
+                const date = new Date(String(daily.time[i]));
+                const day = Number.isFinite(date.getTime())
+                    ? date.toLocaleDateString('en-US', { weekday: 'short' })
+                    : `Day ${i + 1}`;
+                const max = Number(daily.temperature_2m_max?.[i]);
+                const min = Number(daily.temperature_2m_min?.[i]);
+                const code = daily.weather_code?.[i];
+                const label = mapWeatherCodeToLabel(code);
+                rows.push(`
+                    <div class="flex items-center justify-between gap-3 text-white/90 text-sm py-1">
+                        <span class="font-semibold">${day}</span>
+                        <span class="text-white/80">${escapeHtml(label)}</span>
+                        <span class="font-semibold">${Number.isFinite(max) ? Math.round(max) : '--'}° / ${Number.isFinite(min) ? Math.round(min) : '--'}°C</span>
+                    </div>
+                `);
+            }
+
+            container.innerHTML = `
+                <p class="text-white/90 text-sm font-semibold mb-2">5-day forecast</p>
+                ${rows.join('')}
+            `;
+        }
+
+        function toggleForecast() {
+            const container = document.getElementById('forecast-container');
+            const icon = document.getElementById('expand-forecast-icon');
+            if (!container) return;
+            const willShow = container.classList.contains('hidden');
+            container.classList.toggle('hidden', !willShow);
+            if (icon) {
+                icon.style.transform = willShow ? 'rotate(180deg)' : 'rotate(0deg)';
+            }
         }
 
         function expandStateAbbreviation(location) {
@@ -15177,9 +15302,12 @@ function showError(message) {
 // ============ CONTINUOUS VISION (WebRTC) ============
 let continuousVisionStream = null;
 let isContinuousVisionActive = false;
+let continuousVisionTrack = null;
 
 async function toggleContinuousVision() {
     const videoEl = document.getElementById('continuous-vision-video');
+    const previewShell = document.getElementById('continuous-vision-preview-shell');
+    const hintEl = document.getElementById('continuous-vision-hint');
     const btn = document.getElementById('vision-toggle-btn');
     if (!videoEl) {
         showError('Vision preview element is missing from the page.');
@@ -15189,18 +15317,32 @@ async function toggleContinuousVision() {
         if (continuousVisionStream) {
             continuousVisionStream.getTracks().forEach(t => t.stop());
         }
+        continuousVisionTrack = null;
         videoEl.srcObject = null;
+        videoEl.classList.add('hidden');
+        previewShell?.classList.add('hidden');
         isContinuousVisionActive = false;
         btn.classList.remove('bg-blue-100', 'text-blue-600', 'dark:bg-blue-900/30');
         showTemporaryMessage('Continuous Vision deactivated.');
     } else {
         try {
             const getCamera = async () => {
+                const preferred = {
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1920, min: 1280 },
+                        height: { ideal: 1080, min: 720 }
+                    },
+                    audio: false
+                };
                 try {
-                    return await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+                    return await navigator.mediaDevices.getUserMedia(preferred);
                 } catch (_) {
                     try {
-                        return await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+                        return await navigator.mediaDevices.getUserMedia({
+                            video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+                            audio: false
+                        });
                     } catch (_) {
                         return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                     }
@@ -15210,6 +15352,24 @@ async function toggleContinuousVision() {
             continuousVisionStream = await getCamera();
             videoEl.srcObject = continuousVisionStream;
             videoEl.muted = true;
+            videoEl.classList.remove('hidden');
+            previewShell?.classList.remove('hidden');
+            if (hintEl) hintEl.textContent = 'Camera is on. Ask: "What do you see?"';
+            await videoEl.play().catch(() => {});
+
+            const track = continuousVisionStream.getVideoTracks?.()[0] || null;
+            continuousVisionTrack = track;
+            if (track?.applyConstraints) {
+                // Best-effort camera tuning for sharper OCR/object detection on phones.
+                await track.applyConstraints({
+                    advanced: [
+                        { focusMode: 'continuous' },
+                        { exposureMode: 'continuous' },
+                        { whiteBalanceMode: 'continuous' }
+                    ]
+                }).catch(() => {});
+            }
+
             isContinuousVisionActive = true;
             btn.classList.add('bg-blue-100', 'text-blue-600', 'dark:bg-blue-900/30');
             showTemporaryMessage('Continuous Vision activated! Ask "What do you see?" or "What am I looking at?"');
@@ -15223,12 +15383,16 @@ function captureVisionFrame() {
     if (!isContinuousVisionActive) return null;
     const videoEl = document.getElementById('continuous-vision-video');
     const canvas = document.getElementById('continuous-vision-canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = videoEl.videoWidth || 640;
-    canvas.height = videoEl.videoHeight || 480;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const sourceW = videoEl.videoWidth || 1280;
+    const sourceH = videoEl.videoHeight || 720;
+    const maxDim = 1600;
+    const scale = Math.min(1, maxDim / Math.max(sourceW, sourceH));
+    canvas.width = Math.max(640, Math.floor(sourceW * scale));
+    canvas.height = Math.max(480, Math.floor(sourceH * scale));
     if (canvas.width === 0 || canvas.height === 0) return null;
     ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
     return dataUrl.split(',')[1];
 }
 
