@@ -1457,15 +1457,22 @@ body.dark .footer-action-btn-mic:hover {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    margin: 4px auto 0;
-    padding: 6px 10px;
+    margin: 0 6px 0 2px;
+    padding: 5px 8px;
     border-radius: 999px;
     border: 1px solid rgba(148, 163, 184, 0.22);
     background: rgba(248, 250, 252, 0.62);
     backdrop-filter: blur(8px);
     color: #475569;
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.voice-state-indicator.hidden,
+.voice-state-indicator.is-idle {
+    display: none !important;
 }
 
 body.dark .voice-state-indicator {
@@ -1498,6 +1505,15 @@ body.dark .voice-state-indicator {
 
 .voice-state-label {
     letter-spacing: 0.01em;
+}
+
+@media (max-width: 768px) {
+    .voice-state-indicator {
+        margin: 0 4px 0 0;
+        padding: 4px 7px;
+        font-size: 9px;
+        gap: 6px;
+    }
 }
 
 .voice-state-indicator[data-state="assistant-speaking"] {
@@ -2154,6 +2170,25 @@ body {
     #input-bar-container .sm\:max-w-3xl {
         padding-left: var(--app-gutter-x) !important;
         padding-right: var(--app-gutter-x) !important;
+    }
+
+    /* Phone-first performance: reduce expensive effects during chat interactions. */
+    .floating-input-bar,
+    .modern-input,
+    #chat-container {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    #bg-effects,
+    .weather-effect,
+    .weather-effect-local {
+        display: none !important;
+    }
+
+    .chat-bubble-user,
+    .chat-bubble-assistant {
+        max-width: min(88vw, 100%);
     }
 }
 
