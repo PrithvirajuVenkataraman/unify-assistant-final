@@ -246,6 +246,18 @@
                     </button>
                 </div>
             </div>
+            <div id="upload-context-panel" class="upload-context-panel hidden" role="group" aria-label="Upload context">
+                <div class="upload-context-row">
+                    <input
+                        type="text"
+                        id="upload-context-input"
+                        class="upload-context-input"
+                        maxlength="500"
+                        placeholder='Optional file context (e.g. "extract bill totals and tax split")' />
+                    <button type="button" class="upload-context-btn secondary" onclick="skipUploadContextAndPickFile()">Skip</button>
+                    <button type="button" class="upload-context-btn primary" onclick="applyUploadContextAndPickFile()">Choose File</button>
+                </div>
+            </div>
             
             </div>
             <p id="footer-disclaimer" class="mt-2 text-xs text-gray-400 font-medium text-center">AI can make mistakes. Check important info.</p>
@@ -2151,33 +2163,47 @@ function getRecentMemoryHint() {
 }
 
 async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking...') {
-    
     showThinkingIndicator(loadingMessage);
     try {
         const responsePromise = processUserQuery(message);
+        await Promise.all([
+            responsePromise,
+            new Promise(resolve => setTimeout(resolve, 2000))
+        ]);
+        const response = await responsePromise;
+        if (response?.aborted) {
+            hideThinkingIndicator();
+            return response;
+        }
+        return response;
+    } catch (error) {
+        hideThinkingIndicator();
+        if (isAbortError(error)) {
+            return { response: '', intent: 'aborted', aborted: true };
+        }
+        showError('AI request failed. Please try again.');
+        throw error;
+    }
+}
+
 async function processUserQuery(text) {
     const t = String(text || '').trim();
     if (!t) return;
 
-    // 1. Check for Live Search / News Intent
     if (isLiveRetrievalQuery(t) || isHeadlineListQuery(t)) {
         await fetchAndDisplayNews(t);
         return { intent: 'news' };
     }
 
-    // 2. Check for Universal Explainer (Wikipedia/Reference)
     if (isUniversalExplainerRequest(t)) {
         const handled = await handleUniversalExplainerQuery(t);
         if (handled) return { intent: 'explainer' };
     }
 
-    // 3. Check for Weather
     if (isWeatherIntentText(t)) {
-        // Logic to trigger weather card
         return { intent: 'weather' };
     }
 
-    // 4. Default to LLM Chat
     return await askGeminiAI(t);
 }
 
@@ -2197,37 +2223,6 @@ function scoreSourcePolicy(url, type) {
     const isTrusted = trusted.some(domain => url.includes(domain));
     if (type === 'general') return isTrusted ? 10 : 1;
     return isTrusted ? 5 : 0;
-}
-
-function beginAbortableRequest() {
-    return new AbortController();
-}
-
-function clearActiveRequest(controller) {
-    // Cleanup logic
-}
-
-function isAbortError(error) {
-    return error.name === 'AbortError';
-}
-        await Promise.all([
-            responsePromise,
-            new Promise(resolve => setTimeout(resolve, 2000))
-        ]);
-        const response = await responsePromise;
-        if (response?.aborted) {
-            hideThinkingIndicator();
-            return response;
-        }
-        return response;
-    } catch (error) {
-        hideThinkingIndicator();
-        if (isAbortError(error)) {
-            return { response: '', intent: 'aborted', aborted: true };
-        }
-        showError('AI request failed. Please try again.');
-        throw error;
-    }
 }
 
 function isHeadlineListQuery(text) {
@@ -3321,6 +3316,8 @@ async function handleNameCorrection(text) {
         let lastSubmissionTimestamp = 0;
         let chatHistory = [];
         let lastUploadedDocument = null;
+        let uploadedDocumentHistory = [];
+        let pendingUploadContext = '';
         let songMoodGameState = null;
         let translatorMode = false;
         let translatorLanguage = null;
@@ -3510,6 +3507,7 @@ async function handleNameCorrection(text) {
             initChatScrollLock();
             initKeyboardShortcuts();
             initSelectionPromptHelper();
+            initUploadContextPanel();
             window.addEventListener('online', updateOnlineStatus);
             window.addEventListener('offline', updateOnlineStatus);
             updateOnlineStatus();
@@ -3886,6 +3884,19 @@ async function handleNameCorrection(text) {
                                     </svg>
                                     Request Feature
                                 </button>
+                                <button
+                                    onclick="runSystemDiagnostics()"
+                                    class="w-full h-11 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 whitespace-nowrap transition-all hover:scale-[1.02] shadow-md hover:shadow-lg"
+                                    title="Run System Check">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                    Run System Check
+                                </button>
+                                <div id="system-check-panel" class="hidden rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-900/20 p-3">
+                                    <p id="system-check-summary" class="text-xs font-semibold text-emerald-700 dark:text-emerald-300 mb-2"></p>
+                                    <div id="system-check-results" class="space-y-1 text-xs text-gray-700 dark:text-gray-300"></div>
+                                </div>
                             </div>
                         </section>
 
@@ -4507,6 +4518,31 @@ async function handleNameCorrection(text) {
             });
         }
 
+        function initUploadContextPanel() {
+            const contextInput = document.getElementById('upload-context-input');
+            if (!contextInput || contextInput.dataset.bound === '1') return;
+            contextInput.dataset.bound = '1';
+            contextInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    applyUploadContextAndPickFile();
+                    return;
+                }
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeUploadContextPanel();
+                }
+            });
+
+            document.addEventListener('mousedown', (event) => {
+                const panel = document.getElementById('upload-context-panel');
+                const trigger = document.getElementById('document-upload-btn');
+                if (!panel || panel.classList.contains('hidden')) return;
+                if (panel.contains(event.target) || trigger?.contains(event.target)) return;
+                closeUploadContextPanel();
+            });
+        }
+
         function initChatScrollLock() {
             const chatContainer = document.getElementById('chat-container');
             if (!chatContainer || chatContainer.dataset.scrollLockBound === '1') return;
@@ -4711,8 +4747,113 @@ async function handleNameCorrection(text) {
             toggleSendButton();
             hideSelectionHelperPopover();
         }
-        
-        
+
+        function renderSystemCheckResults(results) {
+            const panel = document.getElementById('system-check-panel');
+            const summary = document.getElementById('system-check-summary');
+            const list = document.getElementById('system-check-results');
+            if (!panel || !summary || !list) return;
+
+            const rows = Array.isArray(results) ? results : [];
+            const passed = rows.filter(r => r && r.ok).length;
+            summary.textContent = `System check: ${passed}/${rows.length} checks passed`;
+
+            list.innerHTML = rows.map((row) => {
+                const status = row.ok ? 'PASS' : 'FAIL';
+                const color = row.ok
+                    ? 'text-emerald-700 dark:text-emerald-300'
+                    : 'text-rose-700 dark:text-rose-300';
+                return `<div class="${color}"><span class="font-semibold">${status}</span> - ${escapeHtml(row.label)}${row.detail ? `: ${escapeHtml(row.detail)}` : ''}</div>`;
+            }).join('');
+
+            panel.classList.remove('hidden');
+        }
+
+        async function pingEndpoint(url, body) {
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body || {})
+                });
+                return {
+                    ok: response.ok,
+                    detail: response.ok ? `HTTP ${response.status}` : `HTTP ${response.status}`
+                };
+            } catch (error) {
+                return {
+                    ok: false,
+                    detail: String(error?.message || 'request failed')
+                };
+            }
+        }
+
+        async function runSystemDiagnostics() {
+            const summary = document.getElementById('system-check-summary');
+            const list = document.getElementById('system-check-results');
+            const panel = document.getElementById('system-check-panel');
+            if (!summary || !list || !panel) return;
+
+            panel.classList.remove('hidden');
+            summary.textContent = 'Running system checks...';
+            list.innerHTML = '<div class="text-xs text-gray-600 dark:text-gray-300">Please wait a few seconds.</div>';
+
+            const checks = [];
+            checks.push({
+                label: 'Browser online',
+                ok: !!navigator.onLine,
+                detail: navigator.onLine ? 'Connected' : 'Offline'
+            });
+            checks.push({
+                label: 'Live location support',
+                ok: !!navigator.geolocation,
+                detail: navigator.geolocation ? 'Geolocation API available' : 'Geolocation API unavailable'
+            });
+            checks.push({
+                label: 'Camera/OCR support',
+                ok: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+                detail: (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? 'Camera API available' : 'Camera API unavailable'
+            });
+            checks.push({
+                label: 'Speech recognition support',
+                ok: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+                detail: (window.SpeechRecognition || window.webkitSpeechRecognition) ? 'Web Speech API available' : 'Web Speech API unavailable'
+            });
+
+            const [chatPing, searchPing, marketsPing, ragPing] = await Promise.all([
+                pingEndpoint('/api/chat-groq', { message: 'health check' }),
+                pingEndpoint('/api/search', { query: 'weather today', maxResults: 1 }),
+                pingEndpoint('/api/markets', { mode: 'news', query: 'latest news' }),
+                pingEndpoint('/api/rag', { mode: 'health_check' })
+            ]);
+
+            checks.push({ label: 'LLM API (/api/chat-groq)', ok: chatPing.ok, detail: chatPing.detail });
+            checks.push({ label: 'Live web search (/api/search)', ok: searchPing.ok, detail: searchPing.detail });
+            checks.push({ label: 'News/markets (/api/markets)', ok: marketsPing.ok, detail: marketsPing.detail });
+            checks.push({ label: 'RAG endpoint (/api/rag)', ok: ragPing.ok, detail: ragPing.detail });
+
+            const locationReady = checks.find(c => c.label === 'Live location support')?.ok;
+            const marketsReady = checks.find(c => c.label === 'News/markets (/api/markets)')?.ok;
+            checks.push({
+                label: 'Weather + AQI readiness',
+                ok: !!(locationReady && marketsReady),
+                detail: (locationReady && marketsReady) ? 'Location + weather backend available' : 'Missing location permission/support or weather backend'
+            });
+            checks.push({
+                label: 'Itinerary + transport readiness',
+                ok: !!(chatPing.ok && searchPing.ok),
+                detail: (chatPing.ok && searchPing.ok) ? 'Planner + search path available' : 'Planner/search path has issues'
+            });
+            checks.push({
+                label: 'Follow-up + general Q&A readiness',
+                ok: !!chatPing.ok,
+                detail: chatPing.ok ? 'Conversational model route available' : 'Conversational model route unavailable'
+            });
+
+            renderSystemCheckResults(checks);
+            showTemporaryMessage('System check completed. See results in Help > Settings.');
+        }
+
         function openFeatureRequest() {
             
             const formUrl = 'https://forms.gle/h8Wtb3fbwKBnjoYT8';
@@ -5153,9 +5294,39 @@ function normalizeUiTokens(text) {
         }
 
         function openDocumentPicker() {
-            const input = document.getElementById('document-upload-input');
-            if (!input) return;
-            input.click();
+            const panel = document.getElementById('upload-context-panel');
+            const input = document.getElementById('upload-context-input');
+            if (!panel || !input) return;
+            panel.classList.remove('hidden');
+            input.value = pendingUploadContext || '';
+            setTimeout(() => input.focus(), 0);
+        }
+
+        function closeUploadContextPanel() {
+            const panel = document.getElementById('upload-context-panel');
+            if (!panel) return;
+            panel.classList.add('hidden');
+        }
+
+        function triggerHiddenFilePicker() {
+            const fileInput = document.getElementById('document-upload-input');
+            if (!fileInput) return;
+            fileInput.click();
+        }
+
+        function applyUploadContextAndPickFile() {
+            const contextInput = document.getElementById('upload-context-input');
+            pendingUploadContext = String(contextInput?.value || '').trim().slice(0, 500);
+            closeUploadContextPanel();
+            triggerHiddenFilePicker();
+        }
+
+        function skipUploadContextAndPickFile() {
+            pendingUploadContext = '';
+            const contextInput = document.getElementById('upload-context-input');
+            if (contextInput) contextInput.value = '';
+            closeUploadContextPanel();
+            triggerHiddenFilePicker();
         }
 
         let cameraStream = null;
@@ -5320,8 +5491,10 @@ function normalizeUiTokens(text) {
                     extractedText: extractedText || visionAnswer,
                     summary: visionAnswer || 'Camera OCR analysis',
                     bill: null,
+                    userContext: userInstruction || '',
                     uploadedAt: Date.now()
                 };
+                rememberUploadedDocument(lastUploadedDocument);
 
                 closeCameraMode();
             } catch (error) {
@@ -5339,6 +5512,9 @@ function normalizeUiTokens(text) {
             const file = input?.files?.[0];
             if (!file) return;
             input.value = '';
+            const userContext = String(pendingUploadContext || '').trim().slice(0, 500);
+            pendingUploadContext = '';
+            closeUploadContextPanel();
 
             const parserMaxBytes = 10 * 1024 * 1024;
             // Request body expands due to base64 (~33%) + JSON framing. Keep under deployment limits.
@@ -5372,7 +5548,8 @@ function normalizeUiTokens(text) {
                         fileName,
                         mimeType,
                         fileBase64,
-                        intent
+                        intent,
+                        userContext
                     })
                 });
                 const rawBody = await response.text();
@@ -5428,10 +5605,12 @@ function normalizeUiTokens(text) {
                     extractedText: data.extractedText,
                     summary: data.summary,
                     bill: data.bill || null,
+                    userContext,
                     uploadedAt: Date.now()
                 };
+                rememberUploadedDocument(lastUploadedDocument);
 
-                const resultCard = formatDocumentResultCard(data);
+                const resultCard = formatDocumentResultCard({ ...data, userContext });
                 addChatMessage(resultCard, false, false);
                 speak('I have read the uploaded file.');
                 saveToHistory(`uploaded ${data.fileName}`, 'I have read the uploaded file. Details will be shared only on follow-up questions.');
@@ -5587,12 +5766,39 @@ function normalizeUiTokens(text) {
         function formatDocumentResultCard(data) {
             const fileName = escapeHtml(String(data?.fileName || 'document'));
             const oneLiner = escapeHtml(buildUploadedDocumentOneLiner(data));
+            const userContext = String(data?.userContext || '').trim();
             return `
 <div class="p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70">
   <p class="text-xs font-semibold text-slate-500 dark:text-slate-300 mb-1">Uploaded file</p>
   <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-2">${fileName}</p>
+  ${userContext ? `<p class="text-xs text-slate-600 dark:text-slate-300 mb-2"><strong>Context:</strong> ${escapeHtml(userContext)}</p>` : ''}
   <p class="text-sm text-slate-700 dark:text-slate-200">${oneLiner}</p>
 </div>`;
+        }
+
+        function askOptionalUploadContext(fileName) {
+            const input = document.getElementById('upload-context-input');
+            if (!input) return '';
+            return String(input.value || '').trim().slice(0, 500);
+        }
+
+        function rememberUploadedDocument(doc) {
+            if (!doc || typeof doc !== 'object') return;
+            uploadedDocumentHistory = [doc, ...uploadedDocumentHistory
+                .filter(item => String(item?.fileName || '').toLowerCase() !== String(doc.fileName || '').toLowerCase())]
+                .slice(0, 6);
+            lastUploadedDocument = doc;
+        }
+
+        function resolveDocumentForQuestion(text) {
+            const q = String(text || '').toLowerCase();
+            if (!q) return lastUploadedDocument;
+            const byName = uploadedDocumentHistory.find(doc => {
+                const file = String(doc?.fileName || '').toLowerCase();
+                if (!file) return false;
+                return q.includes(file) || q.includes(file.replace(/\.[a-z0-9]+$/i, ''));
+            });
+            return byName || lastUploadedDocument;
         }
 
         function buildUploadedDocumentOneLiner(data) {
@@ -5616,8 +5822,8 @@ function normalizeUiTokens(text) {
                 /\b(extracted text|raw text|ocr text|full text|verbatim text)\b/.test(lowerText);
         }
 
-        function isLikelyDocumentQuestion(q) {
-            if (!lastUploadedDocument) return false;
+        function isLikelyDocumentQuestion(q, doc = lastUploadedDocument) {
+            if (!doc) return false;
             const lower = String(q || '').toLowerCase().trim();
             if (!lower) return false;
 
@@ -5631,15 +5837,15 @@ function normalizeUiTokens(text) {
 
             if (clearlyOtherIntent && !hasDocWords) return false;
             if (hasDocWords || asksSummary || isDocumentRawTextRequest(lower)) return true;
-            if (lastUploadedDocument.bill && asksAboutBill) return true;
+            if (doc.bill && asksAboutBill) return true;
 
             // Prevent hijacking generic questions unless they contain pronouns or summary overlap
             const hasPronoun = /\b(it|this|that|these|those|they)\b/.test(lower);
-            const summaryTokens = String(lastUploadedDocument.summary || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 4);
+            const summaryTokens = String(doc.summary || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 4);
             const queryTokens = lower.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 4);
             const hasOverlap = queryTokens.some(t => summaryTokens.includes(t));
 
-            const uploadedAt = Number(lastUploadedDocument.uploadedAt || 0);
+            const uploadedAt = Number(doc.uploadedAt || 0);
             const recentlyUploaded = uploadedAt > 0 && (Date.now() - uploadedAt) <= (45 * 60 * 1000);
             return recentlyUploaded && asksQuestion && (hasPronoun || hasOverlap);
         }
@@ -5661,11 +5867,186 @@ function normalizeUiTokens(text) {
             return '';
         }
 
+        function isSplitwiseExpenseIntent(text) {
+            const t = String(text || '').toLowerCase();
+            if (!t.trim()) return false;
+            return /\b(splitwise|split|settle|settlement|owe|owes|owed|share equally|divide equally|who paid|paid by|contributed|spent|brought)\b/.test(t);
+        }
+
+        function normalizeExpensePersonName(name) {
+            const raw = String(name || '').trim();
+            if (!raw) return '';
+            const compact = raw.replace(/\s+/g, ' ').trim();
+            if (/^(i|me|myself)$/i.test(compact)) return 'You';
+            return compact
+                .split(' ')
+                .filter(Boolean)
+                .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+                .join(' ');
+        }
+
+        function extractCurrencySymbol(text, bill) {
+            const billCurrency = String(bill?.currency || '').trim();
+            if (billCurrency) return billCurrency;
+            const t = String(text || '');
+            const m = t.match(/(₹|rs\.?|inr|\$|usd|eur|€|£)/i);
+            if (!m) return '';
+            const token = m[1].toLowerCase();
+            if (token === 'rs' || token === 'rs.' || token === 'inr') return 'INR';
+            if (token === '$' || token === 'usd') return 'USD';
+            if (token === '€' || token === 'eur') return 'EUR';
+            if (token === '£') return 'GBP';
+            return m[1];
+        }
+
+        function parseSplitwisePayload(text, bill) {
+            const raw = String(text || '').trim();
+            const lowered = raw.toLowerCase();
+            const contributions = new Map();
+
+            const addContribution = (name, amount) => {
+                const person = normalizeExpensePersonName(name);
+                const value = Number(amount);
+                if (!person || !Number.isFinite(value) || value < 0) return;
+                contributions.set(person, (contributions.get(person) || 0) + value);
+            };
+
+            // Pattern: "Alice paid 500", "I spent 300", "Bob contributed 200"
+            const verbPattern = /\b([a-z][a-z\s]{0,24}|i)\s+(?:paid|pay|spent|contributed|brought)\s*(?:rs\.?|inr|₹|\$|usd|eur|€|£)?\s*([0-9]+(?:\.[0-9]+)?)\b/gi;
+            let match;
+            while ((match = verbPattern.exec(raw)) !== null) {
+                addContribution(match[1], match[2]);
+            }
+
+            // Pattern: "Alice 500, Bob 200"
+            const simplePairPattern = /\b([a-z][a-z\s]{0,24}|i)\s*[:=-]?\s*(?:rs\.?|inr|₹|\$|usd|eur|€|£)?\s*([0-9]+(?:\.[0-9]+)?)\b/gi;
+            while ((match = simplePairPattern.exec(raw)) !== null) {
+                const nearby = raw.slice(Math.max(0, match.index - 14), Math.min(raw.length, match.index + match[0].length + 14));
+                if (/\b(phone|number|age|time|date)\b/i.test(nearby)) continue;
+                addContribution(match[1], match[2]);
+            }
+
+            // Total amount: explicit in text, else OCR bill total, else sum contributions.
+            let total = null;
+            const totalMatch = raw.match(/\b(?:total|bill(?:\s+amount)?|grand total)\s*(?:is|=|:)?\s*(?:rs\.?|inr|₹|\$|usd|eur|€|£)?\s*([0-9]+(?:\.[0-9]+)?)\b/i);
+            if (totalMatch) {
+                total = Number(totalMatch[1]);
+            } else if (Number.isFinite(Number(bill?.total))) {
+                total = Number(bill.total);
+            }
+
+            const contributionSum = Array.from(contributions.values()).reduce((a, b) => a + b, 0);
+            if (!Number.isFinite(total) || total <= 0) {
+                total = contributionSum;
+            }
+            if (!Number.isFinite(total) || total <= 0) return null;
+
+            // Participant count: "split among 4", "between 3", etc.
+            let participantCount = null;
+            const countMatch = lowered.match(/\b(?:among|between|for|across)\s+([0-9]{1,2})\s+(?:people|persons|friends|members)?\b/);
+            if (countMatch) participantCount = Number(countMatch[1]);
+
+            if (!participantCount || participantCount < 1) {
+                participantCount = contributions.size > 0 ? contributions.size : null;
+            }
+            if (!participantCount || participantCount < 1) return null;
+
+            const knownParticipants = Array.from(contributions.keys());
+            while (knownParticipants.length < participantCount) {
+                knownParticipants.push(`Person ${knownParticipants.length + 1}`);
+            }
+
+            const participantContrib = knownParticipants.map(name => ({
+                name,
+                paid: Number(contributions.get(name) || 0)
+            }));
+
+            return {
+                currency: extractCurrencySymbol(raw, bill),
+                total,
+                participantCount,
+                people: participantContrib
+            };
+        }
+
+        function buildSplitwiseResult(payload) {
+            const currency = payload.currency ? `${payload.currency} ` : '';
+            const share = payload.total / payload.participantCount;
+
+            const balances = payload.people.map(p => ({
+                name: p.name,
+                paid: p.paid,
+                balance: p.paid - share
+            }));
+
+            const creditors = balances
+                .filter(p => p.balance > 0.01)
+                .map(p => ({ name: p.name, amount: p.balance }))
+                .sort((a, b) => b.amount - a.amount);
+            const debtors = balances
+                .filter(p => p.balance < -0.01)
+                .map(p => ({ name: p.name, amount: Math.abs(p.balance) }))
+                .sort((a, b) => b.amount - a.amount);
+
+            const settlements = [];
+            let i = 0;
+            let j = 0;
+            while (i < debtors.length && j < creditors.length) {
+                const pay = Math.min(debtors[i].amount, creditors[j].amount);
+                if (pay > 0.009) {
+                    settlements.push({
+                        from: debtors[i].name,
+                        to: creditors[j].name,
+                        amount: pay
+                    });
+                }
+                debtors[i].amount -= pay;
+                creditors[j].amount -= pay;
+                if (debtors[i].amount <= 0.01) i++;
+                if (creditors[j].amount <= 0.01) j++;
+            }
+
+            const lines = [];
+            lines.push(`Split summary: total ${currency}${payload.total.toFixed(2)} across ${payload.participantCount} people.`);
+            lines.push(`Each person share: ${currency}${share.toFixed(2)}`);
+            lines.push('');
+            lines.push('Paid by:');
+            for (const p of payload.people) {
+                lines.push(`- ${p.name}: ${currency}${p.paid.toFixed(2)}`);
+            }
+            lines.push('');
+            if (!settlements.length) {
+                lines.push('Everyone is settled. No one owes anything.');
+            } else {
+                lines.push('Who owes whom:');
+                for (const s of settlements) {
+                    lines.push(`- ${s.from} owes ${s.to}: ${currency}${s.amount.toFixed(2)}`);
+                }
+            }
+            return lines.join('\n');
+        }
+
+        async function handleSplitwiseExpenseRequest(text) {
+            if (!isSplitwiseExpenseIntent(text)) return false;
+            const doc = resolveDocumentForQuestion(text) || lastUploadedDocument;
+            const payload = parseSplitwisePayload(text, doc?.bill || null);
+            if (!payload) {
+                return false;
+            }
+
+            const result = buildSplitwiseResult(payload);
+            addChatMessage(result, false);
+            speak('I calculated the split and who owes whom.');
+            saveToHistory(text, result);
+            return true;
+        }
+
         async function answerFromUploadedDocument(question, doc) {
             const summary = String(doc?.summary || '').trim();
             const extractedText = String(doc?.extractedText || '').trim();
             const billData = doc?.bill && typeof doc.bill === 'object' ? doc.bill : null;
             const fileName = String(doc?.fileName || 'uploaded file');
+            const userContext = String(doc?.userContext || '').trim();
             const ragContext = await fetchRagContextForDocumentQuestion(question, doc);
             const contentBlock = [summary, extractedText].filter(Boolean).join('\n\n').slice(0, 12000);
             const retrievalBlock = ragContext ? `Retrieved chunks:\n${ragContext}` : '';
@@ -5679,7 +6060,7 @@ function normalizeUiTokens(text) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     systemPrompt: 'You answer using only the provided document content. Be concise, direct, and practical. If a detail is missing, say it is not found in the uploaded file.',
-                    message: `Question about uploaded file "${fileName}": "${question}"\n\nDocument summary/content:\n${grounding}\n\nBill data (if present):\n${billData ? JSON.stringify(billData, null, 2) : 'None'}\n\nRules:\n- Do not expose raw OCR dumps.\n- Give a direct answer in plain language.\n- If asked to teach/explain, teach clearly with short steps based on the document.\n- If unsure, say "Not found in the uploaded file."`
+                    message: `Question about uploaded file "${fileName}": "${question}"\n\nUser context for this file (if any): ${userContext || 'None'}\n\nDocument summary/content:\n${grounding}\n\nBill data (if present):\n${billData ? JSON.stringify(billData, null, 2) : 'None'}\n\nRules:\n- Do not expose raw OCR dumps.\n- Give a direct answer in plain language.\n- If asked to teach/explain, teach clearly with short steps based on the document.\n- If the user asks outside this file scope, clearly say it is outside uploaded-file context.\n- If unsure, say "Not found in the uploaded file."`
                 })
             });
             if (!response.ok) throw new Error(`document_qa_failed_${response.status}`);
@@ -5690,12 +6071,13 @@ function normalizeUiTokens(text) {
 
         async function handleUploadedDocumentFollowup(text) {
             const q = String(text || '').trim();
-            if (!q || !lastUploadedDocument || !isLikelyDocumentQuestion(q)) return false;
+            const targetDoc = resolveDocumentForQuestion(q);
+            if (!q || !targetDoc || !isLikelyDocumentQuestion(q, targetDoc)) return false;
 
-            const fileName = String(lastUploadedDocument.fileName || 'uploaded file');
+            const fileName = String(targetDoc.fileName || 'uploaded file');
             const lower = q.toLowerCase();
-            const summary = String(lastUploadedDocument.summary || '').trim();
-            const extracted = String(lastUploadedDocument.extractedText || '').trim();
+            const summary = String(targetDoc.summary || '').trim();
+            const extracted = String(targetDoc.extractedText || '').trim();
 
             if (isDocumentRawTextRequest(lower)) {
                 const answer = extracted
@@ -5718,7 +6100,7 @@ function normalizeUiTokens(text) {
                 return true;
             }
 
-            const billQuickAnswer = buildBillQuickAnswer(lower, lastUploadedDocument.bill, fileName);
+            const billQuickAnswer = buildBillQuickAnswer(lower, targetDoc.bill, fileName);
             if (billQuickAnswer) {
                 addChatMessage(billQuickAnswer, false);
                 speak(billQuickAnswer);
@@ -5728,7 +6110,7 @@ function normalizeUiTokens(text) {
 
             showThinkingIndicator('Reading your uploaded file...');
             try {
-                const answer = await answerFromUploadedDocument(q, lastUploadedDocument);
+                const answer = await answerFromUploadedDocument(q, targetDoc);
                 addChatMessage(answer, false);
                 speak(answer);
                 saveToHistory(q, answer);
@@ -11593,6 +11975,10 @@ ${snippets}`
 
             if (isCodeAnalyzerRequest(text)) {
                 await handleCodeAnalyzerRequest(text);
+                return;
+            }
+
+            if (await handleSplitwiseExpenseRequest(text)) {
                 return;
             }
 
