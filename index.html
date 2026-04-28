@@ -200,6 +200,16 @@
                     onkeydown="if(event.key === 'Enter'){ event.preventDefault(); sendTextInput(); }"
                     oninput="toggleSendButton()"
                 />
+                <div id="voice-state-indicator" class="voice-state-indicator is-idle hidden" data-state="idle" aria-live="polite">
+                    <span id="voice-state-orb" class="voice-state-orb" aria-hidden="true"></span>
+                    <span id="voice-state-bars" class="voice-state-bars" aria-hidden="true">
+                        <span class="bar"></span>
+                        <span class="bar"></span>
+                        <span class="bar"></span>
+                        <span class="bar"></span>
+                    </span>
+                    <span id="voice-state-label" class="voice-state-label">Listening</span>
+                </div>
 
                 <!-- Voice-to-text + Converse/Send controls -->
                 <div class="footer-action-pill ml-1" role="group" aria-label="Input actions">
@@ -250,16 +260,6 @@
                             <span class="thinking-dot"></span>
                         </span>
                     </div>
-                </div>
-                <div id="voice-state-indicator" class="voice-state-indicator" data-state="idle" aria-live="polite">
-                    <span id="voice-state-orb" class="voice-state-orb" aria-hidden="true"></span>
-                    <span id="voice-state-bars" class="voice-state-bars" aria-hidden="true">
-                        <span class="bar"></span>
-                        <span class="bar"></span>
-                        <span class="bar"></span>
-                        <span class="bar"></span>
-                    </span>
-                    <span id="voice-state-label" class="voice-state-label">Idle</span>
                 </div>
             </div>
         </div>
@@ -3372,6 +3372,7 @@ async function handleNameCorrection(text) {
         let currentSpeechContext = 'none';
         let lastWakeAckTime = 0;
         let waitingForLocation = false;
+        let waitingForName = false;
         let isAssistantSpeaking = false;
         const synth = window.speechSynthesis || null;
 
@@ -3556,8 +3557,10 @@ async function handleNameCorrection(text) {
             } else if (state === 'user-listening') {
                 label.textContent = 'Listening to you';
             } else {
-                label.textContent = converseMode ? 'Converse ready' : 'Idle';
+                label.textContent = '';
             }
+            indicator.classList.toggle('hidden', state === 'idle');
+            indicator.classList.toggle('is-idle', state === 'idle');
 
             if (micBtn) {
                 micBtn.classList.toggle('is-listening', state === 'user-listening');
