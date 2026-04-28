@@ -15,14 +15,10 @@
                                                      }
                                  },
                    "rewrites":  [
-                                    {
-                                        "source":  "/",
-                                        "destination":  "/index.full_with_map_preview.html"
-                                    },
-                                    {
-                                        "source":  "/api/:path*",
-                                        "destination":  "/api/index.js"
-                                    }
-                                ]
+                    {
+                        "source":  "/",
+                        "destination":  "/index.full_with_map_preview.html"
+                    }
+                ]
                }
 }
