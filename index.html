@@ -2699,6 +2699,14 @@ function maybeCaptureKnowledgeEntity(text) {
  
 async function buildSearchFallbackAnswer(userMessage) {
     const resolvedMessage = resolveKnowledgeFollowupQuery(userMessage);
+    const lowSignal = String(resolvedMessage || '').trim();
+    if (!lowSignal) return null;
+    if (/^(hi|hello|hey|yo|sup|hola|vanakkam|namaste|good\s+(morning|afternoon|evening))[.!?]*$/i.test(lowSignal)) {
+        return null;
+    }
+    if (isAcknowledgementUtterance(lowSignal)) {
+        return null;
+    }
     const subject = normalizeKnowledgeSubject(extractKnowledgeSubject(resolvedMessage));
     const query = subject || String(resolvedMessage || '').trim();
     if (!query) return null;
@@ -11934,6 +11942,15 @@ ${snippets}`
 
         async function processCommand(text) {
             const lower = text.toLowerCase();
+            const compact = String(text || '').trim();
+
+            if (/^(hi|hello|hey|yo|sup|hola|vanakkam|namaste|good\s+(morning|afternoon|evening))[.!?]*$/i.test(compact)) {
+                const greet = userName ? `Hi ${userName}, how can I help today?` : 'Hi, how can I help today?';
+                addChatMessage(greet, false);
+                speak(greet);
+                saveToHistory(text, greet);
+                return;
+            }
 
             if (/\b(open|start|launch|enable)\s+(camera|ocr|scan)\b|\b(scan|read)\s+(this|text|document)\b/i.test(lower)) {
                 await openCameraMode();
