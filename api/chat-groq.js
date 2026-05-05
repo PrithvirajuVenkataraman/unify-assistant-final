@@ -95,7 +95,7 @@ function composeFinalPrompt(systemPrompt, ragBlock, contextBlock, message, lengt
 
 async function runModelWithFallback(finalPrompt, lengthPolicy = {}) {
     const temp = Number.isFinite(Number(lengthPolicy?.temperature)) ? Number(lengthPolicy.temperature) : 0.7;
-    const maxTokens = clampInt(lengthPolicy?.maxTokens, 2500, 256, 7000);
+    const maxTokens = clampInt(lengthPolicy?.maxTokens, 5000, 512, 10000);
     let groqFailureDetail = '';
     let groqTriedModels = [];
     const groqApiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
@@ -908,15 +908,15 @@ function buildLengthPolicy(message, clientSystemPrompt, options = {}) {
     if (detail === 'detailed') {
         return {
             instruction: 'User asked for detail. Provide a structured, in-depth explanation with enough depth to fully answer.',
-            maxTokens: 4200,
+            maxTokens: 10000,
             temperature: 0.7,
             wordSpec: null
         };
     }
     if (detail === 'short') {
-        return { instruction: 'Keep the response brief and direct.', maxTokens: 900, temperature: 0.5, wordSpec: null };
+        return { instruction: 'Keep the response brief and direct.', maxTokens: 5000, temperature: 0.5, wordSpec: null };
     }
-    return { instruction: 'Match response length to the user intent; concise for simple asks, fuller when needed.', maxTokens: 2500, temperature: 0.7, wordSpec: null };
+    return { instruction: 'Match response length to the user intent; concise for simple asks, fuller when needed.', maxTokens: 7500, temperature: 0.7, wordSpec: null };
 }
 
 function applyResponseLengthPostCheck(parsedResponse, lengthPolicy, message, clientSystemPrompt) {
