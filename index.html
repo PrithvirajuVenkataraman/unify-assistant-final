@@ -23,12 +23,6 @@
             <!-- Header - Enhanced -->
             <div class="header-enhanced mb-6">
                 <h1 id="title" class="jarvis-top-title">JARVIS</h1>
-                <!-- Light Switch -->
-                <button type="button" class="light-switch-container" onclick="toggleDarkMode()" title="Toggle light/dark mode" aria-label="Toggle light and dark mode" aria-pressed="false">
-                    <div id="light-switch" class="light-switch on">
-                        <div class="switch-toggle"></div>
-                    </div>
-                </button>
                 <p id="subtitle" class="hidden"></p>
             </div>
 
@@ -3851,7 +3845,7 @@ async function handleNameCorrection(text) {
 
             if (darkMode) {
                 // Dark mode
-                lightSwitch.classList.remove('on');
+                if (lightSwitch) lightSwitch.classList.remove('on');
 
                 body.classList.remove('light');
                 body.classList.add('dark');
@@ -3876,7 +3870,7 @@ async function handleNameCorrection(text) {
                 }
             } else {
                 // Light mode
-                lightSwitch.classList.add('on');
+                if (lightSwitch) lightSwitch.classList.add('on');
 
                 setTimeout(() => {
                     body.classList.remove('dark');
@@ -4103,6 +4097,18 @@ async function handleNameCorrection(text) {
                         <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Settings</h3>
                             <div class="space-y-4">
+                                <div class="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                    <div>
+                                        <p class="font-semibold text-gray-900 dark:text-white">Appearance</p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">Switch between light and dark mode</p>
+                                    </div>
+                                    <button
+                                        onclick="toggleDarkMode()"
+                                        class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-all"
+                                        title="Toggle dark mode">
+                                        ${darkMode ? 'Switch to Light' : 'Switch to Dark'}
+                                    </button>
+                                </div>
                                 <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                     <p class="font-semibold text-gray-900 dark:text-white">Safety Setup</p>
                                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Use "enable women's safety mode" and "trusted contact is ..." to personalize fast safety actions.</p>
@@ -4137,19 +4143,6 @@ async function handleNameCorrection(text) {
                                     </svg>
                                     Request Feature
                                 </button>
-                                <button
-                                    onclick="runSystemDiagnostics()"
-                                    class="w-full h-11 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 whitespace-nowrap transition-all hover:scale-[1.02] shadow-md hover:shadow-lg"
-                                    title="Run System Check">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                    Run System Check
-                                </button>
-                                <div id="system-check-panel" class="hidden rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-900/20 p-3">
-                                    <p id="system-check-summary" class="text-xs font-semibold text-emerald-700 dark:text-emerald-300 mb-2"></p>
-                                    <div id="system-check-results" class="space-y-1 text-xs text-gray-700 dark:text-gray-300"></div>
-                                </div>
                             </div>
                         </section>
 
