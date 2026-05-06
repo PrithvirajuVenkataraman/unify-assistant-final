@@ -4777,16 +4777,21 @@ async function handleNameCorrection(text) {
             panel.classList.remove('hidden');
         }
 
-        async function pingEndpoint(url, body) {
+        async function pingEndpoint(url, body, options = {}) {
             try {
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body || {})
                 });
+                const allowClientError = !!options.allowClientError;
+                const reachableClientError = allowClientError && response.status >= 400 && response.status < 500;
+                const ok = response.ok || reachableClientError;
                 return {
-                    ok: response.ok,
-                    detail: response.ok ? `HTTP ${response.status}` : `HTTP ${response.status}`
+                    ok,
+                    detail: reachableClientError
+                        ? `HTTP ${response.status} (reachable; rejected health payload)`
+                        : `HTTP ${response.status}`
                 };
             } catch (error) {
                 return {
@@ -4832,7 +4837,7 @@ async function handleNameCorrection(text) {
                 pingEndpoint('/api/chat-groq', { message: 'health check' }),
                 pingEndpoint('/api/search', { query: 'weather today', maxResults: 1 }),
                 pingEndpoint('/api/markets', { mode: 'news', query: 'latest news' }),
-                pingEndpoint('/api/rag', { mode: 'health_check' })
+                pingEndpoint('/api/rag', { mode: 'health_check' }, { allowClientError: true })
             ]);
 
             checks.push({ label: 'LLM API (/api/chat-groq)', ok: chatPing.ok, detail: chatPing.detail });
@@ -4978,8 +4983,8 @@ async function handleNameCorrection(text) {
                 
                 const hasMarkdownFormatting = /\[[^\]]+\]\((https?:\/\/[^)]+)\)|\*\*([^*]+)\*\*/.test(displayText);
                 const shouldTypewriter = typewriter === null
-                    ? (!hasHtmlContent && !hasMarkdownFormatting)
-                    : (!!typewriter && !hasHtmlContent);
+                    ? false
+                    : (!!typewriter && !hasHtmlContent && !hasMarkdownFormatting);
                 if (shouldTypewriter) {
                     const textElement = messageDiv.querySelector('.typewriter-text');
                     const typewriterRun = { cancelled: false };
@@ -4987,6 +4992,7 @@ async function handleNameCorrection(text) {
                     beginAssistantProcessing();
                     let charIndex = 0;
                     let finished = false;
+                    const safeTypewriterText = escapeHtml(readableText).replace(/\n/g, '<br>');
 
                     function finishTypewriter() {
                         if (finished) return;
@@ -5007,9 +5013,9 @@ async function handleNameCorrection(text) {
                             finishTypewriter();
                             return;
                         }
-                        if (charIndex < formattedText.length) {
-                            textElement.innerHTML = formattedText.substring(0, charIndex + 1);
-                            const currentChar = formattedText.charAt(charIndex);
+                        if (charIndex < safeTypewriterText.length) {
+                            textElement.innerHTML = safeTypewriterText.substring(0, charIndex + 1);
+                            const currentChar = safeTypewriterText.charAt(charIndex);
                             charIndex += 1;
                             maybeAutoScroll(chatContainer);
                             setManagedTimeout(typeCharacter, getHumanTypingDelay(currentChar));
