@@ -3216,7 +3216,7 @@ async function deliverApiReply(intent, data = {}, options = {}) {
     } else if (options?.verifiedLabel) {
         addVerifiedAssistantMessage(finalText, options.verifiedLabel);
     } else {
-        addChatMessage(finalText, false);
+        addChatMessage(finalText, false, options?.typewriter ?? true);
     }
 
     if (options?.speak !== false) {
@@ -5228,7 +5228,7 @@ async function handleNameCorrection(text) {
                 
                 const hasMarkdownFormatting = /\[[^\]]+\]\((https?:\/\/[^)]+)\)|\*\*([^*]+)\*\*/.test(displayText);
                 const shouldTypewriter = typewriter === null
-                    ? false
+                    ? !hasHtmlContent && !hasMarkdownFormatting
                     : (!!typewriter && !hasHtmlContent && !hasMarkdownFormatting);
                 if (shouldTypewriter) {
                     const textElement = messageDiv.querySelector('.typewriter-text');
@@ -13907,6 +13907,18 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             return null;
         }
 
+        function isCurrentLocationWeatherQuery(text) {
+            const raw = String(text || '').trim();
+            if (!raw) return false;
+            if (!isWeatherIntentText(raw)) return false;
+            if (isCurrentLocationIntentText(raw)) return true;
+            if (/\b(my\s+location|current\s+location|my\s+current\s+location|around\s+me|near\s+me|where\s+i\s+am|outside|here)\b/i.test(raw)) {
+                return true;
+            }
+            // If no explicit city/location is provided in a weather query, treat it as current-location weather.
+            return !extractLocationFromSentence(raw);
+        }
+
         async function getWeatherByCity(cityName) {
             hideThinkingIndicator(); 
             try {
@@ -14012,7 +14024,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
         async function fetchWeather(lat, lon, resolvedLocation, originalQuery = null) {
             hideThinkingIndicator(); 
-            showLoading('Checking weather');
+            showThinkingIndicator('Checking weather...');
             try {
                 const weatherResponse = await fetch(
                     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,precipitation&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto`
@@ -14038,7 +14050,14 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 document.getElementById('temperature').textContent = `${fahrenheit}\u00B0F / ${celsius}\u00B0C`;
                 document.getElementById('weather-advice').textContent = advice;
 
-                hideLoading();
+                const isCurrentLocationAsk = isCurrentLocationWeatherQuery(originalQuery);
+                const aqiLine = aqi && Number.isFinite(aqi.usAqi)
+                    ? `Air Quality Index (US AQI): ${aqi.usAqi} (${aqi.label || 'Unknown'})`
+                    : 'Air Quality Index (US AQI): unavailable right now';
+                const weatherFallback = [
+                    `In ${displayLocation}, it's ${celsius}°C (${fahrenheit}°F) with ${advice}.`,
+                    isCurrentLocationAsk ? aqiLine : ''
+                ].filter(Boolean).join('\n');
                 await deliverApiReply('weather_result', {
                     location: displayLocation,
                     fahrenheit,
@@ -14047,13 +14066,17 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     weatherCode: weather?.current?.weather_code,
                     aqiIndex: aqi?.usAqi ?? null,
                     aqiLabel: aqi?.label ?? null
+                }, {
+                    fallbackText: weatherFallback,
+                    typewriter: true
                 });
                 
             } catch (error) {
-                hideLoading();
                 await deliverApiReply('weather_fetch_error', {
                     error: String(error?.message || '')
                 });
+            } finally {
+                hideThinkingIndicator();
             }
         }
 
