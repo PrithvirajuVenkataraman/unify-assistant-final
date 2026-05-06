@@ -455,6 +455,240 @@ function isRecipeRequest(text) {
     return (recipeSignals.test(t) && dishSignals.test(t)) || directRecipePattern.test(t) || makeDishPattern.test(t);
 }
 
+function isMathCalculationRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    if (/\b(weather|forecast|news|headline|translate|joke|hotel|restaurant)\b/.test(t)) return false;
+    if (/\b(calculate|calc|compute|evaluate|solve|scientific calculation|scientific calculator)\b/.test(t)) return true;
+    if (/^[\d\s()+\-*/^%.=,]+$/.test(t) && /[+\-*/^%]/.test(t)) return true;
+    if (/^(what is|what's)\s+[-+*/^%().,\d\s]+=?$/.test(t)) return true;
+    return false;
+}
+
+function isStepByStepMathRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!isMathCalculationRequest(t)) return false;
+    return /\b(step by step|show steps|with steps|explain steps|how did you get|work out|worked solution|derive)\b/.test(t);
+}
+
+function normalizeMathExpression(rawText) {
+    let s = String(rawText || '').trim();
+    s = s
+        .replace(/[×x]/g, '*')
+        .replace(/÷/g, '/')
+        .replace(/−/g, '-')
+        .replace(/–/g, '-')
+        .replace(/,/g, '')
+        .replace(/\s+/g, ' ');
+
+    s = s.replace(/\b(?:calculate|calc|compute|evaluate|solve|what is|what's)\b/gi, '').trim();
+    s = s.replace(/[=?]\s*$/g, '').trim();
+    s = s.replace(/(\d+(?:\.\d+)?)\s*%/g, '($1/100)');
+    return s;
+}
+
+function evaluateScientificExpression(rawText) {
+    const expr = normalizeMathExpression(rawText);
+    if (!expr) return { ok: false, error: 'No expression found.' };
+    if (!/^[0-9+\-*/().,\s%^a-zA-Z]+$/.test(expr)) {
+        return { ok: false, error: 'Unsupported characters in expression.' };
+    }
+
+    let jsExpr = expr.replace(/\^/g, '**');
+    jsExpr = jsExpr.replace(/\bpi\b/gi, 'Math.PI');
+    jsExpr = jsExpr.replace(/(^|[^0-9.])e([^0-9]|$)/gi, '$1Math.E$2');
+
+    const fnMap = {
+        sin: 'Math.sin', cos: 'Math.cos', tan: 'Math.tan',
+        asin: 'Math.asin', acos: 'Math.acos', atan: 'Math.atan',
+        sqrt: 'Math.sqrt', abs: 'Math.abs',
+        log: 'Math.log10', ln: 'Math.log', exp: 'Math.exp',
+        floor: 'Math.floor', ceil: 'Math.ceil', round: 'Math.round',
+        pow: 'Math.pow', min: 'Math.min', max: 'Math.max'
+    };
+    for (const [k, v] of Object.entries(fnMap)) {
+        jsExpr = jsExpr.replace(new RegExp(`\\b${k}\\s*\\(`, 'gi'), `${v}(`);
+    }
+    if (!/^[0-9+\-*/().,\s*%A-Za-z_]+$/.test(jsExpr)) {
+        return { ok: false, error: 'Expression normalization failed.' };
+    }
+
+    try {
+        // eslint-disable-next-line no-new-func
+        const value = Function(`"use strict"; return (${jsExpr});`)();
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+            return { ok: false, error: 'Result is not finite.' };
+        }
+        return { ok: true, expression: expr, value };
+    } catch (_) {
+        return { ok: false, error: 'Could not evaluate expression.' };
+    }
+}
+
+function formatScientificResult(value) {
+    const abs = Math.abs(value);
+    if (abs !== 0 && (abs >= 1e9 || abs < 1e-6)) return value.toExponential(8);
+    return Number(value.toFixed(10)).toString();
+}
+
+function wantsSymbolicMathOutput(text) {
+    const t = String(text || '').toLowerCase();
+    if (!t.trim()) return false;
+    return /\b(exact|symbolic|fraction|fractions|surd|radical|keep.*sqrt|no decimal|without decimal|in terms of)\b/.test(t);
+}
+
+function gcd(a, b) {
+    let x = Math.abs(Math.trunc(a));
+    let y = Math.abs(Math.trunc(b));
+    while (y) {
+        const r = x % y;
+        x = y;
+        y = r;
+    }
+    return x || 1;
+}
+
+function approximateFraction(value, maxDenominator = 10000, tolerance = 1e-10) {
+    if (!Number.isFinite(value)) return null;
+    if (Number.isInteger(value)) return { numerator: value, denominator: 1 };
+
+    const sign = value < 0 ? -1 : 1;
+    let x = Math.abs(value);
+    let h1 = 1, h0 = 0, k1 = 0, k0 = 1;
+    let a = Math.floor(x);
+    let h = a * h1 + h0;
+    let k = a * k1 + k0;
+
+    while (k <= maxDenominator) {
+        const approx = h / k;
+        if (Math.abs(approx - x) <= tolerance) break;
+        const frac = x - a;
+        if (frac === 0) break;
+        x = 1 / frac;
+        a = Math.floor(x);
+
+        h0 = h1; h1 = h;
+        k0 = k1; k1 = k;
+        h = a * h1 + h0;
+        k = a * k1 + k0;
+    }
+
+    if (!k || k > maxDenominator) return null;
+    const num = sign * h;
+    const den = k;
+    const g = gcd(num, den);
+    return { numerator: num / g, denominator: den / g };
+}
+
+function extractSimpleSqrtExpression(expression) {
+    const expr = String(expression || '').trim();
+    const m = expr.match(/^([+-]?\d+(?:\.\d+)?)?\s*\*?\s*sqrt\(\s*([+-]?\d+(?:\.\d+)?)\s*\)$/i);
+    if (!m) return null;
+    const coeff = m[1] ? Number(m[1]) : 1;
+    const radicand = Number(m[2]);
+    if (!Number.isFinite(coeff) || !Number.isFinite(radicand) || radicand < 0) return null;
+    return { coeff, radicand };
+}
+
+function formatExactMathResult(expression, value, preferSymbolic = false) {
+    if (!preferSymbolic) return formatScientificResult(value);
+    if (Number.isInteger(value)) return String(value);
+
+    const sqrtForm = extractSimpleSqrtExpression(expression);
+    if (sqrtForm) {
+        if (sqrtForm.coeff === 1) return `sqrt(${formatScientificResult(sqrtForm.radicand)})`;
+        return `${formatScientificResult(sqrtForm.coeff)}*sqrt(${formatScientificResult(sqrtForm.radicand)})`;
+    }
+
+    const frac = approximateFraction(value);
+    if (frac && frac.denominator !== 1) {
+        return `${frac.numerator}/${frac.denominator}`;
+    }
+
+    return formatScientificResult(value);
+}
+
+async function handleMathCalculationRequest(text) {
+    const out = evaluateScientificExpression(text);
+    if (!out.ok) {
+        const msg = `I could not calculate that yet. ${out.error} Try: "calculate (25*3.2)+sqrt(49)-log(100)".`;
+        addChatMessage(msg, false);
+        speak('I could not calculate that. Please try a clearer expression.');
+        saveToHistory(text, msg);
+        return true;
+    }
+
+    const symbolic = wantsSymbolicMathOutput(text);
+    const resultText = formatScientificResult(out.value);
+    const exactText = formatExactMathResult(out.expression, out.value, symbolic);
+    const msg = symbolic
+        ? `Expression: ${out.expression}\nResult (exact/preferred): ${exactText}\nResult (decimal): ${resultText}\n\nHow: I used scientific operator precedence and math functions.`
+        : `Expression: ${out.expression}\nResult: ${resultText}\n\nHow: I used scientific operator precedence and math functions.`;
+    addChatMessage(msg, false);
+    speak(symbolic ? `Exact result is ${exactText}. Decimal result is ${resultText}` : `The result is ${resultText}`);
+    saveToHistory(text, msg);
+    return true;
+}
+
+async function handleMathStepByStepRequest(text) {
+    const out = evaluateScientificExpression(text);
+    if (!out.ok) {
+        const msg = `I could not solve that step-by-step yet. ${out.error} Try: "solve step by step (25*3.2)+sqrt(49)-log(100)".`;
+        addChatMessage(msg, false);
+        speak('I could not solve that step by step. Please try a clearer expression.');
+        saveToHistory(text, msg);
+        return true;
+    }
+
+    const symbolic = wantsSymbolicMathOutput(text);
+    const finalResult = formatScientificResult(out.value);
+    const exactResult = formatExactMathResult(out.expression, out.value, symbolic);
+    const prompt = `Solve this expression step by step for a student.
+
+Expression: ${out.expression}
+Final numeric result (already validated): ${finalResult}
+Preferred exact/symbolic final form (if available): ${exactResult}
+
+Rules:
+- Keep steps concise and correct.
+- Use numbered steps.
+- Preserve scientific function meaning (sqrt, log base 10, ln, trig).
+- End with:
+  Final answer (exact): ${exactResult}
+  Final answer (decimal): ${finalResult}
+- Do not change the final result.`;
+
+    try {
+        const response = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                systemPrompt: 'You are a precise math tutor. Provide clear, concise, correct worked steps.',
+                message: prompt
+            })
+        });
+
+        if (!response.ok) throw new Error(`step_math_failed_${response.status}`);
+        const data = await response.json();
+        let answer = String(data?.response || data?.text || '').trim();
+        if (!answer) throw new Error('empty_step_math');
+
+        if (!/final answer\s*\(decimal\)\s*:/i.test(answer)) {
+            answer = `${answer}\n\nFinal answer (exact): ${exactResult}\nFinal answer (decimal): ${finalResult}`;
+        }
+        addChatMessage(answer, false);
+        speak(symbolic ? `Done. Exact answer is ${exactResult}. Decimal answer is ${finalResult}` : `Done. Final answer is ${finalResult}`);
+        saveToHistory(text, answer);
+        return true;
+    } catch (_) {
+        const fallback = `1. Start with: ${out.expression}\n2. Apply operator precedence and evaluate inner/grouped operations first.\n3. Compute scientific functions and powers.\n4. Finish remaining multiplication/division, then addition/subtraction.\nFinal answer (exact): ${exactResult}\nFinal answer (decimal): ${finalResult}`;
+        addChatMessage(fallback, false);
+        speak(symbolic ? `Exact answer is ${exactResult}. Decimal answer is ${finalResult}` : `Final answer is ${finalResult}`);
+        saveToHistory(text, fallback);
+        return true;
+    }
+}
+
 function normalizeIntentTypos(text) {
     const raw = String(text || '');
     if (!raw.trim()) return '';
@@ -5449,8 +5683,8 @@ function normalizeUiTokens(text) {
                 const imageBase64 = dataUrl.split(',')[1];
                 const userInstruction = String(document.getElementById('ocr-comment-input')?.value || '').trim();
                 const prompt = userInstruction
-                    ? `First extract the visible text accurately with line breaks. Then answer this user instruction based only on the image: "${userInstruction}".`
-                    : 'Extract all visible text accurately with line breaks and provide a short practical summary.';
+                    ? `First extract ALL visible text exactly with line breaks, including numbers/symbols/equations. Then answer this instruction using only image evidence: "${userInstruction}".`
+                    : 'Extract all visible text exactly with line breaks (including numbers, symbols, and equations), then provide a short practical summary.';
 
                 const response = await fetch('/api/vision', {
                     method: 'POST',
@@ -5482,8 +5716,12 @@ function normalizeUiTokens(text) {
                 const extractedLines = Array.isArray(details?.textDetected)
                     ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean)
                     : [];
-                const extractedText = extractedLines.join('\n').trim();
+                let extractedText = extractedLines.join('\n').trim();
                 const visionAnswer = String(data?.response || details?.summary || '').trim();
+                if (!extractedText && visionAnswer) {
+                    const m = visionAnswer.match(/Detected text:\s*([\s\S]+)/i);
+                    if (m && m[1]) extractedText = String(m[1]).split('\n\n')[0].trim();
+                }
 
                 const card = `
 <div class="p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70">
@@ -11963,6 +12201,25 @@ ${snippets}`
                 return;
             }
 
+            // Deterministic routing for weather and scientific calculations.
+            if (isWeatherIntentText(compact)) {
+                const location = extractLocationFromSentence(compact);
+                if (location) {
+                    await getWeatherByCity(location);
+                } else {
+                    await handleCurrentLocationWeatherRequest(compact);
+                }
+                return;
+            }
+            if (isStepByStepMathRequest(compact)) {
+                await handleMathStepByStepRequest(compact);
+                return;
+            }
+            if (isMathCalculationRequest(compact)) {
+                await handleMathCalculationRequest(compact);
+                return;
+            }
+
             if (isContinuousVisionQuestion(lower)) {
                 if (!isContinuousVisionActive) {
                     const msg = 'Vision mode is off. Tap the vision icon first, then ask again.';
@@ -15825,7 +16082,7 @@ async function handleContinuousVisionQuery(text) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 task: isTextReadIntent ? 'text_extract' : 'general_vision',
-                prompt: `Analyze this live camera image and answer the user question directly: "${text}". Keep the answer concise and practical.`,
+                prompt: `If text is visible, prioritize OCR and preserve exact numbers/symbols/equations. Then answer the user question directly: "${text}". Keep the answer concise and practical.`,
                 mimeType: 'image/jpeg',
                 imageBase64: base64
             })
@@ -15843,7 +16100,13 @@ async function handleContinuousVisionQuery(text) {
             speak(failMsg);
             return;
         }
-        const answer = String(data.response || data?.details?.summary || '').trim() || 'I can see the image, but I could not generate a clear answer.';
+        const details = data?.details && typeof data.details === 'object' ? data.details : {};
+        const textDetected = Array.isArray(details?.textDetected)
+            ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean).join('\n').trim()
+            : '';
+        let answer = String(data.response || details?.summary || '').trim();
+        if (!answer && textDetected) answer = `Detected text:\n${textDetected}`;
+        if (!answer) answer = 'I can see the image, but I could not generate a clear answer.';
         addChatMessage(answer, false);
         speak(answer);
         saveToHistory(text, answer);
