@@ -531,6 +531,17 @@ function formatScientificResult(value) {
     return Number(value.toFixed(10)).toString();
 }
 
+function classTokens(value) {
+    if (Array.isArray(value)) return value.flatMap(classTokens).filter(Boolean);
+    return String(value || '').split(/\s+/).filter(Boolean);
+}
+
+function safeClassListAdd(element, ...values) {
+    if (!element || !element.classList) return;
+    const tokens = values.flatMap(classTokens);
+    if (tokens.length) element.classList.add(...tokens);
+}
+
 function wantsSymbolicMathOutput(text) {
     const t = String(text || '').toLowerCase();
     if (!t.trim()) return false;
@@ -14103,9 +14114,15 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
             const container = document.getElementById('weather-card');
             if (container) {
-                // Remove existing background classes and add the new one
-                container.className = container.className.split(' ').filter(cls => !cls.startsWith('bg-gradient-to-')).join(' ');
-                container.classList.add(weatherBgClass);
+                // Remove existing gradient/background color tokens safely.
+                const gradientPrefixes = ['bg-gradient-to-', 'from-', 'via-', 'to-'];
+                const retained = container.className
+                    .split(/\s+/)
+                    .filter(cls => cls && !gradientPrefixes.some(prefix => cls.startsWith(prefix)));
+                container.className = retained.join(' ');
+
+                // weatherBgClass is a class string with multiple tokens, so split before adding.
+                safeClassListAdd(container, weatherBgClass);
 
                 // Handle temperature-based adjustments
                 if (temp > 30) { // Hot
