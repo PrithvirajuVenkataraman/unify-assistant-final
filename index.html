@@ -5357,11 +5357,13 @@ async function handleNameCorrection(text) {
                     beginAssistantProcessing();
                     let charIndex = 0;
                     let finished = false;
-                    const safeTypewriterText = escapeHtml(readableText).replace(/\n/g, '<br>');
+                    const plainTypewriterText = String(readableText || '');
 
                     function finishTypewriter() {
                         if (finished) return;
                         finished = true;
+                        // Always finalize to the fully formatted HTML so markdown/tables never stay half-rendered.
+                        textElement.innerHTML = formattedText;
                         textElement.classList.remove('is-streaming');
                         activeTypewriterRuns.delete(typewriterRun);
                         endAssistantProcessing();
@@ -5379,9 +5381,10 @@ async function handleNameCorrection(text) {
                             finishTypewriter();
                             return;
                         }
-                        if (charIndex < safeTypewriterText.length) {
-                            textElement.innerHTML = safeTypewriterText.substring(0, charIndex + 1);
-                            const currentChar = safeTypewriterText.charAt(charIndex);
+                        if (charIndex < plainTypewriterText.length) {
+                            const partial = plainTypewriterText.substring(0, charIndex + 1);
+                            textElement.innerHTML = escapeHtml(partial).replace(/\n/g, '<br>');
+                            const currentChar = plainTypewriterText.charAt(charIndex);
                             charIndex += 1;
                             maybeAutoScroll(chatContainer);
                             setManagedTimeout(typeCharacter, getHumanTypingDelay(currentChar));
