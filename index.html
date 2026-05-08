@@ -4425,6 +4425,8 @@ async function handleNameCorrection(text) {
                 const activeClass = button.dataset.activeClass || 'bg-purple-600 text-white';
                 const inactiveClass = button.dataset.inactiveClass || 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300';
                 button.className = `${button.dataset.baseClass || ''} ${isActive ? activeClass : inactiveClass}`.trim();
+                button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                button.setAttribute('data-active', isActive ? 'true' : 'false');
             });
         }
 
