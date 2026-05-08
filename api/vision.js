@@ -41,6 +41,20 @@ export default async function handler(req, res) {
                 details: result.details
             });
         }
+        if (task === 'translate_to_english') {
+            const result = await runTranslateToEnglishPipeline({
+                apiKey,
+                mimeType,
+                imageBase64,
+                userPrompt: prompt
+            });
+            return res.status(200).json({
+                success: true,
+                task,
+                response: result.response,
+                details: result.details
+            });
+        }
 
         const systemPrompt = buildVisionPrompt(prompt, task);
         const geminiResponse = await callGeminiVision({
@@ -55,7 +69,7 @@ export default async function handler(req, res) {
             return res.status(502).json({ success: false, error: 'Vision model returned an empty response' });
         }
 
-        const parsed = safeParseJson(rawText);
+        const parsed = safeParseJson(rawText) || extractJsonFromText(rawText);
         if (!parsed) {
             return res.status(200).json({
                 success: true,
@@ -368,6 +382,77 @@ async function runMathOcrSolvePipeline({ apiKey, mimeType, imageBase64, userProm
     };
 }
 
+async function runTranslateToEnglishPipeline({ apiKey, mimeType, imageBase64, userPrompt }) {
+    const extractionPrompt = [
+        'Extract text from this image with high fidelity.',
+        'Return strict JSON only:',
+        '{',
+        '  "summary": "short useful summary",',
+        '  "quality": { "textReadability": "high|medium|low", "notes": "short note" },',
+        '  "textDetected": ["snippet 1", "snippet 2"],',
+        '  "fullText": "all readable text in original language and order"',
+        '}',
+        'Rules:',
+        '- Preserve original script and punctuation.',
+        '- Do not translate at this stage.'
+    ].join('\n');
+
+    const ocrPayload = await callGeminiVision({
+        apiKey,
+        systemPrompt: extractionPrompt,
+        mimeType,
+        imageBase64
+    });
+    const ocrRawText = extractGeminiText(ocrPayload);
+    if (!ocrRawText) throw new Error('Translation OCR stage returned empty response');
+
+    const ocrJson = extractJsonFromText(ocrRawText) || {};
+    const sourceText = normalizeMathOcrText(ocrJson);
+    if (!sourceText) {
+        throw new Error('Could not detect readable text for translation');
+    }
+
+    const translatorSystemPrompt = [
+        'You are a precise translation engine.',
+        'Translate all provided text to natural English.',
+        'Keep numbers, units, names, and technical terms intact unless translation is obvious.',
+        'Return strict JSON only:',
+        '{',
+        '  "detectedLanguage": "<best guess language name>",',
+        '  "englishText": "<full English translation>",',
+        '  "notes": ["optional short notes about ambiguity"]',
+        '}',
+        'No markdown, no code fences, no prose outside JSON.'
+    ].join('\n');
+
+    const translationText = await callGeminiText({
+        apiKey,
+        systemPrompt: translatorSystemPrompt,
+        userPrompt: [
+            `User intent: ${String(userPrompt || 'Translate this image text to English.').trim()}`,
+            'Source text:',
+            sourceText
+        ].join('\n\n'),
+        maxOutputTokens: 2500
+    });
+    const translationJson = extractJsonFromText(translationText);
+    if (!translationJson) throw new Error('Translation stage returned invalid JSON');
+
+    const englishText = String(translationJson?.englishText || '').trim();
+    if (!englishText) throw new Error('Translation stage returned empty English text');
+    const detectedLanguage = String(translationJson?.detectedLanguage || '').trim();
+    const languageLine = detectedLanguage ? `Language: ${detectedLanguage}` : 'Language: Unknown';
+
+    return {
+        response: `${englishText}\n\n${languageLine}`,
+        details: {
+            pipeline: 'ocr-translate',
+            ocr: ocrJson,
+            translation: translationJson
+        }
+    };
+}
+
 function buildVisionPrompt(userPrompt, task) {
     const isTextTask = task === 'text_extract' || task === 'bill_summary' || task === 'shopping_extract';
     const taskRule = getTaskRule(task);
@@ -432,6 +517,8 @@ function getTaskRule(task) {
             return 'Focus on OCR text extraction from signs, labels, and printed text.';
         case 'math_ocr_solve':
             return 'Extract and solve difficult math content using planner, critic, and solver stages.';
+        case 'translate_to_english':
+            return 'Extract visible text and translate it accurately to English.';
         default:
             return 'Provide a balanced scene analysis including objects, people, animals, and visible text.';
     }
@@ -446,6 +533,7 @@ function extractGeminiText(payload) {
 function safeParseJson(text) {
     const cleaned = String(text || '')
         .trim()
+        .replace(/^`?json\s*/i, '')
         .replace(/^```json\s*/i, '')
         .replace(/^```\s*/i, '')
         .replace(/```$/i, '')
