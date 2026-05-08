@@ -82,7 +82,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
             success: true,
             task,
-            response: formatVisionResponse(parsed, task),
+            response: formatVisionResponse(parsed, task, prompt),
             details: parsed
         });
     } catch (error) {
@@ -545,7 +545,19 @@ function safeParseJson(text) {
     }
 }
 
-function formatVisionResponse(data, task) {
+function wantsDetailedVisionResponse(task, userPrompt) {
+    const text = String(userPrompt || '').toLowerCase();
+    if (/\b(tell me everything|everything|all details|full details|detailed|in detail|explain fully|complete breakdown|show all)\b/.test(text)) {
+        return true;
+    }
+    // OCR-focused tasks should remain detailed by default.
+    if (task === 'text_extract' || task === 'bill_summary' || task === 'shopping_extract' || task === 'fridge_items') {
+        return true;
+    }
+    return false;
+}
+
+function formatVisionResponse(data, task, userPrompt = '') {
     const summary = String(data?.summary || 'Image analyzed.');
     const objects = normalizeDetected(data?.objects);
     const people = Array.isArray(data?.people) ? data.people : [];
@@ -559,6 +571,10 @@ function formatVisionResponse(data, task) {
     const billTotals = Array.isArray(bill.totals) ? bill.totals : [];
 
     const lines = [`Vision summary: ${summary}`];
+    const wantsDetailed = wantsDetailedVisionResponse(task, userPrompt);
+    if (!wantsDetailed && task !== 'people_count') {
+        return lines.join('\n\n');
+    }
 
     if (task === 'people_count') {
         const peopleCountFromList = people.reduce((sum, p) => sum + Number(p?.count || 1), 0);
