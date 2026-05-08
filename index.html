@@ -440,6 +440,15 @@ function isTamilJokeRequest(text) {
     return /\btamil\b|\u0ba4\u0bae\u0bbf\u0bb4\u0bcd/.test(t);
 }
 
+function isSeriesReferenceJokeRequest(text) {
+    const t = String(text || '').toLowerCase();
+    if (!t.trim()) return false;
+    const jokeSignal = /\b(joke|funny|meme|roast|humor|laugh)\b/.test(t);
+    const screenSignal = /\b(series|sitcom|show|web\s*series|movie|film|episode|character|scene)\b/.test(t);
+    const referenceSignal = /\b(reference|inside joke|context|explain)\b/.test(t);
+    return (jokeSignal && screenSignal) || (jokeSignal && referenceSignal);
+}
+
 function isRecipeRequest(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -2770,6 +2779,137 @@ Rules:
     }
 }
 
+async function handleSeriesReferenceJokeRequest(text) {
+    showThinkingIndicator('Writing a reference joke...');
+    try {
+        const response = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                systemPrompt: 'You are a witty assistant. Keep jokes clean and culturally safe.',
+                message: `Create one short, funny series/movie reference joke for this user prompt: "${text}".
+
+Rules:
+- Joke must be understandable.
+- Add one line: "Reference explained: ..."
+- Keep total response under 5 lines.
+- Family-friendly only.`
+            })
+        });
+        if (!response.ok) throw new Error('series_joke_failed');
+        const data = await response.json();
+        const answer = String(data?.response || data?.text || '').trim();
+        if (!answer) throw new Error('series_joke_empty');
+        addModelAssistantMessage(answer, 'Model answer');
+        speak('Here is a series reference joke.');
+        saveToHistory(text, answer);
+        return true;
+    } catch (_) {
+        const fallback = 'Joke: I started binge-watching a detective series to learn focus, but now I suspect my fridge every time it hums.\nReference explained: Detective shows train you to see clues everywhere, even in normal things.';
+        addModelAssistantMessage(fallback, 'Model answer');
+        speak('Here is a series reference joke.');
+        saveToHistory(text, fallback);
+        return true;
+    } finally {
+        hideThinkingIndicator();
+    }
+}
+
+async function generateScreenSuggestions(intent, historyKey) {
+    showThinkingIndicator('Finding suggestions...');
+    try {
+        const response = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                systemPrompt: 'You are a strict recommendation engine. Output valid JSON only.',
+                message: `Suggest exactly 5 titles.
+
+Type: ${intent.type}
+Language: ${intent.language}
+Genre: ${intent.genre}
+
+Return strict JSON only:
+{
+  "items": [
+    { "title": "<name>", "type": "<movie|series|sitcom>", "language": "<language>", "why": "<short reason>" }
+  ]
+}
+
+Rules:
+- Exactly 5 items.
+- Real and recognizable titles only.
+- Match type, language, and genre closely.
+- If language is any language, diversity is allowed.
+- Valid JSON only.`
+            })
+        });
+        if (!response.ok) throw new Error('screen_suggestions_failed');
+        const data = await response.json();
+        const parsed = extractJsonObject(data?.response || data?.text || '');
+        const items = Array.isArray(parsed?.items) ? parsed.items.slice(0, 5) : [];
+        if (items.length < 5) throw new Error('screen_suggestions_not_enough');
+
+        const lines = [`Here are 5 ${intent.genre} ${intent.type} suggestions${intent.language !== 'any language' ? ` in ${intent.language}` : ''}:`, ''];
+        items.forEach((item, idx) => {
+            const title = String(item?.title || '').trim();
+            const type = String(item?.type || '').trim() || 'title';
+            const language = String(item?.language || '').trim() || 'mixed';
+            const why = String(item?.why || '').trim();
+            if (!title) return;
+            lines.push(`${idx + 1}. ${title} (${type}, ${language})${why ? ` - ${why}` : ''}`);
+        });
+        const msg = lines.join('\n').trim();
+        addModelAssistantMessage(msg, 'Model answer');
+        speak(`Here are 5 ${intent.genre} suggestions.`);
+        saveToHistory(historyKey, msg);
+        return true;
+    } catch (_) {
+        const fallback = `I could not generate reliable suggestions right now. Try: "suggest 5 ${intent.genre} ${intent.type} in ${intent.language}".`;
+        addChatMessage(fallback, false);
+        speak('I could not fetch suggestions right now.');
+        saveToHistory(historyKey, fallback);
+        return true;
+    } finally {
+        hideThinkingIndicator();
+    }
+}
+
+async function handleScreenSuggestionFlow(text) {
+    const intent = extractScreenSuggestionIntent(text);
+    if (!intent.genre) {
+        pendingScreenSuggestionRequest = {
+            type: intent.type,
+            language: intent.language
+        };
+        const ask = `Sure. What genre do you want for ${intent.type} suggestions${intent.language !== 'any language' ? ` in ${intent.language}` : ''}?`;
+        addChatMessage(ask, false);
+        speak(ask);
+        saveToHistory(text, ask);
+        return true;
+    }
+    return await generateScreenSuggestions(intent, text);
+}
+
+async function handlePendingScreenSuggestionReply(text) {
+    if (!pendingScreenSuggestionRequest) return false;
+    const genre = detectGenreFromText(text);
+    if (!genre) {
+        const askAgain = 'Please tell me a genre like comedy, thriller, action, romance, sci-fi, crime, or horror.';
+        addChatMessage(askAgain, false);
+        speak(askAgain);
+        saveToHistory(text, askAgain);
+        return true;
+    }
+    const intent = {
+        type: pendingScreenSuggestionRequest.type || 'movie/series',
+        language: pendingScreenSuggestionRequest.language || 'any language',
+        genre
+    };
+    pendingScreenSuggestionRequest = null;
+    return await generateScreenSuggestions(intent, text);
+}
+
 function extractKnowledgeSubject(text) {
     const raw = normalizeIntentTypos(String(text || '').trim());
     if (!raw) return '';
@@ -3568,6 +3708,7 @@ async function handleNameCorrection(text) {
         let lastUploadedDocument = null;
         let uploadedDocumentHistory = [];
         let pendingUploadContext = '';
+        let pendingScreenSuggestionRequest = null;
         let songMoodGameState = null;
         let translatorMode = false;
         let translatorLanguage = null;
@@ -8495,6 +8636,46 @@ function isArtistSongRequest(text) {
            /\b[a-z][a-z0-9.'&\-\s]{2,}\s+songs?\b/.test(t);
 }
 
+function isScreenSuggestionRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    const suggestionSignal = /\b(suggest|recommend|recommendation|suggestion|what should i watch|watchlist|watch list|need a suggestion)\b/.test(t);
+    const screenSignal = /\b(sitcom|series|show|web series|movie|film|anime)\b/.test(t);
+    return suggestionSignal && screenSignal;
+}
+
+function detectGenreFromText(text) {
+    const t = String(text || '').toLowerCase();
+    const knownGenres = [
+        'action', 'comedy', 'romance', 'thriller', 'horror', 'crime', 'mystery',
+        'sci-fi', 'science fiction', 'fantasy', 'drama', 'family', 'animation',
+        'adventure', 'historical', 'biography', 'documentary', 'sports', 'war',
+        'musical', 'slice of life'
+    ];
+    for (const genre of knownGenres) {
+        const re = new RegExp(`\\b${genre.replace(/\s+/g, '\\s+')}\\b`, 'i');
+        if (re.test(t)) return genre;
+    }
+    return '';
+}
+
+function extractScreenSuggestionIntent(text) {
+    const t = String(text || '').toLowerCase();
+    const genre = detectGenreFromText(t);
+
+    const typeMatches = [];
+    if (/\b(sitcom)\b/.test(t)) typeMatches.push('sitcom');
+    if (/\b(series|show|web series)\b/.test(t)) typeMatches.push('series');
+    if (/\b(movie|film)\b/.test(t)) typeMatches.push('movie');
+    const type = typeMatches.length ? typeMatches.join(', ') : 'movie/series';
+
+    let language = 'any language';
+    const langMatch = t.match(/\b(tamil|hindi|telugu|kannada|malayalam|english|korean|japanese|spanish|french|german|chinese)\b/i);
+    if (langMatch && langMatch[1]) language = langMatch[1].toLowerCase();
+
+    return { type, language, genre };
+}
+
 // New generic quantity extraction function
 function extractRequestedQuantity(text, defaultCount = 5, min = 1, max = 20) {
     const raw = String(text || '').trim().toLowerCase();
@@ -10301,9 +10482,11 @@ function classifyUserMessage(text) {
             news: /\b(news|headlines?|current events?|breaking news)\b/i.test(raw) || isNewsworthyLiveTopic(raw),
             liveRetrieval: isLiveRetrievalQuery(raw),
             tamilJoke: isTamilJokeRequest(raw),
+            seriesRefJoke: isSeriesReferenceJokeRequest(raw),
             recipe: isRecipeRequest(raw),
             classicSongs: isClassicSongDiscoveryRequest(raw),
             artistSong: isArtistSongRequest(raw),
+            screenSuggestions: isScreenSuggestionRequest(raw),
             highRiskMentalHealth: isHighRiskMentalHealth(raw),
             supportExit: isSupportConversationExit(raw),
             supportRequest: isSupportConversationRequest(raw),
@@ -10337,9 +10520,11 @@ function decideAnswerPath(classification) {
     if (flags.marketPrice) return 'market_price';
     if (flags.liveRetrieval) return 'live_retrieval';
     if (flags.tamilJoke) return 'tamil_joke';
+    if (flags.seriesRefJoke) return 'series_ref_joke';
     if (flags.recipe) return 'recipe';
     if (flags.classicSongs) return 'classic_songs'; 
     if (flags.artistSong) return 'artist_song'; 
+    if (flags.screenSuggestions) return 'screen_suggestions';
  
     if (flags.highRiskMentalHealth) return 'high_risk_mental_health'; 
     if (flags.motivationStory) return 'motivation_story';
@@ -12666,6 +12851,11 @@ ${snippets}`
                 cleanText = cleanText.replace(regex, ''); 
             } 
 
+            if (pendingScreenSuggestionRequest) {
+                const handledPendingScreen = await handlePendingScreenSuggestionReply(cleanText);
+                if (handledPendingScreen) return;
+            }
+
             if (songMoodGameState) {
                 const handled = await handleSongMoodGameAnswer(cleanText);
                 if (handled) return;
@@ -12826,6 +13016,16 @@ ${snippets}`
 
             if (answerPath === 'tamil_joke') {
                 await handleTamilJokeSearch(cleanText);
+                return;
+            }
+
+            if (answerPath === 'series_ref_joke') {
+                await handleSeriesReferenceJokeRequest(cleanText);
+                return;
+            }
+
+            if (answerPath === 'screen_suggestions') {
+                await handleScreenSuggestionFlow(cleanText);
                 return;
             }
 
