@@ -16811,12 +16811,17 @@ async function handleContinuousVisionQuery(text) {
     showThinkingIndicator('Analyzing your view...');
     try {
         const isTextReadIntent = /\b(read|text|ocr|bill|receipt|invoice|sign|label|menu|document)\b/i.test(String(text || ''));
+        const isMathSolveIntent = /\b(solve|calculate|evaluate|find x|equation|integral|derivative|differentiate|simplify|factor|algebra|trigonometry|calculus|math problem|word problem|step by step)\b/i.test(String(text || ''));
+        const visionTask = isMathSolveIntent ? 'math_ocr_solve' : (isTextReadIntent ? 'text_extract' : 'general_vision');
+        const visionPrompt = isMathSolveIntent
+            ? `Read the math problem from the image and solve it accurately with clear steps. User query: "${text}".`
+            : `If text is visible, prioritize OCR and preserve exact numbers/symbols/equations. Then answer the user question directly: "${text}". Keep the answer concise and practical.`;
         const response = await fetch('/api/vision', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                task: isTextReadIntent ? 'text_extract' : 'general_vision',
-                prompt: `If text is visible, prioritize OCR and preserve exact numbers/symbols/equations. Then answer the user question directly: "${text}". Keep the answer concise and practical.`,
+                task: visionTask,
+                prompt: visionPrompt,
                 mimeType: 'image/jpeg',
                 imageBase64: base64
             })
