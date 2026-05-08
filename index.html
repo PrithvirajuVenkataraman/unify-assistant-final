@@ -16811,11 +16811,16 @@ async function handleContinuousVisionQuery(text) {
     showThinkingIndicator('Analyzing your view...');
     try {
         const isTextReadIntent = /\b(read|text|ocr|bill|receipt|invoice|sign|label|menu|document)\b/i.test(String(text || ''));
+        const isTranslateIntent = /\b(translate|translation|convert to english|to english|in english|what does this say)\b/i.test(String(text || ''));
         const isMathSolveIntent = /\b(solve|calculate|evaluate|find x|equation|integral|derivative|differentiate|simplify|factor|algebra|trigonometry|calculus|math problem|word problem|step by step)\b/i.test(String(text || ''));
-        const visionTask = isMathSolveIntent ? 'math_ocr_solve' : (isTextReadIntent ? 'text_extract' : 'general_vision');
+        const visionTask = isMathSolveIntent
+            ? 'math_ocr_solve'
+            : (isTranslateIntent ? 'translate_to_english' : (isTextReadIntent ? 'text_extract' : 'general_vision'));
         const visionPrompt = isMathSolveIntent
             ? `Read the math problem from the image and solve it accurately with clear steps. User query: "${text}".`
-            : `If text is visible, prioritize OCR and preserve exact numbers/symbols/equations. Then answer the user question directly: "${text}". Keep the answer concise and practical.`;
+            : (isTranslateIntent
+                ? `Extract all readable text and translate it to English. User query: "${text}".`
+                : `If text is visible, prioritize OCR and preserve exact numbers/symbols/equations. Then answer the user question directly: "${text}". Keep the answer concise and practical.`);
         const response = await fetch('/api/vision', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -16850,7 +16855,7 @@ async function handleContinuousVisionQuery(text) {
             const textBlock = fullText || textDetected;
             answer = `Detected text:\n${textBlock}`;
         }
-        if (answer && readability) {
+        if (answer && readability && !isTranslateIntent) {
             answer += `\n\nReadability: ${readability}`;
         }
         if (!answer) answer = 'I can see the image, but I could not generate a clear answer.';
