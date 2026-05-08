@@ -7781,8 +7781,17 @@ function processSuggestion(text) {
 
 function detectPrimaryLocationFromText(text) {
     if (!text) return '';
-    const match = text.match(/\b(?:in|at|near|to)\s+([A-Za-z][A-Za-z\s,.-]{1,80})/i);
-    if (match && match[1]) return match[1].trim().replace(/[?.!,]$/, '');
+    const normalized = String(text || '').trim();
+    const patterns = [
+        /\b(?:in|at|near|to|for)\s+([A-Za-z][A-Za-z\s,.-]{1,80})(?=$|[?.!,])/i,
+        /\b(?:trip|itinerary|visit|travel|hotels?|restaurants?|food)\s+(?:to|in|for)\s+([A-Za-z][A-Za-z\s,.-]{1,80})(?=$|[?.!,])/i
+    ];
+    for (const pattern of patterns) {
+        const match = normalized.match(pattern);
+        if (match && match[1]) {
+            return match[1].trim().replace(/[?.!,]$/, '');
+        }
+    }
     return '';
 }
 
@@ -7829,6 +7838,59 @@ function setLastResolvedTravelLocation(location) {
     if (!normalized || isInvalidLocationCandidate(normalized)) return;
     lastResolvedTravelLocation = normalized;
     window.lastResolvedTravelLocation = normalized;
+}
+
+function extractTravelLocationOrFallback(text) {
+    const fromText = detectPrimaryLocationFromText(text);
+    if (fromText && !isInvalidLocationCandidate(fromText)) return fromText;
+    const fromContext = getLocationFromRecentContext();
+    if (fromContext && !isInvalidLocationCandidate(fromContext)) return fromContext;
+    return '';
+}
+
+async function buildTopPlaceSuggestions(type, location, userText = '') {
+    const kind = String(type || '').toLowerCase();
+    const loc = String(location || '').trim();
+    if (!loc) return null;
+
+    const queryMap = {
+        hotel: `best hotels in ${loc}`,
+        restaurant: `best restaurants in ${loc}`,
+        food: `best local food and must-try dishes in ${loc}`
+    };
+    const searchQuery = queryMap[kind] || `best places in ${loc}`;
+    const web = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: searchQuery, maxResults: 8 })
+    });
+    if (!web.ok) return null;
+    const data = await web.json();
+    const results = Array.isArray(data?.results) ? data.results.filter(Boolean).slice(0, 6) : [];
+    if (!results.length) return null;
+
+    const lines = [];
+    const heading = kind === 'hotel'
+        ? `[Hotel] Top hotel suggestions in ${loc}`
+        : kind === 'restaurant'
+            ? `[Food] Top restaurant suggestions in ${loc}`
+            : `[Food] Local food suggestions in ${loc}`;
+    lines.push(heading, '');
+
+    results.slice(0, 5).forEach((item, idx) => {
+        const title = String(item?.title || '').trim();
+        const desc = String(item?.description || '').replace(/\s+/g, ' ').trim();
+        const url = String(item?.url || '').trim();
+        if (!title) return;
+        const shortDesc = desc ? ` - ${desc.slice(0, 160)}${desc.length > 160 ? '...' : ''}` : '';
+        const sourceLine = url ? `\n   Source: ${url}` : '';
+        lines.push(`${idx + 1}. ${title}${shortDesc}${sourceLine}`);
+    });
+
+    const mapsBase = kind === 'hotel' ? 'hotels' : 'restaurants';
+    const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(`${mapsBase} in ${loc}`)}`;
+    lines.push('', `Map view: ${mapsUrl}`);
+    return lines.join('\n');
 }
 
 function formatSourceLinksWithIcons(urls) {  
@@ -13700,10 +13762,18 @@ Quick recap: ...
                 
                 // Extract location for web search
                 const locationMatch = text.match(/(?:in|to|for|at)\s+([^,?.!]+)/i);
-                const itineraryLocation = locationMatch ? locationMatch[1].trim() : '';
-                const itineraryContextLocation = itineraryLocation || detectPrimaryLocationFromText(text);
-                if (itineraryContextLocation && !isInvalidLocationCandidate(itineraryContextLocation)) {
-                    setLastResolvedTravelLocation(itineraryContextLocation);
+                const itineraryLocation = (locationMatch ? locationMatch[1].trim() : '') || extractTravelLocationOrFallback(text);
+                if (itineraryLocation && !isInvalidLocationCandidate(itineraryLocation)) {
+                    setLastResolvedTravelLocation(itineraryLocation);
+                }
+
+                if (!itineraryLocation || isInvalidLocationCandidate(itineraryLocation)) {
+                    await deliverApiReply('itinerary_city_prompt', {
+                        reason: 'missing_city'
+                    }, {
+                        fallbackText: 'Tell me the city for your itinerary, like: "Plan a 2-day itinerary in Kyoto".'
+                    });
+                    return;
                 }
                 
                 // Do web search first to get real places
@@ -13863,7 +13933,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
             if (isRestaurantMatch || isHotelMatch || isTransportMatch) { 
 
-                const queryType = isHotelMatch ? 'hotel' : (isTransportMatch ? 'transport' : 'food'); 
+                    const queryType = isHotelMatch ? 'hotel' : (isTransportMatch ? 'transport' : 'food'); 
                 
                 // Extract location
                 let cityName = '';
@@ -13938,34 +14008,18 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         return;
                     }
                     // Show Google Maps embed - FREE, no API needed!
-                    if (queryType === 'hotel') { 
-                        const searchQuery = encodeURIComponent(`hotels in ${fullLocation || cityName}`); 
-                        const hotelMsg = `[Hotel] **Hotels in ${cityName}** 
-
-<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
-<iframe 
-  src="https://maps.google.com/maps?q=hotels+in+${searchQuery}&output=embed"
-  width="100%" 
-  height="300"
-  style="border:0; display:block;" 
-  allowfullscreen=""
-  loading="lazy"
-  referrerpolicy="no-referrer-when-downgrade">
-</iframe>
-</div>
-
-[Map] Click on markers to see ratings, reviews & directions!`; 
-
-                        addChatMessage(hotelMsg, false);
-                        const hotelIntro = await composeApiReply('hotel_map_card_intro', {
-                            cityName,
-                            fullLocation: fullLocation || cityName
-                        }, {
-                            fallbackText: `Here are hotels in ${cityName}.`
-                        });
-                        speak(hotelIntro || `Here are hotels in ${cityName}.`);
+                    if (queryType === 'hotel') {
+                        const resolvedHotelLocation = fullLocation || cityName;
+                        const hotelSuggestions = await buildTopPlaceSuggestions('hotel', resolvedHotelLocation, text);
+                        if (hotelSuggestions) {
+                            addVerifiedAssistantMessage(hotelSuggestions, 'Verified live sources');
+                        } else {
+                            const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(`hotels in ${resolvedHotelLocation}`)}`;
+                            addChatMessage(`[Hotel] I could not fetch ranked suggestions right now.\nTry this live map list:\n${mapsUrl}`, false);
+                        }
+                        speak(`Here are hotel options in ${cityName}.`);
                         
-                        setLastResolvedTravelLocation(fullLocation || cityName);
+                        setLastResolvedTravelLocation(resolvedHotelLocation);
                         saveToHistory(text, `Hotel search for ${cityName}`);
                         await askTransportSuggestionFor(cityName);
                         showFastFoodBox();
@@ -14019,29 +14073,16 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
                     const finalLocation = resolved?.fullLocation || fullLocation || cityName; 
                     const locationCity = resolved?.cityName || cityName; 
-                    setLastResolvedTravelLocation(finalLocation || locationCity); 
+                    setLastResolvedTravelLocation(finalLocation || locationCity);
 
-                    const mapsQuery = encodeURIComponent(`restaurants in ${finalLocation}`); 
-                    const googleQuery = encodeURIComponent(`best restaurants in ${finalLocation}`); 
-                    const tripadvisorQuery = encodeURIComponent(`${finalLocation} restaurants tripadvisor`); 
-                    const mapsSearchUrl = `https://www.google.com/maps/search/${mapsQuery}`; 
-                    const googleSearchUrl = `https://www.google.com/search?q=${googleQuery}`; 
-                    const tripadvisorSearchUrl = `https://www.google.com/search?q=${tripadvisorQuery}`; 
-                    const sourceLinksBlock = formatSourceLinksWithIcons([ 
-                        mapsSearchUrl, 
-                        googleSearchUrl, 
-                        tripadvisorSearchUrl 
-                    ]); 
-
-                    const foodMsg = `[Food] **Top restaurant picks near ${locationCity}**\n\n<div class="map-container" style="margin: 10px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">\n<iframe src="https://maps.google.com/maps?q=restaurants+in+${mapsQuery}&output=embed" width="100%" height="320" style="border:0; display:block;" allowfullscreen="" loading="lazy"></iframe>\n</div>\n\nI can suggest good restaurants using these live links:\n\n1. [Open Google Maps list](${mapsSearchUrl})\n2. [Quick Google search](${googleSearchUrl})\n3. [TripAdvisor search](${tripadvisorSearchUrl})\n\n**Sources looked at (exact links):**\n${sourceLinksBlock}`;
-                    addChatMessage(foodMsg, false);
-                    const restaurantIntro = await composeApiReply('restaurant_map_card_intro', {
-                        cityName: locationCity,
-                        fullLocation: finalLocation
-                    }, {
-                        fallbackText: `Here are restaurant options near ${locationCity}.`
-                    });
-                    speak(restaurantIntro || `Here are restaurant options near ${locationCity}.`);
+                    const restaurantSuggestions = await buildTopPlaceSuggestions('restaurant', finalLocation, text);
+                    if (restaurantSuggestions) {
+                        addVerifiedAssistantMessage(restaurantSuggestions, 'Verified live sources');
+                    } else {
+                        const mapsSearchUrl = `https://www.google.com/maps/search/${encodeURIComponent(`restaurants in ${finalLocation}`)}`;
+                        addChatMessage(`[Food] I could not fetch ranked restaurant suggestions right now.\nTry this live map list:\n${mapsSearchUrl}`, false);
+                    }
+                    speak(`Here are restaurant options near ${locationCity}.`);
                     saveToHistory(text, `Restaurant search for ${finalLocation}`);
                     await askTransportSuggestionFor(locationCity);
                     return;
