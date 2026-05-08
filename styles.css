@@ -3135,6 +3135,7 @@ body.light .jarvis-top-title {
     border: 1px solid rgba(148, 163, 184, 0.45);
     background: rgba(15, 23, 42, 0.92);
     box-shadow: 0 10px 24px rgba(2, 6, 23, 0.42);
+    pointer-events: auto;
 }
 
 .continuous-vision-preview.hidden {
@@ -3151,6 +3152,12 @@ body.light .jarvis-top-title {
     border-bottom: 1px solid rgba(100, 116, 139, 0.45);
 }
 
+.continuous-vision-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .continuous-vision-pill {
     display: inline-flex;
     align-items: center;
@@ -3163,6 +3170,7 @@ body.light .jarvis-top-title {
     background: rgba(37, 99, 235, 0.45);
 }
 
+.continuous-vision-minimize,
 .continuous-vision-close {
     border: 0;
     border-radius: 8px;
@@ -3171,6 +3179,15 @@ body.light .jarvis-top-title {
     font-weight: 700;
     color: #e2e8f0;
     background: rgba(51, 65, 85, 0.85);
+}
+
+.continuous-vision-preview.is-minimized {
+    width: min(210px, 42vw);
+}
+
+.continuous-vision-preview.is-minimized .continuous-vision-video,
+.continuous-vision-preview.is-minimized .continuous-vision-hint {
+    display: none !important;
 }
 
 .continuous-vision-video {
@@ -3192,10 +3209,41 @@ body.light .jarvis-top-title {
 @media (max-width: 768px) {
     .continuous-vision-preview {
         right: 8px;
-        left: 8px;
-        width: auto;
-        max-width: none;
-        bottom: calc(92px + env(safe-area-inset-bottom));
+        left: auto;
+        width: min(190px, 44vw);
+        max-width: 190px;
+        bottom: calc(98px + env(safe-area-inset-bottom));
+        border-radius: 12px;
+    }
+
+    .continuous-vision-preview-header {
+        padding: 5px 6px;
+    }
+
+    .continuous-vision-pill {
+        font-size: 9px;
+        padding: 2px 7px;
+    }
+
+    .continuous-vision-close {
+        padding: 3px 7px;
+        font-size: 10px;
+    }
+
+    .continuous-vision-preview.is-minimized {
+        width: min(165px, 40vw);
+        max-width: 165px;
+    }
+
+    .continuous-vision-video {
+        max-height: 118px;
+        aspect-ratio: 16 / 10;
+    }
+
+    .continuous-vision-hint {
+        font-size: 10px;
+        line-height: 1.2;
+        padding: 5px 6px;
     }
 }
 
