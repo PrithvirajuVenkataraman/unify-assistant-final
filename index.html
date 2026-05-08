@@ -775,24 +775,14 @@ function extractReferenceSubject(text) {
 
 function shouldTryReferenceImage(userText, assistantText = '') {
     const q = normalizeIntentTypos(String(userText || '')).toLowerCase();
-    const a = String(assistantText || '').toLowerCase();
     if (!q.trim()) return false;
 
     const blockedIntent = /\b(weather|forecast|temperature|news|headlines|reminder|shopping|grocery|itinerary|hotel|restaurants?|transport|route|translate|translator|joke|calendar|budget trip|sync)\b/;
     if (blockedIntent.test(q)) return false;
 
     const explicitImageAsk = /\b(image|picture|photo|show me|looks like|look like)\b/;
-    if (explicitImageAsk.test(q)) return true;
-
-    const explainerAsk = /\b(what is|what's|who is|who's|tell me about|define|meaning of|explain)\b/;
-    if (explainerAsk.test(q)) return true;
-
-    const peopleFoodPlaceCue = /\b(person|people|actor|actress|scientist|founder|chef|city|country|place|location|landmark|food|dish|recipe|cuisine)\b/;
-    if (peopleFoodPlaceCue.test(q) && q.split(/\s+/).filter(Boolean).length <= 8) return true;
-
-    const shortEntityQuery = q.split(/\s+/).filter(Boolean).length <= 4;
-    const assistantLooksExplanatory = /\b(is a|is an|traditional|dish|animal|city|country|festival|language|object|meaning)\b/.test(a);
-    return shortEntityQuery && assistantLooksExplanatory;
+    // Keep this strict to avoid wrong-topic auto images.
+    return explicitImageAsk.test(q);
 }
 
 async function fetchWikipediaReferenceImage(subject) {
@@ -896,6 +886,7 @@ async function maybeShowReferenceImageForQuery(userText, assistantText = '') {
     if (!shouldTryReferenceImage(userText, assistantText)) return;
     const subject = extractReferenceSubject(userText);
     if (!subject) return;
+    if (subject.split(/\s+/).filter(Boolean).length > 5) return;
 
     const ref = await fetchWikipediaReferenceImage(subject);
     if (!ref || !ref.imageUrl) return;
@@ -2520,6 +2511,7 @@ Rules:
 - Focus on what is current or recent.
 - If the user asked for latest news or headlines, start with a compact summary of the latest development, then give 3 short bullet points.
 - Do not make up numbers, dates, actors, causes, or outcomes.
+- Use only facts explicitly present in snippets.
 - Only state a fact confidently if it appears in multiple snippets or from a clearly reputable source.
 - If evidence is weak, say so instead of guessing.
 - If the question asks for a winner, score, player stat, or latest status, answer that specific fact first before anything else.
@@ -2532,10 +2524,18 @@ ${snippets}`
     });
 
     const data = await response.json();
-    return cleanLiveAnswerText(String(data?.response || data?.text || ''));
+    const cleaned = cleanLiveAnswerText(String(data?.response || data?.text || ''));
+    // Guardrail: if model gives weak/non-anchored text, fallback to snippets.
+    if (!cleaned || /\b(i think|likely|probably|maybe)\b/i.test(cleaned)) {
+        const top = sourcePool[0];
+        const fallback = String(top?.description || top?.title || '').trim();
+        return fallback ? `Based on current snippets: ${fallback}` : '';
+    }
+    return cleaned;
 }
 
 async function buildNewsSearchFallback(query, signal) {
+    showThinkingIndicator('Web search in progress...');
     const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2556,6 +2556,7 @@ async function buildNewsSearchFallback(query, signal) {
     const sourcePool = (trustedResults.length >= 2 ? trustedResults : results).slice(0, 6);
     if (!sourcePool.length) return null;
 
+    showThinkingIndicator('Generating answer...');
     const directAnswer = await buildDirectLiveAnswer(query, sourcePool, signal);
     const answer = directAnswer || cleanLiveAnswerText(String(sourcePool[0]?.description || sourcePool[0]?.title || '').trim());
     if (!answer) return null;
@@ -2568,7 +2569,7 @@ async function buildNewsSearchFallback(query, signal) {
 
 // ========== NEWS FETCHING FUNCTION ==========
 async function fetchAndDisplayNews(query) {
-    showThinkingIndicator('[Map] Fetching latest news...');
+    showThinkingIndicator('Web search in progress...');
     const controller = beginAbortableRequest();
 
     try {
@@ -2629,6 +2630,7 @@ async function fetchAndDisplayNews(query) {
             return;
         }
 
+        showThinkingIndicator('Generating answer...');
         const directAnswer = await buildDirectLiveAnswer(query, articles, controller.signal);
         const sourceLines = formatLiveSourceLinks(articles, 5);
         const summaryBlock = directAnswer || 'I found recent coverage, but I could not generate a clean short summary from the current snippets.';
@@ -3297,7 +3299,7 @@ async function askGeminiAI(userMessage) {
     let autoIndicatorShown = false;
     const autoIndicatorTimer = setTimeout(() => {
         if (hadExistingThinkingIndicator) return;
-        showThinkingIndicator('Fetching response...');
+        showThinkingIndicator('Generating answer...');
         autoIndicatorShown = true;
     }, 260);
     try { 
@@ -5927,7 +5929,7 @@ function normalizeUiTokens(text) {
                     kind: 'image',
                     extractedText: extractedText || visionAnswer,
                     summary: visionAnswer || 'Camera OCR analysis',
-                    bill: null,
+                    bill: parseBillFromVisionDetails(details),
                     userContext: userInstruction || '',
                     uploadedAt: Date.now()
                 };
@@ -6163,7 +6165,7 @@ function normalizeUiTokens(text) {
                     extractedText,
                     extractedCharCount: extractedText.length,
                     summary,
-                    bill: null
+                    bill: isBill ? parseBillFromVisionDetails(details) : null
                 };
             } catch (_) {
                 return null;
@@ -6271,7 +6273,7 @@ function normalizeUiTokens(text) {
 
             const hasDocWords = /\b(file|document|upload|uploaded|pdf|doc|docx|ppt|pptx|image|picture|pic|photo|bill|receipt|invoice|notes|chapter|material|paragraph|page|line|text|summary)\b/.test(lower);
             const asksSummary = /\b(summary|summarize|gist|tldr|brief|short)\b/.test(lower);
-            const asksAboutBill = /\b(total|amount|subtotal|tax|gst|vat|merchant|vendor|store|shop|date|payment)\b/.test(lower);
+            const asksAboutBill = /\b(total|amount|subtotal|tax|gst|vat|merchant|vendor|store|shop|date|payment|paid|spend|spent|cost|charge|charged|due)\b/.test(lower);
             const asksQuestion = /\b(what|why|how|which|when|where|who|explain|teach|define|difference|compare|solve)\b/.test(lower) || /\?$/.test(lower);
             
             // Tighter check for unrelated intents
@@ -6280,6 +6282,7 @@ function normalizeUiTokens(text) {
             if (clearlyOtherIntent && !hasDocWords) return false;
             if (hasDocWords || asksSummary || isDocumentRawTextRequest(lower)) return true;
             if (doc.bill && asksAboutBill) return true;
+            if (doc.bill && /\b(how much|what did i spend|what i spent|how much did i pay|bill amount|final amount|how much was it)\b/.test(lower)) return true;
 
             // Prevent hijacking generic questions unless they contain pronouns or summary overlap
             const hasPronoun = /\b(it|this|that|these|those|they)\b/.test(lower);
@@ -6301,12 +6304,59 @@ function normalizeUiTokens(text) {
             const tax = Number.isFinite(Number(bill.tax)) ? Number(bill.tax).toFixed(2) : '';
             const total = Number.isFinite(Number(bill.total)) ? Number(bill.total).toFixed(2) : '';
 
-            if (/\btotal|amount due|final amount\b/.test(queryLower) && total) return `Total in ${fileName}: ${currency ? `${currency} ` : ''}${total}`;
+            if (/\b(total|amount due|final amount|how much did i spend|what did i spend|how much was it|bill amount|how much did i pay)\b/.test(queryLower) && total) return `Total in ${fileName}: ${currency ? `${currency} ` : ''}${total}`;
             if (/\bsubtotal\b/.test(queryLower) && subtotal) return `Subtotal in ${fileName}: ${currency ? `${currency} ` : ''}${subtotal}`;
             if (/\btax|gst|vat\b/.test(queryLower) && tax) return `Tax in ${fileName}: ${currency ? `${currency} ` : ''}${tax}`;
             if (/\bmerchant|vendor|store|shop\b/.test(queryLower) && merchant) return `Merchant in ${fileName}: ${merchant}`;
             if (/\bdate\b/.test(queryLower) && date) return `Bill date in ${fileName}: ${date}`;
             return '';
+        }
+
+        function parseBillAmount(rawAmount) {
+            const val = Number(String(rawAmount ?? '').replace(/[^0-9.\-]/g, ''));
+            return Number.isFinite(val) ? val : null;
+        }
+
+        function parseBillFromVisionDetails(details = {}) {
+            const billRaw = details?.bill && typeof details.bill === 'object' ? details.bill : null;
+            if (!billRaw) return null;
+
+            const rawItems = Array.isArray(billRaw.lineItems) ? billRaw.lineItems : [];
+            const lineItems = rawItems
+                .map(row => String(row || '').trim())
+                .filter(Boolean)
+                .slice(0, 30)
+                .map(row => {
+                    const match = row.match(/(.+?)\s*[-:]\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/);
+                    if (!match) return { name: row, amount: null };
+                    return { name: String(match[1] || '').trim(), amount: parseBillAmount(match[2]) };
+                });
+
+            const totalsRaw = Array.isArray(billRaw.totals) ? billRaw.totals.map(v => String(v || '')).join('\n') : '';
+            const fullText = String(details?.fullText || '').trim();
+            const sourceText = `${totalsRaw}\n${fullText}`;
+            const detectField = (regex) => {
+                const m = sourceText.match(regex);
+                if (!m) return null;
+                const candidate = m[m.length - 1];
+                return parseBillAmount(candidate);
+            };
+
+            const currency = /\b(inr|rs\.?)\b/i.test(sourceText) || /\u20B9/.test(sourceText)
+                ? 'INR'
+                : (/\b(usd)\b/i.test(sourceText) || /\$/.test(sourceText) ? 'USD' : '');
+            const merchant = String(sourceText.split('\n').map(s => s.trim()).find(Boolean) || '').slice(0, 120);
+            const dateMatch = sourceText.match(/\b(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})\b/);
+
+            return {
+                merchant: merchant || '',
+                date: dateMatch ? dateMatch[1] : '',
+                currency,
+                lineItems,
+                subtotal: detectField(/\bsubtotal\b[^\d]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i),
+                tax: detectField(/\b(gst|tax|vat)\b[^\d]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i) ?? detectField(/\btax\b[^\d]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i),
+                total: detectField(/\b(total|amount due|grand total|final amount)\b[^\d]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i) ?? detectField(/\btotal\b[^\d]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i)
+            };
         }
 
         function isSplitwiseExpenseIntent(text) {
@@ -8660,17 +8710,7 @@ function extractArtistFromSongRequest(text) {
 }
 
 function extractRequestedSongCount(text) {
-    const raw = String(text || '').trim();
-    const wordToNum = {
-        one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
-        seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12
-    };
-    const match = raw.match(/\b(?:top|best|suggest|recommend|give|show|list)\s+(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i);
-    if (!match) return 5;
-    const rawCount = String(match[1] || '').toLowerCase();
-    const n = /^\d{1,2}$/.test(rawCount) ? Number(rawCount) : (wordToNum[rawCount] || 5);
-    if (!Number.isFinite(n)) return 5;
-    return Math.max(1, Math.min(12, n));
+    return extractRequestedQuantity(text, 5, 1, 30);
 }
 
 
@@ -8979,8 +9019,8 @@ function sanitizeArtistName(input) {
 
 function clampSongCount(value, fallback = 5) {
     const n = Number(value);
-    if (!Number.isFinite(n)) return Math.max(1, Math.min(12, fallback));
-    return Math.max(1, Math.min(12, n));
+    if (!Number.isFinite(n)) return Math.max(1, Math.min(30, fallback));
+    return Math.max(1, Math.min(30, n));
 }
 
 function getCuratedClassicSongs(language) {
@@ -9336,7 +9376,7 @@ async function parseSongRequestIntent(text) {
 Return strict JSON only:
 {
   "artist": "<artist name only>",
-  "count": <number 1-12 or null>
+  "count": <number 1-30 or null>
 }
 
 Rules:
@@ -9363,7 +9403,7 @@ User text:
         const parsed = extractJsonObject(data?.response || data?.text || '');
 
         const artist = sanitizeArtistName(parsed?.artist);
-        const requestedCount = extractRequestedQuantity(text, parsed?.count ?? fallbackCount, 1, 12); // Max 12 for songs
+        const requestedCount = extractRequestedQuantity(text, parsed?.count ?? fallbackCount, 1, 30);
 
         if (artist) {
             return { artist, requestedCount };
@@ -9374,7 +9414,7 @@ User text:
 
     return {
         artist: fallbackArtist, // This will be null if not found by regex
-        requestedCount: extractRequestedQuantity(text, 5, 1, 12) // Max 12 for songs
+        requestedCount: extractRequestedQuantity(text, 5, 1, 30)
     };
 }
 
@@ -9600,20 +9640,6 @@ async function handleArtistSongRequest(text) {
         const msg = 'Tell me the artist name and I will suggest good songs. Example: "Best songs of AR Rahman".';
         addChatMessage(msg, false);
         speak(msg);
-        return;
-    }
-
-    const curatedSongs = getCuratedSongsForArtist(artist).slice(0, requestedCount);
-    if (curatedSongs.length) {
-        const curatedReply = formatMusicSongReply(artist, requestedCount, curatedSongs, true);
-        addModelAssistantMessage(curatedReply, 'Curated song picks');
-        const curatedSpeech = await composeApiReply('artist_song_general', {
-            artist
-        }, {
-            fallbackText: `Here are song suggestions for ${artist}.`
-        });
-        speak(curatedSpeech || `Here are song suggestions for ${artist}.`);
-        saveToHistory(text, curatedReply);
         return;
     }
 
@@ -16167,6 +16193,7 @@ function showThinkingIndicator(message = 'Thinking') {
         row.innerHTML = `
             <div class="chat-bubble-assistant assistant-thinking-bubble inline-flex items-center gap-2.5">
                 <span class="assistant-thinking-avatar" aria-hidden="true"></span>
+                <span id="chat-thinking-phase" class="assistant-thinking-phase-pill">Reasoning</span>
                 <span id="chat-thinking-text" class="assistant-thinking-text text-xs font-semibold"></span>
                 <span class="thinking-dots professional-thinking-dots" aria-hidden="true">
                     <span class="thinking-dot professional-thinking-dot"></span>
@@ -16183,7 +16210,24 @@ function showThinkingIndicator(message = 'Thinking') {
         .trim() || 'Thinking';
     const text = document.getElementById('chat-thinking-text');
     if (text) text.textContent = cleanedMessage;
+    const phase = resolveThinkingPhase(cleanedMessage);
+    const phaseEl = document.getElementById('chat-thinking-phase');
+    if (phaseEl) {
+        phaseEl.textContent = phase.label;
+        phaseEl.dataset.phase = phase.key;
+    }
     maybeAutoScroll(chatContainer);
+}
+
+function resolveThinkingPhase(message = '') {
+    const lower = String(message || '').toLowerCase();
+    if (/\b(web search|search|sources?|retriev|fetch)\b/.test(lower)) {
+        return { key: 'searching', label: 'Searching' };
+    }
+    if (/\b(final|finaliz|polish|format)\b/.test(lower)) {
+        return { key: 'finalizing', label: 'Finalizing' };
+    }
+    return { key: 'reasoning', label: 'Reasoning' };
 }
 
 function hideThinkingIndicator() {
