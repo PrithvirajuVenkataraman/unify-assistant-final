@@ -1657,6 +1657,41 @@ body.dark .help-modal-enhanced {
     background: rgba(15, 23, 42, 0.98);
 }
 
+/* Settings section readability fix inside Help modal */
+body:not(.dark) .help-modal-enhanced [class*="bg-gray-100"][class*="dark:bg-gray-700"] {
+    background: #f8fafc !important;
+    border: 1px solid #dbe2ea !important;
+}
+
+body:not(.dark) .help-modal-enhanced [class*="bg-gray-100"][class*="dark:bg-gray-700"] p {
+    color: #1e293b !important;
+}
+
+body:not(.dark) .help-modal-enhanced [class*="bg-gray-100"][class*="dark:bg-gray-700"] p.text-xs {
+    color: #64748b !important;
+}
+
+body:not(.dark) .help-modal-enhanced button[title="Toggle dark mode"] {
+    background: linear-gradient(135deg, #4f46e5, #4338ca) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(67, 56, 202, 0.45) !important;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.24) !important;
+}
+
+body:not(.dark) .help-modal-enhanced button[title="Toggle dark mode"]:hover {
+    filter: brightness(1.04);
+}
+
+body:not(.dark) .help-modal-enhanced #noise-filter-toggle + div {
+    background: #cbd5e1 !important;
+    border: 1px solid #94a3b8 !important;
+}
+
+body:not(.dark) .help-modal-enhanced #noise-filter-toggle:checked + div {
+    background: #4f46e5 !important;
+    border-color: #4338ca !important;
+}
+
 /* Typing indicator */
 .typing-indicator {
     display: flex;
@@ -2527,6 +2562,28 @@ body.dark .chat-bubble-assistant {
 .assistant-message-text {
     line-height: 1.58 !important;
     letter-spacing: 0.01em;
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+    hyphens: auto;
+}
+
+.assistant-message-text p,
+.assistant-message-text li,
+.assistant-message-text span,
+.assistant-message-text a {
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+}
+
+/* Prevent awkward clipping with long URLs/IDs while keeping normal prose readable. */
+.assistant-message-text code,
+.assistant-message-text pre,
+.assistant-message-text .assistant-md-inline-code,
+.assistant-message-text .assistant-md-code-block {
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
 }
 
 .assistant-action-stack {
