@@ -16286,9 +16286,11 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
             // Slightly faster in Converse mode for a more natural dialog rhythm.
             if (isConverse) rate += 0.01;
+            // Global speed-up requested: +10%.
+            rate *= 1.1;
 
             return {
-                rate: Math.max(0.9, Math.min(1.0, rate)),
+                rate: Math.max(0.95, Math.min(1.2, rate)),
                 pitch: isConverse ? 1.01 : 1.03
             };
         }
@@ -16463,6 +16465,13 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 btn.classList.remove('is-speaking');
             });
             currentUtterance = null;
+            if (converseMode && listeningRequested && !isListening) {
+                setTimeout(() => {
+                    if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking) {
+                        startListening();
+                    }
+                }, 90);
+            }
         }
 
         function stopAllSpeechPlayback() {
@@ -16855,7 +16864,8 @@ async function handleContinuousVisionQuery(text) {
             const textBlock = fullText || textDetected;
             answer = `Detected text:\n${textBlock}`;
         }
-        if (answer && readability && !isTranslateIntent) {
+        const alreadyHasReadability = /\bReadability\s*:/i.test(answer);
+        if (answer && readability && !isTranslateIntent && !alreadyHasReadability) {
             answer += `\n\nReadability: ${readability}`;
         }
         if (!answer) answer = 'I can see the image, but I could not generate a clear answer.';
