@@ -1692,6 +1692,60 @@ body:not(.dark) .help-modal-enhanced #noise-filter-toggle:checked + div {
     border-color: #4338ca !important;
 }
 
+/* Behavior mode chips in Help modal: clearer readability + explicit selected states */
+.help-modal-enhanced [data-mode-group] {
+    min-height: 32px;
+    padding: 0.4rem 0.85rem !important;
+    border-radius: 999px !important;
+    border: 1px solid transparent !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.01em;
+    transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+body:not(.dark) .help-modal-enhanced [data-mode-group][data-active="false"] {
+    background: #e2e8f0 !important;
+    color: #334155 !important;
+    border-color: #cbd5e1 !important;
+}
+
+body.dark .help-modal-enhanced [data-mode-group][data-active="false"] {
+    background: #475569 !important;
+    color: #e2e8f0 !important;
+    border-color: #64748b !important;
+}
+
+.help-modal-enhanced [data-mode-group][data-active="true"] {
+    color: #ffffff !important;
+    border-color: transparent !important;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
+}
+
+/* Default active style for support/length/format */
+.help-modal-enhanced [data-mode-group="support-mode"][data-active="true"],
+.help-modal-enhanced [data-mode-group="response-length"][data-active="true"],
+.help-modal-enhanced [data-mode-group="response-format"][data-active="true"] {
+    background: #9333ea !important;
+}
+
+/* School mode explicit selected colors */
+.help-modal-enhanced [data-mode-group="school-mode"][data-mode-value="on"][data-active="true"] {
+    background: #059669 !important;
+}
+
+.help-modal-enhanced [data-mode-group="school-mode"][data-mode-value="off"][data-active="true"] {
+    background: #334155 !important;
+}
+
+/* Medical mode explicit selected colors */
+.help-modal-enhanced [data-mode-group="medical-mode"][data-mode-value="on"][data-active="true"] {
+    background: #e11d48 !important;
+}
+
+.help-modal-enhanced [data-mode-group="medical-mode"][data-mode-value="off"][data-active="true"] {
+    background: #334155 !important;
+}
+
 /* Typing indicator */
 .typing-indicator {
     display: flex;
