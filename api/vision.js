@@ -27,6 +27,21 @@ export default async function handler(req, res) {
             return res.status(500).json({ success: false, error: 'API key not configured' });
         }
 
+        if (task === 'math_ocr_solve') {
+            const result = await runMathOcrSolvePipeline({
+                apiKey,
+                mimeType,
+                imageBase64,
+                userPrompt: prompt
+            });
+            return res.status(200).json({
+                success: true,
+                task,
+                response: result.response,
+                details: result.details
+            });
+        }
+
         const systemPrompt = buildVisionPrompt(prompt, task);
         const geminiResponse = await callGeminiVision({
             apiKey,
@@ -133,6 +148,226 @@ async function callGeminiVision({ apiKey, systemPrompt, mimeType, imageBase64 })
     throw lastError || new Error('No vision model available');
 }
 
+async function callGeminiText({ apiKey, systemPrompt, userPrompt, maxOutputTokens = 2000 }) {
+    const models = [
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-1.5-pro',
+        'gemini-1.5-flash'
+    ];
+    let lastError = null;
+
+    for (const model of models) {
+        try {
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [
+                            {
+                                parts: [
+                                    { text: String(systemPrompt || '').trim() },
+                                    { text: String(userPrompt || '').trim() }
+                                ]
+                            }
+                        ],
+                        generationConfig: {
+                            temperature: 0.15,
+                            topP: 0.9,
+                            maxOutputTokens
+                        }
+                    })
+                }
+            );
+
+            if (!response.ok) {
+                const raw = await response.text().catch(() => '');
+                const detail = String(raw || '').trim();
+                lastError = new Error(`Model ${model} failed with status ${response.status}${detail ? `: ${detail}` : ''}`);
+                continue;
+            }
+
+            const payload = await response.json();
+            const text = extractGeminiText(payload);
+            if (!text) {
+                lastError = new Error(`Model ${model} returned empty text`);
+                continue;
+            }
+            return text;
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error('No text model available');
+}
+
+function extractJsonFromText(text) {
+    const parsed = safeParseJson(text);
+    if (parsed) return parsed;
+    const src = String(text || '').trim();
+    const start = src.indexOf('{');
+    const end = src.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+        return safeParseJson(src.slice(start, end + 1));
+    }
+    return null;
+}
+
+function normalizeMathOcrText(details = {}) {
+    const fullText = String(details?.fullText || '').trim();
+    const snippets = Array.isArray(details?.textDetected)
+        ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean)
+        : [];
+    if (fullText) return fullText;
+    return snippets.join('\n').trim();
+}
+
+async function runMathOcrSolvePipeline({ apiKey, mimeType, imageBase64, userPrompt }) {
+    const extractionPrompt = [
+        'Extract the math problem from the image.',
+        'Return strict JSON only:',
+        '{',
+        '  "problemText": "<normalized problem statement with equations>",',
+        '  "knowns": ["..."],',
+        '  "unknowns": ["..."],',
+        '  "ambiguities": ["..."],',
+        '  "ocrConfidence": "high|medium|low"',
+        '}',
+        'Rules:',
+        '- Preserve symbols and equation structure.',
+        '- If unreadable, mention in ambiguities.',
+        `User intent: ${String(userPrompt || 'Solve the problem in the image.').trim()}`
+    ].join('\n');
+
+    const ocrPayload = await callGeminiVision({
+        apiKey,
+        systemPrompt: extractionPrompt,
+        mimeType,
+        imageBase64
+    });
+    const ocrRawText = extractGeminiText(ocrPayload);
+    if (!ocrRawText) throw new Error('OCR stage returned empty response');
+
+    const ocrJson = extractJsonFromText(ocrRawText) || {};
+    const normalizedProblem = String(ocrJson?.problemText || '').trim();
+    const fallbackDetails = extractJsonFromText(ocrRawText) || {};
+    const fallbackText = normalizeMathOcrText(fallbackDetails);
+    const effectiveProblem = normalizedProblem || fallbackText;
+    if (!effectiveProblem) {
+        throw new Error('Could not read the math problem clearly from image');
+    }
+
+    const plannerSystemPrompt = [
+        'You are Planner Agent for hard math.',
+        'Return strict JSON only:',
+        '{',
+        '  "classification": "<algebra|calculus|geometry|number_theory|probability|other>",',
+        '  "strategy": ["step1", "step2", "step3"],',
+        '  "keyFormulas": ["..."],',
+        '  "riskPoints": ["..."]',
+        '}',
+        'No prose outside JSON.'
+    ].join('\n');
+
+    const plannerText = await callGeminiText({
+        apiKey,
+        systemPrompt: plannerSystemPrompt,
+        userPrompt: `Problem:\n${effectiveProblem}`
+    });
+    const plannerJson = extractJsonFromText(plannerText);
+    if (!plannerJson) throw new Error('Planner stage returned invalid JSON');
+
+    const criticSystemPrompt = [
+        'You are Critic Agent for math solving quality.',
+        'Review OCR output and plan.',
+        'Return strict JSON only:',
+        '{',
+        '  "approved": true,',
+        '  "issues": ["..."],',
+        '  "revisedPlan": ["..."],',
+        '  "normalizedProblem": "<clean canonical problem text>",',
+        '  "assumptions": ["..."]',
+        '}',
+        'Set approved=false if core symbols/values are ambiguous.'
+    ].join('\n');
+
+    const criticText = await callGeminiText({
+        apiKey,
+        systemPrompt: criticSystemPrompt,
+        userPrompt: `OCR JSON:\n${JSON.stringify(ocrJson, null, 2)}\n\nPlanner JSON:\n${JSON.stringify(plannerJson, null, 2)}`
+    });
+    const criticJson = extractJsonFromText(criticText);
+    if (!criticJson) throw new Error('Critic stage returned invalid JSON');
+
+    const approved = Boolean(criticJson?.approved);
+    const canonicalProblem = String(criticJson?.normalizedProblem || effectiveProblem).trim();
+    if (!canonicalProblem) throw new Error('Critic stage did not produce a valid problem statement');
+
+    const solverSystemPrompt = [
+        'You are Solver Agent for advanced math.',
+        'Use the approved/revised plan and solve correctly.',
+        'Return strict JSON only:',
+        '{',
+        '  "steps": ["step 1 ...", "step 2 ..."],',
+        '  "finalAnswer": "<final answer>",',
+        '  "verification": ["check 1", "check 2"],',
+        '  "confidence": "high|medium|low"',
+        '}',
+        'No prose outside JSON.'
+    ].join('\n');
+
+    const planToUse = Array.isArray(criticJson?.revisedPlan) && criticJson.revisedPlan.length
+        ? criticJson.revisedPlan
+        : (Array.isArray(plannerJson?.strategy) ? plannerJson.strategy : []);
+
+    const solverText = await callGeminiText({
+        apiKey,
+        systemPrompt: solverSystemPrompt,
+        userPrompt: [
+            `Problem:\n${canonicalProblem}`,
+            `Plan:\n${JSON.stringify(planToUse, null, 2)}`,
+            `Issues from critic:\n${JSON.stringify(criticJson?.issues || [], null, 2)}`,
+            `Assumptions:\n${JSON.stringify(criticJson?.assumptions || [], null, 2)}`
+        ].join('\n\n'),
+        maxOutputTokens: 3000
+    });
+    const solverJson = extractJsonFromText(solverText);
+    if (!solverJson) throw new Error('Solver stage returned invalid JSON');
+
+    const steps = Array.isArray(solverJson?.steps) ? solverJson.steps.map(s => String(s || '').trim()).filter(Boolean) : [];
+    const checks = Array.isArray(solverJson?.verification) ? solverJson.verification.map(s => String(s || '').trim()).filter(Boolean) : [];
+    const issues = Array.isArray(criticJson?.issues) ? criticJson.issues.map(s => String(s || '').trim()).filter(Boolean) : [];
+    const assumptions = Array.isArray(criticJson?.assumptions) ? criticJson.assumptions.map(s => String(s || '').trim()).filter(Boolean) : [];
+    const finalAnswer = String(solverJson?.finalAnswer || '').trim() || 'Unable to compute final answer confidently.';
+    const confidence = String(solverJson?.confidence || (approved ? 'medium' : 'low')).trim();
+
+    const lines = [];
+    lines.push(`Problem: ${canonicalProblem}`);
+    if (issues.length) lines.push(`Critic notes: ${issues.join(' | ')}`);
+    if (assumptions.length) lines.push(`Assumptions: ${assumptions.join(' | ')}`);
+    if (steps.length) {
+        lines.push('Solution:');
+        steps.forEach((step, idx) => lines.push(`${idx + 1}. ${step}`));
+    }
+    lines.push(`Final answer: ${finalAnswer}`);
+    if (checks.length) lines.push(`Verification: ${checks.join(' | ')}`);
+    lines.push(`Confidence: ${confidence}`);
+
+    return {
+        response: lines.join('\n\n'),
+        details: {
+            pipeline: 'planner-critic-solver',
+            ocr: ocrJson,
+            planner: plannerJson,
+            critic: criticJson,
+            solver: solverJson
+        }
+    };
+}
+
 function buildVisionPrompt(userPrompt, task) {
     const isTextTask = task === 'text_extract' || task === 'bill_summary' || task === 'shopping_extract';
     const taskRule = getTaskRule(task);
@@ -195,6 +430,8 @@ function getTaskRule(task) {
             return 'Focus on broad object detection with labels and counts.';
         case 'text_extract':
             return 'Focus on OCR text extraction from signs, labels, and printed text.';
+        case 'math_ocr_solve':
+            return 'Extract and solve difficult math content using planner, critic, and solver stages.';
         default:
             return 'Provide a balanced scene analysis including objects, people, animals, and visible text.';
     }
@@ -309,3 +546,7 @@ function normalizeDetected(list) {
             return b.count - a.count;
         });
 }
+
+
+
+
