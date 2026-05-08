@@ -4716,7 +4716,20 @@ async function handleNameCorrection(text) {
                     return;
                 }
                 const greet = getConverseWelcomeLine();
-                speak(greet, true);
+                speak(greet);
+                let attempts = 0;
+                const ensureConverseListening = () => {
+                    attempts += 1;
+                    if (!converseMode || !listeningRequested || isListening) return;
+                    if (isAssistantSpeaking && attempts < 8) {
+                        setTimeout(ensureConverseListening, 320);
+                        return;
+                    }
+                    if (!isAssistantSpeaking) {
+                        startListening();
+                    }
+                };
+                setTimeout(ensureConverseListening, 420);
             } else {
                 stopListening();
                 passiveWakeWordEnabled = false;
@@ -7525,6 +7538,30 @@ async function handleMarketLookup(text) {
                 await handleFinalTranscript(text);
             }, 750);
         }
+
+        function normalizeSpeechCommandText(value) {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[^\w\s]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function isWakeInvocation(text) {
+            const t = normalizeSpeechCommandText(text);
+            return /\b(hey|hi|her|hare|hair|a)\s+(jarvis|jervis|davis)\b/.test(t);
+        }
+
+        function extractDisplayModeCommand(text) {
+            const t = normalizeSpeechCommandText(text);
+            const addressed = /\b(hey|hi|her|hare|hair|a)\s+(jarvis|jervis|davis)\b/.test(t);
+            const hasActivate = /\b(activate|set|switch|turn)\b/.test(t);
+            const dark = /\bdark\s+mode\b/.test(t);
+            const light = /\blight\s+mode\b/.test(t);
+            if ((addressed || hasActivate) && dark) return 'dark';
+            if ((addressed || hasActivate) && light) return 'light';
+            return '';
+        }
         
         function initializeSpeechRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -7576,7 +7613,7 @@ async function handleMarketLookup(text) {
                     const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
 
                     // Skip if confidence is too low (unless it's the wake word)
-                    const isWakeWord = text.includes('hey jarvis') || text.includes('hey davis');
+                    const isWakeWord = isWakeInvocation(text);
                     if (!isWakeWord && confidence > 0 && confidence < threshold.confidence) {
                         return;
                     }
@@ -7596,7 +7633,7 @@ async function handleMarketLookup(text) {
                 
                 if (wakeWordMode && !commandMode) {
 
-                    if (text.includes('hey jarvis') || text.includes('hey davis')) {
+                    if (isWakeInvocation(text)) {
                         // Prevent double detection - only trigger if not in cooldown
                         const now = Date.now();
                         if (wakeWordCooldown || (now - lastWakeWordTime < 2000)) {
@@ -8477,7 +8514,7 @@ function isDebateIntent(text) {
 
 function isMentalHealthConversation(text) { 
     const t = String(text || '').toLowerCase(); 
-    return /\b(sad|depress|depressed|anxious|anxiety|panic|lonely|hopeless|overwhelmed|stressed|burnout|mental health|not okay|feeling low|empty|worthless|guilty|guilt|procrastinat(?:e|ing|ion)|unproductive)\b/.test(t); 
+    return /\b(sad|depress|depressed|anxious|anxiety|panic|lonely|hopeless|overwhelmed|stressed|burnout|mental health|not okay|feeling low|i feel low|empty|worthless|guilty|guilt|procrastinat(?:e|ing|ion)|unproductive|discouraged|demotivated|lost confidence|feeling down)\b/.test(t); 
 } 
 
 function isMotivationStoryRequest(text) {
@@ -13291,7 +13328,7 @@ Format:
 Respond with: 
 1) Warm validation and empathy (no judgment)
 2) Short, practical coping steps for right now
-3) Motivating, supportive tone
+3) Motivating, supportive tone with one uplifting line they can repeat now
 4) If they sound persistently sad/hopeless, gently suggest as the LAST step to speak to a certified mental health specialist
 
 Important:
@@ -13300,9 +13337,10 @@ Important:
 - Keep it concise and human`;
                 const mhResponse = await callAIWithTyping(mhPrompt, 'I am here with you...');
                 if (mhResponse?.aborted) return;
-                await publishResolvedModelMessage(text, mhResponse.response, {
+                const upliftingFallback = "You are not failing, you are recovering your energy one step at a time. Take one small win right now: drink water, breathe slowly for 60 seconds, and do one tiny task.";
+                await publishResolvedModelMessage(text, mhResponse.response || upliftingFallback, {
                     label: 'Model answer',
-                    speechText: "I'm here for you."
+                    speechText: "I'm with you. You still have strength, and we'll take this one small step at a time."
                 });
                 return;
             }
@@ -13390,6 +13428,34 @@ Quick recap: ...
                 }
             }
 
+            const modeCommand = extractDisplayModeCommand(cleanText);
+            if (modeCommand === 'dark' && !darkMode) {
+                toggleDarkMode();
+                await deliverApiReply('dark_mode_enabled', {}, {
+                    fallbackText: 'Dark mode activated.'
+                });
+                return;
+            }
+            if (modeCommand === 'light' && darkMode) {
+                toggleDarkMode();
+                await deliverApiReply('light_mode_enabled', {}, {
+                    fallbackText: 'Light mode activated.'
+                });
+                return;
+            }
+            if (modeCommand === 'dark' && darkMode) {
+                await deliverApiReply('dark_mode_already_enabled', {}, {
+                    fallbackText: 'Dark mode is already on.'
+                });
+                return;
+            }
+            if (modeCommand === 'light' && !darkMode) {
+                await deliverApiReply('light_mode_already_enabled', {}, {
+                    fallbackText: 'Light mode is already on.'
+                });
+                return;
+            }
+
             const supportModeMatch = cleanText.match(/\b(?:set|change|switch)\s+support\s+mode\s+(balanced|supportive|debate)\b/i);
             if (supportModeMatch) {
                 await setSupportModeLock(supportModeMatch[1].toLowerCase());
@@ -13436,7 +13502,7 @@ Quick recap: ...
                 return;
             }
 
-            if (/^\s*hey\s+(jarvis|davis)\s*[.!?]*$/i.test(cleanText)) { 
+            if (isWakeInvocation(cleanText) && normalizeSpeechCommandText(cleanText).split(' ').length <= 3) { 
                 const wakeReply = "Yes, sir?"; 
                 addChatMessage(wakeReply, false); 
                 speak(wakeReply); 
