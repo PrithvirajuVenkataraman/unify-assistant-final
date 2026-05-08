@@ -304,7 +304,10 @@
     <div id="continuous-vision-preview-shell" class="continuous-vision-preview hidden" aria-live="polite">
         <div class="continuous-vision-preview-header">
             <span class="continuous-vision-pill">Live Vision</span>
-            <button type="button" class="continuous-vision-close" onclick="toggleContinuousVision()" aria-label="Close live vision preview">Close</button>
+            <div class="continuous-vision-actions">
+                <button type="button" id="continuous-vision-minimize-btn" class="continuous-vision-minimize" onclick="toggleContinuousVisionMinimize()" aria-label="Minimize live vision preview" aria-pressed="false">Minimize</button>
+                <button type="button" class="continuous-vision-close" onclick="toggleContinuousVision()" aria-label="Close live vision preview">Close</button>
+            </div>
         </div>
         <video id="continuous-vision-video" class="continuous-vision-video hidden" autoplay playsinline muted></video>
         <p id="continuous-vision-hint" class="continuous-vision-hint">Camera is on. Ask: "What do you see?"</p>
@@ -1176,6 +1179,7 @@ Rules:
 - Start with one short natural hook line to draw the user in.
 - Then give a precise explanation in 2-5 concise lines.
 - Keep it on-point; no generic advice.
+- For pop-culture references, do not invent scenes, quotes, or characters. If uncertain, say what is commonly known and keep confidence clear.
 - If this is a chemistry reaction query, include a clear reaction equation line using arrow notation.
 - If the question is chemistry/physics/math (or asks formula/equation), ALWAYS include an explicit "Formula:" or "Equation:" line.
 - If chemistry/physics/math formula is involved, use this strict structure:
@@ -1249,6 +1253,23 @@ Quick recap: ...
     } finally {
         hideThinkingIndicator();
     }
+}
+
+function isBatmanWhyDoWeFallQuery(text) {
+    const t = String(text || '').toLowerCase();
+    if (!t.trim()) return false;
+    return /\bwhy do we fall\b/.test(t) && /\b(batman|bruce|alfred|dark knight)\b/.test(t);
+}
+
+async function handleBatmanWhyDoWeFallQuery(text) {
+    const answer = [
+        'In Batman context, "Why do we fall?" means we fail so we can learn and rise stronger.',
+        'The famous line is from Alfred in Batman Begins (2005): "Why do we fall, sir? So that we can learn to pick ourselves up."'
+    ].join('\n');
+    addModelAssistantMessage(answer, 'Model answer');
+    speak('It means we fall so we can learn and rise stronger.');
+    saveToHistory(text, answer);
+    return true;
 }
 
 async function handleVerifiedPlacesMode(text) {
@@ -3464,7 +3485,9 @@ async function askGeminiAI(userMessage) {
         const topicHint = getTopicMemoryHint(normalizedUserMessage);
         const memoryHint = getRecentMemoryHint();
 
-        const requestedQuantity = classification?.requestedQuantity; // Get from classification
+        const requestedQuantity = (typeof classification !== 'undefined' && classification?.requestedQuantity)
+            ? classification.requestedQuantity
+            : null;
         conversationContext.push({ role: 'user', text: normalizedUserMessage }); 
         if (conversationContext.length > 40) { 
             conversationContext = conversationContext.slice(-40); 
@@ -3957,7 +3980,10 @@ async function handleNameCorrection(text) {
         }
 
         function updateVoiceInteractionGraphics() {
-            const state = getVoiceInteractionState();
+            let state = getVoiceInteractionState();
+            if (state === 'assistant-speaking' && !converseMode && !isVoiceTyping) {
+                state = 'idle';
+            }
             const indicator = document.getElementById('voice-state-indicator');
             const label = document.getElementById('voice-state-label');
             const micBtn = document.getElementById('voice-to-text-btn');
@@ -4719,8 +4745,13 @@ async function handleNameCorrection(text) {
                 setTimeout(ensureConverseListening, 420);
             } else {
                 stopListening();
+                stopSpeaking();
                 passiveWakeWordEnabled = false;
                 isPassiveListening = false;
+                listeningRequested = false;
+                currentSpeechContext = 'none';
+                awaitingFollowUpResponse = false;
+                clearTimeout(followUpTimer);
             }
         }
 
@@ -5388,20 +5419,21 @@ async function handleNameCorrection(text) {
         function getAssistantAvatarConfig(sourceType = 'default') {
             const t = String(sourceType || 'default').toLowerCase();
             if (t === 'verified') {
-                return { label: 'V', className: 'assistant-avatar verified', title: 'Verified source reply' };
+                return { label: '', className: 'assistant-avatar verified', title: 'Verified source reply' };
             }
             if (t === 'model') {
-                return { label: 'M', className: 'assistant-avatar model', title: 'Model reply' };
+                return { label: '', className: 'assistant-avatar model', title: 'Model reply' };
             }
             if (t === 'tool') {
-                return { label: 'T', className: 'assistant-avatar tool', title: 'Tool-generated reply' };
+                return { label: '', className: 'assistant-avatar tool', title: 'Tool-generated reply' };
             }
-            return { label: 'AI', className: 'assistant-avatar', title: 'Assistant reply' };
+            return { label: '', className: 'assistant-avatar', title: 'Assistant reply' };
         }
 
         function addChatMessage(text, isUser = true, typewriter = null, meta = {}) {
             const chatContainer = document.getElementById('chat-container');
             if (!chatContainer) return;
+            if (!isUser) hideThinkingIndicator();
             const displayText = normalizeUiTokens(String(text ?? ''));
             const messageDiv = document.createElement('div');
             messageDiv.className = `chat-row flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-3`;
@@ -5707,12 +5739,11 @@ function normalizeUiTokens(text) {
         }
 
         function formatVerifiedSourceBadge(label = 'Verified live sources') {
-            return `<div class="assistant-source-badge web">${escapeHtml(label)}</div>`;
+            return '';
         }
 
         function addVerifiedAssistantMessage(text, label = 'Verified live sources') {
-            const html = `${formatVerifiedSourceBadge(label)}\n${text}`;
-            addChatMessage(html, false, false, { sourceType: 'verified' });
+            addChatMessage(text, false, false, { sourceType: 'verified' });
         }
 
         function formatModelSourceBadge(label = 'Model answer') {
@@ -12706,6 +12737,10 @@ ${snippets}`
                 await handleMathCalculationRequest(compact);
                 return;
             }
+            if (isBatmanWhyDoWeFallQuery(compact)) {
+                await handleBatmanWhyDoWeFallQuery(compact);
+                return;
+            }
 
             if (isContinuousVisionQuestion(lower)) {
                 if (!isContinuousVisionActive) {
@@ -16182,18 +16217,18 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const words = content ? content.split(/\s+/).filter(Boolean).length : 0;
 
             // Tune rate by utterance length so speech feels close to natural conversation.
-            let rate = 0.99;
-            if (words <= 10) rate = 1.01;
-            else if (words <= 24) rate = 0.99;
-            else if (words <= 46) rate = 0.96;
+            let rate = 0.97;
+            if (words <= 10) rate = 0.99;
+            else if (words <= 24) rate = 0.97;
+            else if (words <= 46) rate = 0.95;
             else rate = 0.93;
 
             // Slightly faster in Converse mode for a more natural dialog rhythm.
-            if (isConverse) rate += 0.015;
+            if (isConverse) rate += 0.01;
 
             return {
-                rate: Math.max(0.9, Math.min(1.04, rate)),
-                pitch: isConverse ? 0.98 : 0.99
+                rate: Math.max(0.9, Math.min(1.0, rate)),
+                pitch: isConverse ? 1.01 : 1.03
             };
         }
 
@@ -16203,15 +16238,17 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const pool = englishVoices.length ? englishVoices : voices;
 
             const preferredNames = [
-                /daniel/i,
-                /arthur/i,
-                /brian/i,
-                /google uk english male/i,
-                /guy/i,
+                /samantha/i,
+                /serena/i,
+                /karen/i,
+                /zira/i,
+                /hazel/i,
+                /google us english/i,
+                /google uk english/i,
                 /neural/i,
                 /natural/i,
-                /online/i,
-                /enhanced/i
+                /enhanced/i,
+                /online/i
             ];
 
             let best = null;
@@ -16585,6 +16622,24 @@ function showError(message) {
 let continuousVisionStream = null;
 let isContinuousVisionActive = false;
 let continuousVisionTrack = null;
+let isContinuousVisionMinimized = false;
+
+function setContinuousVisionMinimized(nextState) {
+    const previewShell = document.getElementById('continuous-vision-preview-shell');
+    const minimizeBtn = document.getElementById('continuous-vision-minimize-btn');
+    isContinuousVisionMinimized = Boolean(nextState);
+    previewShell?.classList.toggle('is-minimized', isContinuousVisionMinimized);
+    if (minimizeBtn) {
+        minimizeBtn.textContent = isContinuousVisionMinimized ? 'Expand' : 'Minimize';
+        minimizeBtn.setAttribute('aria-pressed', isContinuousVisionMinimized ? 'true' : 'false');
+        minimizeBtn.setAttribute('aria-label', isContinuousVisionMinimized ? 'Expand live vision preview' : 'Minimize live vision preview');
+    }
+}
+
+function toggleContinuousVisionMinimize() {
+    if (!isContinuousVisionActive) return;
+    setContinuousVisionMinimized(!isContinuousVisionMinimized);
+}
 
 async function toggleContinuousVision() {
     const videoEl = document.getElementById('continuous-vision-video');
@@ -16602,6 +16657,7 @@ async function toggleContinuousVision() {
         continuousVisionTrack = null;
         videoEl.srcObject = null;
         videoEl.classList.add('hidden');
+        setContinuousVisionMinimized(false);
         previewShell?.classList.add('hidden');
         isContinuousVisionActive = false;
         btn.classList.remove('bg-blue-100', 'text-blue-600', 'dark:bg-blue-900/30');
@@ -16635,6 +16691,7 @@ async function toggleContinuousVision() {
             videoEl.srcObject = continuousVisionStream;
             videoEl.muted = true;
             videoEl.classList.remove('hidden');
+            setContinuousVisionMinimized(false);
             previewShell?.classList.remove('hidden');
             if (hintEl) hintEl.textContent = 'Camera is on. Ask: "What do you see?"';
             await videoEl.play().catch(() => {});
