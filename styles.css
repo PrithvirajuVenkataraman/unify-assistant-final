@@ -2716,6 +2716,43 @@ body.dark .assistant-thinking-text {
     animation-delay: 0.28s;
 }
 
+.assistant-thinking-phase-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border: 1px solid #dbe4ff;
+    background: #eef2ff;
+    color: #3730a3;
+}
+
+.assistant-thinking-phase-pill[data-phase="searching"] {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.assistant-thinking-phase-pill[data-phase="reasoning"] {
+    border-color: #ddd6fe;
+    background: #f5f3ff;
+    color: #6d28d9;
+}
+
+.assistant-thinking-phase-pill[data-phase="finalizing"] {
+    border-color: #bae6fd;
+    background: #ecfeff;
+    color: #0e7490;
+}
+
+body.dark .assistant-thinking-phase-pill {
+    border-color: rgba(148, 163, 184, 0.4);
+    background: rgba(30, 41, 59, 0.92);
+    color: #e2e8f0;
+}
+
 @keyframes professionalPulse {
     0%, 100% { transform: scale(1); opacity: 1; }
     50% { transform: scale(1.2); opacity: 0.75; }
@@ -2724,6 +2761,85 @@ body.dark .assistant-thinking-text {
 @keyframes professionalDotBounce {
     0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
     40% { transform: translateY(-2px); opacity: 0.95; }
+}
+
+/* Professional polish overrides */
+:root {
+    --surface-bg: #f3f6fb;
+    --surface-card: rgba(255, 255, 255, 0.9);
+    --surface-border: rgba(15, 23, 42, 0.08);
+    --text-primary: #0f172a;
+    --text-muted: #475569;
+}
+
+body {
+    background:
+        radial-gradient(1200px 380px at 0% -10%, rgba(14, 165, 233, 0.08), transparent 60%),
+        radial-gradient(900px 340px at 100% 0%, rgba(99, 102, 241, 0.08), transparent 56%),
+        var(--surface-bg);
+    color: var(--text-primary);
+}
+
+body.dark {
+    background:
+        radial-gradient(1000px 360px at 0% -10%, rgba(30, 64, 175, 0.2), transparent 58%),
+        radial-gradient(900px 320px at 100% 0%, rgba(15, 23, 42, 0.45), transparent 52%),
+        #020617;
+}
+
+.glass-card {
+    background: var(--surface-card) !important;
+    border: 1px solid var(--surface-border) !important;
+    box-shadow: 0 10px 34px rgba(15, 23, 42, 0.09) !important;
+    backdrop-filter: blur(14px);
+}
+
+body.dark .glass-card {
+    background: rgba(15, 23, 42, 0.74) !important;
+    border-color: rgba(148, 163, 184, 0.2) !important;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4) !important;
+}
+
+#chat-container {
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.8) !important;
+}
+
+body.dark #chat-container {
+    border-color: rgba(148, 163, 184, 0.22);
+    background: rgba(15, 23, 42, 0.58) !important;
+}
+
+.chat-bubble-assistant {
+    border-radius: 14px !important;
+    border: 1px solid rgba(148, 163, 184, 0.24) !important;
+    background: rgba(255, 255, 255, 0.97) !important;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05) !important;
+}
+
+body.dark .chat-bubble-assistant {
+    border-color: rgba(100, 116, 139, 0.4) !important;
+    background: rgba(15, 23, 42, 0.9) !important;
+    box-shadow: 0 3px 12px rgba(2, 6, 23, 0.45) !important;
+}
+
+.assistant-message-text {
+    color: #0f172a !important;
+}
+
+body.dark .assistant-message-text {
+    color: #e2e8f0 !important;
+}
+
+.modern-input {
+    border: 1px solid rgba(148, 163, 184, 0.32) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08) !important;
+}
+
+body.dark .modern-input {
+    border-color: rgba(100, 116, 139, 0.48) !important;
+    box-shadow: 0 8px 24px rgba(2, 6, 23, 0.4) !important;
 }
 
 .assistant-avatar {
@@ -3162,4 +3278,125 @@ body.dark .upload-context-btn.secondary {
     .upload-context-btn {
         flex: 1 1 calc(50% - 4px);
     }
+}
+
+/* ========== Professional UI Pass v2 ========== */
+:root {
+    --pro-title: #0b1220;
+    --pro-text: #0f172a;
+    --pro-text-soft: #475569;
+    --pro-border: rgba(15, 23, 42, 0.12);
+    --pro-border-strong: rgba(15, 23, 42, 0.2);
+}
+
+body.dark {
+    --pro-title: #e5e7eb;
+    --pro-text: #e2e8f0;
+    --pro-text-soft: #94a3b8;
+    --pro-border: rgba(148, 163, 184, 0.26);
+    --pro-border-strong: rgba(148, 163, 184, 0.4);
+}
+
+.app-shell {
+    max-width: 1024px !important;
+    padding-top: 18px !important;
+}
+
+.header-enhanced {
+    margin-bottom: 18px !important;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--pro-border);
+}
+
+.jarvis-top-title {
+    font-family: "Space Grotesk", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+    font-size: clamp(1.5rem, 1.9vw, 1.95rem) !important;
+    letter-spacing: 0.04em !important;
+    font-weight: 700 !important;
+    color: var(--pro-title) !important;
+    text-shadow: none !important;
+}
+
+#chat-container {
+    border-radius: 16px !important;
+    padding: 14px !important;
+}
+
+.chat-row {
+    margin-bottom: 2px;
+}
+
+.chat-bubble-user {
+    border-radius: 14px 14px 4px 14px !important;
+    box-shadow: 0 3px 10px rgba(30, 64, 175, 0.18) !important;
+}
+
+.chat-bubble-assistant {
+    border-radius: 12px !important;
+    border: 1px solid var(--pro-border) !important;
+}
+
+.assistant-message-text {
+    color: var(--pro-text) !important;
+    font-size: 0.9rem !important;
+    line-height: 1.58 !important;
+}
+
+.assistant-avatar {
+    width: 26px !important;
+    height: 26px !important;
+    font-size: 9px !important;
+    box-shadow: none !important;
+    border: 1px solid var(--pro-border-strong) !important;
+}
+
+.assistant-source-badge {
+    border-radius: 999px !important;
+    font-size: 10px !important;
+    letter-spacing: 0.02em !important;
+}
+
+.input-utility-btn,
+.footer-action-btn {
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 10px !important;
+    border: 1px solid transparent;
+}
+
+.input-utility-btn svg,
+.footer-action-btn svg {
+    width: 18px !important;
+    height: 18px !important;
+}
+
+.input-utility-btn:hover,
+.footer-action-btn:hover {
+    border-color: var(--pro-border) !important;
+}
+
+.modern-input {
+    min-height: 48px;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+}
+
+#text-input {
+    font-size: 14px !important;
+    color: var(--pro-text) !important;
+}
+
+#footer-disclaimer {
+    color: var(--pro-text-soft) !important;
+    font-size: 11px !important;
+    letter-spacing: 0.01em;
+}
+
+.help-modal-enhanced h2,
+.help-modal-enhanced h3 {
+    letter-spacing: -0.01em;
+}
+
+.help-modal-enhanced p {
+    line-height: 1.55;
 }
