@@ -464,6 +464,14 @@ function isSeriesReferenceJokeRequest(text) {
     return (jokeSignal && screenSignal) || (jokeSignal && referenceSignal);
 }
 
+function isGeneralJokeRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    if (!/\b(joke|funny|make me laugh|say something funny|tell me something funny)\b/.test(t)) return false;
+    if (isTamilJokeRequest(t) || isSeriesReferenceJokeRequest(t)) return false;
+    return true;
+}
+
 function isRecipeRequest(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -2844,6 +2852,48 @@ Rules:
         const fallback = 'Joke: I started binge-watching a detective series to learn focus, but now I suspect my fridge every time it hums.\nReference explained: Detective shows train you to see clues everywhere, even in normal things.';
         addModelAssistantMessage(fallback, 'Model answer');
         speak('Here is a series reference joke.');
+        saveToHistory(text, fallback);
+        return true;
+    } finally {
+        hideThinkingIndicator();
+    }
+}
+
+async function handleGeneralJokeRequest(text) {
+    showThinkingIndicator('Writing a joke...');
+    try {
+        const response = await fetch('/api/chat-groq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                systemPrompt: 'You are a clean humor assistant.',
+                message: `User request: "${text}"
+
+Return exactly one short joke.
+Rules:
+- Joke only.
+- No explanation.
+- No prefix labels like "Joke:".
+- No follow-up question.
+- Family-friendly.`
+            })
+        });
+        if (!response.ok) throw new Error('general_joke_failed');
+        const data = await response.json();
+        let answer = String(data?.response || data?.text || '').trim();
+        answer = answer
+            .replace(/^joke:\s*/i, '')
+            .replace(/\n+\s*(reference explained|explanation|why funny)\s*:.*/gis, '')
+            .trim();
+        if (!answer) throw new Error('general_joke_empty');
+        addModelAssistantMessage(answer, 'Model answer');
+        speak(answer);
+        saveToHistory(text, answer);
+        return true;
+    } catch (_) {
+        const fallback = 'I told my keyboard I needed a break, and now it keeps sending me Escape.';
+        addModelAssistantMessage(fallback, 'Model answer');
+        speak(fallback);
         saveToHistory(text, fallback);
         return true;
     } finally {
@@ -5478,6 +5528,10 @@ async function handleNameCorrection(text) {
                 const containerWidth = hasMap ? 'w-full max-w-4xl' : (hasHtmlContent ? 'w-full max-w-3xl' : 'w-full max-w-3xl');
                 const sourceType = meta?.sourceType || (hasMap ? 'tool' : 'default');
                 const avatar = getAssistantAvatarConfig(sourceType);
+                const showAvatar = sourceType !== 'model';
+                const avatarHtml = showAvatar
+                    ? `<div class="${avatar.className}" aria-hidden="true" title="${avatar.title}">${avatar.label}</div>`
+                    : '';
 
                 // Store text safely for speech - use data attribute to avoid escaping issues
                 const speechId = 'speech_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -5486,7 +5540,7 @@ async function handleNameCorrection(text) {
                 messageDiv.innerHTML = `
                     <div class="w-full ${containerWidth}">
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
-                        <div class="${avatar.className}" aria-hidden="true" title="${avatar.title}">${avatar.label}</div>
+                        ${avatarHtml}
                         <div class="min-w-0 flex-1 overflow-hidden ${hasMap ? 'map-message' : ''}">
                             <div class="${hasMap ? '' : 'chat-bubble-assistant'}">
                                 <div class="assistant-message-text typewriter-text text-sm leading-relaxed text-left"></div>
@@ -10600,6 +10654,7 @@ function classifyUserMessage(text) {
             liveRetrieval: isLiveRetrievalQuery(raw),
             tamilJoke: isTamilJokeRequest(raw),
             seriesRefJoke: isSeriesReferenceJokeRequest(raw),
+            generalJoke: isGeneralJokeRequest(raw),
             recipe: isRecipeRequest(raw),
             classicSongs: isClassicSongDiscoveryRequest(raw),
             artistSong: isArtistSongRequest(raw),
@@ -10638,6 +10693,7 @@ function decideAnswerPath(classification) {
     if (flags.liveRetrieval) return 'live_retrieval';
     if (flags.tamilJoke) return 'tamil_joke';
     if (flags.seriesRefJoke) return 'series_ref_joke';
+    if (flags.generalJoke) return 'general_joke';
     if (flags.recipe) return 'recipe';
     if (flags.classicSongs) return 'classic_songs'; 
     if (flags.artistSong) return 'artist_song'; 
@@ -13142,6 +13198,11 @@ ${snippets}`
 
             if (answerPath === 'series_ref_joke') {
                 await handleSeriesReferenceJokeRequest(cleanText);
+                return;
+            }
+
+            if (answerPath === 'general_joke') {
+                await handleGeneralJokeRequest(cleanText);
                 return;
             }
 
