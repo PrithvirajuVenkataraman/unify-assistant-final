@@ -410,6 +410,18 @@ function detectRequestedResponseLength(text) {
     return 'normal';
 }
 
+function detectTeachingDepth(text) {
+    const lower = String(text || '').toLowerCase();
+    if (!lower.trim()) return 'normal';
+    if (/\b(explain like i am 5|eli5|in simple words|very simple|easy words|beginner|for a kid|i am new|new to this)\b/.test(lower)) {
+        return 'simple';
+    }
+    if (/\b(advanced|deep dive|comprehensive|detailed|technical|in-depth|expert)\b/.test(lower)) {
+        return 'detailed';
+    }
+    return 'normal';
+}
+
 function getUserIntent(text) {
   return {
     wantsHotels: /hotel|stay|accommodation/i.test(text),
@@ -1145,13 +1157,15 @@ async function handleUniversalExplainerQuery(userText, historyKey = '') {
     const reactionNeeded = isChemistryReactionQuery(userText);
     const formulaNeeded = requiresAutoFormula(userText);
     const recentMemory = buildConversationRecallSummary(5);
-    const schoolModeEnabled = typeof schoolMode !== 'undefined' ? !!schoolMode : false;
+    const teachingDepth = detectTeachingDepth(userText);
 
     showThinkingIndicator(reactionNeeded ? 'Explaining reaction...' : (formulaNeeded ? 'Building explanation with formula...' : 'Building explanation...'));
     try {
-        const schoolModeSection = schoolModeEnabled
-            ? `\n\nSchool mode is ON. Use this exact structure whenever relevant:\n1) Definition\n2) Formula/Equation (if applicable)\n3) Worked Example\n4) Quick recap in one line`
-            : '';
+        const depthRule = teachingDepth === 'simple'
+            ? 'Use very simple words, short sentences, and one tiny example.'
+            : teachingDepth === 'detailed'
+                ? 'Give a deeper explanation with a clear worked example and practical nuance.'
+                : 'Keep it clear, concise, and practical with one short example.';
         const explainerPrompt = `User question: "${userText}"
 
 Recent conversation context:
@@ -1172,7 +1186,8 @@ Example: ...
 Quick recap: ...
 - If user asked for formula/equation, include it explicitly.
 - If term is misspelled, infer the most likely intended term and answer that directly.
-- Do not ask follow-up questions unless ambiguity is high.${schoolModeSection}`;
+- Do not ask follow-up questions unless ambiguity is high.
+- Teaching depth: ${teachingDepth}. ${depthRule}`;
         const response = await fetch('/api/chat-groq', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -3657,7 +3672,6 @@ async function handleNameCorrection(text) {
                 darkMode: false,
                 autoSpeak: false,
                 noiseFilter: { enabled: false, level: 'medium' },
-                schoolMode: false,
                 medicalMode: false
             },
             user: {
@@ -3741,7 +3755,6 @@ async function handleNameCorrection(text) {
         let supportModeLock = 'balanced';
         let responseLength = 'normal';
         let responseFormat = 'paragraph';
-        let schoolMode = false;
         let medicalMode = false;
         let converseMode = false;
         let supportConversationMode = false;
@@ -4223,20 +4236,13 @@ async function handleNameCorrection(text) {
                                     </div>
                                 </div>
                                 <div>
-                                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">School mode</p>
-                                    <div class="flex gap-2 flex-wrap">
-                                        <button onclick="setSchoolMode(true)" data-mode-group="school-mode" data-mode-value="on" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-emerald-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${schoolMode ? 'bg-emerald-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">On</button>
-                                        <button onclick="setSchoolMode(false)" data-mode-group="school-mode" data-mode-value="off" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${!schoolMode ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Off</button>
-                                    </div>
-                                </div>
-                                <div>
                                     <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Medical mode</p>
                                     <div class="flex gap-2 flex-wrap">
                                         <button onclick="setMedicalMode(true)" data-mode-group="medical-mode" data-mode-value="on" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-rose-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${medicalMode ? 'bg-rose-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">On</button>
                                         <button onclick="setMedicalMode(false)" data-mode-group="medical-mode" data-mode-value="off" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${!medicalMode ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Off</button>
                                     </div>
                                 </div>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Voice commands: "set support mode supportive", "set response length detailed", "set response format bullet points", "set school mode on", or "turn medical mode on".</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Voice commands: "set support mode supportive", "set response length detailed", "set response format bullet points", or "turn medical mode on".</p>
                             </div>
                         </section>
 
@@ -4396,7 +4402,6 @@ async function handleNameCorrection(text) {
                     supportModeLock,
                     responseLength,
                     responseFormat,
-                    schoolMode,
                     medicalMode,
                     converseMode
                 }));
@@ -4580,7 +4585,6 @@ async function handleNameCorrection(text) {
             updateModeButtonGroup('support-mode', supportModeLock);
             updateModeButtonGroup('response-length', responseLength);
             updateModeButtonGroup('response-format', responseFormat);
-            updateModeButtonGroup('school-mode', schoolMode ? 'on' : 'off');
             updateModeButtonGroup('medical-mode', medicalMode ? 'on' : 'off');
         }
 
@@ -4588,7 +4592,6 @@ async function handleNameCorrection(text) {
             supportModeLock = 'balanced';
             responseLength = 'normal';
             responseFormat = 'paragraph';
-            schoolMode = false;
             medicalMode = false;
             converseMode = false;
             supportConversationMode = false;
@@ -4599,7 +4602,6 @@ async function handleNameCorrection(text) {
                     supportModeLock = parsed.supportModeLock || 'balanced';
                     responseLength = parsed.responseLength || 'normal';
                     responseFormat = ['paragraph', 'bullet', 'steps'].includes(parsed.responseFormat) ? parsed.responseFormat : 'paragraph';
-                    schoolMode = !!parsed.schoolMode;
                     medicalMode = !!parsed.medicalMode;
                     // Always start with Converse mode OFF unless user explicitly presses it.
                     converseMode = false;
@@ -4608,7 +4610,6 @@ async function handleNameCorrection(text) {
             window.supportModeLock = supportModeLock;
             window.responseLength = responseLength;
             window.responseFormat = responseFormat;
-            window.schoolMode = schoolMode;
             window.medicalMode = medicalMode;
             updateAssistantModeUI();
             // Do not auto-start listening on load.
@@ -4652,20 +4653,6 @@ async function handleNameCorrection(text) {
                 label: labelMap[responseFormat] || 'Paragraph'
             }, {
                 fallbackText: `Response format set to ${labelMap[responseFormat] || 'Paragraph'}.`
-            });
-        }
-
-        async function setSchoolMode(enabled) {
-            schoolMode = !!enabled;
-            window.schoolMode = schoolMode;
-            saveAssistantModes();
-            updateAssistantModeUI();
-            await deliverApiReply('school_mode_changed', {
-                enabled: schoolMode
-            }, {
-                fallbackText: schoolMode
-                    ? 'School mode is ON. I will answer explainers with definition, formula/equation where relevant, and a worked example.'
-                    : 'School mode is OFF. Normal explainer style restored.'
             });
         }
 
@@ -13366,6 +13353,12 @@ Do not use repetitive filler or generic wording.`;
 
             if (isLearningIntent(cleanText)) {
                 const formulaNeededInLearning = requiresAutoFormula(text);
+                const teachingDepth = detectTeachingDepth(text);
+                const teachingRule = teachingDepth === 'simple'
+                    ? 'Use the simplest possible words, avoid jargon, and keep steps short.'
+                    : teachingDepth === 'detailed'
+                        ? 'Go deeper with precise detail and one fuller worked example.'
+                        : 'Keep it clear and practical with concise steps.';
                 const learningPrompt = `User asked: "${text}"
 
 Teach this clearly for a beginner.
@@ -13384,7 +13377,8 @@ Quick recap: ...
 - End with a short "quick recap".
 - If useful, add "next thing to learn" in one line.
 - Avoid jargon unless you define it immediately.
-- Keep it accurate and practical.`;
+- Keep it accurate and practical.
+- Teaching depth: ${teachingDepth}. ${teachingRule}`;
                 const learningResponse = await callAIWithTyping(learningPrompt, 'Preparing a clear explanation...');
                 if (learningResponse?.aborted) return;
                 let learningAnswer = learningResponse.response;
@@ -13476,16 +13470,10 @@ Quick recap: ...
                 return;
             }
 
-            const schoolModeMatch = cleanText.match(/\b(?:set|change|switch|turn)\s+school\s+mode\s+(on|off|enable|disable|start|stop)\b/i);
-            if (schoolModeMatch) {
-                const raw = schoolModeMatch[1].toLowerCase();
-                const enabled = raw === 'on' || raw === 'enable' || raw === 'start';
-                await setSchoolMode(enabled);
-                return;
-            }
-
-            if (/\bschool\s+mode\s+(on|off)\b/i.test(cleanText)) {
-                await setSchoolMode(/\bschool\s+mode\s+on\b/i.test(cleanText));
+            if (/\bschool\s+mode\b/i.test(cleanText)) {
+                await deliverApiReply('school_mode_removed', {}, {
+                    fallbackText: 'School mode is removed. I now auto-adjust teaching depth based on your question.'
+                });
                 return;
             }
 
