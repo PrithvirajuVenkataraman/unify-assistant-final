@@ -334,6 +334,7 @@
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button onclick="triggerEmergencySmsNow()" class="px-4 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white text-sm font-semibold transition-all">SOS SMS</button>
             <button onclick="shareCurrentLocation()" class="px-4 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all">Share location</button>
             <button onclick="openNearbySearch('hospital')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest hospital</button>
             <button onclick="openNearbySearch('police station')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest police</button>
@@ -4030,11 +4031,13 @@ async function handleNameCorrection(text) {
                         </section>
 
                         <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">How RLAIF Works</h3>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Safety Mode</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p><strong>RLAIF</strong> means Reinforcement Learning from AI Feedback: stronger evaluator models rank candidate answers for quality, safety, and usefulness.</p>
-                                <p>Training loop: model generates multiple answers -> evaluator AI scores/ranks them -> reward signal is learned -> policy is optimized to prefer higher-ranked behavior.</p>
-                                <p>This improves consistency and safety, but live facts still require retrieval + source verification.</p>
+                                <p><strong>Open Safety Panel:</strong> Tap the shield button near the input bar.</p>
+                                <p><strong>Quick actions:</strong> Share location, nearest hospital, nearest police, nearest pharmacy, nearest ATM.</p>
+                                <p><strong>Enable safety setup:</strong> Say "enable women's safety mode".</p>
+                                <p><strong>Set trusted contact:</strong> Say "trusted contact is +1..." to save a contact for fast sharing workflows.</p>
+                                <p><strong>Good voice examples:</strong> "share my location", "nearest hospital", "nearest police".</p>
                             </div>
                         </section>
 
@@ -5781,6 +5784,35 @@ function normalizeUiTokens(text) {
             }
         }
 
+        function drawOcrEnhancedFrame(ctx, video, width, height) {
+            ctx.drawImage(video, 0, 0, width, height);
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const d = imageData.data;
+            for (let i = 0; i < d.length; i += 4) {
+                const r = d[i];
+                const g = d[i + 1];
+                const b = d[i + 2];
+                // Grayscale + mild contrast boost to improve OCR legibility.
+                let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                gray = Math.max(0, Math.min(255, (gray - 128) * 1.25 + 128));
+                d[i] = gray;
+                d[i + 1] = gray;
+                d[i + 2] = gray;
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function extractTextFromVisionDetails(details = {}, visionAnswer = '') {
+            const linesFromArray = Array.isArray(details?.textDetected)
+                ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean)
+                : [];
+            const fullText = String(details?.fullText || '').trim();
+            if (fullText) return fullText;
+            if (linesFromArray.length) return linesFromArray.join('\n').trim();
+            const m = String(visionAnswer || '').match(/Detected text:\s*([\s\S]+)/i);
+            return m && m[1] ? String(m[1]).split('\n\n')[0].trim() : '';
+        }
+
         async function captureAndProcessOCR() {
             const video = document.getElementById('camera-preview');
             const canvas = document.getElementById('camera-canvas');
@@ -5807,51 +5839,73 @@ function normalizeUiTokens(text) {
             setCaptureButtonBusy(true);
             showThinkingIndicator('Reading text from image...');
             try {
-                canvas.width = width;
-                canvas.height = height;
-                ctx.drawImage(video, 0, 0, width, height);
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-                const imageBase64 = dataUrl.split(',')[1];
+                // Use a higher internal resolution for sharper OCR on small text.
+                const scale = width < 1600 ? 1.5 : 1;
+                const renderWidth = Math.max(960, Math.round(width * scale));
+                const renderHeight = Math.max(540, Math.round(height * scale));
+                canvas.width = renderWidth;
+                canvas.height = renderHeight;
+                drawOcrEnhancedFrame(ctx, video, renderWidth, renderHeight);
+
+                const enhancedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+                const enhancedBase64 = enhancedDataUrl.split(',')[1];
                 const userInstruction = String(document.getElementById('ocr-comment-input')?.value || '').trim();
                 const prompt = userInstruction
-                    ? `First extract ALL visible text exactly with line breaks, including numbers/symbols/equations. Then answer this instruction using only image evidence: "${userInstruction}".`
-                    : 'Extract all visible text exactly with line breaks (including numbers, symbols, and equations), then provide a short practical summary.';
+                    ? `Extract all visible text exactly, preserving line order, numbers, totals, symbols, and punctuation. Then answer the instruction using only extracted evidence: "${userInstruction}".`
+                    : 'Extract all visible text exactly, preserving line breaks and numeric accuracy. Then provide a concise professional summary.';
 
-                const response = await fetch('/api/vision', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        task: 'text_extract',
-                        prompt,
-                        mimeType: 'image/jpeg',
-                        imageBase64
-                    })
-                });
+                const attemptOcr = async (imageBase64) => {
+                    const response = await fetch('/api/vision', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            task: 'text_extract',
+                            prompt,
+                            mimeType: 'image/jpeg',
+                            imageBase64
+                        })
+                    });
+                    const rawBody = await response.text();
+                    let data = {};
+                    try {
+                        data = rawBody ? JSON.parse(rawBody) : {};
+                    } catch (_) {
+                        data = {};
+                    }
+                    return { ok: response.ok, data };
+                };
 
-                const rawBody = await response.text();
-                let data = {};
-                try {
-                    data = rawBody ? JSON.parse(rawBody) : {};
-                } catch (_) {
-                    data = {};
+                // First pass: enhanced OCR frame
+                let attempt = await attemptOcr(enhancedBase64);
+                let details = attempt?.data?.details && typeof attempt.data.details === 'object' ? attempt.data.details : {};
+                let visionAnswer = String(attempt?.data?.response || details?.summary || '').trim();
+                let extractedText = extractTextFromVisionDetails(details, visionAnswer);
+
+                // Fallback pass: raw camera frame (some scenes perform better without preprocessing)
+                if ((!attempt.ok || !attempt?.data?.success || extractedText.length < 8) && width && height) {
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(video, 0, 0, width, height);
+                    const rawBase64 = canvas.toDataURL('image/jpeg', 0.95).split(',')[1];
+                    const retry = await attemptOcr(rawBase64);
+                    if (retry.ok && retry?.data?.success) {
+                        const retryDetails = retry.data?.details && typeof retry.data.details === 'object' ? retry.data.details : {};
+                        const retryAnswer = String(retry.data?.response || retryDetails?.summary || '').trim();
+                        const retryText = extractTextFromVisionDetails(retryDetails, retryAnswer);
+                        if (retryText.length > extractedText.length) {
+                            attempt = retry;
+                            details = retryDetails;
+                            visionAnswer = retryAnswer;
+                            extractedText = retryText;
+                        }
+                    }
                 }
 
-                if (!response.ok || !data?.success) {
-                    const errMsg = String(data?.error || 'OCR analysis failed. Please try again.').trim();
+                if (!attempt.ok || !attempt?.data?.success) {
+                    const errMsg = String(attempt?.data?.error || 'OCR analysis failed. Please try again.').trim();
                     addChatMessage(errMsg, false);
                     speak(errMsg);
                     return;
-                }
-
-                const details = data?.details && typeof data.details === 'object' ? data.details : {};
-                const extractedLines = Array.isArray(details?.textDetected)
-                    ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean)
-                    : [];
-                let extractedText = extractedLines.join('\n').trim();
-                const visionAnswer = String(data?.response || details?.summary || '').trim();
-                if (!extractedText && visionAnswer) {
-                    const m = visionAnswer.match(/Detected text:\s*([\s\S]+)/i);
-                    if (m && m[1]) extractedText = String(m[1]).split('\n\n')[0].trim();
                 }
 
                 const card = `
@@ -5859,7 +5913,7 @@ function normalizeUiTokens(text) {
   <p class="text-xs font-semibold text-slate-500 dark:text-slate-300 mb-1">Camera OCR</p>
   <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-2">${userInstruction ? 'OCR + instruction result' : 'OCR result'}</p>
   ${extractedText ? `<div class="mb-2"><p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Extracted text</p><p class="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">${escapeHtml(extractedText.slice(0, 3500))}</p></div>` : '<p class="text-sm text-slate-600 dark:text-slate-300 mb-2">No clear text detected.</p>'}
-  ${visionAnswer ? `<div><p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Answer</p><p class="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">${escapeHtml(visionAnswer)}</p></div>` : ''}
+  ${visionAnswer ? `<div><p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Analysis</p><p class="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">${escapeHtml(visionAnswer)}</p></div>` : ''}
 </div>`;
                 addChatMessage(card, false, false);
 
@@ -12531,11 +12585,23 @@ ${snippets}`
                 await deliverApiReply('safety_trusted_contact_saved', {
                     trustedContact: safetyProfile.trustedContact
                 }, { historyKey: text });
+                if (!sanitizePhoneForSms(safetyProfile.trustedContact)) {
+                    await deliverApiReply('safety_trusted_contact_phone_hint', {
+                        example: '+1 5551234567'
+                    }, {
+                        fallbackText: 'Tip: save trusted contact as a phone number (for example +1 5551234567) so SOS can open an SMS draft automatically.'
+                    });
+                }
                 return;
             }
 
             if (/\b(share my location|send my location)\b/i.test(lower)) {
                 await shareCurrentLocation();
+                return;
+            }
+
+            if (/\b(sos|emergency help|panic|i am in danger|unsafe|help me now|send emergency location)\b/i.test(lower)) {
+                await triggerEmergencySafetyFlow(text);
                 return;
             }
 
@@ -15347,24 +15413,69 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         }
 
         async function shareCurrentLocation() {
+            return shareCurrentLocationWithOptions({ emergency: false, source: 'manual' });
+        }
+
+        function sanitizePhoneForSms(raw) {
+            const value = String(raw || '').trim();
+            if (!value) return '';
+            const cleaned = value.replace(/[^\d+]/g, '');
+            if (!cleaned) return '';
+            if (/^\+?\d{8,15}$/.test(cleaned)) return cleaned;
+            return '';
+        }
+
+        async function triggerEmergencySafetyFlow(sourceText = '') {
+            const origin = String(sourceText || '').trim();
+            showSafetyPanel();
+            await shareCurrentLocationWithOptions({ emergency: true, source: origin || 'voice_command' });
+        }
+
+        async function triggerEmergencySmsNow() {
+            showSafetyPanel();
+            const trustedPhone = sanitizePhoneForSms(safetyProfile?.trustedContact || '');
+            if (!trustedPhone) {
+                await deliverApiReply('safety_trusted_contact_phone_hint', {
+                    example: '+1 5551234567'
+                }, {
+                    fallbackText: 'Trusted contact phone is not set. Say: "trusted contact is +1 5551234567" and try SOS SMS again.'
+                });
+                return;
+            }
+            await shareCurrentLocationWithOptions({ emergency: true, source: 'sos_button_sms' });
+        }
+
+        async function shareCurrentLocationWithOptions(options = {}) {
+            const isEmergency = !!options.emergency;
+            const trustedPhone = sanitizePhoneForSms(safetyProfile?.trustedContact || '');
             try {
                 const position = await getCurrentPositionAsync();
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
                 const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`;
-                const shareText = `My current location: ${mapsUrl}`;
+                const shareText = isEmergency
+                    ? `Emergency: I need help. My current location is ${mapsUrl}`
+                    : `My current location: ${mapsUrl}`;
 
                 window.open(mapsUrl, '_blank', 'noopener,noreferrer');
 
-                if (navigator.share) {
+                if (isEmergency && trustedPhone) {
+                    const smsBody = encodeURIComponent(shareText);
+                    const smsLink = `sms:${trustedPhone}?body=${smsBody}`;
+                    window.location.href = smsLink;
+                    showTemporaryMessage('Emergency SMS draft opened for your trusted contact.');
+                } else if (navigator.share) {
                     await navigator.share({
-                        title: 'My current location',
+                        title: isEmergency ? 'Emergency location' : 'My current location',
                         text: shareText,
                         url: mapsUrl
                     });
-                    showTemporaryMessage('Location shared successfully.');
+                    showTemporaryMessage(isEmergency ? 'Emergency location shared.' : 'Location shared successfully.');
                 } else {
                     copyToClipboard(shareText);
+                    if (isEmergency && !trustedPhone) {
+                        showTemporaryMessage('Trusted contact phone not set. Location copied; paste into SMS/WhatsApp now.');
+                    }
                 }
             } catch (error) {
                 await deliverApiReply('gps_access_error', {
