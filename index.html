@@ -6144,9 +6144,14 @@ function normalizeUiTokens(text) {
                     ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean)
                     : [];
                 const responseText = String(data?.response || '').trim();
-                const extractedText = (textDetected.join('\n') || responseText).slice(0, 22000).trim();
+                const fullText = String(details?.fullText || '').trim();
+                const extractedText = (fullText || textDetected.join('\n') || responseText).slice(0, 22000).trim();
                 if (!extractedText) return null;
                 const summary = String(details?.summary || responseText || 'Image analyzed.').slice(0, 4000).trim();
+                const readability = String(details?.quality?.textReadability || '').trim();
+                const extractionHint = readability
+                    ? `Used /api/vision fallback because /api/document-ingest was unavailable. OCR readability: ${readability}.`
+                    : 'Used /api/vision fallback because /api/document-ingest was unavailable.';
 
                 return {
                     success: true,
@@ -6154,7 +6159,7 @@ function normalizeUiTokens(text) {
                     mimeType: mimeType || 'image/jpeg',
                     kind: 'image',
                     extractionMode: 'vision-fallback',
-                    extractionHint: 'Used /api/vision fallback because /api/document-ingest was unavailable.',
+                    extractionHint,
                     extractedText,
                     extractedCharCount: extractedText.length,
                     summary,
@@ -16376,8 +16381,16 @@ async function handleContinuousVisionQuery(text) {
         const textDetected = Array.isArray(details?.textDetected)
             ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean).join('\n').trim()
             : '';
+        const fullText = String(details?.fullText || '').trim();
+        const readability = String(details?.quality?.textReadability || '').trim();
         let answer = String(data.response || details?.summary || '').trim();
-        if (!answer && textDetected) answer = `Detected text:\n${textDetected}`;
+        if (!answer && (fullText || textDetected)) {
+            const textBlock = fullText || textDetected;
+            answer = `Detected text:\n${textBlock}`;
+        }
+        if (answer && readability) {
+            answer += `\n\nReadability: ${readability}`;
+        }
         if (!answer) answer = 'I can see the image, but I could not generate a clear answer.';
         addChatMessage(answer, false);
         speak(answer);
