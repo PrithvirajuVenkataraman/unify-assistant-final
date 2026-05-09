@@ -7,7 +7,6 @@
   // Unified API Handler to bypass Vercel's Serverless Function limits
   export default async function handler(req, res) {
     const path = resolveRequestPath(req);
-    
     try {
       if (path.includes('/chat-groq')) {
         return await chatGroqHandler(req, res);
