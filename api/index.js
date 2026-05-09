@@ -1,7 +1,6 @@
   import chatGroqHandler from './chat-groq.js';
   import documentIngestHandler from './document-ingest.js';
   import marketsHandler from './markets.js';
-  import ragHandler from './rag.js';
   import searchHandler from './search.js';
   import visionHandler from './vision.js';
 
@@ -12,12 +11,16 @@
     try {
       if (path.includes('/chat-groq')) {
         return await chatGroqHandler(req, res);
+      } else if (path.includes('/rag')) {
+        return res.status(410).json({
+          success: false,
+          error: 'The legacy /api/rag endpoint has been retired.',
+          hint: 'Use /api/document-ingest for uploads and /api/chat-groq for Q&A.'
+        });
       } else if (path.includes('/document-ingest')) {
         return await documentIngestHandler(req, res);
       } else if (path.includes('/markets')) {
         return await marketsHandler(req, res);
-      } else if (path.includes('/rag')) {
-        return await ragHandler(req, res);
       } else if (path.includes('/search')) {
         return await searchHandler(req, res);
       } else if (path.includes('/vision')) {
