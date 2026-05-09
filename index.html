@@ -12174,6 +12174,75 @@ function buildSourceAgreement(results, entityIntent) {
     };
 }
 
+function isLikelyPersonNameCandidate(value) {
+    const text = String(value || '').trim();
+    if (!text) return false;
+    if (text.length < 3 || text.length > 50) return false;
+    if (/\d/.test(text)) return false;
+    if (/\b(team|squad|season|players?|list|captaincy|coach|role|official|news|update|latest)\b/i.test(text)) return false;
+    const parts = text.split(/\s+/).filter(Boolean);
+    if (!parts.length || parts.length > 4) return false;
+    return parts.every(part => /^[A-Za-z.'-]+$/.test(part));
+}
+
+function selectBestSportsRoleCandidate(results, entityIntent, intent = null) {
+    const relation = String(entityIntent?.relationType || '').toLowerCase();
+    const domain = String(entityIntent?.domain || '').toLowerCase();
+    if (relation !== 'role' || domain !== 'sports') return null;
+
+    const voteMap = new Map();
+    const targetYear = Number(intent?.year || entityIntent?.year || 0);
+    const sample = (Array.isArray(results) ? results : []).slice(0, 8);
+
+    for (const item of sample) {
+        const candidateRaw = String(extractFactCandidate(item, entityIntent) || '').trim();
+        if (!isLikelyPersonNameCandidate(candidateRaw)) continue;
+
+        const key = normalizeAgreementValue(candidateRaw);
+        if (!key) continue;
+
+        const trusted = scoreSourcePolicy(item?.url, entityIntent.domain);
+        const published = extractResultPublishedDate(item);
+        const publishedYear = published?.getFullYear?.() || 0;
+        const yearBoost = targetYear && publishedYear === targetYear ? 1 : 0;
+        const yearPenalty = targetYear && publishedYear && publishedYear < targetYear - 1 ? -1 : 0;
+        const score = 1 + trusted + yearBoost + yearPenalty;
+
+        const existing = voteMap.get(key) || {
+            value: candidateRaw,
+            count: 0,
+            score: 0,
+            trustedScore: 0,
+            sources: []
+        };
+        existing.count += 1;
+        existing.score += score;
+        existing.trustedScore += trusted;
+        existing.sources.push(item);
+        voteMap.set(key, existing);
+    }
+
+    const ranked = Array.from(voteMap.values()).sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if (b.count !== a.count) return b.count - a.count;
+        return b.trustedScore - a.trustedScore;
+    });
+
+    const top = ranked[0] || null;
+    const second = ranked[1] || null;
+    if (!top) return null;
+
+    const clearLead = !second || (top.score - second.score >= 2);
+    const enoughEvidence = top.count >= 2 || top.trustedScore >= 6 || clearLead;
+    if (!enoughEvidence) return null;
+
+    return {
+        value: top.value,
+        sources: top.sources.slice(0, 4),
+        confidence: top.count >= 2 && top.trustedScore >= 6 ? 'high' : (top.count >= 2 || top.trustedScore >= 4 ? 'medium' : 'low')
+    };
+}
+
 function normalizePersonVariant(value) {
     return String(value || '')
         .toLowerCase()
@@ -12663,39 +12732,48 @@ function buildStrictVerificationClarificationMessage(userText, intent, entityInt
     const competition = String(entityIntent?.competition || '').trim();
     const year = String(intent?.year || entityIntent?.year || '').trim();
     const sampleYear = year || String(new Date().getFullYear());
+    const lowerQuery = query.toLowerCase();
+    const missing = [];
+    const hasEntity = Boolean(subject || entityIntent?.targetEntity);
+    const needsCompetition = ['winner', 'score', 'standings', 'qualification', 'stats', 'title_count', 'role'].includes(relation);
+    const asksFresh = /\b(latest|current|today|now|live|as of)\b/.test(lowerQuery);
+
+    if (!hasEntity) {
+        missing.push('Which exact person/team/company should I verify?');
+    }
+    if (needsCompetition && !competition && domain.includes('sports')) {
+        missing.push('Which competition/league do you mean? (for example: IPL, Champions League)');
+    }
+    if ((relation === 'stats' || relation === 'title_count') && !/\b(career|season|format|test|odi|t20|ipl)\b/.test(lowerQuery)) {
+        missing.push('Do you want career totals, season totals, or format-wise stats?');
+    }
+    if (!year && (relation === 'winner' || relation === 'score' || relation === 'standings' || relation === 'qualification' || asksFresh)) {
+        missing.push('Which season/date should I lock to?');
+    }
 
     const clarifyLines = [];
-    clarifyLines.push('I need 1-2 more details before I can verify this from live sources.');
-    clarifyLines.push('');
-    clarifyLines.push('Please clarify:');
-    clarifyLines.push(`1. Time: exact date/season${year ? ` (you asked about ${year})` : ''}`);
-    clarifyLines.push('2. Scope: country, league, market, or product line');
-    if (subject) {
-        clarifyLines.push(`3. Entity: confirm "${subject}"${competition ? ` in "${competition}"` : ''}`);
+    if (missing.length) {
+        clarifyLines.push('I only need one quick detail to verify this precisely:');
+        clarifyLines.push('');
+        clarifyLines.push(`- ${missing[0]}`);
     } else {
-        clarifyLines.push('3. Entity: exact person/team/company');
-    }
-
-    if (relation === 'stats' || relation === 'title_count') {
-        clarifyLines.push('4. Metric: career total, season total, or format split');
+        clarifyLines.push('Your query is clear, but live sources are conflicting right now.');
+        clarifyLines.push('I can retry with one tighter qualifier (season/date or official source preference).');
     }
 
     clarifyLines.push('');
-    clarifyLines.push('Try:');
+    clarifyLines.push('Examples:');
     if (domain.includes('sports')) {
-        clarifyLines.push(`- "CSK IPL titles as of ${sampleYear}"`);
-        clarifyLines.push(`- "Who won IPL ${sampleYear} final and score?"`);
+        clarifyLines.push(`- "Who is CSK captain in IPL ${sampleYear}?"`);
+        clarifyLines.push(`- "IPL ${sampleYear} final winner and score"`);
     } else if (domain.includes('politics')) {
         clarifyLines.push('- "Current prime minister of India as of today"');
         clarifyLines.push('- "Election result in [country/state] on [date]"');
     } else if (domain.includes('finance') || relation === 'price') {
         clarifyLines.push('- "USD to INR now (RBI reference)"');
         clarifyLines.push('- "Gold price in India today, 24k per gram"');
-    } else if (domain.includes('tech') || domain.includes('companies')) {
-        clarifyLines.push('- "Latest AMD Radeon launch date"');
-        clarifyLines.push('- "Current OpenAI CEO as of today"');
     } else {
-        clarifyLines.push('- "Latest update for [topic] in [region] on [date]"');
+        clarifyLines.push('- "Latest update for [topic] on [date]"');
     }
 
     const sourceLines = (Array.isArray(sources) ? sources : [])
@@ -12747,6 +12825,26 @@ async function publishUniversalConsensusAnswer(pipeline, agreement) {
     addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
     await speakApiReply('verified_answer_confirmed', {}, 'I checked multiple sources and confirmed the answer.');
     saveToHistory(pipeline.userText, finalMsg);
+    return true;
+}
+
+async function publishSportsRoleBestEffortAnswer(pipeline, candidate) {
+    if (!pipeline?.entityIntent || !candidate?.value) return false;
+    const roleLabel = pipeline.entityIntent.roleLabel || 'role';
+    const targetEntity = pipeline.entityIntent.targetEntity || pipeline.entityIntent.subject || 'the team';
+    const sourceLines = (Array.isArray(candidate.sources) ? candidate.sources : [])
+        .slice(0, 4)
+        .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+        .join('\n');
+    if (!sourceLines) return false;
+
+    const qualifier = candidate.confidence === 'high'
+        ? 'Based on multiple live sources'
+        : 'Based on the strongest live-source signal';
+    const message = `${qualifier}, the current ${roleLabel} of ${targetEntity} is ${candidate.value}.\n\n${buildSourceMetaBlock(candidate.sources)}\n\nSources:\n${sourceLines}`;
+    addVerifiedAssistantMessage(message, candidate.confidence === 'high' ? 'Verified live sources' : 'Best live-source match');
+    await speakApiReply('verified_answer_found', {}, `The current ${roleLabel} of ${targetEntity} is ${candidate.value}.`);
+    saveToHistory(pipeline.userText, message);
     return true;
 }
 
@@ -12900,6 +12998,8 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         if (await publishUniversalConsensusAnswer(pipeline, agreement)) return true;
 
         if (pipeline.entityIntent.directFact && agreement.mixed) {
+            const bestSportsRole = selectBestSportsRoleCandidate(deduped, pipeline.entityIntent, pipeline.intent);
+            if (await publishSportsRoleBestEffortAnswer(pipeline, bestSportsRole)) return true;
             if (pipeline.knownFact && pipeline.entityIntent.relationType === 'title_count') {
                 return publishUniversalKnownFact(pipeline);
             }
