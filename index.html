@@ -4188,36 +4188,14 @@ async function handleNameCorrection(text) {
                     
                     <div class="p-6 space-y-6">
                         <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">What I Can Do</h3>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Read Me</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p><strong>Explain & Teach Anything:</strong> "What is AI?", "Explain inflation like I'm 12", "Teach me probability basics"</p>
-                                <p><strong>Code Analyzer:</strong> Paste code and ask "analyze this code" to get behavior, mistakes, and fixes.</p>
-                                <p><strong>Current Answers with Sources:</strong> "Who won the T20 World Cup 2026?", "What happened in the Middle East?", "What is the latest on Ukraine?"</p>
-                                <p><strong>Scores, Stats, Results, and Upcoming Events:</strong> "What was India's score?", "What are Virat Kohli's latest stats?", "What is Barcelona's next match?", "What is the next public holiday in Japan?", "What is A.R. Rahman's upcoming project?"</p>
-                                <p><strong>Travel Planning:</strong> "Plan a 3-day trip to Tokyo"</p>
-                                <p><strong>Food Recommendations:</strong> "Best restaurants in Rome"</p>
-                                <p><strong>Recipes:</strong> "How to prepare Andhra style chicken biryani", "Recipe for pasta", "How do I make tomato soup?"</p>
-                                <p><strong>Transport Info:</strong> "How to get around London?"</p>
-                                <p><strong>Weather:</strong> "What's the weather in Seattle tomorrow?"</p>
-                                <p><strong>General Medical Guidance:</strong> "What should I do for a sore throat?" or "When is a fever serious?"</p>
-                                <p><strong>Live Trip Mode:</strong> "start trip to office" or "start trip to Times Square"</p>
-                                <p><strong>Safety Tools:</strong> "share my location", "nearest hospital", or "nearest police"</p>
-                                <p><strong>Translator:</strong> "Speak in Tamil" or "Translate this to Hindi"</p>
-                                <p><strong>Budget Planner:</strong> "budget trip to Seattle for 3 days under 900 USD"</p>
-                            </div>
-                        </section>
-
-                        <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">How to Prompt Better</h3>
-                            <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p><strong>Use place + goal + constraints:</strong> City, dates, budget, food preference, mobility needs.</p>
-                                <p><strong>Strong example:</strong> "Plan 2 days in Boston under $500, kid-friendly, near public transport."</p>
-                                <p><strong>Weak example:</strong> "Plan Boston trip."</p>
-                                <p><strong>For current or upcoming info:</strong> Ask directly. Example: "Who won the T20 World Cup 2026?", "What happened in the Middle East today?", "What is Liverpool's next match?", or "What is the next holiday in Canada?"</p>
-                                <p><strong>For news lists:</strong> Ask for "latest headlines" or "breaking news" if you want a headline-style response.</p>
-                                <p><strong>For recipes:</strong> Include the dish and style. Example: "How to make Andhra chicken biryani" or "Recipe for veg fried rice".</p>
-                                <p><strong>Example:</strong> "Plan 2 days in Boston under $500, kid-friendly, near public transport."</p>
-                                <p><strong>For live trip tracking:</strong> Use a direct destination. Example: "start trip to office" or "start trip to JFK Airport".</p>
+                                <p>Detailed Features and How to Prompt are now in the project README.</p>
+                                <button
+                                    onclick="openReadmeFile()"
+                                    class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold transition-all">
+                                    Open README
+                                </button>
                             </div>
                         </section>
                         
@@ -5038,6 +5016,10 @@ async function handleNameCorrection(text) {
             const modal = document.getElementById('help-modal');
             if (modal) modal.remove();
             document.querySelector('.page-shell')?.removeAttribute('aria-hidden');
+        }
+
+        function openReadmeFile() {
+            window.open('/README.md', '_blank', 'noopener,noreferrer');
         }
 
         function clearSavedMemoryStore() {
