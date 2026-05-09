@@ -11,7 +11,6 @@ export const config = {
         }
     }
 };
-
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_TEXT_CHARS = 22000;
 const MAX_USER_CONTEXT_CHARS = 500;
