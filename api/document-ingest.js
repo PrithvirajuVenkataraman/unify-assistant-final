@@ -14,6 +14,7 @@ export const config = {
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_TEXT_CHARS = 22000;
+const MAX_USER_CONTEXT_CHARS = 500;
 
 export default async function handler(req, res) {
     const guard = applyApiSecurity(req, res, {
@@ -29,7 +30,8 @@ export default async function handler(req, res) {
             fileName = 'document',
             mimeType = '',
             fileBase64 = '',
-            intent = 'general'
+            intent = 'general',
+            userContext = ''
         } = req.body || {};
         if (String(fileName).length > 255 || String(mimeType).length > 120) {
             return res.status(413).json({ success: false, error: 'File metadata is too long' });
@@ -138,6 +140,7 @@ export default async function handler(req, res) {
         }
 
         const trimmedText = extractedText.slice(0, MAX_TEXT_CHARS);
+        const trimmedUserContext = String(userContext || '').trim().slice(0, MAX_USER_CONTEXT_CHARS);
         const isBillLike = isBillIntent(intent) || looksLikeBillText(trimmedText) || isBillFileName(lowerName);
         let summary = '';
         if (isBillLike) {
@@ -154,7 +157,8 @@ export default async function handler(req, res) {
             summary = await summarizeExtractedText(trimmedText, {
                 kind,
                 fileName: normalizedName,
-                billLike: isBillLike
+                billLike: isBillLike,
+                userContext: trimmedUserContext
             });
         }
 
@@ -301,10 +305,14 @@ function looksLikeBillText(text) {
 
 async function summarizeExtractedText(text, meta) {
     const fallback = buildFallbackSummary(text, meta);
+    const contextLine = meta?.userContext
+        ? `User focus instruction: ${String(meta.userContext).slice(0, MAX_USER_CONTEXT_CHARS)}`
+        : '';
     const prompt = [
         'Summarize the uploaded document in concise bullet points.',
         `File type: ${meta?.kind || 'document'}`,
         `File name: ${meta?.fileName || 'document'}`,
+        contextLine,
         meta?.billLike ? 'This appears to be a bill/receipt. Include merchant, totals, and payment clues.' : '',
         'Return plain text only.',
         '',
@@ -449,9 +457,9 @@ function buildFixedBillSummary(bill, text) {
 
 function detectCurrencyFromText(text) {
     const t = String(text || '');
-    if (/\b(inr|rs\.?|₹)\b/i.test(t)) return 'INR';
+    if (/\b(inr|rs\.?)\b/i.test(t) || /\u20B9/.test(t)) return 'INR';
     if (/\b(usd|\$)\b/i.test(t)) return 'USD';
-    if (/\b(eur|€)\b/i.test(t)) return 'EUR';
+    if (/\b(eur)\b/i.test(t) || /\u20AC/.test(t)) return 'EUR';
     return '';
 }
 
@@ -663,6 +671,7 @@ function extractGeminiText(data) {
     }
     return '';
 }
+
 
 
 
