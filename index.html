@@ -10179,28 +10179,15 @@ ${snippetsBlock}`;
 function formatMusicSongReply(artist, requestedCount, items, fallback = false) {
     const safeArtist = String(artist || 'Unknown artist').trim();
     const count = clampSongCount(requestedCount, 5);
-    const fixedNotes = [
-        'Hit single',
-        'Popular track',
-        'Classic song',
-        'Melodic tune',
-        'Fan-favorite'
-    ];
-
     const lines = [`[Music] Top ${count} songs for ${safeArtist}`, ''];
     items.slice(0, count).forEach((item, index) => {
         const song = String(item?.song || '').trim();
-        const work = String(item?.work || '').trim();
-        const workVerified = item?.workVerified !== false && !!work;
         if (!song) return;
-        const reason = fixedNotes[index % fixedNotes.length];
-        lines.push(workVerified ? `- ${song} - ${work}` : `- ${song}`);
-        lines.push(`Note: ${reason}`);
+        lines.push(`${index + 1}. ${song}`);
     });
 
-    if (fallback) {
-        lines.push('');
-        lines.push('Note: This list is generated from model knowledge because live web retrieval was unavailable.');
+    if (lines.length === 2) {
+        lines.push('No songs found.');
     }
 
     return lines.join('\n');
