@@ -148,7 +148,7 @@
         <div class="max-w-5xl mx-auto px-3 py-1">
             <div class="max-w-xl sm:max-w-3xl mx-auto">
             <div id="input-bar-inner" class="flex items-center gap-1.5 modern-input px-2 py-1">
-                <button onclick="showHelpModal()" id="help-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Tips">
+                <button onclick="showHelpModal()" id="help-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Options">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
                         <circle cx="12" cy="12" r="10"></circle>
                         <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
@@ -156,7 +156,7 @@
                     </svg>
                     <!-- Tooltip -->
                     <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                        Help & Tips
+                        Help & Options
                     </div>
                 </button>
                 <button onclick="showSafetyPanel()" id="safety-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all" title="Safety">
@@ -336,8 +336,29 @@
             <div id="safety-summary" class="space-y-2 text-sm text-gray-700 dark:text-gray-300"></div>
         </div>
 
+        <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-rose-100 dark:border-slate-700 mb-5 space-y-3">
+            <p class="text-sm font-semibold text-gray-900 dark:text-white">Emergency setup</p>
+            <input id="safety-trusted-contact-input" type="text" placeholder="Trusted contact phone (example: +1 5551234567)" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-sm text-gray-800 dark:text-gray-200">
+            <textarea id="safety-sos-message-input" rows="3" placeholder="Custom SOS message. You can use {name}, {map}, {lat}, {lon}, {time}" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-sm text-gray-800 dark:text-gray-200"></textarea>
+            <div class="flex flex-wrap items-center gap-3">
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input id="safety-live-updates-toggle" type="checkbox">
+                    <span>Enable live SMS location updates</span>
+                </label>
+                <select id="safety-live-interval-select" class="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-sm text-gray-700 dark:text-gray-200">
+                    <option value="20">Every 20s</option>
+                    <option value="30" selected>Every 30s</option>
+                    <option value="45">Every 45s</option>
+                    <option value="60">Every 60s</option>
+                </select>
+                <button onclick="saveSafetySettingsFromPanel()" class="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all">Save safety settings</button>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400">Note: browsers cannot auto-send SMS silently. JARVIS will keep preparing updated SMS drafts while you move.</p>
+        </div>
+
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button onclick="triggerEmergencySmsNow()" class="px-4 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white text-sm font-semibold transition-all">SOS SMS</button>
+            <button onclick="stopSafetyLiveLocationSharing(); showTemporaryMessage('Live SOS updates stopped.')" class="px-4 py-3 rounded-xl bg-slate-700 hover:bg-slate-800 text-white text-sm font-semibold transition-all">Stop live SOS updates</button>
             <button onclick="shareCurrentLocation()" class="px-4 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all">Share location</button>
             <button onclick="openNearbySearch('hospital')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest hospital</button>
             <button onclick="openNearbySearch('police station')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest police</button>
@@ -3757,7 +3778,14 @@ async function handleNameCorrection(text) {
                 email: '',
                 memory: {},
                 commute: { home: '', office: '', arrivalTime: '09:00', mode: 'drive' },
-                safety: { womenSafetyMode: false, trustedContact: '', checkInMinutes: 30 }
+                safety: {
+                    womenSafetyMode: false,
+                    trustedContact: '',
+                    checkInMinutes: 30,
+                    sosMessageTemplate: 'Emergency: I need help right now. My live location: {map}',
+                    liveSmsUpdatesEnabled: true,
+                    liveSmsUpdateSeconds: 30
+                }
             },
             voice: {
                 recognition: null,
@@ -3806,7 +3834,22 @@ async function handleNameCorrection(text) {
         let translatorLanguage = null;
         let lastBudgetPlan = null;
         let commuteProfile = { home: '', office: '', arrivalTime: '09:00', mode: 'drive' };
-        let safetyProfile = { womenSafetyMode: false, trustedContact: '', checkInMinutes: 30 };
+        let safetyProfile = {
+            womenSafetyMode: false,
+            trustedContact: '',
+            checkInMinutes: 30,
+            sosMessageTemplate: 'Emergency: I need help right now. My live location: {map}',
+            liveSmsUpdatesEnabled: true,
+            liveSmsUpdateSeconds: 30
+        };
+        let safetyLiveShareState = {
+            active: false,
+            watchId: null,
+            lastSentAt: 0,
+            source: 'manual',
+            initialDraftDispatched: false,
+            latestMessage: ''
+        };
         let tripState = {
             active: false,
             watchId: null,
@@ -3915,39 +3958,6 @@ async function handleNameCorrection(text) {
                 })
                 .join('');
         };
-
-        /**
-         * Robust Speech Synthesis with state management
-         */
-        function stopAllSpeechPlayback() {
-            if (synth) {
-                synth.cancel();
-            }
-            updateTTSVisualizer(false);
-            AppState.voice.isSpeaking = false;
-        }
-
-        function speak(text, options = {}) {
-            if (!text) return;
-            stopAllSpeechPlayback();
-            
-            AppState.voice.isSpeaking = true;
-            updateTTSVisualizer(true);
-
-            const onEnd = () => {
-                AppState.voice.isSpeaking = false;
-                updateTTSVisualizer(false);
-                if (options.onEnd) options.onEnd();
-            };
-
-            speakInLanguage(text, options.lang || 'en-GB');
-            if (typeof options.onEnd === 'function') {
-                // Browser TTS does not always expose exact callbacks uniformly.
-                // Keep a conservative timeout fallback for state cleanup.
-                const estimatedMs = Math.max(900, Math.min(12000, String(text).split(/\s+/).length * 280));
-                setTimeout(onEnd, estimatedMs);
-            }
-        }
 
         const NOISE_THRESHOLDS = {
             low: { confidence: 0.6, minWords: 1 },
@@ -4160,7 +4170,7 @@ async function handleNameCorrection(text) {
                                     <line x1="12" y1="17" x2="12.01" y2="17"></line>
                                 </svg>
                             </div>
-                            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Help & Tips</h2>
+                            <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Help & Options</h2>
                         </div>
                         <button onclick="closeHelpModal()" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-all">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -4366,6 +4376,30 @@ async function handleNameCorrection(text) {
                                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Higher = stricter filtering (may miss some commands)</p>
                                 </div>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">Voice: Say "enable noise filter" or "disable noise filter"</p>
+                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                    <p class="font-semibold text-gray-900 dark:text-white mb-2">Memory</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Manage saved memory and this account's chat history.</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button
+                                            onclick="clearSavedMemoryStore()"
+                                            class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-all"
+                                            title="Clear saved memory">
+                                            Clear Memory
+                                        </button>
+                                        <button
+                                            onclick="clearConversationHistoryData()"
+                                            class="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold transition-all"
+                                            title="Clear chat history">
+                                            Clear Chat History
+                                        </button>
+                                        <button
+                                            onclick="clearAllAssistantMemoryData()"
+                                            class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-all"
+                                            title="Clear memory and chat history">
+                                            Clear All
+                                        </button>
+                                    </div>
+                                </div>
                                 <button
                                     onclick="openFeatureRequest()"
                                     class="w-full h-11 px-4 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 whitespace-nowrap transition-all hover:scale-[1.02] shadow-md hover:shadow-lg"
@@ -4975,6 +5009,38 @@ async function handleNameCorrection(text) {
             const modal = document.getElementById('help-modal');
             if (modal) modal.remove();
             document.querySelector('.page-shell')?.removeAttribute('aria-hidden');
+        }
+
+        function clearSavedMemoryStore() {
+            const ok = window.confirm('Clear all saved memory items for this user?');
+            if (!ok) return;
+            memoryStore = {};
+            saveUserData();
+            showTemporaryMessage('Saved memory cleared.');
+        }
+
+        function clearConversationHistoryData() {
+            const ok = window.confirm('Clear this user chat history?');
+            if (!ok) return;
+            conversationHistory = [];
+            const historyKey = getHistoryStorageKey();
+            localStorage.removeItem(historyKey);
+            showTemporaryMessage('Chat history cleared.');
+        }
+
+        function clearAllAssistantMemoryData() {
+            const ok = window.confirm('Clear saved memory and chat history for this user?');
+            if (!ok) return;
+            memoryStore = {};
+            conversationHistory = [];
+            conversationContext = [];
+            activeConversationTopic = null;
+            conversationTopicTimeline = [];
+            initialConversationTopicKey = '';
+            lastDiscussedEntity = '';
+            saveUserData();
+            localStorage.removeItem(getHistoryStorageKey());
+            showTemporaryMessage('Memory and history cleared.');
         }
 
         function initKeyboardShortcuts() {
@@ -13013,6 +13079,7 @@ ${snippets}`
 
             if (/\b(disable|turn off|stop)\s+(women'?s?\s+)?safety\s+mode\b/i.test(lower)) {
                 safetyProfile.womenSafetyMode = false;
+                stopSafetyLiveLocationSharing();
                 saveSafetyProfile();
                 showSafetyPanel();
                 await deliverApiReply('safety_mode_disabled', {
@@ -13039,6 +13106,20 @@ ${snippets}`
                 return;
             }
 
+            const sosMessageMatch = text.match(/\b(?:set\s+sos\s+message\s+to|sos\s+message\s+is)\s+(.+)$/i);
+            if (sosMessageMatch) {
+                safetyProfile.sosMessageTemplate = sosMessageMatch[1].replace(/[?.!,]$/g, '').trim() || 'Emergency: I need help right now. My live location: {map}';
+                saveSafetyProfile();
+                showSafetyPanel();
+                await deliverApiReply('safety_sos_message_saved', {
+                    sosMessageTemplate: safetyProfile.sosMessageTemplate
+                }, {
+                    historyKey: text,
+                    fallbackText: 'Saved your custom SOS message.'
+                });
+                return;
+            }
+
             if (/\b(share my location|send my location)\b/i.test(lower)) {
                 await shareCurrentLocation();
                 return;
@@ -13046,6 +13127,15 @@ ${snippets}`
 
             if (/\b(sos|emergency help|panic|i am in danger|unsafe|help me now|send emergency location)\b/i.test(lower)) {
                 await triggerEmergencySafetyFlow(text);
+                return;
+            }
+
+            if (/\b(stop|end|disable)\s+(live\s+)?(sos|safety)\s+(updates|tracking)\b/i.test(lower)) {
+                stopSafetyLiveLocationSharing();
+                await deliverApiReply('safety_live_updates_stopped', {}, {
+                    historyKey: text,
+                    fallbackText: 'Stopped live SOS location updates.'
+                });
                 return;
             }
 
@@ -15073,7 +15163,10 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 safetyProfile = {
                     womenSafetyMode: !!parsed.womenSafetyMode,
                     trustedContact: parsed.trustedContact || '',
-                    checkInMinutes: Math.max(5, parseInt(parsed.checkInMinutes || 30, 10))
+                    checkInMinutes: Math.max(5, parseInt(parsed.checkInMinutes || 30, 10)),
+                    sosMessageTemplate: String(parsed.sosMessageTemplate || 'Emergency: I need help right now. My live location: {map}').trim() || 'Emergency: I need help right now. My live location: {map}',
+                    liveSmsUpdatesEnabled: parsed.liveSmsUpdatesEnabled !== false,
+                    liveSmsUpdateSeconds: Math.min(120, Math.max(15, parseInt(parsed.liveSmsUpdateSeconds || 30, 10)))
                 };
             } catch (e) { console.error('Error loading safety profile:', e); }
         }
@@ -15114,10 +15207,40 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const rows = [];
             rows.push(`<p><strong>Safety mode:</strong> ${safetyProfile.womenSafetyMode ? 'Women-focused safety shortcuts on' : 'Standard safety shortcuts'}</p>`);
             rows.push(`<p><strong>Trusted contact:</strong> ${escapeHtml(safetyProfile.trustedContact || 'Not set')}</p>`);
+            rows.push(`<p><strong>Live SMS updates:</strong> ${safetyProfile.liveSmsUpdatesEnabled ? `On (every ${safetyProfile.liveSmsUpdateSeconds}s)` : 'Off'}</p>`);
+            rows.push(`<p><strong>SOS message:</strong> ${escapeHtml((safetyProfile.sosMessageTemplate || '').slice(0, 120) || 'Default message')}</p>`);
             if (safetyProfile.womenSafetyMode) {
                 rows.push('<p><strong>Quick actions:</strong> Share live location faster and jump to nearby police, hospital, or pharmacy.</p>');
             }
             summary.innerHTML = rows.join('');
+
+            const trustedInput = document.getElementById('safety-trusted-contact-input');
+            const messageInput = document.getElementById('safety-sos-message-input');
+            const liveToggle = document.getElementById('safety-live-updates-toggle');
+            const intervalSelect = document.getElementById('safety-live-interval-select');
+            if (trustedInput) trustedInput.value = safetyProfile.trustedContact || '';
+            if (messageInput) messageInput.value = safetyProfile.sosMessageTemplate || '';
+            if (liveToggle) liveToggle.checked = !!safetyProfile.liveSmsUpdatesEnabled;
+            if (intervalSelect) intervalSelect.value = String(safetyProfile.liveSmsUpdateSeconds || 30);
+        }
+
+        function saveSafetySettingsFromPanel() {
+            const trustedInput = document.getElementById('safety-trusted-contact-input');
+            const messageInput = document.getElementById('safety-sos-message-input');
+            const liveToggle = document.getElementById('safety-live-updates-toggle');
+            const intervalSelect = document.getElementById('safety-live-interval-select');
+
+            const trustedContact = String(trustedInput?.value || '').trim();
+            const sosTemplate = String(messageInput?.value || '').trim();
+            const liveEnabled = !!liveToggle?.checked;
+            const seconds = Math.min(120, Math.max(15, parseInt(intervalSelect?.value || '30', 10)));
+
+            safetyProfile.trustedContact = trustedContact;
+            safetyProfile.sosMessageTemplate = sosTemplate || 'Emergency: I need help right now. My live location: {map}';
+            safetyProfile.liveSmsUpdatesEnabled = liveEnabled;
+            safetyProfile.liveSmsUpdateSeconds = seconds;
+            saveSafetyProfile();
+            showTemporaryMessage('Safety settings saved.');
         }
 
         function parseTimeInput(text) {
@@ -15898,6 +16021,115 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             return '';
         }
 
+        function stopSafetyLiveLocationSharing() {
+            if (safetyLiveShareState.watchId != null && navigator.geolocation) {
+                navigator.geolocation.clearWatch(safetyLiveShareState.watchId);
+            }
+            safetyLiveShareState.active = false;
+            safetyLiveShareState.watchId = null;
+            safetyLiveShareState.lastSentAt = 0;
+            safetyLiveShareState.source = 'manual';
+            safetyLiveShareState.initialDraftDispatched = false;
+            safetyLiveShareState.latestMessage = '';
+        }
+
+        function buildSafetySmsMessage({ lat, lon, mapUrl, emergency = false }) {
+            const template = String(safetyProfile?.sosMessageTemplate || '').trim() || 'Emergency: I need help right now. My live location: {map}';
+            const finalText = template
+                .replace(/\{name\}/gi, String(userName || 'I'))
+                .replace(/\{lat\}/gi, Number(lat).toFixed(6))
+                .replace(/\{lon\}/gi, Number(lon).toFixed(6))
+                .replace(/\{map\}/gi, mapUrl)
+                .replace(/\{time\}/gi, new Date().toLocaleString());
+            if (emergency) return finalText;
+            return `My live location update: ${mapUrl}`;
+        }
+
+        function openSmsDraft(phone, body) {
+            const smsBody = encodeURIComponent(body);
+            const smsLink = `sms:${phone}?body=${smsBody}`;
+            window.location.href = smsLink;
+        }
+
+        function formatPhoneForWhatsApp(raw) {
+            const digits = String(raw || '').replace(/\D/g, '');
+            if (!/^\d{8,15}$/.test(digits)) return '';
+            return digits;
+        }
+
+        function buildWhatsAppDraftUrl(phone, body) {
+            const waPhone = formatPhoneForWhatsApp(phone);
+            if (!waPhone) return '';
+            return `https://wa.me/${waPhone}?text=${encodeURIComponent(String(body || ''))}`;
+        }
+
+        function openWhatsAppDraft(phone, body) {
+            const waUrl = buildWhatsAppDraftUrl(phone, body);
+            if (!waUrl) return false;
+            window.open(waUrl, '_blank', 'noopener,noreferrer');
+            return true;
+        }
+
+        function showWhatsAppFallbackHint(phone, messageText) {
+            const waUrl = buildWhatsAppDraftUrl(phone, messageText);
+            if (!waUrl) return;
+            const chatContainer = document.getElementById('chat-container');
+            if (!chatContainer) return;
+            const card = document.createElement('div');
+            card.className = 'flex justify-start fade-in';
+            card.innerHTML = `
+                <div class="max-w-xl p-3 rounded-xl border border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-700">
+                    <p class="text-sm font-semibold text-green-800 dark:text-green-200 mb-2">WhatsApp fallback ready</p>
+                    <div class="flex flex-wrap gap-2">
+                        <a href="${waUrl}" target="_blank" class="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold">Open WhatsApp draft</a>
+                        <button onclick="copyToClipboard(decodeURIComponent('${encodeURIComponent(String(messageText || ''))}'))" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold">Copy message</button>
+                    </div>
+                </div>
+            `;
+            chatContainer.appendChild(card);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function maybeSendLiveSafetySmsUpdate(lat, lon, source = 'live') {
+            const trustedPhone = sanitizePhoneForSms(safetyProfile?.trustedContact || '');
+            if (!trustedPhone) return;
+            const now = Date.now();
+            const intervalMs = Math.max(15000, Math.min(120000, Number(safetyProfile?.liveSmsUpdateSeconds || 30) * 1000));
+            if (now - safetyLiveShareState.lastSentAt < intervalMs) return;
+
+            const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`;
+            const shareText = buildSafetySmsMessage({ lat, lon, mapUrl, emergency: true });
+            safetyLiveShareState.latestMessage = shareText;
+            if (!safetyLiveShareState.initialDraftDispatched) {
+                openSmsDraft(trustedPhone, shareText);
+                openWhatsAppDraft(trustedPhone, shareText);
+                safetyLiveShareState.initialDraftDispatched = true;
+                showTemporaryMessage('Emergency draft prepared (SMS + WhatsApp fallback).');
+            } else {
+                showTemporaryMessage('Live SOS location refreshed. Tap SOS SMS to open a new draft.');
+            }
+            safetyLiveShareState.lastSentAt = now;
+        }
+
+        function startSafetyLiveLocationSharing(source = 'sos_button_sms') {
+            if (!navigator.geolocation || !safetyProfile?.liveSmsUpdatesEnabled) return;
+            stopSafetyLiveLocationSharing();
+            safetyLiveShareState.active = true;
+            safetyLiveShareState.source = source;
+            // Initial emergency draft is already prepared by the SOS action.
+            safetyLiveShareState.initialDraftDispatched = true;
+            safetyLiveShareState.lastSentAt = Date.now();
+            safetyLiveShareState.watchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    maybeSendLiveSafetySmsUpdate(lat, lon, source);
+                },
+                () => {},
+                { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 }
+            );
+        }
+
         async function triggerEmergencySafetyFlow(sourceText = '') {
             const origin = String(sourceText || '').trim();
             showSafetyPanel();
@@ -15916,6 +16148,9 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 return;
             }
             await shareCurrentLocationWithOptions({ emergency: true, source: 'sos_button_sms' });
+            if (safetyProfile?.liveSmsUpdatesEnabled) {
+                startSafetyLiveLocationSharing('sos_button_sms');
+            }
         }
 
         async function shareCurrentLocationWithOptions(options = {}) {
@@ -15927,16 +16162,18 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 const lon = position.coords.longitude;
                 const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`;
                 const shareText = isEmergency
-                    ? `Emergency: I need help. My current location is ${mapsUrl}`
+                    ? buildSafetySmsMessage({ lat, lon, mapUrl: mapsUrl, emergency: true })
                     : `My current location: ${mapsUrl}`;
 
                 window.open(mapsUrl, '_blank', 'noopener,noreferrer');
 
                 if (isEmergency && trustedPhone) {
-                    const smsBody = encodeURIComponent(shareText);
-                    const smsLink = `sms:${trustedPhone}?body=${smsBody}`;
-                    window.location.href = smsLink;
-                    showTemporaryMessage('Emergency SMS draft opened for your trusted contact.');
+                    openSmsDraft(trustedPhone, shareText);
+                    const openedWhatsApp = openWhatsAppDraft(trustedPhone, shareText);
+                    if (!openedWhatsApp) {
+                        showWhatsAppFallbackHint(trustedPhone, shareText);
+                    }
+                    showTemporaryMessage('Emergency draft prepared (SMS + WhatsApp fallback).');
                 } else if (navigator.share) {
                     await navigator.share({
                         title: isEmergency ? 'Emergency location' : 'My current location',
