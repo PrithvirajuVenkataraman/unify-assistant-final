@@ -357,6 +357,11 @@ async function lookupCrypto(query) {
 
 async function lookupStock(query) {
     const symbol = inferTicker(query);
+    const afterMarkets = await lookupStockViaAfterMarkets(query, symbol);
+    if (afterMarkets) {
+        return afterMarkets;
+    }
+
     const alphaKey = process.env.ALPHA_VANTAGE_API_KEY;
 
     if (alphaKey && symbol) {
@@ -420,6 +425,108 @@ async function lookupStock(query) {
             description: item.description
         }))
     };
+}
+
+async function lookupStockViaAfterMarkets(query, symbolHint) {
+    const baseUrl = String(process.env.AFTERMARKETS_API_BASE || 'https://api.aftermarkets.in').replace(/\/+$/, '');
+    const token = process.env.AFTERMARKETS_API_KEY || process.env.AFTERMARKETS_TOKEN || '';
+    const symbol = normalizeAfterMarketsSymbol(symbolHint || inferTicker(query) || String(query || '').trim());
+    if (!symbol) return null;
+
+    const headers = token
+        ? { Authorization: `Bearer ${token}` }
+        : {};
+    const candidates = [
+        `${baseUrl}/api/v1/stocks/quote?symbol=${encodeURIComponent(symbol)}`,
+        `${baseUrl}/v1/stocks/quote?symbol=${encodeURIComponent(symbol)}`,
+        `${baseUrl}/api/stocks/quote?symbol=${encodeURIComponent(symbol)}`,
+        `${baseUrl}/stocks/quote?symbol=${encodeURIComponent(symbol)}`,
+        `${baseUrl}/quote?symbol=${encodeURIComponent(symbol)}`
+    ];
+
+    for (const url of candidates) {
+        try {
+            const response = await fetch(url, { headers });
+            if (!response.ok) continue;
+            const data = await response.json();
+            const parsed = parseAfterMarketsQuote(data, symbol);
+            if (!parsed) continue;
+
+            const verified = await runVerifiedWebSearch([
+                `${parsed.symbol} stock price today`,
+                `${parsed.symbol} market update Reuters Bloomberg CNBC`,
+                `${parsed.name || parsed.symbol} latest stock news`
+            ], {
+                maxResultsPerQuery: 4,
+                limit: 8
+            });
+
+            return {
+                success: true,
+                verified: true,
+                provider: 'aftermarkets.in',
+                assetType: 'stock',
+                symbol: parsed.symbol,
+                name: parsed.name || '',
+                price: parsed.price,
+                change: parsed.change,
+                changePercent: parsed.changePercent,
+                tradingDay: parsed.tradingDay,
+                sourceCount: verified.results.length,
+                distinctDomainCount: verified.distinctDomains.length,
+                sources: verified.results.slice(0, 5).map(item => ({
+                    title: item.title,
+                    url: item.url,
+                    description: item.description
+                }))
+            };
+        } catch (_) {}
+    }
+
+    return null;
+}
+
+function normalizeAfterMarketsSymbol(raw) {
+    const text = String(raw || '').toUpperCase().replace(/\s+/g, '').trim();
+    if (!text) return '';
+    if (text.includes(':')) return text;
+    if (/^[A-Z]{1,10}$/.test(text)) return `NSE:${text}`;
+    return text;
+}
+
+function parseAfterMarketsQuote(payload, symbolFallback) {
+    const node = payload?.data || payload?.result || payload?.quote || payload;
+    if (!node || typeof node !== 'object') return null;
+
+    const pick = (...keys) => {
+        for (const key of keys) {
+            if (node[key] !== undefined && node[key] !== null && node[key] !== '') {
+                return node[key];
+            }
+        }
+        return null;
+    };
+
+    const price = Number(pick('lastPrice', 'ltp', 'price', 'close', 'value'));
+    if (!Number.isFinite(price)) return null;
+
+    const symbol = String(pick('symbol', 'ticker', 'tradingsymbol', 'code') || symbolFallback || '').toUpperCase();
+    const change = toFiniteNumber(pick('change', 'netChange', 'priceChange'));
+    const changePercentRaw = pick('pChange', 'changePercent', 'percentChange');
+    const changePercent = changePercentRaw === null || changePercentRaw === undefined
+        ? ''
+        : String(changePercentRaw).replace(/\s+/g, '').endsWith('%')
+            ? String(changePercentRaw)
+            : `${changePercentRaw}%`;
+    const tradingDay = String(pick('lastUpdated', 'timestamp', 'updatedAt', 'tradingDay', 'date') || '') || null;
+    const name = String(pick('name', 'companyName', 'displayName') || '').trim();
+
+    return { symbol, name, price, change, changePercent, tradingDay };
+}
+
+function toFiniteNumber(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
 }
 
 function inferTicker(query) {
