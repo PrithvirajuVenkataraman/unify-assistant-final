@@ -2496,17 +2496,17 @@ async function processUserQuery(text) {
     return await askGeminiAI(t);
 }
 
-function isCurrentInfoQuery(text) {
+function isCurrentInfoQueryLegacy(text) {
     const t = String(text || '').toLowerCase();
     return /\b(current|latest|today|now|live|status|update)\b/.test(t);
 }
 
-function hasExplicitFreshnessLanguage(text) {
+function hasExplicitFreshnessLanguageLegacy(text) {
     const t = String(text || '').toLowerCase();
     return /\b(news|headlines|breaking|recent events|what happened today)\b/.test(t);
 }
 
-function scoreSourcePolicy(url, type) {
+function scoreSourcePolicyLegacy(url, type) {
     if (!url) return 0;
     const trusted = ['reuters.com', 'apnews.com', 'bbc.com', 'nytimes.com', 'theguardian.com', 'wikipedia.org'];
     const isTrusted = trusted.some(domain => url.includes(domain));
@@ -3300,6 +3300,22 @@ async function buildLocalAssistantFallback(userMessage, error) {
 }
 
 function buildDirectKnowledgeFallback(userMessage) {
+    const text = String(userMessage || '').trim();
+    if (!text || !isDirectExplainerQuery(text)) return '';
+
+    const subject = normalizeKnowledgeSubject(extractKnowledgeSubject(text)).toLowerCase();
+    if (!subject) return '';
+
+    const factMap = {
+        jalebi: 'Jalebi is a popular South Asian sweet made by deep-frying fermented batter in spiral shapes and soaking it in sugar syrup.',
+        recursion: 'Recursion is a technique where a function solves a problem by calling itself on smaller inputs until it reaches a base case.',
+        'oop pillars': 'The four OOP pillars are encapsulation, abstraction, inheritance, and polymorphism.',
+        'object oriented programming': 'Object-oriented programming organizes code into objects that combine data and behavior, commonly using encapsulation, inheritance, and polymorphism.'
+    };
+
+    if (factMap[subject]) return factMap[subject];
+    if (subject.includes('oop')) return factMap['oop pillars'];
+    if (subject.includes('object oriented')) return factMap['object oriented programming'];
     return '';
 }
 
@@ -5808,19 +5824,27 @@ function normalizeUiTokens(text) {
         }
 
         function formatVerifiedSourceBadge(label = 'Verified live sources') {
-            return '';
+            const safe = String(label || 'Verified live sources').trim();
+            return safe ? `[${safe}]` : '[Verified live sources]';
         }
 
         function addVerifiedAssistantMessage(text, label = 'Verified live sources') {
-            addChatMessage(text, false, false, { sourceType: 'verified' });
+            const badge = formatVerifiedSourceBadge(label);
+            const body = String(text || '').trim();
+            const finalText = badge ? `${badge}\n${body}`.trim() : body;
+            addChatMessage(finalText, false, false, { sourceType: 'verified' });
         }
 
         function formatModelSourceBadge(label = 'Model answer') {
-            return '';
+            const safe = String(label || 'Model answer').trim();
+            return safe ? `[${safe}]` : '[Model answer]';
         }
 
         function addModelAssistantMessage(text, label = 'Model answer') {
-            addChatMessage(text, false, null, { sourceType: 'model' });
+            const badge = formatModelSourceBadge(label);
+            const body = String(text || '').trim();
+            const finalText = badge ? `${badge}\n${body}`.trim() : body;
+            addChatMessage(finalText, false, null, { sourceType: 'model' });
         }
 
         function isSafeAssistantUrl(url) {
@@ -10639,8 +10663,6 @@ function isLiveRetrievalQuery(text) {
         /\b(news|events?|updates?|status|happening|result|score|standings|fixture|schedule|price|rate|market|war|conflict|election)\b.*\b(latest|recent|current|today)\b/,
         /\bright now\b/,
         /\bas of now\b/,
-        /\bupcoming\b/,
-        /\bfuture\b/,
         /\bnext\b.*\b(match|game|fixture|film|movie|release|project|holiday|album|song|show|series)\b/,
         /\bupdate(?:s)? on\b/,
         /\bstatus of\b/,
@@ -10676,10 +10698,11 @@ function isSportsLiveResultQuery(text) {
     const teamCodeTerms = /\b(csk|mi|rcb|kkr|srh|dc|pbks|gt|rr|lsg|pk|bcci|ict|ind|aus|eng|pak|nz|sa)\b/;
     const sportsEntityTerms = /\b(team|teams|player|players|club|clubs|driver|drivers|rider|riders|fighter|fighters|athlete|athletes|captain|coach)\b/;
     const resultTerms = /\b(who won|winner|won|champion|champions|result|results|score|scores|scored|stat|stats|standing|standings|points table|rank|ranking|rankings|medal|medals|title|titles|lifted|beat|defeated|lost to|qualified|eliminated|record|records|how many|next match|next game|upcoming match|upcoming fixture|fixture|fixtures|schedule|opponent)\b/;
-    const timeTerms = /\b(latest|recent|current|today|tonight|live|now|this year|this season|2025|2026|2027|upcoming|next|tomorrow)\b/;
+    const timeTerms = /\b(latest|recent|current|today|tonight|live|now|this year|this season|upcoming|next|tomorrow)\b/;
+    const hasYearReference = hasExplicitYearReference(t);
 
     const hasSportsContext = sportsContextTerms.test(t) || competitionCodeTerms.test(t) || teamCodeTerms.test(t) || (sportsEntityTerms.test(t) && resultTerms.test(t));
-    return hasSportsContext && (resultTerms.test(t) || timeTerms.test(t));
+    return hasSportsContext && (resultTerms.test(t) || timeTerms.test(t) || hasYearReference);
 }
 
 function normalizeLiveTopic(text) {
@@ -10776,6 +10799,12 @@ function isFutureYearLiveQuery(intent) {
     return queryYear > currentYear;
 }
 
+function hasExplicitYearReference(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    return /\b(19|20)\d{2}\b/.test(t);
+}
+
 async function buildFutureYearResponse(intent) {
     const year = intent?.year || 'that year';
     const topic = String(intent?.topic || 'that').trim();
@@ -10796,14 +10825,15 @@ function isCurrentInfoQuery(text) {
         return true;
     }
 
-    const freshnessTerms = /\b(latest|recent|current|today|right now|as of now|live|just now|this year|2025|2026|2027|upcoming|future|next)\b/;
+    const freshnessTerms = /\b(latest|recent|current|today|right now|as of now|live|just now|this year|upcoming|future|next)\b/;
     const resultTerms = /\b(who won|winner|won|result|results|score|scores|what happened|what's happening|status|update|updates|headline|headlines|breaking|next match|upcoming fixture|upcoming holiday|next holiday|upcoming project)\b/;
     const unstableEntityTerms = /\b(president|prime minister|ceo|chairman|captain|coach|champion|title holder|world cup|tournament|final|match|fixture|schedule|holiday|festival|war|conflict|ceasefire|attack|election|release|project|album|film|movie|song)\b/;
     const businessEventTerms = /\b(layoff|layoffs|firing|firings|job cuts|cuts|restructuring|reorganization|earnings|results|merger|acquisition|recall|bankruptcy|probe|investigation|antitrust|strike|walkout)\b/;
+    const hasYearReference = hasExplicitYearReference(t);
 
-    if (freshnessTerms.test(t) && unstableEntityTerms.test(t)) return true;
+    if ((freshnessTerms.test(t) || hasYearReference) && unstableEntityTerms.test(t)) return true;
     if (resultTerms.test(t) && unstableEntityTerms.test(t)) return true;
-    if (businessEventTerms.test(t) && freshnessTerms.test(t)) return true;
+    if (businessEventTerms.test(t) && (freshnessTerms.test(t) || hasYearReference)) return true;
 
     return false;
 }
@@ -10811,7 +10841,7 @@ function isCurrentInfoQuery(text) {
 function hasExplicitFreshnessLanguage(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    return /\b(latest|recent|current|today|right now|as of now|live|just now|this year|2025|2026|2027)\b/.test(t);
+    return /\b(latest|recent|current|today|right now|as of now|live|just now|this year)\b/.test(t) || hasExplicitYearReference(t);
 }
 
 function shouldUseNewsEndpointForCurrentQuery(text) {
@@ -10826,7 +10856,7 @@ function shouldUseNewsEndpointForCurrentQuery(text) {
 
     if (/\b(news|headline|headlines|breaking|current events?)\b/.test(t)) return true;
     if (/\b(latest|recent|today|current)\b.*\b(news|headlines?|current events?)\b/.test(t)) return true;
-    if (businessEventTerms.test(t) && /\b(latest|recent|today|current|2025|2026|2027|this year)\b/.test(t)) return true;
+    if (businessEventTerms.test(t) && (/\b(latest|recent|today|current|this year)\b/.test(t) || hasExplicitYearReference(t))) return true;
 
     return false;
 }
@@ -11022,8 +11052,8 @@ function decideHybridResponseMode(classification) {
     if (flags.news || flags.exchangeRate || flags.marketPrice) return 'verify_first';
     if (flags.currentInfo && strictLiveRequired) return 'verify_first';
     if (flags.universalEntityFact && strictLiveRequired) return 'verify_first';
+    if (flags.currentInfo || flags.liveRetrieval || flags.universalEntityFact) return 'verify_first';
     if (shouldUseAnswerThenCiteMode(raw, classification)) return 'answer_then_cite';
-    if (flags.currentInfo || flags.liveRetrieval || flags.universalEntityFact) return 'chat_first';
     return 'chat_first';
 }
 
@@ -11057,7 +11087,7 @@ const ROUTING_REGRESSION_CASES = [
         name: 'Mixed current topic',
         prompt: "Tell me about Nvidia's latest earnings",
         expectedPath: 'current_info',
-        expectedMode: 'answer_then_cite'
+        expectedMode: 'verify_first'
     },
     {
         name: 'Technical concept should stay local',
@@ -12695,6 +12725,7 @@ function buildStrictVerificationClarificationMessage(userText, intent, entityInt
     const subject = String(entityIntent?.subject || '').trim();
     const competition = String(entityIntent?.competition || '').trim();
     const year = String(intent?.year || entityIntent?.year || '').trim();
+    const sampleYear = year || String(new Date().getFullYear());
 
     const clarifyLines = [];
     clarifyLines.push('I need 1-2 more details before I can verify this from live sources.');
@@ -12715,8 +12746,8 @@ function buildStrictVerificationClarificationMessage(userText, intent, entityInt
     clarifyLines.push('');
     clarifyLines.push('Try:');
     if (domain.includes('sports')) {
-        clarifyLines.push('- "CSK IPL titles as of 2025"');
-        clarifyLines.push('- "Who won IPL 2025 final and score?"');
+        clarifyLines.push(`- "CSK IPL titles as of ${sampleYear}"`);
+        clarifyLines.push(`- "Who won IPL ${sampleYear} final and score?"`);
     } else if (domain.includes('politics')) {
         clarifyLines.push('- "Current prime minister of India as of today"');
         clarifyLines.push('- "Election result in [country/state] on [date]"');
