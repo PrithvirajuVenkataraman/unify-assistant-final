@@ -429,6 +429,14 @@ function isWeatherIntentText(text) {
         /\b(?:forecast|temperature|rain|snow|hot|cold|wind|sunny|cloudy|humid|weather)\b/.test(t);
 }
 
+function isPersonalHealthStatement(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    const firstPerson = /\b(i|i'm|i am|my|me)\b/.test(t);
+    if (!firstPerson) return false;
+    return /\b(hurt|injur|injured|pain|ache|swelling|swollen|bleed|bleeding|burn|burned|burnt|cut|sprain|fracture|fever|cough|cold|vomit|nausea|dizzy|headache|toe|ankle|knee|back pain|stomach pain|chest pain|sick)\b/.test(t);
+}
+
 function isCurrentLocationIntentText(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -2466,6 +2474,10 @@ async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking
 async function processUserQuery(text) {
     const t = String(text || '').trim();
     if (!t) return;
+
+    if (isPersonalHealthStatement(t)) {
+        return await askGeminiAI(t);
+    }
 
     if (isLiveRetrievalQuery(t) || isHeadlineListQuery(t)) {
         await fetchAndDisplayNews(t);
@@ -5019,7 +5031,7 @@ async function handleNameCorrection(text) {
         }
 
         function openReadmeFile() {
-            const GUIDE_DOC_URL = 'https://docs.google.com/document/d/1qzu28BYiT6NzP7AHHulwEdOMMO5UT2OsY4myaD0q2OY/edit?usp=sharing'; 
+            const GUIDE_DOC_URL = ''; // Paste your Google Doc share link here
             const target = String(GUIDE_DOC_URL || '').trim() || '/README.md';
             window.open(target, '_blank', 'noopener,noreferrer');
         }
@@ -10663,7 +10675,7 @@ function isSportsLiveResultQuery(text) {
     const competitionCodeTerms = /\b(ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|mls|nba|wnba|nfl|mlb|nhl|ufc|wwe|atp|wta|icc|fifa|uefa|afc|fiba|pga|bwf|f1|motogp|nascar|indycar)\b/;
     const teamCodeTerms = /\b(csk|mi|rcb|kkr|srh|dc|pbks|gt|rr|lsg|pk|bcci|ict|ind|aus|eng|pak|nz|sa)\b/;
     const sportsEntityTerms = /\b(team|teams|player|players|club|clubs|driver|drivers|rider|riders|fighter|fighters|athlete|athletes|captain|coach)\b/;
-    const resultTerms = /\b(who won|winner|won|champion|champions|result|results|score|scores|scored|stat|stats|standing|standings|table|points table|rank|ranking|rankings|medal|medals|title|titles|lifted|beat|defeated|lost to|qualified|eliminated|record|records|how many|next match|next game|upcoming match|upcoming fixture|fixture|fixtures|schedule|opponent)\b/;
+    const resultTerms = /\b(who won|winner|won|champion|champions|result|results|score|scores|scored|stat|stats|standing|standings|points table|rank|ranking|rankings|medal|medals|title|titles|lifted|beat|defeated|lost to|qualified|eliminated|record|records|how many|next match|next game|upcoming match|upcoming fixture|fixture|fixtures|schedule|opponent)\b/;
     const timeTerms = /\b(latest|recent|current|today|tonight|live|now|this year|this season|2025|2026|2027|upcoming|next|tomorrow)\b/;
 
     const hasSportsContext = sportsContextTerms.test(t) || competitionCodeTerms.test(t) || teamCodeTerms.test(t) || (sportsEntityTerms.test(t) && resultTerms.test(t));
@@ -10733,7 +10745,7 @@ function extractLiveQueryIntent(text) {
         factType = 'score';
     } else if (/\b(who won|winner|won|champion|champions|title|titles|lifted)\b/.test(t)) {
         factType = 'winner';
-    } else if (/\b(standing|standings|points table|table|rank|ranking|rankings)\b/.test(t)) {
+    } else if (/\b(standing|standings|points table|rank|ranking|rankings)\b/.test(t)) {
         factType = 'standings';
     } else if (/\b(qualified|qualification|eliminated)\b/.test(t)) {
         factType = 'qualification';
@@ -11665,7 +11677,7 @@ const UNIVERSAL_ENTITY_DOMAIN_PACKS = {
 };
 
 const UNIVERSAL_ENTITY_RELATION_PATTERNS = [
-    { type: 'title_count', test: (t) => /\b(how many|number of|total|all[- ]time)\b.*\b(titles|cups|trophies|championships|wins|medals)\b|\b(titles|cups|trophies|championships|wins|medals)\b.*\b(how many|number of|total)\b/.test(t) },
+    { type: 'title_count', test: (t) => /\b(how many|many|number of|total|all[- ]time)\b.*\b(titles|cups|trophies|championships|wins|medals)\b|\b(titles|cups|trophies|championships|wins|medals)\b.*\b(how many|many|number of|total)\b/.test(t) },
     { type: 'latest_work', test: (t) => /\b(latest|recent|new|newest|most recent|current|upcoming|future)\b.*\b(movie|film|release|song|album|single|show|series|project)\b|\b(movie|film|release|song|album|single|show|series|project)\b.*\b(latest|recent|new|newest|most recent|current|upcoming|future)\b/.test(t) },
     { type: 'team_membership', test: (t) => /\b(plays? for|play for|current team|which team|belongs to which team|signed for|signed with|joined)\b/.test(t) },
     { type: 'party_membership', test: (t) => /\b(belongs to which party|party affiliation|which party|current party|member of which party|political party)\b/.test(t) },
@@ -11673,7 +11685,7 @@ const UNIVERSAL_ENTITY_RELATION_PATTERNS = [
     { type: 'winner', test: (t) => /\b(who won|winner|champion|champions|won|won in|lifted|clinched)\b/.test(t) },
     { type: 'score', test: (t) => /\b(score|scored|result|final result|live score)\b/.test(t) },
     { type: 'stats', test: (t) => /\b(stats?|record|records|average|goals|runs|wickets|points|assists|medals|podiums|laps|ranked how many)\b/.test(t) },
-    { type: 'standings', test: (t) => /\b(standings|ranking|rankings|points table|table|position)\b/.test(t) },
+    { type: 'standings', test: (t) => /\b(standings|ranking|rankings|points table|position)\b/.test(t) },
     { type: 'qualification', test: (t) => /\b(qualified|eliminated|knocked out|advanced to|through to)\b/.test(t) },
     { type: 'price', test: (t) => /\b(price|share price|stock price|market cap|repo rate|interest rate|inflation rate|valuation)\b/.test(t) }
 ];
@@ -12403,37 +12415,58 @@ function buildUniversalFactPipelineContext(userText, liveIntent = null) {
     };
 }
 
-function requiresStrictLiveVerification(userText, liveIntent = null, entityIntent = null) {
-    const text = String(userText || '').trim();
-    const lower = text.toLowerCase();
-    const intent = liveIntent || extractLiveQueryIntent(text);
-    const entity = entityIntent || extractUniversalEntityIntent(text, intent);
-
+function shouldRequireVerifiedSources(classificationOrText, liveIntent = null, entityIntent = null) {
+    const classification = (classificationOrText && typeof classificationOrText === 'object' && !Array.isArray(classificationOrText))
+        ? classificationOrText
+        : null;
+    const text = String(classification ? (classification.raw || '') : (classificationOrText || '')).trim();
     if (!text) return false;
-    if (isExchangeRateQuery(text) || isMarketPriceQuery(text) || isMarketMoversQuery(text) || isNewsworthyLiveTopic(text) || isSportsLiveResultQuery(text)) {
+
+    const lower = text.toLowerCase();
+    const flags = classification?.flags || {};
+    const intent = liveIntent || classification?.liveIntent || extractLiveQueryIntent(text);
+    const entity = entityIntent || classification?.entityIntent || extractUniversalEntityIntent(text, intent);
+
+    const explicitFreshness = hasExplicitFreshnessLanguage(text) ||
+        /\b(latest|recent|current|today|right now|as of now|live|status|update|updates|what happened|what's happening)\b/.test(lower);
+    const liveSignals = isCurrentInfoQuery(text) || isLiveRetrievalQuery(text);
+
+    const directChangingFacts = (
+        ['winner', 'score', 'standings', 'qualification', 'price', 'stats', 'team_membership', 'party_membership', 'latest_work', 'role', 'schedule', 'holiday', 'title_count'].includes(entity?.relationType) ||
+        ['winner', 'score', 'standings', 'qualification', 'stats', 'latest_work', 'schedule', 'holiday'].includes(String(intent?.factType || '').toLowerCase()) ||
+        Boolean(intent?.directFact) ||
+        isDirectFactLiveQuery(text)
+    );
+
+    const leadershipOrOffice = entity?.relationType === 'role' &&
+        /\b(president|prime minister|governor|mayor|minister|chief minister|ceo|captain|coach|chairman|chairperson)\b/.test(lower);
+
+    const newsworthy = flags.news ||
+        isNewsworthyLiveTopic(text) ||
+        shouldUseNewsEndpointForCurrentQuery(text) ||
+        /\b(war|conflict|attack|ceasefire|election|layoff|layoffs|firing|job cuts|restructuring|earnings|merger|acquisition|recall|bankruptcy|investigation|antitrust|strike|walkout)\b/.test(lower);
+
+    if (isExchangeRateQuery(text) || isMarketPriceQuery(text) || isMarketMoversQuery(text) || isSportsLiveResultQuery(text)) {
         return true;
     }
 
-    if (['winner', 'score', 'standings', 'qualification', 'price', 'stats'].includes(entity.relationType)) {
+    if (leadershipOrOffice && (explicitFreshness || entity?.timeframe === 'current' || intent?.year)) {
         return true;
     }
 
-    if (['team_membership', 'party_membership', 'latest_work'].includes(entity.relationType)) {
+    if (directChangingFacts && (explicitFreshness || liveSignals || intent?.year)) {
         return true;
     }
 
-    if (entity.relationType === 'role') {
-        const politicalOffice = /\b(president|prime minister|governor|mayor|minister|chief minister)\b/.test(lower);
-        if ((entity.timeframe === 'current' || hasExplicitFreshnessLanguage(text)) && politicalOffice) {
-            return true;
-        }
-    }
-
-    if (intent?.year && ['winner', 'score', 'standings', 'qualification', 'stats'].includes(intent.factType)) {
+    if (newsworthy && (explicitFreshness || liveSignals || directChangingFacts)) {
         return true;
     }
 
     return false;
+}
+
+function requiresStrictLiveVerification(userText, liveIntent = null, entityIntent = null) {
+    return shouldRequireVerifiedSources(String(userText || ''), liveIntent, entityIntent);
 }
 
 async function publishUniversalModelFallback(pipeline, label = 'Model fallback') {
@@ -12655,6 +12688,86 @@ async function publishUniversalVerificationFallback(pipeline, speechText = 'I co
     return true;
 }
 
+function buildStrictVerificationClarificationMessage(userText, intent, entityIntent, sources = []) {
+    const query = String(userText || '').trim();
+    const relation = String(entityIntent?.relationType || intent?.factType || '').toLowerCase();
+    const domain = String(entityIntent?.domain || intent?.domain || 'general').replace(/_/g, ' ');
+    const subject = String(entityIntent?.subject || '').trim();
+    const competition = String(entityIntent?.competition || '').trim();
+    const year = String(intent?.year || entityIntent?.year || '').trim();
+
+    const clarifyLines = [];
+    clarifyLines.push('I could not verify a confident answer yet from current sources.');
+    clarifyLines.push('');
+    clarifyLines.push('Please narrow your query with one or more details:');
+    clarifyLines.push(`1. Timeframe: exact date or season${year ? ` (you asked about ${year})` : ''}`);
+    clarifyLines.push('2. Scope: country/league/market/product line');
+    if (subject) {
+        clarifyLines.push(`3. Entity disambiguation: confirm "${subject}"${competition ? ` in "${competition}"` : ''}`);
+    } else {
+        clarifyLines.push('3. Entity disambiguation: exact person/team/company name');
+    }
+
+    if (relation === 'stats' || relation === 'title_count') {
+        clarifyLines.push('4. Metric format: career total, season-wise, or format-wise split');
+    }
+
+    clarifyLines.push('');
+    clarifyLines.push('Try examples:');
+    if (domain.includes('sports')) {
+        clarifyLines.push('- "CSK IPL titles as of 2025 official sources"');
+        clarifyLines.push('- "Who won IPL 2025 final with score"');
+    } else if (domain.includes('politics')) {
+        clarifyLines.push('- "Current prime minister of India as of today official source"');
+        clarifyLines.push('- "Election result in [country/state] on [date]"');
+    } else if (domain.includes('finance') || relation === 'price') {
+        clarifyLines.push('- "USD to INR rate right now from RBI/market source"');
+        clarifyLines.push('- "Gold price India 24k today per gram"');
+    } else if (domain.includes('tech') || domain.includes('companies')) {
+        clarifyLines.push('- "Latest AMD GPU launch date for Radeon RX series"');
+        clarifyLines.push('- "Current OpenAI CEO as of today with source"');
+    } else {
+        clarifyLines.push('- "Latest update for [topic] in [country/market] on [date]"');
+    }
+
+    const sourceLines = (Array.isArray(sources) ? sources : [])
+        .slice(0, 4)
+        .map((item, index) => `${index + 1}. [${item.title}](${item.url})`)
+        .join('\n');
+    const metaBlock = buildSourceMetaBlock(Array.isArray(sources) ? sources : []);
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query || `${subject} ${relation}`.trim())}`;
+
+    if (sourceLines) {
+        clarifyLines.push('');
+        clarifyLines.push(metaBlock);
+        clarifyLines.push('');
+        clarifyLines.push('Attempted sources:');
+        clarifyLines.push(sourceLines);
+    } else {
+        clarifyLines.push('');
+        clarifyLines.push(metaBlock);
+    }
+
+    clarifyLines.push('');
+    clarifyLines.push(`Live search link: ${searchUrl}`);
+
+    return clarifyLines.join('\n');
+}
+
+async function publishStrictVerificationClarification(pipeline, options = {}) {
+    const sources = Array.isArray(options?.sources) ? options.sources : [];
+    const message = buildStrictVerificationClarificationMessage(
+        pipeline?.userText || '',
+        pipeline?.intent || {},
+        pipeline?.entityIntent || {},
+        sources
+    );
+    addVerifiedAssistantMessage(message, options?.badge || 'Needs clarification');
+    speak(options?.speechText || 'I need one more detail to verify this from reliable live sources.');
+    saveToHistory(pipeline?.userText || '', message);
+    return true;
+}
+
 async function publishUniversalConsensusAnswer(pipeline, agreement) {
     if (!agreement?.agreed || !agreement?.top) return false;
     const directAnswer = formatConsensusAnswer(pipeline.entityIntent, agreement);
@@ -12717,7 +12830,7 @@ async function publishUniversalMixedEvidence(pipeline, results) {
     return true;
 }
 
-async function summarizeUniversalEntitySources(pipeline, results, controller) {
+async function summarizeUniversalEntitySources(pipeline, results, controller, strictLiveRequired = false) {
     const snippets = results
         .slice(0, 6)
         .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}`)
@@ -12764,6 +12877,13 @@ ${snippets}`
     const sourceLines = results.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
     const finalAnswer = answer || cleanLiveAnswerText(`Direct answer: ${results[0].title}${results[0].description ? `\n\nKey points:\n- ${results[0].description}` : ''}`);
     if (isDegenerateLatestWorkAnswer(finalAnswer, pipeline.entityIntent)) {
+        if (strictLiveRequired) {
+            return publishStrictVerificationClarification(pipeline, {
+                sources: results,
+                speechText: 'I found profile pages, but I need one more detail to verify the exact latest release.',
+                badge: 'Needs clarification'
+            });
+        }
         return publishUniversalVerificationFallback(pipeline, 'I found profile pages but could not verify the exact latest release.');
     }
     if (pipeline?.entityIntent?.relationType === 'stats' && !looksLikeStatsAnswerText(finalAnswer)) {
@@ -12784,7 +12904,7 @@ ${snippets}`
 
 async function handleUniversalEntityFactQuery(userText, liveIntent = null) { 
     const pipeline = buildUniversalFactPipelineContext(userText, liveIntent);
-    const strictLiveRequired = requiresStrictLiveVerification(userText, pipeline.intent, pipeline.entityIntent);
+    const strictLiveRequired = shouldRequireVerifiedSources(pipeline.userText, pipeline.intent, pipeline.entityIntent);
     showThinkingIndicator('Checking verified sources...'); 
     const controller = beginAbortableRequest(); 
     try { 
@@ -12792,6 +12912,13 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
 
         if (!deduped.length) { 
             if (await publishUniversalKnownFact(pipeline)) return true;
+            if (strictLiveRequired) {
+                return publishStrictVerificationClarification(pipeline, {
+                    sources: [],
+                    speechText: 'I need one more detail to verify this from live sources.',
+                    badge: 'Needs clarification'
+                });
+            }
             if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
             return publishUniversalVerificationFallback(pipeline, 'I could not verify that result right now.');
         } 
@@ -12808,16 +12935,30 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
             if (pipeline.knownFact && pipeline.entityIntent.relationType === 'title_count') {
                 return publishUniversalKnownFact(pipeline);
             }
+            if (strictLiveRequired) {
+                return publishStrictVerificationClarification(pipeline, {
+                    sources: deduped,
+                    speechText: 'Sources are mixed. Please narrow the query and I will verify it precisely.',
+                    badge: 'Needs clarification'
+                });
+            }
             if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) {
                 return true;
             }
             return publishUniversalMixedEvidence(pipeline, deduped);
         }
 
-        return await summarizeUniversalEntitySources(pipeline, deduped, controller);
+        return await summarizeUniversalEntitySources(pipeline, deduped, controller, strictLiveRequired);
     } catch (error) { 
         if (isAbortError(error)) return true; 
         if (await publishUniversalKnownFact(pipeline)) return true;
+        if (strictLiveRequired) {
+            return publishStrictVerificationClarification(pipeline, {
+                sources: [],
+                speechText: 'I hit a verification issue. Please narrow the query and I will retry with live sources.',
+                badge: 'Needs clarification'
+            });
+        }
         if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
         return publishUniversalVerificationFallback(pipeline);
     } finally { 
@@ -12837,8 +12978,15 @@ async function handleLiveRetrievalQuery(userText) {
     try {
         const query = String(userText || '').trim();
         const intent = extractLiveQueryIntent(query);
+        if (intent.domain === 'sports' && !isSportsLiveResultQuery(query)) {
+            intent.domain = 'general';
+            if (intent.factType === 'standings' || intent.factType === 'winner' || intent.factType === 'score' || intent.factType === 'qualification' || intent.factType === 'stats') {
+                intent.factType = 'general';
+            }
+            intent.directFact = isDirectFactLiveQuery(query);
+        }
         const entityIntent = extractUniversalEntityIntent(query, intent);
-        strictLiveRequired = requiresStrictLiveVerification(query, intent, entityIntent);
+        strictLiveRequired = shouldRequireVerifiedSources(query, intent, entityIntent);
         const directFactQuery = intent.directFact || isSportsLiveResultQuery(query);
         const conciseFactQuery = isConciseDirectFactQuery(query);
         const queries = buildLiveSearchQueries(query, intent);
@@ -12879,8 +13027,15 @@ async function handleLiveRetrievalQuery(userText) {
                 speak('I checked live sources, but I could not produce a final answer right now. Please try again in a moment.');
                 return true;
             }
-            await fetchAndDisplayNews(userText);
-            return true;
+            return publishStrictVerificationClarification({
+                userText: query,
+                intent,
+                entityIntent
+            }, {
+                sources: [],
+                speechText: 'I could not verify this yet. Please narrow the query with timeframe or scope.',
+                badge: 'Needs clarification'
+            });
         }
 
         const trusted = deduped.filter(r => scoreSourcePolicy(r.url, intent.domain || 'general') > 0);
@@ -12888,8 +13043,15 @@ async function handleLiveRetrievalQuery(userText) {
         const distinctDomains = Array.from(new Set(sourcePool.map(r => getDomainFromUrl(r.url)).filter(Boolean)));
         if (!directFactQuery && distinctDomains.length < 2) {
             if (strictLiveRequired) {
-                await fetchAndDisplayNews(userText);
-                return true;
+                return publishStrictVerificationClarification({
+                    userText: query,
+                    intent,
+                    entityIntent
+                }, {
+                    sources: sourcePool,
+                    speechText: 'Source coverage is limited. Please narrow the query and I will verify it.',
+                    badge: 'Needs clarification'
+                });
             }
         }
 
@@ -12972,8 +13134,15 @@ ${snippets}`
                     speak('I found sources, but I could not assemble a clean answer. Please try once more.');
                     return true;
                 }
-                await fetchAndDisplayNews(userText);
-                return true;
+                return publishStrictVerificationClarification({
+                    userText: query,
+                    intent,
+                    entityIntent
+                }, {
+                    sources: sourcePool,
+                    speechText: 'I could not verify a clean answer yet. Please narrow the query.',
+                    badge: 'Needs clarification'
+                });
             }
             const fallbackAnswer = `Direct answer: ${top.title}${top.description ? `\n\nKey points:\n- ${top.description}` : ''}`;
             const sourceLines = sourcePool.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
@@ -13017,8 +13186,15 @@ ${snippets}`
             speak('I hit a temporary processing issue after live search. Please try again.');
             return true;
         }
-        await fetchAndDisplayNews(userText);
-        return true;
+        return publishStrictVerificationClarification({
+            userText: String(userText || '').trim(),
+            intent: extractLiveQueryIntent(String(userText || '').trim()),
+            entityIntent: extractUniversalEntityIntent(String(userText || '').trim(), extractLiveQueryIntent(String(userText || '').trim()))
+        }, {
+            sources: [],
+            speechText: 'I hit a verification issue. Please narrow the query and I will retry.',
+            badge: 'Needs clarification'
+        });
     } finally {
         clearActiveRequest(controller);
         hideThinkingIndicator();
@@ -16361,15 +16537,27 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         }
 
         async function openNearbySearch(query) {
+            const popup = window.open('', '_blank', 'noopener,noreferrer');
+            const safeOpen = (url) => {
+                if (popup && !popup.closed) {
+                    popup.location.href = url;
+                    return;
+                }
+                try {
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                } catch (_) {
+                    window.location.href = url;
+                }
+            };
             try {
                 const position = await getCurrentPositionAsync();
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
                 const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${query} near ${lat},${lon}`)}`;
-                window.open(url, '_blank', 'noopener,noreferrer');
+                safeOpen(url);
             } catch (error) {
                 const fallback = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${query} near me`)}`;
-                window.open(fallback, '_blank', 'noopener,noreferrer');
+                safeOpen(fallback);
             }
         }
 
