@@ -388,7 +388,6 @@ async function runTranslateToEnglishPipeline({ apiKey, mimeType, imageBase64, us
         'Return strict JSON only:',
         '{',
         '  "summary": "short useful summary",',
-        '  "quality": { "textReadability": "high|medium|low", "notes": "short note" },',
         '  "textDetected": ["snippet 1", "snippet 2"],',
         '  "fullText": "all readable text in original language and order"',
         '}',
@@ -470,7 +469,6 @@ function buildVisionPrompt(userPrompt, task) {
         'JSON schema:',
         '{',
         '  "summary": "short useful summary",',
-        '  "quality": { "textReadability": "high|medium|low", "notes": "short note" },',
         '  "objects": [',
         '    { "label": "person", "count": 2, "confidence": 0.88 }',
         '  ],',
@@ -564,7 +562,6 @@ function formatVisionResponse(data, task, userPrompt = '') {
     const animals = normalizeDetected(data?.animals);
     const textDetected = Array.isArray(data?.textDetected) ? data.textDetected : [];
     const fullText = String(data?.fullText || '').trim();
-    const quality = data?.quality && typeof data.quality === 'object' ? data.quality : null;
     const shoppingItems = Array.isArray(data?.shoppingItems) ? data.shoppingItems : [];
     const bill = data?.bill && typeof data.bill === 'object' ? data.bill : { lineItems: [], totals: [] };
     const billItems = Array.isArray(bill.lineItems) ? bill.lineItems : [];
@@ -607,10 +604,6 @@ function formatVisionResponse(data, task, userPrompt = '') {
     if (task === 'text_extract' && fullText) {
         lines.push(`Full text:\n${fullText.slice(0, 6000)}`);
     }
-    if (quality?.textReadability) {
-        lines.push(`Readability: ${String(quality.textReadability)}`);
-    }
-
     if (task === 'text_extract' && !textDetected.length) {
         lines.push('No clear text detected.');
     }
