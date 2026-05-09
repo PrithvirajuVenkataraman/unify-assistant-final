@@ -260,6 +260,7 @@
                 
                 <div class="flex items-center justify-between gap-4">
                     <button onclick="closeCameraMode()" class="px-6 py-3 rounded-xl bg-slate-800 text-white font-semibold hover:bg-slate-700 transition-all">Cancel</button>
+                    <button type="button" onclick="rotateCameraPreview()" class="px-4 py-3 rounded-xl bg-slate-700 text-white font-semibold hover:bg-slate-600 transition-all">Rotate</button>
                     <button id="capture-btn" onclick="captureAndProcessOCR()" class="flex-1 px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center gap-2">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                         Capture & Analyze
@@ -272,6 +273,7 @@
         <div class="continuous-vision-preview-header">
             <span class="continuous-vision-pill">Live Vision</span>
             <div class="continuous-vision-actions">
+                <button type="button" id="continuous-vision-rotate-btn" class="continuous-vision-minimize" onclick="rotateContinuousVisionPreview()" aria-label="Rotate live vision preview">Rotate</button>
                 <button type="button" id="continuous-vision-minimize-btn" class="continuous-vision-minimize" onclick="toggleContinuousVisionMinimize()" aria-label="Minimize live vision preview" aria-pressed="false">Minimize</button>
                 <button type="button" class="continuous-vision-close" onclick="toggleContinuousVision()" aria-label="Close live vision preview">Close</button>
             </div>
@@ -4228,64 +4230,11 @@ async function handleNameCorrection(text) {
                         </section>
                         
                         <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Pro Tips for Better Results</h3>
-                            <div class="space-y-3 text-sm text-gray-700 dark:text-gray-300">
-                                <div>
-                                    <p class="font-semibold text-gray-900 dark:text-white">Be Specific:</p>
-                                    <p class="text-gray-600 dark:text-gray-400">"Hotels"</p>
-                                    <p class="text-green-600 dark:text-green-400">"Hotels in Chennai with non-vegetarian food"</p>
-                                </div>
-                                
-                                <div>
-                                    <p class="font-semibold text-gray-900 dark:text-white">Ask for Local Specialties:</p>
-                                    <p class="text-green-600 dark:text-green-400">"Biryani places in Hyderabad" or "Pizza spots in NYC"</p>
-                                    <p class="text-xs text-gray-500 mt-1">I'll suggest region-specific dishes based on location!</p>
-                                </div>
-
-                                <div>
-                                    <p class="font-semibold text-gray-900 dark:text-white">Use the Right Query Style:</p>
-                                    <p class="text-gray-600 dark:text-gray-400">Ask "Who won?", "What happened?", "What is the latest score?", or "What are the latest stats?" when you want a direct live answer with sources.</p>
-                                </div>
-
-                                <div>
-                                    <p class="font-semibold text-gray-900 dark:text-white">Read the Source Badge:</p>
-                                    <p class="text-gray-600 dark:text-gray-400"><strong>Verified live sources</strong> means the answer used current external sources. <strong>Model answer</strong> means it came from the AI model.</p>
-                                </div>
-
-                                <div>
-                                    <p class="font-semibold text-gray-900 dark:text-white">Use the Share Button:</p>
-                                    <p class="text-gray-600 dark:text-gray-400">After getting recommendations, click "Share" to send via SMS, WhatsApp, or email.</p>
-                                </div>
-                                
-                                <div>
-                                    <p class="font-semibold text-gray-900 dark:text-white">Get GPS Directions:</p>
-                                    <p class="text-gray-600 dark:text-gray-400">Hotel recommendations are based on web search results!</p>
-                                </div>
-                            </div>
-                        </section>
-                        
-                        <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Voice Commands</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                                 <p>Press the <strong>microphone button</strong> and speak naturally.</p>
                                 <p class="text-xs text-gray-500">Examples: "What's the weather?", "Who won the T20 World Cup 2026?", "What happened in the Middle East today?", "How to make Andhra chicken biryani?", or "when should I leave?"</p>
                                 <p class="text-xs text-gray-500">While a reply is generating, the main action button turns into a <strong>Stop</strong> button so you can cancel the request.</p>
-                            </div>
-                        </section>
-                        
-                        <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Smart Features</h3>
-                            <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p><strong>Learning Mode:</strong> I can teach concepts step-by-step across tech and non-tech topics.</p>
-                                <p><strong>Live Retrieval:</strong> I can answer current-result questions using live sources instead of only model memory.</p>
-                                <p><strong>Direct Live Answers:</strong> For many current questions, I answer first, then show key points, confidence, and sources.</p>
-                                <p><strong>Web Search:</strong> I can enrich recommendations with live search context.</p>
-                                <p><strong>Location-Aware:</strong> I adapt transport suggestions by city type.</p>
-                                <p><strong>Regional Food:</strong> I suggest cuisine ideas by destination.</p>
-                                <p><strong>Recipe Help:</strong> I can generate ingredients and step-by-step cooking instructions for many dishes and styles. For obscure or highly regional dishes, I may give a best-effort version and say when it is approximate.</p>
-                                <p><strong>Converse Mode:</strong> Hands-free conversation with auto speaking.</p>
-                                <p><strong>Traffic-Aware Leave Estimate:</strong> I can use a route API for live leave-time estimates when configured, with a fallback estimate if not.</p>
-                                <p><strong>Safety Mode:</strong> Women-focused safety shortcuts, trusted contact storage, and location sharing.</p>
                             </div>
                         </section>
 
@@ -4300,53 +4249,6 @@ async function handleNameCorrection(text) {
                             </div>
                         </section>
 
-                        <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Tech Stack</h3>
-                            <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p><strong>UI:</strong> HTML, CSS, JavaScript, Tailwind CSS.</p>
-                                <p><strong>Voice:</strong> Web Speech API (speech recognition + text-to-speech).</p>
-                                <p><strong>AI:</strong> Groq and Gemini with live web retrieval.</p>
-                                <p><strong>Documents:</strong> PDF, DOCX, PPTX parsing and OCR support.</p>
-                            </div>
-                        </section>
-
-                        <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Behavior</h3>
-                            <div class="space-y-4">
-                                <div>
-                                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Reply style</p>
-                                    <div class="flex gap-2 flex-wrap">
-                                        <button onclick="setSupportModeLock('balanced')" data-mode-group="support-mode" data-mode-value="balanced" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${supportModeLock === 'balanced' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Balanced</button>
-                                        <button onclick="setSupportModeLock('supportive')" data-mode-group="support-mode" data-mode-value="supportive" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${supportModeLock === 'supportive' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Supportive</button>
-                                        <button onclick="setSupportModeLock('debate')" data-mode-group="support-mode" data-mode-value="debate" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${supportModeLock === 'debate' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Debate</button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Response length</p>
-                                    <div class="flex gap-2 flex-wrap">
-                                        <button onclick="setResponseLength('short')" data-mode-group="response-length" data-mode-value="short" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseLength === 'short' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Short</button>
-                                        <button onclick="setResponseLength('normal')" data-mode-group="response-length" data-mode-value="normal" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseLength === 'normal' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Normal</button>
-                                        <button onclick="setResponseLength('detailed')" data-mode-group="response-length" data-mode-value="detailed" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseLength === 'detailed' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Detailed</button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Response format</p>
-                                    <div class="flex gap-2 flex-wrap">
-                                        <button onclick="setResponseFormat('paragraph')" data-mode-group="response-format" data-mode-value="paragraph" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'paragraph' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Paragraph</button>
-                                        <button onclick="setResponseFormat('bullet')" data-mode-group="response-format" data-mode-value="bullet" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'bullet' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Bullet points</button>
-                                        <button onclick="setResponseFormat('steps')" data-mode-group="response-format" data-mode-value="steps" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-purple-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${responseFormat === 'steps' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Step-by-step</button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Medical mode</p>
-                                    <div class="flex gap-2 flex-wrap">
-                                        <button onclick="setMedicalMode(true)" data-mode-group="medical-mode" data-mode-value="on" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-rose-600 text-white" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${medicalMode ? 'bg-rose-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">On</button>
-                                        <button onclick="setMedicalMode(false)" data-mode-group="medical-mode" data-mode-value="off" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" data-active-class="bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" data-inactive-class="bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${!medicalMode ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Off</button>
-                                    </div>
-                                </div>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">Voice commands: "set support mode supportive", "set response length detailed", "set response format bullet points", or "turn medical mode on".</p>
-                            </div>
-                        </section>
 
                         <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Settings</h3>
@@ -4440,9 +4342,6 @@ async function handleNameCorrection(text) {
                             </div>
                         </section>
 
-                        <div class="text-center pt-4 border-t border-gray-200 dark:border-gray-700">
-                            <p class="text-sm text-gray-600 dark:text-gray-400">Need more help? You can submit a feature request from Settings or ask directly: "show trip commands" or "how do I set up commute?"</p>
-                        </div>
                     </div>
                 </div>
             `;
@@ -5978,8 +5877,27 @@ function normalizeUiTokens(text) {
         }
 
         let cameraStream = null;
+        let cameraRotationDeg = 0;
         let tesseractWorkerPromise = null;
         let tesseractWorkerLangKey = '';
+
+        function normalizeCameraRotation(deg) {
+            const n = Number(deg || 0);
+            return ((n % 360) + 360) % 360;
+        }
+
+        function applyCameraPreviewRotation() {
+            const video = document.getElementById('camera-preview');
+            if (!video) return;
+            const normalized = normalizeCameraRotation(cameraRotationDeg);
+            video.style.transform = normalized ? `rotate(${normalized}deg)` : 'none';
+            video.style.transformOrigin = 'center center';
+        }
+
+        function rotateCameraPreview() {
+            cameraRotationDeg = normalizeCameraRotation(cameraRotationDeg + 90);
+            applyCameraPreviewRotation();
+        }
 
         async function openCameraMode() {
             const modal = document.getElementById('camera-modal');
@@ -6007,6 +5925,8 @@ function normalizeUiTokens(text) {
 
                 cameraStream = stream;
                 video.srcObject = stream;
+                cameraRotationDeg = 0;
+                applyCameraPreviewRotation();
                 modal.classList.remove('hidden');
                 document.body.classList.add('overflow-hidden');
 
@@ -6031,11 +5951,13 @@ function normalizeUiTokens(text) {
             if (video) {
                 try { video.pause(); } catch (_) {}
                 video.srcObject = null;
+                video.style.transform = 'none';
             }
             if (cameraStream) {
                 cameraStream.getTracks().forEach(track => track.stop());
                 cameraStream = null;
             }
+            cameraRotationDeg = 0;
         }
 
         function setCaptureButtonBusy(isBusy) {
@@ -6052,8 +5974,28 @@ function normalizeUiTokens(text) {
             }
         }
 
-        function drawOcrEnhancedFrame(ctx, video, width, height) {
-            ctx.drawImage(video, 0, 0, width, height);
+        function drawVideoFrameWithRotation(ctx, video, width, height, rotationDeg = 0) {
+            const rot = normalizeCameraRotation(rotationDeg);
+            ctx.save();
+            ctx.clearRect(0, 0, width, height);
+            if (!rot) {
+                ctx.drawImage(video, 0, 0, width, height);
+                ctx.restore();
+                return;
+            }
+
+            ctx.translate(width / 2, height / 2);
+            ctx.rotate((rot * Math.PI) / 180);
+            if (rot === 90 || rot === 270) {
+                ctx.drawImage(video, -height / 2, -width / 2, height, width);
+            } else {
+                ctx.drawImage(video, -width / 2, -height / 2, width, height);
+            }
+            ctx.restore();
+        }
+
+        function drawOcrEnhancedFrame(ctx, video, width, height, rotationDeg = 0) {
+            drawVideoFrameWithRotation(ctx, video, width, height, rotationDeg);
             const imageData = ctx.getImageData(0, 0, width, height);
             const d = imageData.data;
             let lumaSum = 0;
@@ -6164,9 +6106,11 @@ function normalizeUiTokens(text) {
                 const scale = width < 1600 ? 1.5 : 1;
                 const renderWidth = Math.max(960, Math.round(width * scale));
                 const renderHeight = Math.max(540, Math.round(height * scale));
-                canvas.width = renderWidth;
-                canvas.height = renderHeight;
-                drawOcrEnhancedFrame(ctx, video, renderWidth, renderHeight);
+                const normalizedRotation = normalizeCameraRotation(cameraRotationDeg);
+                const swap = normalizedRotation === 90 || normalizedRotation === 270;
+                canvas.width = swap ? renderHeight : renderWidth;
+                canvas.height = swap ? renderWidth : renderHeight;
+                drawOcrEnhancedFrame(ctx, video, canvas.width, canvas.height, normalizedRotation);
 
                 const enhancedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
                 const enhancedBase64 = enhancedDataUrl.split(',')[1];
@@ -6205,9 +6149,11 @@ function normalizeUiTokens(text) {
 
                 // Fallback pass: raw camera frame (some scenes perform better without preprocessing)
                 if ((!attempt.ok || !attempt?.data?.success || extractedText.length < 8) && width && height) {
-                    canvas.width = width;
-                    canvas.height = height;
-                    ctx.drawImage(video, 0, 0, width, height);
+                    const normalizedRotation = normalizeCameraRotation(cameraRotationDeg);
+                    const swap = normalizedRotation === 90 || normalizedRotation === 270;
+                    canvas.width = swap ? height : width;
+                    canvas.height = swap ? width : height;
+                    drawVideoFrameWithRotation(ctx, video, canvas.width, canvas.height, normalizedRotation);
                     const rawBase64 = canvas.toDataURL('image/jpeg', 0.95).split(',')[1];
                     const retry = await attemptOcr(rawBase64);
                     if (retry.ok && retry?.data?.success) {
@@ -6228,9 +6174,11 @@ function normalizeUiTokens(text) {
                     const localEnhanced = await runLocalTesseractOcr(enhancedBase64, ocrLangHint);
                     let localBest = localEnhanced;
                     if (width && height) {
-                        canvas.width = width;
-                        canvas.height = height;
-                        ctx.drawImage(video, 0, 0, width, height);
+                        const normalizedRotation = normalizeCameraRotation(cameraRotationDeg);
+                        const swap = normalizedRotation === 90 || normalizedRotation === 270;
+                        canvas.width = swap ? height : width;
+                        canvas.height = swap ? width : height;
+                        drawVideoFrameWithRotation(ctx, video, canvas.width, canvas.height, normalizedRotation);
                         const rawBase64 = canvas.toDataURL('image/jpeg', 0.95).split(',')[1];
                         const localRaw = await runLocalTesseractOcr(rawBase64, ocrLangHint);
                         if (String(localRaw?.text || '').length > String(localBest?.text || '').length) {
@@ -6512,10 +6460,7 @@ function normalizeUiTokens(text) {
                 const extractedText = (fullText || textDetected.join('\n') || responseText).slice(0, 22000).trim();
                 if (!extractedText) return null;
                 const summary = String(details?.summary || responseText || 'Image analyzed.').slice(0, 4000).trim();
-                const readability = String(details?.quality?.textReadability || '').trim();
-                const extractionHint = readability
-                    ? `Used /api/vision fallback because /api/document-ingest was unavailable. OCR readability: ${readability}.`
-                    : 'Used /api/vision fallback because /api/document-ingest was unavailable.';
+                const extractionHint = 'Used /api/vision fallback because /api/document-ingest was unavailable.';
 
                 return {
                     success: true,
@@ -17425,6 +17370,21 @@ let continuousVisionStream = null;
 let isContinuousVisionActive = false;
 let continuousVisionTrack = null;
 let isContinuousVisionMinimized = false;
+let continuousVisionRotationDeg = 0;
+
+function applyContinuousVisionRotation() {
+    const videoEl = document.getElementById('continuous-vision-video');
+    if (!videoEl) return;
+    const normalized = normalizeCameraRotation(continuousVisionRotationDeg);
+    videoEl.style.transform = normalized ? `rotate(${normalized}deg)` : 'none';
+    videoEl.style.transformOrigin = 'center center';
+}
+
+function rotateContinuousVisionPreview() {
+    if (!isContinuousVisionActive) return;
+    continuousVisionRotationDeg = normalizeCameraRotation(continuousVisionRotationDeg + 90);
+    applyContinuousVisionRotation();
+}
 
 function setContinuousVisionMinimized(nextState) {
     const previewShell = document.getElementById('continuous-vision-preview-shell');
@@ -17458,6 +17418,8 @@ async function toggleContinuousVision() {
         }
         continuousVisionTrack = null;
         videoEl.srcObject = null;
+        continuousVisionRotationDeg = 0;
+        applyContinuousVisionRotation();
         videoEl.classList.add('hidden');
         setContinuousVisionMinimized(false);
         previewShell?.classList.add('hidden');
@@ -17492,6 +17454,8 @@ async function toggleContinuousVision() {
             continuousVisionStream = await getCamera();
             videoEl.srcObject = continuousVisionStream;
             videoEl.muted = true;
+            continuousVisionRotationDeg = 0;
+            applyContinuousVisionRotation();
             videoEl.classList.remove('hidden');
             setContinuousVisionMinimized(false);
             previewShell?.classList.remove('hidden');
@@ -17529,10 +17493,14 @@ function captureVisionFrame() {
     const sourceH = videoEl.videoHeight || 720;
     const maxDim = 1600;
     const scale = Math.min(1, maxDim / Math.max(sourceW, sourceH));
-    canvas.width = Math.max(640, Math.floor(sourceW * scale));
-    canvas.height = Math.max(480, Math.floor(sourceH * scale));
+    const normalizedRotation = normalizeCameraRotation(continuousVisionRotationDeg);
+    const drawW = Math.max(640, Math.floor(sourceW * scale));
+    const drawH = Math.max(480, Math.floor(sourceH * scale));
+    const swap = normalizedRotation === 90 || normalizedRotation === 270;
+    canvas.width = swap ? drawH : drawW;
+    canvas.height = swap ? drawW : drawH;
     if (canvas.width === 0 || canvas.height === 0) return null;
-    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    drawVideoFrameWithRotation(ctx, videoEl, canvas.width, canvas.height, normalizedRotation);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
     return dataUrl.split(',')[1];
 }
@@ -17590,15 +17558,10 @@ async function handleContinuousVisionQuery(text) {
             ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean).join('\n').trim()
             : '';
         const fullText = String(details?.fullText || '').trim();
-        const readability = String(details?.quality?.textReadability || '').trim();
         let answer = String(data.response || details?.summary || '').trim();
         if (!answer && (fullText || textDetected)) {
             const textBlock = fullText || textDetected;
             answer = `Detected text:\n${textBlock}`;
-        }
-        const alreadyHasReadability = /\bReadability\s*:/i.test(answer);
-        if (answer && readability && !isTranslateIntent && !alreadyHasReadability) {
-            answer += `\n\nReadability: ${readability}`;
         }
         if (!answer) answer = 'I can see the image, but I could not generate a clear answer.';
         addChatMessage(answer, false);
