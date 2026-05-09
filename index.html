@@ -2450,10 +2450,15 @@ async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking
     showThinkingIndicator(loadingMessage);
     try {
         const responsePromise = processUserQuery(message);
-        await Promise.all([
-            responsePromise,
-            new Promise(resolve => setTimeout(resolve, 2000))
-        ]);
+        const minimumThinkMs = converseMode ? 0 : 2000;
+        if (minimumThinkMs > 0) {
+            await Promise.all([
+                responsePromise,
+                new Promise(resolve => setTimeout(resolve, minimumThinkMs))
+            ]);
+        } else {
+            await responsePromise;
+        }
         const response = await responsePromise;
         if (response?.aborted) {
             hideThinkingIndicator();
@@ -4778,8 +4783,7 @@ async function handleNameCorrection(text) {
                     });
                     return;
                 }
-                const greet = getConverseWelcomeLine();
-                speak(greet);
+                // Keep Converse startup silent to avoid immediate overlap/interruption.
                 let attempts = 0;
                 const ensureConverseListening = () => {
                     attempts += 1;
@@ -5527,11 +5531,7 @@ async function handleNameCorrection(text) {
                 const hasMap = displayText.includes('<iframe') || displayText.includes('map-container');
                 const containerWidth = hasMap ? 'w-full max-w-4xl' : (hasHtmlContent ? 'w-full max-w-3xl' : 'w-full max-w-3xl');
                 const sourceType = meta?.sourceType || (hasMap ? 'tool' : 'default');
-                const avatar = getAssistantAvatarConfig(sourceType);
-                const showAvatar = sourceType !== 'model';
-                const avatarHtml = showAvatar
-                    ? `<div class="${avatar.className}" aria-hidden="true" title="${avatar.title}">${avatar.label}</div>`
-                    : '';
+                const avatarHtml = '';
 
                 // Store text safely for speech - use data attribute to avoid escaping issues
                 const speechId = 'speech_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -7509,6 +7509,27 @@ async function handleMarketLookup(text) {
             return false;
         }
 
+        function classifyConverseUtterance(text) {
+            const raw = String(text || '').trim();
+            const t = raw.toLowerCase();
+            if (!t) return 'noise';
+
+            if (/\b(thats all|that's all|nothing else|no more|we are done|we're done|done for now|goodbye|bye|end conversation|stop conversation|stop converse|exit converse)\b/.test(t)) {
+                return 'end';
+            }
+
+            if (/^(thanks|thank you|ok|okay|cool|great|nice|got it|understood|hmm|huh)$/i.test(raw)) {
+                return 'ack';
+            }
+
+            if (/\?$/.test(raw) || /^(what|why|how|who|when|where|which|can|could|would|will|is|are|do|does|did|should)\b/.test(t)) {
+                return 'question';
+            }
+
+            if (raw.split(/\s+/).length <= 2) return 'ack';
+            return 'statement';
+        }
+
         async function handleFinalTranscript(finalTranscript) {
             const finalText = String(finalTranscript || '').trim();
             if (!finalText) return;
@@ -7547,6 +7568,24 @@ async function handleMarketLookup(text) {
 
             if (!converseMode) {
                 stopListening();
+            }
+
+            if (converseMode) {
+                const utteranceKind = classifyConverseUtterance(finalText);
+                if (utteranceKind === 'end') {
+                    converseMode = false;
+                    listeningRequested = false;
+                    stopListening();
+                    stopSpeaking();
+                    saveAssistantModes();
+                    updateAssistantModeUI();
+                    addChatMessage('Converse mode off. Say "converse mode on" anytime.', false);
+                    return;
+                }
+                if (utteranceKind === 'ack') {
+                    // Avoid noisy assistant turns for short acknowledgements in hands-free mode.
+                    return;
+                }
             }
 
             if (isProcessing) return;
@@ -10362,14 +10401,15 @@ ${snippets}`
 function isLiveRetrievalQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
+    const explicitLiveContext = /\b(news|headlines?|breaking|live|right now|current events?|today|latest|recent|update|status|who won|winner|score|standings|fixture|schedule|market|price|rate|currency|exchange|war|conflict|election)\b/;
+    const technicalConceptSignals = /\b(hld|lld|system design|design pattern|architecture|api design|database design|algorithm|data structure|o\(?n\)?|time complexity|space complexity|java|javascript|python|react|node|sql|backend|frontend|microservices?)\b/;
+    if (technicalConceptSignals.test(t) && !explicitLiveContext.test(t)) return false;
 
     const liveSignals = [
         /\bwhat(?:'s| is)?(?:\s+\w+){0,2}\s+happening\b/,
         /\bwhat happened\b/,
-        /\blatest\b/,
-        /\brecent\b/,
-        /\bcurrent\b/,
-        /\btoday\b/,
+        /\b(latest|recent|current|today)\b.*\b(news|events?|updates?|status|happening|result|score|standings|fixture|schedule|price|rate|market|war|conflict|election)\b/,
+        /\b(news|events?|updates?|status|happening|result|score|standings|fixture|schedule|price|rate|market|war|conflict|election)\b.*\b(latest|recent|current|today)\b/,
         /\bright now\b/,
         /\bas of now\b/,
         /\bupcoming\b/,
@@ -10521,6 +10561,9 @@ async function buildFutureYearResponse(intent) {
 function isCurrentInfoQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
+    const technicalConceptSignals = /\b(hld|lld|system design|design pattern|architecture|api design|database design|algorithm|data structure|time complexity|space complexity|java|javascript|python|react|node|sql|backend|frontend|microservices?)\b/;
+    const explicitLiveContext = /\b(news|headlines?|breaking|live|right now|current events?|today|latest|recent|update|status|who won|winner|score|standings|fixture|schedule|market|price|rate|currency|exchange|war|conflict|election)\b/;
+    if (technicalConceptSignals.test(t) && !explicitLiveContext.test(t)) return false;
 
     if (isExchangeRateQuery(t) || isMarketPriceQuery(t) || isLiveRetrievalQuery(t) || isNewsworthyLiveTopic(t) || isSportsLiveResultQuery(t)) {
         return true;
@@ -10547,6 +10590,8 @@ function hasExplicitFreshnessLanguage(text) {
 function shouldUseNewsEndpointForCurrentQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
+    const technicalConceptSignals = /\b(hld|lld|system design|design pattern|architecture|api design|database design|algorithm|data structure|time complexity|space complexity|java|javascript|python|react|node|sql|backend|frontend|microservices?)\b/;
+    if (technicalConceptSignals.test(t)) return false;
 
     const directQuestionSignals = /\b(who won|who lost|winner|won|lost|score|scores|stat|stats|how many|what happened|what's happening|status|update me|brief me|tell me about|ceo|president|prime minister|captain|coach|price|rate)\b/;
     const businessEventTerms = /\b(layoff|layoffs|firing|firings|job cuts|restructuring|reorganization|earnings|merger|acquisition|recall|bankruptcy|probe|investigation|antitrust|strike|walkout)\b/;
@@ -10786,6 +10831,12 @@ const ROUTING_REGRESSION_CASES = [
         prompt: "Tell me about Nvidia's latest earnings",
         expectedPath: 'current_info',
         expectedMode: 'answer_then_cite'
+    },
+    {
+        name: 'Technical concept should stay local',
+        prompt: 'What is HLD and LLD in system design?',
+        expectedPath: 'default_model',
+        expectedMode: 'chat_first'
     },
     {
         name: 'Recipe route',
