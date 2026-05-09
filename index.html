@@ -4190,11 +4190,11 @@ async function handleNameCorrection(text) {
                         <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Read Me</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p>Detailed Features and How to Prompt are now in the project README.</p>
+                                <p>Detailed Features and How to Prompt are now in the full guide.</p>
                                 <button
                                     onclick="openReadmeFile()"
                                     class="px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold transition-all">
-                                    Open README
+                                    Open Full Guide
                                 </button>
                             </div>
                         </section>
@@ -5019,7 +5019,9 @@ async function handleNameCorrection(text) {
         }
 
         function openReadmeFile() {
-            window.open('/README.md', '_blank', 'noopener,noreferrer');
+            const GUIDE_DOC_URL = ''; // Paste your Google Doc share link here
+            const target = String(GUIDE_DOC_URL || '').trim() || '/README.md';
+            window.open(target, '_blank', 'noopener,noreferrer');
         }
 
         function clearSavedMemoryStore() {
