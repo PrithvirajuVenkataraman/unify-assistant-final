@@ -163,6 +163,19 @@ async function handleRouteTrafficLookup(req, res) {
         }
     }
 
+    const orsKey = process.env.ORS_API_KEY || process.env.OPENROUTESERVICE_API_KEY;
+    if (orsKey) {
+        const orsResult = await fetchOpenRouteServiceRoute({ origin, destination, mode, apiKey: orsKey });
+        if (orsResult) {
+            return res.status(200).json({
+                success: true,
+                liveTraffic: false,
+                provider: 'openrouteservice',
+                ...orsResult
+            });
+        }
+    }
+
     const fallback = buildFallbackEstimate(origin, destination, mode);
     return res.status(200).json({
         success: true,
@@ -170,6 +183,34 @@ async function handleRouteTrafficLookup(req, res) {
         provider: 'fallback',
         ...fallback
     });
+}
+
+async function fetchOpenRouteServiceRoute({ origin, destination, mode, apiKey }) {
+    const profile = mode === 'walk' ? 'foot-walking' : 'driving-car';
+    const url = `https://api.openrouteservice.org/v2/directions/${profile}`;
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            Authorization: apiKey,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            coordinates: [
+                [origin.lon, origin.lat],
+                [destination.lon, destination.lat]
+            ]
+        })
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const route = Array.isArray(data?.routes) ? data.routes[0] : null;
+    const summary = route?.summary;
+    if (!summary) return null;
+    return {
+        durationMinutes: Number(summary.duration || 0) / 60,
+        trafficDelayMinutes: 0,
+        distanceMiles: Number(summary.distance || 0) / 1609.344
+    };
 }
 
 function normalizePoint(value) {
