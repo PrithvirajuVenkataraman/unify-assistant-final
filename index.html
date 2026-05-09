@@ -12697,37 +12697,37 @@ function buildStrictVerificationClarificationMessage(userText, intent, entityInt
     const year = String(intent?.year || entityIntent?.year || '').trim();
 
     const clarifyLines = [];
-    clarifyLines.push('I could not verify a confident answer yet from current sources.');
+    clarifyLines.push('I need 1-2 more details before I can verify this from live sources.');
     clarifyLines.push('');
-    clarifyLines.push('Please narrow your query with one or more details:');
-    clarifyLines.push(`1. Timeframe: exact date or season${year ? ` (you asked about ${year})` : ''}`);
-    clarifyLines.push('2. Scope: country/league/market/product line');
+    clarifyLines.push('Please clarify:');
+    clarifyLines.push(`1. Time: exact date/season${year ? ` (you asked about ${year})` : ''}`);
+    clarifyLines.push('2. Scope: country, league, market, or product line');
     if (subject) {
-        clarifyLines.push(`3. Entity disambiguation: confirm "${subject}"${competition ? ` in "${competition}"` : ''}`);
+        clarifyLines.push(`3. Entity: confirm "${subject}"${competition ? ` in "${competition}"` : ''}`);
     } else {
-        clarifyLines.push('3. Entity disambiguation: exact person/team/company name');
+        clarifyLines.push('3. Entity: exact person/team/company');
     }
 
     if (relation === 'stats' || relation === 'title_count') {
-        clarifyLines.push('4. Metric format: career total, season-wise, or format-wise split');
+        clarifyLines.push('4. Metric: career total, season total, or format split');
     }
 
     clarifyLines.push('');
-    clarifyLines.push('Try examples:');
+    clarifyLines.push('Try:');
     if (domain.includes('sports')) {
-        clarifyLines.push('- "CSK IPL titles as of 2025 official sources"');
-        clarifyLines.push('- "Who won IPL 2025 final with score"');
+        clarifyLines.push('- "CSK IPL titles as of 2025"');
+        clarifyLines.push('- "Who won IPL 2025 final and score?"');
     } else if (domain.includes('politics')) {
-        clarifyLines.push('- "Current prime minister of India as of today official source"');
+        clarifyLines.push('- "Current prime minister of India as of today"');
         clarifyLines.push('- "Election result in [country/state] on [date]"');
     } else if (domain.includes('finance') || relation === 'price') {
-        clarifyLines.push('- "USD to INR rate right now from RBI/market source"');
-        clarifyLines.push('- "Gold price India 24k today per gram"');
+        clarifyLines.push('- "USD to INR now (RBI reference)"');
+        clarifyLines.push('- "Gold price in India today, 24k per gram"');
     } else if (domain.includes('tech') || domain.includes('companies')) {
-        clarifyLines.push('- "Latest AMD GPU launch date for Radeon RX series"');
-        clarifyLines.push('- "Current OpenAI CEO as of today with source"');
+        clarifyLines.push('- "Latest AMD Radeon launch date"');
+        clarifyLines.push('- "Current OpenAI CEO as of today"');
     } else {
-        clarifyLines.push('- "Latest update for [topic] in [country/market] on [date]"');
+        clarifyLines.push('- "Latest update for [topic] in [region] on [date]"');
     }
 
     const sourceLines = (Array.isArray(sources) ? sources : [])
@@ -12741,7 +12741,7 @@ function buildStrictVerificationClarificationMessage(userText, intent, entityInt
         clarifyLines.push('');
         clarifyLines.push(metaBlock);
         clarifyLines.push('');
-        clarifyLines.push('Attempted sources:');
+        clarifyLines.push('Checked so far:');
         clarifyLines.push(sourceLines);
     } else {
         clarifyLines.push('');
@@ -12749,7 +12749,7 @@ function buildStrictVerificationClarificationMessage(userText, intent, entityInt
     }
 
     clarifyLines.push('');
-    clarifyLines.push(`Live search link: ${searchUrl}`);
+    clarifyLines.push(`Live search: ${searchUrl}`);
 
     return clarifyLines.join('\n');
 }
@@ -12763,7 +12763,7 @@ async function publishStrictVerificationClarification(pipeline, options = {}) {
         sources
     );
     addVerifiedAssistantMessage(message, options?.badge || 'Needs clarification');
-    speak(options?.speechText || 'I need one more detail to verify this from reliable live sources.');
+    speak(options?.speechText || 'Need one more detail to verify this from live sources.');
     saveToHistory(pipeline?.userText || '', message);
     return true;
 }
