@@ -5836,8 +5836,7 @@ function normalizeUiTokens(text) {
         }
 
         function formatModelSourceBadge(label = 'Model answer') {
-            const safe = String(label || 'Model answer').trim();
-            return safe ? `[${safe}]` : '[Model answer]';
+            return '';
         }
 
         function addModelAssistantMessage(text, label = 'Model answer') {
@@ -17346,8 +17345,12 @@ function hideThinkingIndicator() {
 function formatAssistantTextForReadability(rawText) {
     if (typeof rawText !== 'string') return rawText;
     if (/<(iframe|div|img|table|svg|button|a)\b/i.test(rawText)) return rawText;
-    if (rawText.includes('\n')) return rawText;
     if (/^\s*[-*]\s+/m.test(rawText) || /^\s*\d+\.\s+/m.test(rawText)) return rawText;
+
+    const proceduralText = autoBulletizeProcedureText(rawText);
+    if (proceduralText !== rawText) return proceduralText;
+
+    if (rawText.includes('\n')) return rawText;
     if (rawText.length < 300) return rawText;
 
     const sentences = (rawText.match(/[^.!?]+[.!?]+/g) || []).map(s => s.trim()).filter(Boolean);
@@ -17364,6 +17367,33 @@ function formatAssistantTextForReadability(rawText) {
 
     const bullets = sentences.map(s => `- ${s}`).join('\n');
     return closingQuestion ? `${bullets}\n\n${closingQuestion}` : bullets;
+}
+
+function autoBulletizeProcedureText(rawText) {
+    if (typeof rawText !== 'string') return rawText;
+    const text = String(rawText || '').replace(/\r\n/g, '\n').trim();
+    if (!text) return rawText;
+    if (/^\s*[-*]\s+/.test(text) || /^\s*\d+\.\s+/.test(text)) return rawText;
+
+    const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+    if (lines.length < 4) return rawText;
+
+    const stepHint = /\b(step by step|steps?|procedure|what you can do|what to do|do this|try this)\b/i.test(text);
+    const stepLike = line =>
+        /^[A-Z][^:]{1,100}:\s+.+/.test(line) ||
+        /^(apply|take|keep|avoid|rest|monitor|call|seek|elevate|ice|stop|wash|clean|use|drink|move|check)\b/i.test(line);
+
+    const firstStepIdx = lines.findIndex(stepLike);
+    const stepCount = lines.filter(stepLike).length;
+    if (firstStepIdx < 0 || (!stepHint && stepCount < 3)) return rawText;
+
+    const introLines = lines.slice(0, firstStepIdx);
+    const stepLines = lines.slice(firstStepIdx).filter(line => !/^sources?\s*:/i.test(line));
+    if (stepLines.length < 2) return rawText;
+
+    const intro = introLines.length ? `${introLines.join('\n\n')}\n\n` : '';
+    const bullets = stepLines.map(line => `- ${line}`).join('\n');
+    return `${intro}${bullets}`.trim();
 }
 
 function showError(message) {
