@@ -4292,38 +4292,44 @@ async function handleNameCorrection(text) {
                                 <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                     <p class="font-semibold text-gray-900 dark:text-white mb-2">Memory</p>
                                     <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Manage saved memory and this account's chat history.</p>
-                                    <label class="flex items-center justify-between gap-3 mb-3 p-2 rounded-lg bg-white/70 dark:bg-slate-800/70 border border-gray-200 dark:border-gray-600">
-                                        <span class="text-xs font-medium text-gray-700 dark:text-gray-200">Persist memory on this device</span>
+                                    <label class="memory-persist-row flex items-center justify-between gap-3 mb-3 p-2 rounded-lg border">
+                                        <span class="memory-persist-label text-xs font-medium">Persist memory on this device</span>
                                         <input type="checkbox" id="persist-memory-toggle" class="h-4 w-4 accent-purple-600" ${persistMemoryToDevice ? 'checked' : ''} onchange="toggleMemoryPersistence(this.checked)">
                                     </label>
                                     <div class="flex flex-wrap gap-2">
                                         <button
                                             onclick="clearSavedMemoryStore()"
-                                            class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-all"
+                                            class="memory-action-btn px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-xs font-semibold transition-all"
                                             title="Clear saved memory">
                                             Clear Memory
                                         </button>
                                         <button
                                             onclick="clearConversationHistoryData()"
-                                            class="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold transition-all"
+                                            class="memory-action-btn px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-xs font-semibold transition-all"
                                             title="Clear chat history">
                                             Clear Chat History
                                         </button>
                                         <button
                                             onclick="clearAllAssistantMemoryData()"
-                                            class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-all"
+                                            class="memory-action-btn px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-xs font-semibold transition-all"
                                             title="Clear memory and chat history">
                                             Clear All
                                         </button>
                                         <button
                                             onclick="exportChatHistoryJson()"
-                                            class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold transition-all"
+                                            class="memory-action-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-800 text-xs font-semibold transition-all"
                                             title="Export chat history JSON">
                                             Export Chat
                                         </button>
                                         <button
+                                            onclick="cleanExistingConversationHistory()"
+                                            class="memory-action-btn px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-semibold transition-all"
+                                            title="Clean existing chat history entries">
+                                            Clean History
+                                        </button>
+                                        <button
                                             onclick="deleteAllLocalDataNow()"
-                                            class="px-3 py-1.5 rounded-lg bg-black hover:bg-slate-900 text-white text-xs font-semibold transition-all"
+                                            class="memory-action-btn px-3 py-1.5 rounded-lg bg-black hover:bg-slate-900 text-xs font-semibold transition-all"
                                             title="Delete all local app data">
                                             Delete Local Data
                                         </button>
@@ -13269,7 +13275,8 @@ async function handleDailyBriefRequest(text) {
 
 function exportChatHistoryJson() {
     try {
-        const payload = JSON.stringify(conversationHistory || [], null, 2);
+        const cleanHistory = sanitizeConversationHistoryRecords(conversationHistory);
+        const payload = JSON.stringify(cleanHistory, null, 2);
         const blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -13282,6 +13289,25 @@ function exportChatHistoryJson() {
         showTemporaryMessage('Chat history exported.');
     } catch (_) {
         showTemporaryMessage('Could not export chat history.');
+    }
+}
+
+function cleanExistingConversationHistory() {
+    const ok = window.confirm('Clean and rewrite existing chat history entries now?');
+    if (!ok) return;
+    try {
+        const beforeCount = Array.isArray(conversationHistory) ? conversationHistory.length : 0;
+        const cleaned = sanitizeConversationHistoryRecords(conversationHistory);
+        conversationHistory = cleaned;
+        localStorage.setItem(getHistoryStorageKey(), JSON.stringify(cleaned));
+        const removed = Math.max(0, beforeCount - cleaned.length);
+        showTemporaryMessage(
+            removed > 0
+                ? `History cleaned. ${removed} empty/invalid entr${removed === 1 ? 'y' : 'ies'} removed.`
+                : 'History cleaned.'
+        );
+    } catch (_) {
+        showTemporaryMessage('Could not clean history right now.');
     }
 }
 
@@ -17209,11 +17235,53 @@ function saveConversationHistory() {
     localStorage.setItem(historyKey, JSON.stringify(conversationHistory));
 }
 
+function normalizeHistoryUserMessage(userMessage) {
+    const raw = String(userMessage || '').trim();
+    if (!raw) return '';
+
+    // Convert internal teaching wrapper back to the real user query.
+    const wrappedDouble = raw.match(/^User asked:\s*"([^"]+)"/i);
+    if (wrappedDouble && wrappedDouble[1]) return wrappedDouble[1].trim();
+
+    const wrappedSingle = raw.match(/^User asked:\s*'([^']+)'/i);
+    if (wrappedSingle && wrappedSingle[1]) return wrappedSingle[1].trim();
+
+    const wrappedPlain = raw.match(/^User asked:\s*([^\n]+)$/im);
+    if (wrappedPlain && wrappedPlain[1]) {
+        const line = wrappedPlain[1].replace(/[?.!,;:\s]+$/g, '').trim();
+        if (line && !/^teach this clearly|^rules:/i.test(line)) return line;
+    }
+
+    const firstLine = raw.split('\n')[0].trim();
+    if (/^(User asked:|Teach this clearly|Rules:)/i.test(firstLine)) {
+        const quoted = raw.match(/"([^"]+)"/);
+        if (quoted && quoted[1]) return quoted[1].trim();
+    }
+
+    return raw;
+}
+
+function normalizeHistoryAssistantMessage(aiResponse) {
+    return String(aiResponse || '').replace(/\r\n/g, '\n').trim();
+}
+
+function sanitizeConversationHistoryRecords(historyItems) {
+    const source = Array.isArray(historyItems) ? historyItems : [];
+    return source
+        .map(item => ({
+            timestamp: String(item?.timestamp || '').trim(),
+            user: normalizeHistoryUserMessage(item?.user || ''),
+            ai: normalizeHistoryAssistantMessage(item?.ai || ''),
+            date: String(item?.date || '').trim()
+        }))
+        .filter(item => item.user || item.ai);
+}
+
 function saveToHistory(userMessage, aiResponse) {
     conversationHistory.push({
         timestamp: new Date().toISOString(),
-        user: userMessage,
-        ai: aiResponse,
+        user: normalizeHistoryUserMessage(userMessage),
+        ai: normalizeHistoryAssistantMessage(aiResponse),
         date: new Date().toLocaleDateString()
     });
     
