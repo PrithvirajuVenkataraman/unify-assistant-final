@@ -1,5 +1,5 @@
 export const config = { maxDuration: 60 };
-import { extractSearchTopic, runVerifiedWebSearch } from './live-search.js';
+import { extractSearchTopic, getDomainFromUrl, isTrustedLiveSource, runVerifiedWebSearch } from './live-search.js';
 import { applyApiSecurity } from './security.js';
 
 export default async function handler(req, res) {
@@ -724,8 +724,22 @@ async function handleNewsLookup(req, res) {
     const category = String(req.body?.category || '').trim();
     const city = String(req.body?.city || '').trim();
     const countryCode = String(req.body?.countryCode || '').trim();
+    const verificationMode = normalizeNewsVerificationMode(
+        req.body?.verificationMode || req.body?.newsVerificationMode || 'normal'
+    );
+    const riskLevel = normalizeRiskLevel(req.body?.riskLevel || req.body?.verificationRiskLevel || 'high_risk');
     if ([query, category, city, countryCode].some(value => value.length > 500)) {
-        return res.status(413).json({ success: false, error: 'news query is too long', articles: [] });
+        return res.status(413).json({
+            success: false,
+            error: 'news query is too long',
+            verificationMode,
+            riskLevel,
+            sourceCount: 0,
+            distinctDomainCount: 0,
+            trustedCount: 0,
+            verified: false,
+            articles: []
+        });
     }
 
     const topic = normalizeTopic(query || category || (city ? `${city} news` : 'latest news'));
@@ -754,21 +768,48 @@ async function handleNewsLookup(req, res) {
             : [];
 
         if (rssArticles.length) {
+            const rssMeta = computeNewsSourceMeta(rssArticles, verificationMode, riskLevel);
+            if (rssMeta.strongEnough) {
+                return res.status(200).json({
+                    success: true,
+                    verified: true,
+                    verificationMode,
+                    riskLevel,
+                    query: topic,
+                    sourceCount: rssMeta.sourceCount,
+                    distinctDomainCount: rssMeta.distinctDomainCount,
+                    trustedCount: rssMeta.trustedCount,
+                    articles: rssArticles
+                });
+            }
+        }
+
+        const verifiedArticles = verified.results.map(item => ({
+            title: item.title,
+            url: item.url,
+            description: item.description
+        }));
+        const verifiedMeta = computeNewsSourceMeta(verifiedArticles, verificationMode, riskLevel);
+        if (verifiedMeta.strongEnough) {
             return res.status(200).json({
                 success: true,
                 verified: true,
+                verificationMode,
+                riskLevel,
                 query: topic,
-                sourceCount: rssArticles.length,
-                distinctDomainCount: 1,
-                trustedCount: rssArticles.length,
-                articles: rssArticles
+                sourceCount: verifiedMeta.sourceCount,
+                distinctDomainCount: verifiedMeta.distinctDomainCount,
+                trustedCount: verifiedMeta.trustedCount,
+                articles: verifiedArticles
             });
         }
 
-        if (!verified.results.length) {
+        if (!verifiedArticles.length) {
             return res.status(200).json({
                 success: true,
                 verified: false,
+                verificationMode,
+                riskLevel,
                 query: topic,
                 sourceCount: 0,
                 distinctDomainCount: 0,
@@ -779,21 +820,25 @@ async function handleNewsLookup(req, res) {
 
         return res.status(200).json({
             success: true,
-            verified: true,
+            verified: false,
+            verificationMode,
+            riskLevel,
             query: topic,
-            sourceCount: verified.results.length,
-            distinctDomainCount: verified.distinctDomains.length,
-            trustedCount: verified.trustedCount,
-            articles: verified.results.map(item => ({
-                title: item.title,
-                url: item.url,
-                description: item.description
-            }))
+            sourceCount: verifiedMeta.sourceCount,
+            distinctDomainCount: verifiedMeta.distinctDomainCount,
+            trustedCount: verifiedMeta.trustedCount,
+            articles: []
         });
     } catch (error) {
         return res.status(200).json({
             success: false,
             error: 'news lookup failed',
+            verificationMode,
+            riskLevel,
+            sourceCount: 0,
+            distinctDomainCount: 0,
+            trustedCount: 0,
+            verified: false,
             query: String(req.body?.query || req.body?.category || '').trim(),
             articles: []
         });
@@ -824,11 +869,14 @@ async function fetchGoogleNewsRss(topic) {
         const title = decodeXml(getTag(block, 'title'));
         const link = decodeXml(getTag(block, 'link'));
         const description = decodeXml(stripHtml(getTag(block, 'description')));
+        const source = parseGoogleNewsSource(block);
+        const sourceUrl = normalizeSourceUrl(source?.url || '');
         if (!title || !link) continue;
         items.push({
             title: cleanGoogleNewsTitle(title),
-            url: link,
-            description: description || title
+            url: sourceUrl || link,
+            description: description || title,
+            sourceName: source?.name || ''
         });
     }
     return items;
@@ -857,6 +905,93 @@ function decodeXml(input) {
 
 function cleanGoogleNewsTitle(title) {
     return String(title || '').replace(/\s+-\s+[^-]+$/, '').trim();
+}
+
+function parseGoogleNewsSource(itemBlock) {
+    const sourceTag = String(itemBlock || '').match(/<source\b([^>]*)>([\s\S]*?)<\/source>/i);
+    if (!sourceTag) return null;
+    const attrs = sourceTag[1] || '';
+    const name = decodeXml(sourceTag[2] || '');
+    const urlMatch = attrs.match(/\burl=(["'])(.*?)\1/i);
+    return {
+        name,
+        url: decodeXml(urlMatch?.[2] || '')
+    };
+}
+
+function normalizeSourceUrl(url) {
+    const value = String(url || '').trim();
+    if (!value) return '';
+    if (!/^https?:\/\//i.test(value)) return '';
+    return value;
+}
+
+function computeNewsSourceMeta(articles, verificationMode = 'normal', riskLevel = 'high_risk') {
+    const rows = Array.isArray(articles) ? articles.filter(Boolean) : [];
+    const domains = new Set();
+    let trustedCount = 0;
+
+    for (const article of rows) {
+        const url = String(article?.url || '').trim();
+        const domain = getDomainFromUrl(url);
+        if (domain) domains.add(domain);
+        if (isTrustedLiveSource(url)) trustedCount++;
+    }
+
+    const sourceCount = rows.length;
+    const distinctDomainCount = domains.size;
+    const threshold = getNewsVerificationThreshold(verificationMode, riskLevel);
+    const strongEnough =
+        sourceCount >= threshold.minArticles &&
+        distinctDomainCount >= threshold.minDomains &&
+        trustedCount >= threshold.minTrusted;
+
+    return {
+        sourceCount,
+        distinctDomainCount,
+        trustedCount,
+        strongEnough
+    };
+}
+
+function normalizeNewsVerificationMode(value) {
+    const mode = String(value || '').trim().toLowerCase();
+    return mode === 'strict' ? 'strict' : 'normal';
+}
+
+function normalizeRiskLevel(value) {
+    const level = String(value || '').trim().toLowerCase();
+    if (level === 'medium_risk' || level === 'low_risk') return level;
+    return 'high_risk';
+}
+
+function getNewsVerificationThreshold(mode, riskLevel = 'high_risk') {
+    if (riskLevel === 'medium_risk') {
+        return {
+            minArticles: 2,
+            minDomains: 2,
+            minTrusted: 1
+        };
+    }
+    if (riskLevel === 'low_risk') {
+        return {
+            minArticles: 1,
+            minDomains: 1,
+            minTrusted: 0
+        };
+    }
+    if (mode === 'strict') {
+        return {
+            minArticles: 3,
+            minDomains: 2,
+            minTrusted: 2
+        };
+    }
+    return {
+        minArticles: 2,
+        minDomains: 2,
+        minTrusted: 1
+    };
 }
 
 
