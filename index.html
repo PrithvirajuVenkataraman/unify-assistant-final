@@ -2476,14 +2476,23 @@ async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking
 async function processUserQuery(text) {
     const t = String(text || '').trim();
     if (!t) return;
+    const riskLevel = getRiskTierForQuery(t);
 
     if (isPersonalHealthStatement(t)) {
         return await askGeminiAI(t);
     }
 
-    if (isLiveRetrievalQuery(t) || isHeadlineListQuery(t)) {
+    if (isHeadlineListQuery(t) || shouldUseNewsEndpointForCurrentQuery(t) || isNewsworthyLiveTopic(t)) {
         await fetchAndDisplayNews(t);
         return { intent: 'news' };
+    }
+
+    if (
+        riskLevel !== 'low_risk' &&
+        (isCurrentInfoQuery(t) || isLiveRetrievalQuery(t) || isUniversalEntityFactQuestion(t) || isProfileOrIdentityQuery(t))
+    ) {
+        await handleLiveRetrievalQuery(t);
+        return { intent: 'live_retrieval' };
     }
 
     if (isUniversalExplainerRequest(t)) {
@@ -2566,6 +2575,61 @@ function buildSourceMetaBlock(items) {
     return `${asOf}\nLatest source date: ${latest}\nSource confidence: ${confidence}`;
 }
 
+const TRUST_FIRST_RELIABILITY_POLICY = {
+    enabled: true,
+    verificationBudgetMs: 8000,
+    summaryTimeoutMs: 4500,
+    tiers: {
+        high_risk: { minArticles: 3, minDomains: 2, minTrusted: 2 },
+        medium_risk: { minArticles: 2, minDomains: 2, minTrusted: 1 },
+        low_risk: { minArticles: 0, minDomains: 0, minTrusted: 0 }
+    }
+};
+
+function getReliabilityThreshold(riskLevel = 'low_risk') {
+    return TRUST_FIRST_RELIABILITY_POLICY.tiers[riskLevel] || TRUST_FIRST_RELIABILITY_POLICY.tiers.low_risk;
+}
+
+function getRiskTierForQuery(text, liveIntent = null, entityIntent = null) {
+    const query = String(text || '').trim();
+    if (!query) return 'low_risk';
+    const intent = liveIntent || extractLiveQueryIntent(query);
+    const entity = entityIntent || extractUniversalEntityIntent(query, intent);
+    if (shouldRequireVerifiedSources(query, intent, entity)) return 'high_risk';
+    if (
+        isCurrentInfoQuery(query) ||
+        isLiveRetrievalQuery(query) ||
+        isUniversalEntityFactQuestion(query) ||
+        isProfileOrIdentityQuery(query) ||
+        hasExplicitFreshnessLanguage(query) ||
+        isDirectFactLiveQuery(query)
+    ) {
+        return 'medium_risk';
+    }
+    return 'low_risk';
+}
+
+function computeEvidenceMeta(items, domain = 'general') {
+    const pool = Array.isArray(items) ? items.filter(Boolean) : [];
+    const domains = new Set(pool.map(item => getDomainFromUrl(item?.url || '')).filter(Boolean));
+    const trustedHits = pool.filter(item => scoreSourcePolicy(item?.url || '', domain) > 0).length;
+    return {
+        sourceCount: pool.length,
+        distinctDomainCount: domains.size,
+        trustedCount: trustedHits
+    };
+}
+
+function hasEnoughEvidenceForRisk(items, riskLevel = 'medium_risk', domain = 'general') {
+    const threshold = getReliabilityThreshold(riskLevel);
+    const meta = computeEvidenceMeta(items, domain);
+    return (
+        meta.sourceCount >= threshold.minArticles &&
+        meta.distinctDomainCount >= threshold.minDomains &&
+        meta.trustedCount >= threshold.minTrusted
+    );
+}
+
 function cleanLiveAnswerText(text) {
     return String(text || '')
         .replace(/^\s*(?:\*\*)?Direct answer:(?:\*\*)?\s*/i, '')
@@ -2573,6 +2637,18 @@ function cleanLiveAnswerText(text) {
         .replace(/\n\s*Verified sources checked:\s*[^\n]*/gi, '')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
+}
+
+function getNewsVerificationThreshold(mode = 'strict') {
+    if (mode === 'normal') {
+        return getReliabilityThreshold('medium_risk');
+    }
+    return getReliabilityThreshold('high_risk');
+}
+
+function hasEnoughNewsEvidence(items, mode = 'strict') {
+    const riskLevel = mode === 'normal' ? 'medium_risk' : 'high_risk';
+    return hasEnoughEvidenceForRisk(items, riskLevel, 'general');
 }
 
 async function buildDirectLiveAnswer(question, items, signal) {
@@ -2649,6 +2725,7 @@ async function buildNewsSearchFallback(query, signal) {
     const trustedResults = results.filter(item => scoreSourcePolicy(item?.url, 'general') > 0);
     const sourcePool = (trustedResults.length >= 2 ? trustedResults : results).slice(0, 6);
     if (!sourcePool.length) return null;
+    if (!hasEnoughNewsEvidence(sourcePool, 'strict')) return null;
 
     showThinkingIndicator('Generating answer...');
     const directAnswer = await buildDirectLiveAnswer(query, sourcePool, signal);
@@ -2665,6 +2742,9 @@ async function buildNewsSearchFallback(query, signal) {
 async function fetchAndDisplayNews(query) {
     showThinkingIndicator('Web search in progress...');
     const controller = beginAbortableRequest();
+    const budgetTimer = setTimeout(() => {
+        try { controller.abort(); } catch (_) {}
+    }, TRUST_FIRST_RELIABILITY_POLICY.verificationBudgetMs);
 
     try {
         const response = await fetch('/api/markets', {
@@ -2673,7 +2753,9 @@ async function fetchAndDisplayNews(query) {
             signal: controller.signal,
             body: JSON.stringify({
                 mode: 'news',
-                query
+                query,
+                verificationMode: 'strict',
+                riskLevel: 'high_risk'
             })
         });
 
@@ -2724,6 +2806,23 @@ async function fetchAndDisplayNews(query) {
             return;
         }
 
+        if (!hasEnoughNewsEvidence(articles, 'strict')) {
+            const fallbackNews = await buildNewsSearchFallback(query, controller.signal);
+            if (fallbackNews?.answer) {
+                const sourceLines = formatLiveSourceLinks(fallbackNews.sources, 5);
+                const newsMsg = `${fallbackNews.answer}\n\n${buildSourceMetaBlock(fallbackNews.sources)}\n\nSources:\n${sourceLines}`;
+                addVerifiedAssistantMessage(newsMsg, 'Verified live sources');
+                await speakApiReply('news_summary_ready', {}, 'I checked current sources and summarized the latest update.');
+                saveToHistory(query, newsMsg);
+                return;
+            }
+
+            await deliverApiReply('news_insufficient_sources', {
+                query
+            });
+            return;
+        }
+
         showThinkingIndicator('Generating answer...');
         const directAnswer = await buildDirectLiveAnswer(query, articles, controller.signal);
         const sourceLines = formatLiveSourceLinks(articles, 5);
@@ -2755,6 +2854,7 @@ async function fetchAndDisplayNews(query) {
             googleNewsUrl: 'https://news.google.com'
         });
     } finally {
+        clearTimeout(budgetTimer);
         clearActiveRequest(controller);
     }
 }
@@ -3910,6 +4010,7 @@ async function handleNameCorrection(text) {
         let supportModeLock = 'balanced';
         let responseLength = 'normal';
         let responseFormat = 'paragraph';
+        let newsVerificationMode = 'normal';
         let persistMemoryToDevice = true;
         let medicalMode = false;
         let converseMode = false;
@@ -4449,6 +4550,7 @@ async function handleNameCorrection(text) {
                     supportModeLock,
                     responseLength,
                     responseFormat,
+                    newsVerificationMode,
                     medicalMode,
                     converseMode
                 }));
@@ -4639,6 +4741,7 @@ async function handleNameCorrection(text) {
             supportModeLock = 'balanced';
             responseLength = 'normal';
             responseFormat = 'paragraph';
+            newsVerificationMode = 'normal';
             medicalMode = false;
             converseMode = false;
             supportConversationMode = false;
@@ -4649,6 +4752,7 @@ async function handleNameCorrection(text) {
                     supportModeLock = parsed.supportModeLock || 'balanced';
                     responseLength = parsed.responseLength || 'normal';
                     responseFormat = ['paragraph', 'bullet', 'steps'].includes(parsed.responseFormat) ? parsed.responseFormat : 'paragraph';
+                    newsVerificationMode = ['normal', 'strict'].includes(parsed.newsVerificationMode) ? parsed.newsVerificationMode : 'normal';
                     medicalMode = !!parsed.medicalMode;
                     // Always start with Converse mode OFF unless user explicitly presses it.
                     converseMode = false;
@@ -4657,6 +4761,7 @@ async function handleNameCorrection(text) {
             window.supportModeLock = supportModeLock;
             window.responseLength = responseLength;
             window.responseFormat = responseFormat;
+            window.newsVerificationMode = newsVerificationMode;
             window.medicalMode = medicalMode;
             updateAssistantModeUI();
             // Do not auto-start listening on load.
@@ -4700,6 +4805,20 @@ async function handleNameCorrection(text) {
                 label: labelMap[responseFormat] || 'Paragraph'
             }, {
                 fallbackText: `Response format set to ${labelMap[responseFormat] || 'Paragraph'}.`
+            });
+        }
+
+        async function setNewsVerificationMode(mode) {
+            const normalized = mode === 'strict' ? 'strict' : 'normal';
+            newsVerificationMode = normalized;
+            window.newsVerificationMode = newsVerificationMode;
+            saveAssistantModes();
+            await deliverApiReply('news_verification_mode_changed', {
+                mode: newsVerificationMode
+            }, {
+                fallbackText: newsVerificationMode === 'strict'
+                    ? 'News verification mode set to Strict. I will require stronger multi-source agreement.'
+                    : 'News verification mode set to Normal. Balanced verification is now active.'
             });
         }
 
@@ -5319,7 +5438,7 @@ async function handleNameCorrection(text) {
             const [chatPing, searchPing, marketsPing] = await Promise.all([
                 pingEndpoint('/api/chat-groq', { message: 'health check' }),
                 pingEndpoint('/api/search', { query: 'weather today', maxResults: 1 }),
-                pingEndpoint('/api/markets', { mode: 'news', query: 'latest news' })
+                pingEndpoint('/api/markets', { mode: 'news', query: 'latest news', verificationMode: 'strict', riskLevel: 'high_risk' })
             ]);
 
             checks.push({ label: 'LLM API (/api/chat-groq)', ok: chatPing.ok, detail: chatPing.detail });
@@ -10870,12 +10989,14 @@ function classifyUserMessage(text) {
     const requestedQuantity = extractRequestedQuantity(raw, null, 1, 20); // Max 20 for general facts
     const entityIntent = classifyUniversalEntityIntent(raw, liveIntent);
     const translatorRequest = detectTranslatorRequest(raw);
+    const riskLevel = getRiskTierForQuery(raw, liveIntent, entityIntent);
 
     return {
         raw,
         lower,
         liveIntent,
         entityIntent,
+        riskLevel,
         requestedQuantity,
         translatorRequest,
         flags: {
@@ -10968,6 +11089,9 @@ function shouldUseAnswerThenCiteMode(text, classification) {
     if (requiresStrictLiveVerification(raw, classification?.liveIntent, classification?.entityIntent)) {
         return false;
     }
+    if ((classification?.riskLevel || 'low_risk') !== 'low_risk') {
+        return false;
+    }
 
     const mixedSignals = /\b(latest|recent|current|today|this year|update|updates|status|earnings|results|layoffs|launch|release|lawsuit|investigation|funding|roadmap)\b/;
     const explainerSignals = /^(tell me about|what is|what's|who is|who was|explain|summarize)\b/;
@@ -10983,10 +11107,12 @@ function decideHybridResponseMode(classification) {
     const raw = classification.raw;
     const flags = classification.flags || {};
     const strictLiveRequired = requiresStrictLiveVerification(raw, classification.liveIntent, classification.entityIntent);
+    const riskLevel = classification?.riskLevel || getRiskTierForQuery(raw, classification?.liveIntent, classification?.entityIntent);
 
     if (flags.inappropriate) return 'special_handler';
     if (flags.profileIdentity || flags.stableBiography) return 'verify_first';
     if (flags.news || flags.exchangeRate || flags.marketPrice) return 'verify_first';
+    if (riskLevel !== 'low_risk') return 'verify_first';
     if (flags.currentInfo && strictLiveRequired) return 'verify_first';
     if (flags.universalEntityFact && strictLiveRequired) return 'verify_first';
     if (flags.currentInfo || flags.liveRetrieval || flags.universalEntityFact) return 'verify_first';
@@ -12970,22 +13096,25 @@ ${snippets}`
 
 async function handleUniversalEntityFactQuery(userText, liveIntent = null) { 
     const pipeline = buildUniversalFactPipelineContext(userText, liveIntent);
-    const strictLiveRequired = shouldRequireVerifiedSources(pipeline.userText, pipeline.intent, pipeline.entityIntent);
+    const riskLevel = getRiskTierForQuery(pipeline.userText, pipeline.intent, pipeline.entityIntent);
+    const failClosed = riskLevel !== 'low_risk';
     showThinkingIndicator('Checking verified sources...'); 
     const controller = beginAbortableRequest(); 
+    const budgetTimer = setTimeout(() => {
+        try { controller.abort(); } catch (_) {}
+    }, TRUST_FIRST_RELIABILITY_POLICY.verificationBudgetMs);
     try { 
         const deduped = await retrieveUniversalEntitySources(pipeline, controller);
 
         if (!deduped.length) { 
             if (await publishUniversalKnownFact(pipeline)) return true;
-            if (strictLiveRequired) {
+            if (failClosed) {
                 return publishStrictVerificationClarification(pipeline, {
                     sources: [],
                     speechText: 'I need one more detail to verify this from live sources.',
                     badge: 'Needs clarification'
                 });
             }
-            if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
             return publishUniversalVerificationFallback(pipeline, 'I could not verify that result right now.');
         } 
 
@@ -13003,33 +13132,30 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
             if (pipeline.knownFact && pipeline.entityIntent.relationType === 'title_count') {
                 return publishUniversalKnownFact(pipeline);
             }
-            if (strictLiveRequired) {
+            if (failClosed) {
                 return publishStrictVerificationClarification(pipeline, {
                     sources: deduped,
                     speechText: 'Sources are mixed. Please narrow the query and I will verify it precisely.',
                     badge: 'Needs clarification'
                 });
             }
-            if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) {
-                return true;
-            }
             return publishUniversalMixedEvidence(pipeline, deduped);
         }
 
-        return await summarizeUniversalEntitySources(pipeline, deduped, controller, strictLiveRequired);
+        return await summarizeUniversalEntitySources(pipeline, deduped, controller, failClosed);
     } catch (error) { 
         if (isAbortError(error)) return true; 
         if (await publishUniversalKnownFact(pipeline)) return true;
-        if (strictLiveRequired) {
+        if (failClosed) {
             return publishStrictVerificationClarification(pipeline, {
                 sources: [],
                 speechText: 'I hit a verification issue. Please narrow the query and I will retry with live sources.',
                 badge: 'Needs clarification'
             });
         }
-        if (!strictLiveRequired && await publishUniversalModelFallback(pipeline)) return true;
         return publishUniversalVerificationFallback(pipeline);
     } finally { 
+        clearTimeout(budgetTimer);
         clearActiveRequest(controller);
         hideThinkingIndicator();
     }
@@ -13042,7 +13168,13 @@ async function handleSportsFactQuery(userText, intent) {
 async function handleLiveRetrievalQuery(userText) {
     showThinkingIndicator('Checking current sources...');
     const controller = beginAbortableRequest();
-    let strictLiveRequired = false;
+    let failClosed = true;
+    let liveRiskLevel = 'medium_risk';
+    const verificationBudgetMs = TRUST_FIRST_RELIABILITY_POLICY.verificationBudgetMs;
+    const summaryTimeoutMs = TRUST_FIRST_RELIABILITY_POLICY.summaryTimeoutMs;
+    const budgetTimer = setTimeout(() => {
+        try { controller.abort(); } catch (_) {}
+    }, verificationBudgetMs);
     try {
         const query = String(userText || '').trim();
         const intent = extractLiveQueryIntent(query);
@@ -13054,7 +13186,8 @@ async function handleLiveRetrievalQuery(userText) {
             intent.directFact = isDirectFactLiveQuery(query);
         }
         const entityIntent = extractUniversalEntityIntent(query, intent);
-        strictLiveRequired = shouldRequireVerifiedSources(query, intent, entityIntent);
+        liveRiskLevel = getRiskTierForQuery(query, intent, entityIntent);
+        failClosed = liveRiskLevel !== 'low_risk';
         const directFactQuery = intent.directFact || isSportsLiveResultQuery(query);
         const conciseFactQuery = isConciseDirectFactQuery(query);
         const queries = buildLiveSearchQueries(query, intent);
@@ -13088,9 +13221,7 @@ async function handleLiveRetrievalQuery(userText) {
         }
 
         if (!deduped.length) {
-            if (!strictLiveRequired) {
-                const published = await publishUniversalModelFallback({ userText: query }, 'Model fallback');
-                if (published) return true;
+            if (!failClosed) {
                 addChatMessage('I checked live sources, but I could not produce a final answer right now. Please try again in a moment.', false);
                 speak('I checked live sources, but I could not produce a final answer right now. Please try again in a moment.');
                 return true;
@@ -13108,9 +13239,20 @@ async function handleLiveRetrievalQuery(userText) {
 
         const trusted = deduped.filter(r => scoreSourcePolicy(r.url, intent.domain || 'general') > 0);
         const sourcePool = trusted.length >= 3 ? trusted : deduped;
+        if (!hasEnoughEvidenceForRisk(sourcePool, liveRiskLevel, intent.domain || 'general')) {
+            return publishStrictVerificationClarification({
+                userText: query,
+                intent,
+                entityIntent
+            }, {
+                sources: sourcePool,
+                speechText: 'I could not verify enough independent sources yet. Please narrow the query by timeframe or entity.',
+                badge: 'Needs clarification'
+            });
+        }
         const distinctDomains = Array.from(new Set(sourcePool.map(r => getDomainFromUrl(r.url)).filter(Boolean)));
         if (!directFactQuery && distinctDomains.length < 2) {
-            if (strictLiveRequired) {
+            if (failClosed) {
                 return publishStrictVerificationClarification({
                     userText: query,
                     intent,
@@ -13182,7 +13324,7 @@ Snippets:
 ${snippets}`
                     })
                 }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('live_summary_timeout')), 12000))
+                new Promise((_, reject) => setTimeout(() => reject(new Error('live_summary_timeout')), summaryTimeoutMs))
             ]);
             if (!summaryResponse || !summaryResponse.ok) {
                 throw new Error('live_summary_failed');
@@ -13195,9 +13337,7 @@ ${snippets}`
         if (!answer) {
             const top = sourcePool[0];
             if (!top) {
-                if (!strictLiveRequired) {
-                    const published = await publishUniversalModelFallback({ userText: query }, 'Model fallback');
-                    if (published) return true;
+                if (!failClosed) {
                     addChatMessage('I found sources, but I could not assemble a clean answer. Please try once more.', false);
                     speak('I found sources, but I could not assemble a clean answer. Please try once more.');
                     return true;
@@ -13245,11 +13385,20 @@ ${snippets}`
         return true;
     } catch (error) {
         if (isAbortError(error)) {
+            if (failClosed) {
+                return publishStrictVerificationClarification({
+                    userText: String(userText || '').trim(),
+                    intent: extractLiveQueryIntent(String(userText || '').trim()),
+                    entityIntent: extractUniversalEntityIntent(String(userText || '').trim(), extractLiveQueryIntent(String(userText || '').trim()))
+                }, {
+                    sources: [],
+                    speechText: 'Verification timed out before confidence threshold. Please narrow the query and I will retry.',
+                    badge: 'Needs clarification'
+                });
+            }
             return true;
         }
-        if (!strictLiveRequired) {
-            const published = await publishUniversalModelFallback({ userText }, 'Model fallback');
-            if (published) return true;
+        if (!failClosed) {
             addChatMessage('I hit a temporary processing issue after live search. Please try again.', false);
             speak('I hit a temporary processing issue after live search. Please try again.');
             return true;
@@ -13264,6 +13413,7 @@ ${snippets}`
             badge: 'Needs clarification'
         });
     } finally {
+        clearTimeout(budgetTimer);
         clearActiveRequest(controller);
         hideThinkingIndicator();
     }
@@ -14267,6 +14417,21 @@ Quick recap: ...
                 const rawMode = responseFormatMatch[1].toLowerCase();
                 const mode = rawMode.includes('step') ? 'steps' : (rawMode.includes('bullet') ? 'bullet' : 'paragraph');
                 await setResponseFormat(mode);
+                return;
+            }
+
+            const newsModeMatch = cleanText.match(/\b(?:set|change|switch)\s+(?:news\s+)?(?:verification\s+)?mode\s+(strict|normal)\b/i);
+            if (newsModeMatch) {
+                await setNewsVerificationMode(newsModeMatch[1].toLowerCase());
+                return;
+            }
+
+            if (/\bnews\s+mode\s+strict\b/i.test(cleanText)) {
+                await setNewsVerificationMode('strict');
+                return;
+            }
+            if (/\bnews\s+mode\s+normal\b/i.test(cleanText)) {
+                await setNewsVerificationMode('normal');
                 return;
             }
 
