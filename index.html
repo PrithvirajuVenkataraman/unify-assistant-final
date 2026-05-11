@@ -4128,6 +4128,15 @@ async function handleNameCorrection(text) {
         };
 
         function initZoomLock() {
+            if (window.__jarvisZoomLockBound) return;
+            window.__jarvisZoomLockBound = true;
+
+            const lockedViewportContent = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content';
+            const viewportMeta = document.querySelector('meta[name="viewport"]');
+            if (viewportMeta) {
+                viewportMeta.setAttribute('content', lockedViewportContent);
+            }
+
             // Prevent browser zoom gestures and Ctrl/Cmd + wheel zoom.
             document.addEventListener('gesturestart', (event) => event.preventDefault(), { passive: false });
             document.addEventListener('gesturechange', (event) => event.preventDefault(), { passive: false });
@@ -4135,11 +4144,42 @@ async function handleNameCorrection(text) {
             document.addEventListener('wheel', (event) => {
                 if (event.ctrlKey || event.metaKey) event.preventDefault();
             }, { passive: false });
-            document.addEventListener('touchmove', (event) => {
+
+            // Block multi-touch pinch start and movement.
+            const preventMultiTouchZoom = (event) => {
                 if (event.touches && event.touches.length > 1) {
                     event.preventDefault();
                 }
+            };
+            document.addEventListener('touchstart', preventMultiTouchZoom, { passive: false });
+            document.addEventListener('touchmove', preventMultiTouchZoom, { passive: false });
+
+            // Block double-tap zoom on iOS Safari.
+            let lastTouchEndAt = 0;
+            document.addEventListener('touchend', (event) => {
+                const now = Date.now();
+                if (now - lastTouchEndAt <= 320) {
+                    event.preventDefault();
+                }
+                lastTouchEndAt = now;
             }, { passive: false });
+
+            // Re-assert viewport lock while focusing fields and normalize tiny font sizes on touch devices.
+            const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+            if (isTouchDevice) {
+                document.addEventListener('focusin', (event) => {
+                    const target = event.target;
+                    if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) {
+                        if (viewportMeta) {
+                            viewportMeta.setAttribute('content', lockedViewportContent);
+                        }
+                        const computedSize = parseFloat(window.getComputedStyle(target).fontSize || '0');
+                        if (Number.isFinite(computedSize) && computedSize > 0 && computedSize < 16) {
+                            target.style.fontSize = '16px';
+                        }
+                    }
+                }, true);
+            }
         }
 
         function hasAnyRenderedChatMessages() {
@@ -11790,7 +11830,17 @@ function expandKnownQueryAliases(text) {
         llm: 'large language model',
         agi: 'artificial general intelligence',
         gpu: 'graphics processing unit',
-        cpu: 'central processing unit'
+        cpu: 'central processing unit',
+        csk: 'chennai super kings',
+        mi: 'mumbai indians',
+        rcb: 'royal challengers bengaluru',
+        kkr: 'kolkata knight riders',
+        srh: 'sunrisers hyderabad',
+        dc: 'delhi capitals',
+        pbks: 'punjab kings',
+        gt: 'gujarat titans',
+        rr: 'rajasthan royals',
+        lsg: 'lucknow super giants'
     };
 
     return String(text || '')
@@ -12006,9 +12056,15 @@ function extractRoleQueryParts(text) {
             const first = String(match[1]).trim().toLowerCase();
             const second = String(match[2]).trim();
             const roleFirst = /^(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)$/i.test(first);
+            const rawTarget = (roleFirst ? second : match[1]).replace(/[?.!,;]+$/g, '').trim();
+            const cleanedTarget = rawTarget
+                .replace(/\b(?:in|for)\s+(?:the\s+)?(ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|icc|fifa|uefa|world cup|olympics|formula 1|f1)(?:\s+\d{4})?\b.*$/i, '')
+                .replace(/\b(19|20)\d{2}\b/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
             return {
                 roleLabel: roleFirst ? first : second.toLowerCase(),
-                targetEntity: (roleFirst ? second : match[1]).replace(/[?.!,;]+$/g, '').trim()
+                targetEntity: cleanedTarget || rawTarget
             };
         }
         if (match?.[1] && /who heads?/i.test(pattern.source)) {
@@ -12237,6 +12293,36 @@ function sourceMatchesEntitySubject(result, entityIntent) {
             .map(token => token.trim())
             .filter(Boolean)
     );
+
+    const isSportsRole = relationType === 'role' && String(entityIntent?.domain || '').toLowerCase() === 'sports';
+    if (isSportsRole) {
+        const subjectVariants = [
+            entityIntent?.subject || '',
+            expandKnownQueryAliases(entityIntent?.subject || ''),
+            entityIntent?.targetEntity || '',
+            expandKnownQueryAliases(entityIntent?.targetEntity || '')
+        ]
+            .map(value => normalizeEntitySearchText(value))
+            .filter(Boolean)
+            .filter((value, index, arr) => arr.indexOf(value) === index);
+        if (!subjectVariants.length) return true;
+
+        const textNormalized = normalizeEntitySearchText(`${String(result?.title || '')} ${String(result?.description || '')}`);
+        if (subjectVariants.some(variant => variant && textNormalized.includes(variant))) {
+            return true;
+        }
+
+        const variantTokens = Array.from(new Set(subjectVariants.flatMap(v => v.split(' ').filter(Boolean))));
+        const acronymHit = variantTokens.some(token => token.length <= 4 && textTokens.has(token));
+        if (acronymHit) return true;
+
+        const genericTeamTerms = new Set(['team', 'club', 'league', 'super', 'kings', 'royals', 'united', 'city', 'fc']);
+        const strongHits = variantTokens
+            .filter(token => token.length >= 4 && !genericTeamTerms.has(token))
+            .filter(token => textTokens.has(token))
+            .length;
+        return strongHits >= 2;
+    }
 
     const requiresStrictPersonMatch = entityIntent?.entityType === 'profession_person' || relationType === 'latest_work' || relationType === 'role';
     if (requiresStrictPersonMatch) {
@@ -12486,7 +12572,8 @@ function selectBestSportsRoleCandidate(results, entityIntent, intent = null) {
     if (!top) return null;
 
     const clearLead = !second || (top.score - second.score >= 2);
-    const enoughEvidence = top.count >= 2 || top.trustedScore >= 6 || clearLead;
+    const hasTrustedEvidence = top.trustedScore >= 2;
+    const enoughEvidence = hasTrustedEvidence && (top.count >= 2 || top.trustedScore >= 6 || clearLead);
     if (!enoughEvidence) return null;
 
     return {
@@ -13023,6 +13110,9 @@ function buildStrictVerificationClarificationMessage(userText, intent, entityInt
         return `I cannot verify this yet from independent trusted sources, so I will not guess.\nRefine hint: Please ${missing[0]}.`;
     }
 
+    if (String(entityIntent?.domain || intent?.domain || '').toLowerCase() === 'sports') {
+        return 'I cannot verify this from enough independent trusted sports sources right now, so I will not guess.\nRefine hint: add exact competition + season/year (example: "CSK captain IPL 2026") or an official-source constraint like site:iplt20.com or site:espncricinfo.com.';
+    }
     return 'I cannot verify this from enough independent trusted sources right now, so I will not guess.\nRefine hint: add one tighter qualifier (exact date/year or official-source constraint like site:gov.in, site:nasa.gov, site:iplt20.com).';
 }
 
@@ -13215,6 +13305,7 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
     }, TRUST_FIRST_RELIABILITY_POLICY.verificationBudgetMs);
     try { 
         const deduped = await retrieveUniversalEntitySources(pipeline, controller);
+        const sportsRoleCandidate = selectBestSportsRoleCandidate(deduped, pipeline.entityIntent, pipeline.intent);
         const verification = buildVerificationSnapshot(
             deduped,
             pipeline.entityIntent.domain || 'general',
@@ -13231,6 +13322,9 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         }
 
         if (!verification.verified) {
+            if (sportsRoleCandidate) {
+                return publishSportsRoleBestEffortAnswer(pipeline, sportsRoleCandidate);
+            }
             return publishStrictVerificationClarification(pipeline, {
                 sources: deduped,
                 speechText: 'I could not verify this from enough independent trusted sources.',
@@ -13247,6 +13341,9 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         if (await publishUniversalConsensusAnswer(pipeline, agreement)) return true;
 
         if (pipeline.entityIntent.directFact && agreement.mixed) {
+            if (sportsRoleCandidate) {
+                return publishSportsRoleBestEffortAnswer(pipeline, sportsRoleCandidate);
+            }
             return publishStrictVerificationClarification(pipeline, {
                 sources: deduped,
                 speechText: 'Independent sources are mixed, so I will not guess.',
