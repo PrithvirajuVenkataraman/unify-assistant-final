@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2595,7 +2595,21 @@ function getRiskTierForQuery(text, liveIntent = null, entityIntent = null) {
     if (!query) return 'low_risk';
     const intent = liveIntent || extractLiveQueryIntent(query);
     const entity = entityIntent || extractUniversalEntityIntent(query, intent);
-    if (shouldRequireVerifiedSources(query, intent, entity)) return 'high_risk';
+    const lower = query.toLowerCase();
+    const isEntityFact = Boolean(entity?.isEntityFact || isUniversalEntityFactQuestion(query));
+    const explicitFreshnessOrYear = hasExplicitFreshnessLanguage(query) || hasExplicitYearReference(query);
+    const highImpactLeadership = /\b(president|prime minister|chief minister|governor|mayor|ceo|chairman|chairperson|secretary general|director general|administrator|head of|captain|coach)\b/.test(lower);
+    const strictVerificationNeeded = shouldRequireVerifiedSources(query, intent, entity);
+
+    // Universal trust-first policy: all entity factual queries are at least medium risk.
+    if (isEntityFact) {
+        if (strictVerificationNeeded || explicitFreshnessOrYear || highImpactLeadership) {
+            return 'high_risk';
+        }
+        return 'medium_risk';
+    }
+
+    if (strictVerificationNeeded) return 'high_risk';
     if (
         isCurrentInfoQuery(query) ||
         isLiveRetrievalQuery(query) ||
@@ -2628,6 +2642,18 @@ function hasEnoughEvidenceForRisk(items, riskLevel = 'medium_risk', domain = 'ge
         meta.distinctDomainCount >= threshold.minDomains &&
         meta.trustedCount >= threshold.minTrusted
     );
+}
+
+function buildVerificationSnapshot(items, domain = 'general', riskLevel = 'medium_risk', verificationMode = 'strict') {
+    const meta = computeEvidenceMeta(items, domain);
+    return {
+        verified: hasEnoughEvidenceForRisk(items, riskLevel, domain),
+        sourceCount: meta.sourceCount,
+        distinctDomainCount: meta.distinctDomainCount,
+        trustedCount: meta.trustedCount,
+        riskLevel,
+        verificationMode
+    };
 }
 
 function cleanLiveAnswerText(text) {
@@ -4101,6 +4127,21 @@ async function handleNameCorrection(text) {
             high: { confidence: 0.85, minWords: 2 }
         };
 
+        function initZoomLock() {
+            // Prevent browser zoom gestures and Ctrl/Cmd + wheel zoom.
+            document.addEventListener('gesturestart', (event) => event.preventDefault(), { passive: false });
+            document.addEventListener('gesturechange', (event) => event.preventDefault(), { passive: false });
+            document.addEventListener('gestureend', (event) => event.preventDefault(), { passive: false });
+            document.addEventListener('wheel', (event) => {
+                if (event.ctrlKey || event.metaKey) event.preventDefault();
+            }, { passive: false });
+            document.addEventListener('touchmove', (event) => {
+                if (event.touches && event.touches.length > 1) {
+                    event.preventDefault();
+                }
+            }, { passive: false });
+        }
+
         function hasAnyRenderedChatMessages() {
             const chatContainer = document.getElementById('chat-container');
             return !!chatContainer?.querySelector('[data-role]');
@@ -4124,6 +4165,7 @@ async function handleNameCorrection(text) {
         window.onload = async () => {
             // Ensure no queued/leftover speech survives a refresh.
             stopAllSpeechPlayback();
+            initZoomLock();
             requestMicrophonePermission().catch(() => {});
             loadMemoryPersistencePreference();
             loadUserData();
@@ -10805,8 +10847,12 @@ function extractLiveQueryIntent(text) {
         domain = 'finance';
     } else if (isSportsLiveResultQuery(t)) {
         domain = 'sports';
-    } else if (/\b(actor|actress|movie|film|films|cinema|director|producer|singer|composer|music director|song|songs|album|albums|show|series|web series|filmography|discography|imdb|release|project)\b/.test(t)) {
+    } else if (/\b(actor|actress|movie|film|films|cinema|director|producer|singer|composer|music director|song|songs|album|albums|show|series|web series|filmography|discography|imdb|release|project|artist|poet|painter|writer|author)\b/.test(t)) {
         domain = 'entertainment';
+    } else if (/\b(astronaut|scientist|space|nasa|isro|esa|jaxa|agency|administrator|director general)\b/.test(t)) {
+        domain = 'space_science';
+    } else if (/\b(president|prime minister|chief minister|governor|mayor|minister|party|government|parliament|senate|election)\b/.test(t)) {
+        domain = 'politics';
     } else if (shouldUseNewsEndpointForCurrentQuery(t) || isNewsworthyLiveTopic(t)) {
         domain = 'news';
     }
@@ -10814,6 +10860,10 @@ function extractLiveQueryIntent(text) {
     let factType = 'general';
     if (/\b(latest|recent|new|newest|most recent|current|upcoming|future)\b.*\b(movie|film|release|song|album|single|show|series|project)\b|\b(movie|film|release|song|album|single|show|series|project)\b.*\b(latest|recent|new|newest|most recent|current|upcoming|future)\b/.test(t)) {
         factType = 'latest_work';
+    } else if (/\b(?:who is|who was|what is)\b[^?.!]{0,120}\b(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\b|\b(current|latest)\s+(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\b|\b(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\s+of\b|\bwho\s+heads?\b/.test(t)) {
+        factType = 'role';
+    } else if (/\b(known for|famous for|best known for)\b/.test(t)) {
+        factType = 'known_for';
     } else if (/\b(next|upcoming)\b.*\b(match|game|fixture|opponent|schedule)\b|\b(match|game|fixture|schedule)\b.*\b(next|upcoming)\b/.test(t)) {
         factType = 'schedule';
     } else if (/\b(next|upcoming)\b.*\b(holiday|festival|public holiday|bank holiday)\b|\b(holiday|festival|public holiday|bank holiday)\b.*\b(next|upcoming)\b/.test(t)) {
@@ -10836,7 +10886,7 @@ function extractLiveQueryIntent(text) {
 
     const normalizedTopic = normalizeLiveTopic(raw);
     const topic = normalizedTopic || raw;
-    const directFact = ['winner', 'score', 'stats', 'standings', 'qualification', 'latest_work', 'schedule', 'holiday'].includes(factType) || isDirectFactLiveQuery(raw);
+    const directFact = ['winner', 'score', 'stats', 'standings', 'qualification', 'latest_work', 'schedule', 'holiday', 'role', 'known_for'].includes(factType) || isDirectFactLiveQuery(raw);
 
     return {
         raw,
@@ -10920,13 +10970,13 @@ function shouldUseNewsEndpointForCurrentQuery(text) {
 function isDirectFactLiveQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    return /\b(who won|who lost|winner|won|lost|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated|ceo|president|prime minister|captain|coach|price|rate|latest movie|latest film|latest song|latest album|most recent film|most recent movie|upcoming film|upcoming movie|upcoming project|next match|upcoming match|upcoming fixture|next holiday|upcoming holiday)\b/.test(t);
+    return /\b(who won|who lost|winner|won|lost|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated|ceo|president|prime minister|captain|coach|head of|leader of|director general|administrator|known for|famous for|price|rate|latest movie|latest film|latest song|latest album|most recent film|most recent movie|upcoming film|upcoming movie|upcoming project|next match|upcoming match|upcoming fixture|next holiday|upcoming holiday)\b/.test(t);
 }
 
 function isConciseDirectFactQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    const directFactSignals = /\b(how many|who is|who was|who won|who lost|winner|won|lost|what is the current|what is the latest|latest|current|ceo|president|prime minister|captain|coach|price|rate|score|scores|stats?|record|ranking|standings|titles?|cups?|won in total|total titles?|total cups?|qualified|eliminated|result|results|movie|film|song|album|release)\b/;
+    const directFactSignals = /\b(how many|who is|who was|who won|who lost|winner|won|lost|what is the current|what is the latest|latest|current|ceo|president|prime minister|captain|coach|head of|leader of|director general|administrator|known for|famous for|price|rate|score|scores|stats?|record|ranking|standings|titles?|cups?|won in total|total titles?|total cups?|qualified|eliminated|result|results|movie|film|song|album|release)\b/;
     const strictBinarySignal = isStrictYesNoRequest(t);
     const binaryQuestionStarter = /^(is|are|am|was|were|do|does|did|can|could|should|would|will|has|have|had)\b/.test(t) &&
         !/\b(explain|help|advise|suggest|recommend|walk me through|how to)\b/.test(t);
@@ -11039,9 +11089,8 @@ function decideAnswerPath(classification) {
     const medicalModeEnabled = typeof window !== 'undefined' ? !!window.medicalMode : false;
 
     if (flags.inappropriate) return 'moderation';
-    if (flags.profileIdentity || flags.stableBiography) return 'live_retrieval';
-
     if (flags.universalEntityFact) return 'entity_fact';
+    if (flags.profileIdentity || flags.stableBiography) return 'live_retrieval';
     if (flags.currentInfo) return 'current_info';
 
     if (flags.vagueAdvice) return 'vague_advice';
@@ -11078,7 +11127,7 @@ function shouldUseAnswerThenCiteMode(text, classification) {
     const flags = classification?.flags || {};
     if (!raw) return false;
 
-    if (flags.inappropriate || flags.stableBiography || flags.exchangeRate || flags.marketPrice || flags.news) {
+    if (flags.inappropriate || flags.stableBiography || flags.exchangeRate || flags.marketPrice || flags.news || flags.universalEntityFact) {
         return false;
     }
 
@@ -11110,6 +11159,7 @@ function decideHybridResponseMode(classification) {
     const riskLevel = classification?.riskLevel || getRiskTierForQuery(raw, classification?.liveIntent, classification?.entityIntent);
 
     if (flags.inappropriate) return 'special_handler';
+    if (flags.universalEntityFact) return 'verify_first';
     if (flags.profileIdentity || flags.stableBiography) return 'verify_first';
     if (flags.news || flags.exchangeRate || flags.marketPrice) return 'verify_first';
     if (riskLevel !== 'low_risk') return 'verify_first';
@@ -11131,7 +11181,7 @@ const ROUTING_REGRESSION_CASES = [
     {
         name: 'Stable biography',
         prompt: 'Who is Donald Trump?',
-        expectedPath: 'live_retrieval',
+        expectedPath: 'entity_fact',
         expectedMode: 'verify_first'
     },
     {
@@ -11290,6 +11340,8 @@ const DOMAIN_SOURCE_POLICIES = {
             'espn.com',
             'espncricinfo.com',
             'cricbuzz.com',
+            'iplt20.com',
+            'bcci.tv',
             'icc-cricket.com',
             'fifa.com',
             'uefa.com',
@@ -11308,6 +11360,8 @@ const DOMAIN_SOURCE_POLICIES = {
             'bbc.com'
         ],
         preferredDomains: [
+            'iplt20.com',
+            'bcci.tv',
             'icc-cricket.com',
             'espncricinfo.com',
             'cricbuzz.com',
@@ -11433,6 +11487,25 @@ const DOMAIN_SOURCE_POLICIES = {
             'netflix.com',
             'primevideo.com',
             'disneyplus.com'
+        ]
+    },
+    arts_literature: {
+        trustedDomains: [
+            'britannica.com',
+            'wikipedia.org',
+            'moma.org',
+            'tate.org.uk',
+            'metmuseum.org',
+            'poetryfoundation.org',
+            'reuters.com',
+            'bbc.com'
+        ],
+        preferredDomains: [
+            'britannica.com',
+            'wikipedia.org',
+            'moma.org',
+            'tate.org.uk',
+            'poetryfoundation.org'
         ]
     },
     space_science: {
@@ -11621,14 +11694,17 @@ function buildLiveSearchQueries(userText, intent = null) {
 
     if (liveIntent.domain === 'sports' && liveIntent.directFact) {
         const sportSources = 'ESPN Cricbuzz ESPNcricinfo ICC FIFA UEFA NBA NFL ATP WTA Formula 1 Olympics';
+        const explicitRoleMatch = raw.match(/\b(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor)\b/i);
+        const explicitRole = explicitRoleMatch?.[1] ? explicitRoleMatch[1].toLowerCase() : '';
         const factHintMap = {
             winner: 'winner champion final result',
             score: 'score result live score',
             stats: 'stats record numbers',
             standings: 'standings points table rankings table',
-            qualification: 'qualified eliminated standings'
+            qualification: 'qualified eliminated standings',
+            role: explicitRole ? `current ${explicitRole} official squad team sheet` : 'current role official team'
         };
-        const factHints = factHintMap[liveIntent.factType] || 'result latest';
+        const factHints = factHintMap[liveIntent.factType] || (explicitRole ? `current ${explicitRole} official team` : 'result latest');
         const seasonHint = liveIntent.year || '';
         return Array.from(new Set([
             raw,
@@ -11636,6 +11712,8 @@ function buildLiveSearchQueries(userText, intent = null) {
             `${topic} ${factHints}`.replace(/\s+/g, ' ').trim(),
             `${topic} ${seasonHint} ${sportSources}`.replace(/\s+/g, ' ').trim(),
             `${topic} official ${factHints}`.replace(/\s+/g, ' ').trim(),
+            explicitRole ? `${topic} ${seasonHint} ${explicitRole} site:iplt20.com`.replace(/\s+/g, ' ').trim() : '',
+            explicitRole ? `${topic} ${seasonHint} ${explicitRole} site:espncricinfo.com`.replace(/\s+/g, ' ').trim() : '',
             expandedTopic && expandedTopic.toLowerCase() !== topic.toLowerCase() ? `${expandedTopic} ${seasonHint} ${factHints}`.replace(/\s+/g, ' ').trim() : '',
             expandedTopic && expandedTopic.toLowerCase() !== topic.toLowerCase() ? `${expandedTopic} official ${factHints}`.replace(/\s+/g, ' ').trim() : ''
         ].filter(Boolean)));
@@ -11752,20 +11830,24 @@ const UNIVERSAL_ENTITY_DOMAIN_PACKS = {
         entityHints: /\b(csk|rcb|mi|kkr|srh|rr|dc|pbks|gt|lsg|royal challengers|super kings|mumbai indians|knight riders|sunrisers|rajasthan royals|punjab kings|gujarat titans|lucknow super giants)\b/
     },
     politics: {
-        keywords: /\b(president|prime minister|minister|senator|mp|mla|mlc|governor|mayor|party|alliance|election|government|parliament|congress|bjp|dmk|aiadmk|aap|tdp|ysrcp|chief minister|cabinet)\b/,
-        entityHints: /\b(white house|downing street|parliament|senate|lok sabha|rajya sabha)\b/
+        keywords: /\b(president|prime minister|minister|senator|mp|mla|mlc|governor|mayor|party|alliance|election|government|parliament|congress|bjp|dmk|aiadmk|aap|tdp|ysrcp|chief minister|cabinet|head of state|head of government|foreign minister|home minister|leader of opposition|chancellor)\b/,
+        entityHints: /\b(white house|downing street|parliament|senate|lok sabha|rajya sabha|kremlin|elysee|10 downing|capitol hill)\b/
     },
     space_science: {
-        keywords: /\b(astronaut|cosmonaut|taikonaut|space|nasa|isro|esa|jaxa|spacex|rocket|mission|crew|capsule|orbiter|moon|mars|iss|international space station|scientist|physics|chemistry|nobel)\b/,
-        entityHints: /\b(sunita williams|neil armstrong|buzz aldrin|kalpana chawla|rakesh sharma|yuri gagarin)\b/
+        keywords: /\b(astronaut|cosmonaut|taikonaut|space|nasa|isro|esa|jaxa|spacex|rocket|mission|crew|capsule|orbiter|moon|mars|iss|international space station|scientist|physics|chemistry|nobel|agency|administrator|director general|observatory)\b/,
+        entityHints: /\b(sunita williams|neil armstrong|buzz aldrin|kalpana chawla|rakesh sharma|yuri gagarin|charles bolden|bill nelson)\b/
     },
     companies_finance: {
-        keywords: /\b(company|companies|corporation|startup|firm|ceo|founder|chairman|chairperson|stock|share|shares|market cap|repo rate|interest rate|bank|rbi|sebi|nasdaq|dow|ipo|earnings|revenue|profit|valuation|openai|google|alphabet|microsoft|apple|nvidia|amd|tesla|tcs|ibm)\b/,
-        entityHints: /\b(nasdaq|nyse|sensex|nifty|s&p|dow jones|reserve bank|federal reserve)\b/
+        keywords: /\b(company|companies|corporation|startup|firm|ceo|founder|chairman|chairperson|stock|share|shares|market cap|repo rate|interest rate|bank|rbi|sebi|nasdaq|dow|ipo|earnings|revenue|profit|valuation|openai|google|alphabet|microsoft|apple|nvidia|amd|tesla|tcs|ibm|organization|org|institution|agency)\b/,
+        entityHints: /\b(nasdaq|nyse|sensex|nifty|s&p|dow jones|reserve bank|federal reserve|world bank|imf)\b/
     },
     entertainment: {
-        keywords: /\b(actor|actress|movie|film|films|cinema|director|producer|singer|composer|music director|song|songs|album|albums|show|series|web series|filmography|discography|release|project|box office|imdb)\b/,
+        keywords: /\b(actor|actress|movie|film|films|cinema|director|producer|singer|composer|music director|song|songs|album|albums|show|series|web series|filmography|discography|release|project|box office|imdb|artist|writer|author|poet|painter|sculptor|novelist|playwright|lyricist)\b/,
         entityHints: /\b(netflix|prime video|amazon prime|disney|hotstar|zee5|sonyliv|kollywood|bollywood|hollywood|tollywood)\b/
+    },
+    arts_literature: {
+        keywords: /\b(artist|poet|painter|writer|author|novelist|essayist|playwright|sculptor|illustrator|lyricist|composer|critic|photographer|known for|works of|famous for)\b/,
+        entityHints: /\b(moma|louvre|tate|met museum|national gallery|pulitzer|booker|nobel prize in literature)\b/
     }
 };
 
@@ -11774,7 +11856,8 @@ const UNIVERSAL_ENTITY_RELATION_PATTERNS = [
     { type: 'latest_work', test: (t) => /\b(latest|recent|new|newest|most recent|current|upcoming|future)\b.*\b(movie|film|release|song|album|single|show|series|project)\b|\b(movie|film|release|song|album|single|show|series|project)\b.*\b(latest|recent|new|newest|most recent|current|upcoming|future)\b/.test(t) },
     { type: 'team_membership', test: (t) => /\b(plays? for|play for|current team|which team|belongs to which team|signed for|signed with|joined)\b/.test(t) },
     { type: 'party_membership', test: (t) => /\b(belongs to which party|party affiliation|which party|current party|member of which party|political party)\b/.test(t) },
-    { type: 'role', test: (t) => /\b(who is|who was|current ceo|ceo of|founder of|president of|prime minister of|captain of|coach of|role|position|office|designation|profession|job|what does .+ do|astronaut|scientist)\b/.test(t) },
+    { type: 'known_for', test: (t) => /\b(known for|famous for|best known for|what is .+ known for|what are .+ known for)\b/.test(t) },
+    { type: 'role', test: (t) => /\b(who is|who was|current ceo|ceo of|founder of|president of|prime minister of|captain of|coach of|role|position|office|designation|profession|job|what does .+ do|astronaut|scientist|head of|leader of|administrator of|director of)\b/.test(t) },
     { type: 'winner', test: (t) => /\b(who won|winner|champion|champions|won|won in|lifted|clinched)\b/.test(t) },
     { type: 'score', test: (t) => /\b(score|scored|result|final result|live score)\b/.test(t) },
     { type: 'stats', test: (t) => /\b(stats?|record|records|average|goals|runs|wickets|points|assists|medals|podiums|laps|ranked how many)\b/.test(t) },
@@ -11804,7 +11887,7 @@ function detectEntityRelationType(text, liveIntent = null) {
         if (liveFactType === 'stats' && /\b(how many|number of|total)\b.*\b(titles|cups|trophies|championships)\b/.test(lower)) {
             return 'title_count';
         }
-        if (['winner', 'score', 'stats', 'standings', 'qualification'].includes(liveFactType)) {
+        if (['winner', 'score', 'stats', 'standings', 'qualification', 'known_for', 'role'].includes(liveFactType)) {
             return liveFactType;
         }
     }
@@ -11816,6 +11899,8 @@ function detectNormalizedEntityDomain(text, relationType, liveIntent = null) {
     if (liveIntent?.domain === 'sports') return 'sports';
     if (liveIntent?.domain === 'finance') return 'companies_finance';
     if (liveIntent?.domain === 'tech') return 'companies_finance';
+    if (liveIntent?.domain === 'politics') return 'politics';
+    if (liveIntent?.domain === 'space_science') return 'space_science';
     if (liveIntent?.domain === 'entertainment') return 'entertainment';
     const lower = normalizeEntitySearchText(text);
     for (const [domainKey, pack] of Object.entries(UNIVERSAL_ENTITY_DOMAIN_PACKS)) {
@@ -11827,6 +11912,17 @@ function detectNormalizedEntityDomain(text, relationType, liveIntent = null) {
     if (relationType === 'team_membership' || relationType === 'title_count' || relationType === 'winner' || relationType === 'score' || relationType === 'standings' || relationType === 'qualification') return 'sports';
     if (relationType === 'price') return 'companies_finance';
     if (relationType === 'latest_work') return 'entertainment';
+    if (relationType === 'known_for') {
+        if (/\b(artist|poet|painter|writer|author|novelist|playwright|sculptor|composer|lyricist)\b/.test(lower)) return 'arts_literature';
+        if (/\b(actor|actress|director|producer|movie|film|song|album|show|series)\b/.test(lower)) return 'entertainment';
+        if (/\b(scientist|astronaut|space|nasa|isro|esa|jaxa|physics|chemistry|biology)\b/.test(lower)) return 'space_science';
+    }
+    if (relationType === 'role') {
+        if (/\b(president|prime minister|chief minister|minister|governor|mayor|senator|mp|mla|party|government|parliament)\b/.test(lower)) return 'politics';
+        if (/\b(ceo|founder|chairman|chairperson|company|organization|corporation|startup|firm|stock|market)\b/.test(lower)) return 'companies_finance';
+        if (/\b(astronaut|scientist|agency|administrator|director general|space|nasa|isro|esa|jaxa)\b/.test(lower)) return 'space_science';
+        if (/\b(actor|actress|director|producer|singer|composer|artist|poet|painter|writer|author)\b/.test(lower)) return 'entertainment';
+    }
     return 'general';
 }
 
@@ -11850,9 +11946,9 @@ function detectEntityType(text, relationType, domain) {
     if (/\b(astronaut|cosmonaut|taikonaut|scientist|researcher|physicist|chemist)\b/.test(lower)) return 'science_person';
     if (/\b(player|batsman|bowler|footballer|striker|goalkeeper|quarterback|driver|fighter|boxer|captain|coach)\b/.test(lower)) return 'player'; 
     if (domain === 'sports' || relationType === 'title_count' || relationType === 'winner' || /\b(team|club|franchise|fc|united|city|kings|super kings|knight riders|indians)\b/.test(lower)) return 'team';
-    if (domain === 'entertainment' || relationType === 'latest_work') return 'profession_person';
-    if (/\b(company|startup|firm|corporation)\b/.test(lower)) return 'company';
-    if (/\b(ceo|founder|actor|actress|singer|director|engineer|doctor|lawyer|author|writer)\b/.test(lower)) return 'profession_person'; 
+    if (domain === 'entertainment' || domain === 'arts_literature' || relationType === 'latest_work' || relationType === 'known_for') return 'profession_person';
+    if (/\b(company|startup|firm|corporation|organization|agency|institution)\b/.test(lower)) return 'company';
+    if (/\b(ceo|founder|actor|actress|singer|director|engineer|doctor|lawyer|author|writer|poet|painter|artist|composer|astronaut|scientist)\b/.test(lower)) return 'profession_person'; 
     return 'entity'; 
 } 
 
@@ -11899,15 +11995,26 @@ function extractRoleQueryParts(text) {
 
     const rolePatterns = [
         /\b(?:who is|who was|what is)\s+(?:the\s+)?(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor)\s+of\s+(.+?)\s*\??$/i,
-        /\b(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor)\s+of\s+(.+?)\s*\??$/i
+        /\b(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\s+of\s+(.+?)\s*\??$/i,
+        /\bwho is\s+(.+?)\s+(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\s*\??$/i,
+        /\bwho heads?\s+(.+?)\s*\??$/i
     ];
 
     for (const pattern of rolePatterns) {
         const match = raw.match(pattern);
         if (match?.[1] && match?.[2]) {
+            const first = String(match[1]).trim().toLowerCase();
+            const second = String(match[2]).trim();
+            const roleFirst = /^(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)$/i.test(first);
             return {
-                roleLabel: match[1].toLowerCase(),
-                targetEntity: match[2].replace(/[?.!,;]+$/g, '').trim()
+                roleLabel: roleFirst ? first : second.toLowerCase(),
+                targetEntity: (roleFirst ? second : match[1]).replace(/[?.!,;]+$/g, '').trim()
+            };
+        }
+        if (match?.[1] && /who heads?/i.test(pattern.source)) {
+            return {
+                roleLabel: 'head',
+                targetEntity: String(match[1]).replace(/[?.!,;]+$/g, '').trim()
             };
         }
     }
@@ -12062,6 +12169,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         team_membership: 'current team club franchise belongs to plays for', 
         party_membership: 'current party political party affiliation belongs to party', 
         role: 'current role position office profession designation', 
+        known_for: 'known for notable works achievements biography profile',
         stats: 'latest stats record numbers official profile',
         winner: 'winner champion final result official',
         score: 'score result official live score',
@@ -12074,6 +12182,15 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
     const officialCompanyHints = entityIntent.domain === 'companies_finance'
         ? getOfficialCompanySourceHints(subject).join(' ')
         : '';
+    const officialDomainHints = entityIntent.domain === 'politics'
+        ? 'site:gov.in OR site:parliament.uk OR site:congress.gov OR site:eci.gov.in OR Reuters OR AP'
+        : entityIntent.domain === 'space_science'
+            ? 'site:nasa.gov OR site:isro.gov.in OR site:esa.int OR site:jaxa.jp OR Reuters'
+            : entityIntent.domain === 'arts_literature'
+                ? 'site:britannica.com OR site:wikipedia.org OR site:moma.org OR site:tate.org.uk'
+                : entityIntent.domain === 'entertainment'
+                    ? 'site:imdb.com OR site:wikipedia.org OR Reuters'
+                    : '';
     const politicalRole = entityIntent.relationType === 'role' && /\b(president|prime minister|governor|mayor|minister|chief minister)\b/.test(roleLabel);
  
     return Array.from(new Set([ 
@@ -12087,6 +12204,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         `${subjectWithCompetition} ${relationHint}`.replace(/\s+/g, ' ').trim(), 
         `${subjectWithCompetition} ${entityIntent.timeframe || ''} ${relationHint} ${sourceBias}`.replace(/\s+/g, ' ').trim(), 
         officialCompanyHints ? `${subjectWithCompetition} ${relationHint} ${officialCompanyHints}`.replace(/\s+/g, ' ').trim() : '',
+        officialDomainHints ? `${subjectWithCompetition} ${relationHint} ${officialDomainHints}`.replace(/\s+/g, ' ').trim() : '',
         expandedSubject && expandedSubject.toLowerCase() !== subject.toLowerCase() 
             ? `${expandedSubjectWithCompetition} ${relationHint}`.replace(/\s+/g, ' ').trim() 
             : '', 
@@ -12245,10 +12363,19 @@ function extractFactCandidate(result, entityIntent) {
         return match ? match[1].trim() : '';
     }
 
+    if (entityIntent.relationType === 'known_for') {
+        const knownForMatch = combined.match(/\b(?:known for|famous for|best known for)\s+([A-Za-z0-9 ,&.'\-]{6,140})/i);
+        if (knownForMatch?.[1]) {
+            return knownForMatch[1].trim().replace(/\s+/g, ' ');
+        }
+        const workMatch = combined.match(/\b(?:notable works?|major works?|notable achievements?)\s*[:\-]?\s*([A-Za-z0-9 ,&.'\-]{6,140})/i);
+        return workMatch?.[1] ? workMatch[1].trim().replace(/\s+/g, ' ') : '';
+    }
+
     if (entityIntent.relationType === 'role') {
         const roleWord = entityIntent.roleLabel
             ? entityIntent.roleLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-            : '(?:ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor)';
+            : '(?:ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)';
         const personPatterns = [
             new RegExp(`\\b([A-Z][A-Za-z.'-]+(?:\\s+[A-Z][A-Za-z.'-]+){0,3})\\b\\s+(?:is|serves as|was appointed as|works as)\\s+(?:the\\s+)?(?:current\\s+)?${roleWord}\\b`, 'i'),
             new RegExp(`\\b(?:current\\s+)?${roleWord}\\b[^A-Za-z]{0,12}([A-Z][A-Za-z.'-]+(?:\\s+[A-Z][A-Za-z.'-]+){0,3})\\b`, 'i'),
@@ -12504,6 +12631,9 @@ function formatConsensusAnswer(entityIntent, agreement) {
     if (entityIntent.relationType === 'stats') {
         return `${entityIntent.subject} recorded ${value}.`;
     }
+    if (entityIntent.relationType === 'known_for') {
+        return `${entityIntent.subject} is known for ${value}.`;
+    }
     if (entityIntent.relationType === 'standings') {
         return `${entityIntent.subject || entityIntent.competition || 'The team'} is at ${value}.`;
     }
@@ -12588,6 +12718,7 @@ function shouldRequireVerifiedSources(classificationOrText, liveIntent = null, e
     const flags = classification?.flags || {};
     const intent = liveIntent || classification?.liveIntent || extractLiveQueryIntent(text);
     const entity = entityIntent || classification?.entityIntent || extractUniversalEntityIntent(text, intent);
+    const entityFact = Boolean(entity?.isEntityFact || flags.universalEntityFact || isUniversalEntityFactQuestion(text));
 
     const explicitFreshness = hasExplicitFreshnessLanguage(text) ||
         /\b(latest|recent|current|today|right now|as of now|live|status|update|updates|what happened|what's happening)\b/.test(lower);
@@ -12601,7 +12732,7 @@ function shouldRequireVerifiedSources(classificationOrText, liveIntent = null, e
     );
 
     const leadershipOrOffice = entity?.relationType === 'role' &&
-        /\b(president|prime minister|governor|mayor|minister|chief minister|ceo|captain|coach|chairman|chairperson)\b/.test(lower);
+        /\b(president|prime minister|governor|mayor|minister|chief minister|ceo|captain|coach|chairman|chairperson|head of|secretary general|director general|administrator)\b/.test(lower);
 
     const newsworthy = flags.news ||
         isNewsworthyLiveTopic(text) ||
@@ -12612,7 +12743,15 @@ function shouldRequireVerifiedSources(classificationOrText, liveIntent = null, e
         return true;
     }
 
+    if (entityFact && leadershipOrOffice) {
+        return true;
+    }
+
     if (leadershipOrOffice && (explicitFreshness || entity?.timeframe === 'current' || intent?.year)) {
+        return true;
+    }
+
+    if (entityFact && (explicitFreshness || intent?.year || liveSignals)) {
         return true;
     }
 
@@ -12853,77 +12992,38 @@ async function publishUniversalVerificationFallback(pipeline, speechText = 'I co
 function buildStrictVerificationClarificationMessage(userText, intent, entityIntent, sources = []) {
     const query = String(userText || '').trim();
     const relation = String(entityIntent?.relationType || intent?.factType || '').toLowerCase();
-    const domain = String(entityIntent?.domain || intent?.domain || 'general').replace(/_/g, ' ');
     const subject = String(entityIntent?.subject || '').trim();
     const competition = String(entityIntent?.competition || '').trim();
     const year = String(intent?.year || entityIntent?.year || '').trim();
-    const sampleYear = year || String(new Date().getFullYear());
     const lowerQuery = query.toLowerCase();
     const missing = [];
     const hasEntity = Boolean(subject || entityIntent?.targetEntity);
+    const hasExplicitYear = Boolean(year || hasExplicitYearReference(lowerQuery));
+    const hasCompetitionSignal = Boolean(
+        competition ||
+        /\b(ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|icc|fifa|uefa|world cup|olympics|formula 1|f1)\b/.test(lowerQuery)
+    );
     const needsCompetition = ['winner', 'score', 'standings', 'qualification', 'stats', 'title_count', 'role'].includes(relation);
     const asksFresh = /\b(latest|current|today|now|live|as of)\b/.test(lowerQuery);
 
     if (!hasEntity) {
-        missing.push('Which exact person/team/company should I verify?');
+        missing.push('add the exact person/team/organization name');
     }
-    if (needsCompetition && !competition && domain.includes('sports')) {
-        missing.push('Which competition/league do you mean? (for example: IPL, Champions League)');
+    if (needsCompetition && !hasCompetitionSignal && /\b(captain|coach|winner|score|standings|table|league|cup|tournament)\b/.test(lowerQuery)) {
+        missing.push('add the exact competition/league');
     }
-    if ((relation === 'stats' || relation === 'title_count') && !/\b(career|season|format|test|odi|t20|ipl)\b/.test(lowerQuery)) {
-        missing.push('Do you want career totals, season totals, or format-wise stats?');
+    if (!hasExplicitYear && (relation === 'winner' || relation === 'score' || relation === 'standings' || relation === 'qualification' || asksFresh)) {
+        missing.push('add the exact season/date or year');
     }
-    if (!year && (relation === 'winner' || relation === 'score' || relation === 'standings' || relation === 'qualification' || asksFresh)) {
-        missing.push('Which season/date should I lock to?');
+    if ((relation === 'stats' || relation === 'title_count') && !/\b(career|season|format|test|odi|t20|ipl|league)\b/.test(lowerQuery)) {
+        missing.push('specify stats scope (career, season, or format)');
     }
 
-    const clarifyLines = [];
     if (missing.length) {
-        clarifyLines.push('I only need one quick detail to verify this precisely:');
-        clarifyLines.push('');
-        clarifyLines.push(`- ${missing[0]}`);
-    } else {
-        clarifyLines.push('Your query is clear, but live sources are conflicting right now.');
-        clarifyLines.push('I can retry with one tighter qualifier (season/date or official source preference).');
+        return `I cannot verify this yet from independent trusted sources, so I will not guess.\nRefine hint: Please ${missing[0]}.`;
     }
 
-    clarifyLines.push('');
-    clarifyLines.push('Examples:');
-    if (domain.includes('sports')) {
-        clarifyLines.push(`- "Who is CSK captain in IPL ${sampleYear}?"`);
-        clarifyLines.push(`- "IPL ${sampleYear} final winner and score"`);
-    } else if (domain.includes('politics')) {
-        clarifyLines.push('- "Current prime minister of India as of today"');
-        clarifyLines.push('- "Election result in [country/state] on [date]"');
-    } else if (domain.includes('finance') || relation === 'price') {
-        clarifyLines.push('- "USD to INR now (RBI reference)"');
-        clarifyLines.push('- "Gold price in India today, 24k per gram"');
-    } else {
-        clarifyLines.push('- "Latest update for [topic] on [date]"');
-    }
-
-    const sourceLines = (Array.isArray(sources) ? sources : [])
-        .slice(0, 4)
-        .map((item, index) => `${index + 1}. [${item.title}](${item.url})`)
-        .join('\n');
-    const metaBlock = buildSourceMetaBlock(Array.isArray(sources) ? sources : []);
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query || `${subject} ${relation}`.trim())}`;
-
-    if (sourceLines) {
-        clarifyLines.push('');
-        clarifyLines.push(metaBlock);
-        clarifyLines.push('');
-        clarifyLines.push('Checked so far:');
-        clarifyLines.push(sourceLines);
-    } else {
-        clarifyLines.push('');
-        clarifyLines.push(metaBlock);
-    }
-
-    clarifyLines.push('');
-    clarifyLines.push(`Live search: ${searchUrl}`);
-
-    return clarifyLines.join('\n');
+    return 'I cannot verify this from enough independent trusted sources right now, so I will not guess.\nRefine hint: add one tighter qualifier (exact date/year or official-source constraint like site:gov.in, site:nasa.gov, site:iplt20.com).';
 }
 
 async function publishStrictVerificationClarification(pipeline, options = {}) {
@@ -12934,8 +13034,12 @@ async function publishStrictVerificationClarification(pipeline, options = {}) {
         pipeline?.entityIntent || {},
         sources
     );
-    addVerifiedAssistantMessage(message, options?.badge || 'Needs clarification');
-    speak(options?.speechText || 'Need one more detail to verify this from live sources.');
+    const asksRefinement = /^I cannot verify this yet/i.test(String(message || ''));
+    addVerifiedAssistantMessage(
+        message,
+        asksRefinement ? 'Needs refinement' : 'Verification unavailable'
+    );
+    speak(options?.speechText || 'I could not verify this confidently from independent sources, so I will not guess.');
     saveToHistory(pipeline?.userText || '', message);
     return true;
 }
@@ -13068,12 +13172,19 @@ ${snippets}`
     const answer = cleanLiveAnswerText(String(summaryData?.response || summaryData?.text || '').trim());
     const sourceLines = results.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
     const finalAnswer = answer || cleanLiveAnswerText(`Direct answer: ${results[0].title}${results[0].description ? `\n\nKey points:\n- ${results[0].description}` : ''}`);
+    if (!answer && strictLiveRequired) {
+        return publishStrictVerificationClarification(pipeline, {
+            sources: results,
+            speechText: 'I could not verify a clean direct answer with enough independent evidence.',
+            badge: 'Verification unavailable'
+        });
+    }
     if (isDegenerateLatestWorkAnswer(finalAnswer, pipeline.entityIntent)) {
         if (strictLiveRequired) {
             return publishStrictVerificationClarification(pipeline, {
                 sources: results,
                 speechText: 'I found profile pages, but I need one more detail to verify the exact latest release.',
-                badge: 'Needs clarification'
+                badge: 'Verification unavailable'
             });
         }
         return publishUniversalVerificationFallback(pipeline, 'I found profile pages but could not verify the exact latest release.');
@@ -13097,7 +13208,6 @@ ${snippets}`
 async function handleUniversalEntityFactQuery(userText, liveIntent = null) { 
     const pipeline = buildUniversalFactPipelineContext(userText, liveIntent);
     const riskLevel = getRiskTierForQuery(pipeline.userText, pipeline.intent, pipeline.entityIntent);
-    const failClosed = riskLevel !== 'low_risk';
     showThinkingIndicator('Checking verified sources...'); 
     const controller = beginAbortableRequest(); 
     const budgetTimer = setTimeout(() => {
@@ -13105,17 +13215,27 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
     }, TRUST_FIRST_RELIABILITY_POLICY.verificationBudgetMs);
     try { 
         const deduped = await retrieveUniversalEntitySources(pipeline, controller);
+        const verification = buildVerificationSnapshot(
+            deduped,
+            pipeline.entityIntent.domain || 'general',
+            riskLevel,
+            'trust_first'
+        );
 
         if (!deduped.length) { 
-            if (await publishUniversalKnownFact(pipeline)) return true;
-            if (failClosed) {
-                return publishStrictVerificationClarification(pipeline, {
-                    sources: [],
-                    speechText: 'I need one more detail to verify this from live sources.',
-                    badge: 'Needs clarification'
-                });
-            }
-            return publishUniversalVerificationFallback(pipeline, 'I could not verify that result right now.');
+            return publishStrictVerificationClarification(pipeline, {
+                sources: [],
+                speechText: 'I could not verify this from independent trusted sources.',
+                badge: 'Verification unavailable'
+            });
+        }
+
+        if (!verification.verified) {
+            return publishStrictVerificationClarification(pipeline, {
+                sources: deduped,
+                speechText: 'I could not verify this from enough independent trusted sources.',
+                badge: 'Verification unavailable'
+            });
         } 
 
         const ambiguity = detectEntityIdentityAmbiguity(deduped, pipeline.entityIntent);
@@ -13127,33 +13247,27 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         if (await publishUniversalConsensusAnswer(pipeline, agreement)) return true;
 
         if (pipeline.entityIntent.directFact && agreement.mixed) {
-            const bestSportsRole = selectBestSportsRoleCandidate(deduped, pipeline.entityIntent, pipeline.intent);
-            if (await publishSportsRoleBestEffortAnswer(pipeline, bestSportsRole)) return true;
-            if (pipeline.knownFact && pipeline.entityIntent.relationType === 'title_count') {
-                return publishUniversalKnownFact(pipeline);
-            }
-            if (failClosed) {
-                return publishStrictVerificationClarification(pipeline, {
-                    sources: deduped,
-                    speechText: 'Sources are mixed. Please narrow the query and I will verify it precisely.',
-                    badge: 'Needs clarification'
-                });
-            }
-            return publishUniversalMixedEvidence(pipeline, deduped);
-        }
-
-        return await summarizeUniversalEntitySources(pipeline, deduped, controller, failClosed);
-    } catch (error) { 
-        if (isAbortError(error)) return true; 
-        if (await publishUniversalKnownFact(pipeline)) return true;
-        if (failClosed) {
             return publishStrictVerificationClarification(pipeline, {
-                sources: [],
-                speechText: 'I hit a verification issue. Please narrow the query and I will retry with live sources.',
-                badge: 'Needs clarification'
+                sources: deduped,
+                speechText: 'Independent sources are mixed, so I will not guess.',
+                badge: 'Verification unavailable'
             });
         }
-        return publishUniversalVerificationFallback(pipeline);
+
+        return await summarizeUniversalEntitySources(pipeline, deduped, controller, true);
+    } catch (error) { 
+        if (isAbortError(error)) {
+            return publishStrictVerificationClarification(pipeline, {
+                sources: [],
+                speechText: 'Verification timed out before reaching confidence threshold.',
+                badge: 'Verification unavailable'
+            });
+        }
+        return publishStrictVerificationClarification(pipeline, {
+            sources: [],
+            speechText: 'Verification timed out or failed before confidence threshold.',
+            badge: 'Verification unavailable'
+        });
     } finally { 
         clearTimeout(budgetTimer);
         clearActiveRequest(controller);
@@ -13233,21 +13347,22 @@ async function handleLiveRetrievalQuery(userText) {
             }, {
                 sources: [],
                 speechText: 'I could not verify this yet. Please narrow the query with timeframe or scope.',
-                badge: 'Needs clarification'
+                badge: 'Verification unavailable'
             });
         }
 
         const trusted = deduped.filter(r => scoreSourcePolicy(r.url, intent.domain || 'general') > 0);
         const sourcePool = trusted.length >= 3 ? trusted : deduped;
-        if (!hasEnoughEvidenceForRisk(sourcePool, liveRiskLevel, intent.domain || 'general')) {
+        const verification = buildVerificationSnapshot(sourcePool, intent.domain || 'general', liveRiskLevel, 'trust_first');
+        if (!verification.verified) {
             return publishStrictVerificationClarification({
                 userText: query,
                 intent,
                 entityIntent
             }, {
                 sources: sourcePool,
-                speechText: 'I could not verify enough independent sources yet. Please narrow the query by timeframe or entity.',
-                badge: 'Needs clarification'
+                speechText: 'I could not verify enough independent trusted sources for this.',
+                badge: 'Verification unavailable'
             });
         }
         const distinctDomains = Array.from(new Set(sourcePool.map(r => getDomainFromUrl(r.url)).filter(Boolean)));
@@ -13260,7 +13375,7 @@ async function handleLiveRetrievalQuery(userText) {
                 }, {
                     sources: sourcePool,
                     speechText: 'Source coverage is limited. Please narrow the query and I will verify it.',
-                    badge: 'Needs clarification'
+                    badge: 'Verification unavailable'
                 });
             }
         }
@@ -13335,13 +13450,7 @@ ${snippets}`
             answer = '';
         }
         if (!answer) {
-            const top = sourcePool[0];
-            if (!top) {
-                if (!failClosed) {
-                    addChatMessage('I found sources, but I could not assemble a clean answer. Please try once more.', false);
-                    speak('I found sources, but I could not assemble a clean answer. Please try once more.');
-                    return true;
-                }
+            if (!sourcePool[0]) {
                 return publishStrictVerificationClarification({
                     userText: query,
                     intent,
@@ -13349,23 +13458,18 @@ ${snippets}`
                 }, {
                     sources: sourcePool,
                     speechText: 'I could not verify a clean answer yet. Please narrow the query.',
-                    badge: 'Needs clarification'
+                    badge: 'Verification unavailable'
                 });
             }
-            const fallbackAnswer = `Direct answer: ${top.title}${top.description ? `\n\nKey points:\n- ${top.description}` : ''}`;
-            const sourceLines = sourcePool.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
-            const cleanedFallbackAnswer = cleanLiveAnswerText(fallbackAnswer);
-            const conciseFallbackAnswer = cleanedFallbackAnswer
-                .split(/\n\s*Key points:\s*/i)[0]
-                .split(/\n\s*Confidence:\s*/i)[0]
-                .trim();
-            const finalMsg = conciseFactQuery
-                ? `${conciseFallbackAnswer}\n\n${buildSourceMetaBlock(sourcePool)}\n\nSources:\n${sourceLines}`
-                : `${cleanedFallbackAnswer}\n\n${buildSourceMetaBlock(sourcePool)}\n\nSources:\n${sourceLines}`;
-            addVerifiedAssistantMessage(finalMsg, 'Verified live sources');
-            await speakApiReply('direct_live_result', {}, 'I checked current sources and found a direct result.');
-            saveToHistory(userText, finalMsg);
-            return true;
+            return publishStrictVerificationClarification({
+                userText: query,
+                intent,
+                entityIntent
+            }, {
+                sources: sourcePool,
+                speechText: 'I could not produce a clean verified answer from these sources.',
+                badge: 'Verification unavailable'
+            });
         }
         const sourceLines = sourcePool.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
         const conciseAnswer = answer
@@ -13393,7 +13497,7 @@ ${snippets}`
                 }, {
                     sources: [],
                     speechText: 'Verification timed out before confidence threshold. Please narrow the query and I will retry.',
-                    badge: 'Needs clarification'
+                    badge: 'Verification unavailable'
                 });
             }
             return true;
@@ -13410,7 +13514,7 @@ ${snippets}`
         }, {
             sources: [],
             speechText: 'I hit a verification issue. Please narrow the query and I will retry.',
-            badge: 'Needs clarification'
+            badge: 'Verification unavailable'
         });
     } finally {
         clearTimeout(budgetTimer);
@@ -13932,16 +14036,6 @@ function detectInputLanguageHint(text) {
                     return;
                 }
 
-                if (hybridMode === 'answer_then_cite') {
-                    const handled = await handleAnswerThenCiteQuery(cleanText, classification);
-                    if (handled) return;
-                }
-
-                if (hybridMode === 'chat_first') {
-                    const handled = await handleChatFirstCurrentQuery(cleanText, classification);
-                    if (handled) return;
-                }
-
                 const handled = await handleUniversalEntityFactQuery(cleanText, entityFactIntent);
                 if (handled) return;
             }
@@ -13949,8 +14043,7 @@ function detectInputLanguageHint(text) {
             if (answerPath !== 'entity_fact' &&
                 hybridMode === 'verify_first' &&
                 !isStableBiographyQuestion(cleanText) &&
-                fallbackEntityIntent?.isEntityFact &&
-                isConciseDirectFactQuery(cleanText)) {
+                fallbackEntityIntent?.isEntityFact) {
                 const handled = await handleUniversalEntityFactQuery(cleanText, classification.liveIntent);
                 if (handled) return;
             }
