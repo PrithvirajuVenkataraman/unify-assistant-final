@@ -9,7 +9,6 @@ export default async function handler(req, res) {
         rateLimit: { max: 10, windowMs: 60 * 1000 }
     });
     if (guard.handled) return;
-
     try {
         const { prompt = '', task = 'general_vision', mimeType = 'image/jpeg', imageBase64 = '' } = req.body || {};
         if (String(prompt).length > 2000 || String(task).length > 120) {
