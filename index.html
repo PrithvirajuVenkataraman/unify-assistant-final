@@ -16979,28 +16979,73 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             }
         }
 
+        function formatNearbyCategoryLabel(query) {
+            const q = String(query || '').trim().toLowerCase();
+            if (q === 'hospital') return 'Nearby Hospitals';
+            if (q === 'police station') return 'Nearby Police Stations';
+            if (q === 'pharmacy') return 'Nearby Pharmacies';
+            if (q === 'atm') return 'Nearby ATMs';
+            return `Nearby ${String(query || '').trim()}`;
+        }
+
+        function buildNearbyResultsMessage(label, results, mapsUrl, webUrl, usedLocation = false) {
+            const top = (Array.isArray(results) ? results : []).slice(0, 5);
+            const heading = `${label}${usedLocation ? ' (using your current location)' : ''}`;
+            if (!top.length) {
+                return `${heading}\n\nI could not fetch direct listings right now.\n\n1. [Open in Google Maps](${mapsUrl})\n2. [Open in Google Search](${webUrl})`;
+            }
+            const lines = top.map((item, idx) => {
+                const title = (String(item?.title || '').trim() || `Result ${idx + 1}`).replace(/[\[\]]/g, '');
+                const url = String(item?.url || '').trim() || webUrl;
+                const snippet = String(item?.description || '').replace(/\s+/g, ' ').trim();
+                return `${idx + 1}. [${title}](${url})${snippet ? `\n   ${snippet}` : ''}`;
+            });
+            lines.push('', `Maps: [Open nearby map](${mapsUrl})`, `Search: [Open nearby web results](${webUrl})`);
+            return `${heading}\n\n${lines.join('\n')}`;
+        }
+
         async function openNearbySearch(query) {
-            const popup = window.open('', '_blank', 'noopener,noreferrer');
-            const safeOpen = (url) => {
-                if (popup && !popup.closed) {
-                    popup.location.href = url;
-                    return;
-                }
-                try {
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                } catch (_) {
-                    window.location.href = url;
-                }
-            };
+            const category = String(query || 'hospital').trim() || 'hospital';
+            const label = formatNearbyCategoryLabel(category);
+            showThinkingIndicator(`Finding ${label.toLowerCase()}...`);
+
+            let lat = null;
+            let lon = null;
+            let usedLocation = false;
             try {
                 const position = await getCurrentPositionAsync();
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${query} near ${lat},${lon}`)}`;
-                safeOpen(url);
-            } catch (error) {
-                const fallback = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${query} near me`)}`;
-                safeOpen(fallback);
+                lat = position.coords.latitude;
+                lon = position.coords.longitude;
+                usedLocation = Number.isFinite(lat) && Number.isFinite(lon);
+            } catch (_) {
+                usedLocation = false;
+            }
+
+            const locationSuffix = usedLocation ? ` near ${lat},${lon}` : ' near me';
+            const searchQuery = `${category}${locationSuffix}`;
+            const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`;
+            const webUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: searchQuery, maxResults: 8 })
+                });
+                if (!response.ok) throw new Error('nearby_search_failed');
+                const data = await response.json();
+                const results = Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
+                const message = buildNearbyResultsMessage(label, results, mapsUrl, webUrl, usedLocation);
+                addVerifiedAssistantMessage(message, 'Nearby search');
+                speak(`I found ${label.toLowerCase()}. Check the links in chat.`);
+                saveToHistory(`nearby ${category}`, message);
+            } catch (_) {
+                const fallback = buildNearbyResultsMessage(label, [], mapsUrl, webUrl, usedLocation);
+                addVerifiedAssistantMessage(fallback, 'Nearby search');
+                speak(`I could not fetch direct listings, but I added nearby search links for ${category}.`);
+                saveToHistory(`nearby ${category}`, fallback);
+            } finally {
+                hideThinkingIndicator();
             }
         }
 
