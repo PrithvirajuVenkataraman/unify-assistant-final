@@ -2554,6 +2554,14 @@ function formatAsOfTimestamp() {
     });
 }
 
+function formatAsOfDateLong(date = new Date()) {
+    return new Date(date).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+}
+
 function formatLatestSourceDate(items) {
     const dates = (Array.isArray(items) ? items : [])
         .map(item => extractResultPublishedDate(item))
@@ -12353,6 +12361,49 @@ function hasLatestWorkEvidence(result, entityIntent = null) {
     return /\b(latest|recent|new|newest|upcoming|future|release|released|announced)\b/i.test(text) || mediumPattern.test(text);
 }
 
+function extractProperNameCandidates(text) {
+    const raw = String(text || '');
+    if (!raw.trim()) return [];
+    const matches = raw.match(/\b[A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3}\b/g) || [];
+    return matches
+        .map(value => String(value || '').trim())
+        .filter(Boolean);
+}
+
+function pickRolePersonCandidate(combinedText, roleLabel = '') {
+    const text = String(combinedText || '');
+    if (!text.trim()) return '';
+
+    const normalizedRole = String(roleLabel || '').trim().toLowerCase();
+    const rolePattern = normalizedRole
+        ? new RegExp(`\\b${escapeRegexLiteral(normalizedRole)}\\b`, 'i')
+        : /\b(?:ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\b/i;
+    if (!rolePattern.test(text)) return '';
+
+    const candidates = extractProperNameCandidates(text)
+        .filter(isLikelyPersonNameCandidate);
+    if (!candidates.length) return '';
+
+    const roleMatch = text.match(rolePattern);
+    const roleIndex = roleMatch?.index ?? -1;
+    if (roleIndex < 0) return candidates[0];
+
+    let best = '';
+    let bestScore = -1;
+    for (const candidate of candidates) {
+        const candidateIndex = text.indexOf(candidate);
+        if (candidateIndex < 0) continue;
+        const distance = Math.abs(candidateIndex - roleIndex);
+        const directionalBoost = candidateIndex < roleIndex ? 6 : 5;
+        const score = Math.max(0, 60 - Math.min(distance, 60)) + directionalBoost;
+        if (score > bestScore) {
+            best = candidate;
+            bestScore = score;
+        }
+    }
+    return best;
+}
+
 function isLikelyLatestWorkTitleCandidate(candidate, subject, sourceTitle = '') {
     const rawCandidate = String(candidate || '').trim();
     if (!rawCandidate) return false;
@@ -12471,8 +12522,13 @@ function extractFactCandidate(result, entityIntent) {
         ];
         for (const pattern of personPatterns) {
             const match = combined.match(pattern);
-            if (match?.[1]) return match[1].trim();
+            if (match?.[1]) {
+                const candidate = match[1].trim();
+                if (isLikelyPersonNameCandidate(candidate)) return candidate;
+            }
         }
+        const fallbackCandidate = pickRolePersonCandidate(combined, entityIntent.roleLabel || '');
+        if (fallbackCandidate) return fallbackCandidate;
         return '';
     }
 
@@ -12487,9 +12543,17 @@ function extractFactCandidate(result, entityIntent) {
 function buildSourceAgreement(results, entityIntent) {
     const votes = new Map();
     for (const item of Array.isArray(results) ? results : []) {
-        const candidate = normalizeAgreementValue(extractFactCandidate(item, entityIntent));
+        const candidateRaw = extractFactCandidate(item, entityIntent);
+        if (
+            entityIntent?.relationType === 'role' &&
+            String(entityIntent?.domain || '').toLowerCase() === 'sports' &&
+            !isLikelyPersonNameCandidate(candidateRaw)
+        ) {
+            continue;
+        }
+        const candidate = normalizeAgreementValue(candidateRaw);
         if (!candidate) continue;
-        const current = votes.get(candidate) || { value: extractFactCandidate(item, entityIntent).trim(), count: 0, sources: [] };
+        const current = votes.get(candidate) || { value: String(candidateRaw || '').trim(), count: 0, sources: [] };
         current.count += 1;
         current.sources.push(item);
         votes.set(candidate, current);
@@ -12518,10 +12582,38 @@ function isLikelyPersonNameCandidate(value) {
     if (!text) return false;
     if (text.length < 3 || text.length > 50) return false;
     if (/\d/.test(text)) return false;
-    if (/\b(team|squad|season|players?|list|captaincy|coach|role|official|news|update|latest)\b/i.test(text)) return false;
+    if (/\b(team|squad|season|players?|list|captaincy|coach|role|official|news|update|latest|current|franchise|club|league|ipl)\b/i.test(text)) return false;
     const parts = text.split(/\s+/).filter(Boolean);
     if (!parts.length || parts.length > 4) return false;
-    return parts.every(part => /^[A-Za-z.'-]+$/.test(part));
+    if (!parts.every(part => /^[A-Za-z.'-]+$/.test(part))) return false;
+
+    const lowerParts = parts.map(part => part.toLowerCase());
+    const blockedNameWords = new Set([
+        'he', 'she', 'they', 'them', 'his', 'her', 'their',
+        'says', 'said', 'will', 'would', 'could', 'should',
+        'give', 'gives', 'giving', 'gave',
+        'announced', 'announce', 'unveiled', 'appointed', 'named',
+        'about', 'after', 'before', 'during', 'under',
+        'this', 'that', 'these', 'those',
+        'from', 'with', 'without', 'into', 'onto',
+        'lsg', 'csk', 'rcb', 'mi', 'kkr', 'rr', 'dc', 'pbks', 'srh', 'gt'
+    ]);
+    if (lowerParts.some(word => blockedNameWords.has(word))) return false;
+    if (parts.length === 1 && /^[A-Z]{2,4}$/.test(parts[0])) return false;
+
+    const allowedParticles = new Set(['de', 'da', 'del', 'della', 'di', 'van', 'von', 'bin', 'ibn', 'al']);
+    const hasUppercaseToken = parts.some(part => /[A-Z]/.test(part));
+    if (!hasUppercaseToken) return false;
+    if (!parts.every((part, index) => {
+        const lower = part.toLowerCase();
+        if (allowedParticles.has(lower) && index > 0 && index < parts.length - 1) return true;
+        return /^[A-Z][a-z.'-]*$/.test(part) || /^[A-Z]{2,4}$/.test(part) || /^[A-Z]\.$/.test(part);
+    })) return false;
+
+    // Keep to realistic person-name length while allowing initials.
+    const longTokens = parts.filter(part => part.length >= 3).length;
+    if (longTokens === 0) return false;
+    return true;
 }
 
 function selectBestSportsRoleCandidate(results, entityIntent, intent = null) {
@@ -12568,18 +12660,16 @@ function selectBestSportsRoleCandidate(results, entityIntent, intent = null) {
     });
 
     const top = ranked[0] || null;
-    const second = ranked[1] || null;
     if (!top) return null;
 
-    const clearLead = !second || (top.score - second.score >= 2);
-    const hasTrustedEvidence = top.trustedScore >= 2;
-    const enoughEvidence = hasTrustedEvidence && (top.count >= 2 || top.trustedScore >= 6 || clearLead);
+    const hasTrustedEvidence = top.trustedScore >= 4;
+    const enoughEvidence = hasTrustedEvidence && (top.count >= 2 || top.trustedScore >= 8);
     if (!enoughEvidence) return null;
 
     return {
         value: top.value,
         sources: top.sources.slice(0, 4),
-        confidence: top.count >= 2 && top.trustedScore >= 6 ? 'high' : (top.count >= 2 || top.trustedScore >= 4 ? 'medium' : 'low')
+        confidence: top.count >= 2 && top.trustedScore >= 8 ? 'high' : 'medium'
     };
 }
 
@@ -13152,17 +13242,16 @@ async function publishSportsRoleBestEffortAnswer(pipeline, candidate) {
     if (!pipeline?.entityIntent || !candidate?.value) return false;
     const roleLabel = pipeline.entityIntent.roleLabel || 'role';
     const targetEntity = pipeline.entityIntent.targetEntity || pipeline.entityIntent.subject || 'the team';
-    const sourceLines = (Array.isArray(candidate.sources) ? candidate.sources : [])
-        .slice(0, 4)
-        .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
-        .join('\n');
-    if (!sourceLines) return false;
+    const sourceUrls = Array.from(new Set(
+        (Array.isArray(candidate.sources) ? candidate.sources : [])
+            .map(r => String(r?.url || '').trim())
+            .filter(Boolean)
+    )).slice(0, 4);
+    if (!sourceUrls.length) return false;
 
-    const qualifier = candidate.confidence === 'high'
-        ? 'Based on multiple live sources'
-        : 'Based on the strongest live-source signal';
-    const message = `${qualifier}, the current ${roleLabel} of ${targetEntity} is ${candidate.value}.\n\n${buildSourceMetaBlock(candidate.sources)}\n\nSources:\n${sourceLines}`;
-    addVerifiedAssistantMessage(message, candidate.confidence === 'high' ? 'Verified live sources' : 'Best live-source match');
+    const asOfDate = formatAsOfDateLong();
+    const message = `As of ${asOfDate}, the ${targetEntity} ${roleLabel} is ${candidate.value}.\nSources:\n\n${sourceUrls.join('\n')}`;
+    addVerifiedAssistantMessage(message, candidate.confidence === 'high' ? 'Verified live sources' : 'Live-source consensus');
     await speakApiReply('verified_answer_found', {}, `The current ${roleLabel} of ${targetEntity} is ${candidate.value}.`);
     saveToHistory(pipeline.userText, message);
     return true;
@@ -13306,6 +13395,9 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
     try { 
         const deduped = await retrieveUniversalEntitySources(pipeline, controller);
         const sportsRoleCandidate = selectBestSportsRoleCandidate(deduped, pipeline.entityIntent, pipeline.intent);
+        const isSportsRoleQuery =
+            pipeline?.entityIntent?.relationType === 'role' &&
+            String(pipeline?.entityIntent?.domain || '').toLowerCase() === 'sports';
         const verification = buildVerificationSnapshot(
             deduped,
             pipeline.entityIntent.domain || 'general',
@@ -13325,6 +13417,13 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
             if (sportsRoleCandidate) {
                 return publishSportsRoleBestEffortAnswer(pipeline, sportsRoleCandidate);
             }
+            if (isSportsRoleQuery) {
+                return publishStrictVerificationClarification(pipeline, {
+                    sources: deduped,
+                    speechText: 'I could not verify a reliable captain or coach name from independent sources.',
+                    badge: 'Verification unavailable'
+                });
+            }
             return publishStrictVerificationClarification(pipeline, {
                 sources: deduped,
                 speechText: 'I could not verify this from enough independent trusted sources.',
@@ -13338,7 +13437,17 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         }
 
         const agreement = buildSourceAgreement(deduped.slice(0, 6), pipeline.entityIntent);
+        if (isSportsRoleQuery && sportsRoleCandidate) {
+            return publishSportsRoleBestEffortAnswer(pipeline, sportsRoleCandidate);
+        }
         if (await publishUniversalConsensusAnswer(pipeline, agreement)) return true;
+        if (isSportsRoleQuery) {
+            return publishStrictVerificationClarification(pipeline, {
+                sources: deduped,
+                speechText: 'I could not verify a reliable captain or coach name from these sources.',
+                badge: 'Verification unavailable'
+            });
+        }
 
         if (pipeline.entityIntent.directFact && agreement.mixed) {
             if (sportsRoleCandidate) {
