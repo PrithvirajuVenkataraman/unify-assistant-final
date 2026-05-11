@@ -3448,3 +3448,47 @@ body.dark {
 .help-modal-enhanced p {
     line-height: 1.55;
 }
+
+/* Memory controls readability in Help modal */
+.help-modal-enhanced .memory-persist-row {
+    background: #f3f6fb;
+    border-color: #cfd8e3;
+}
+
+.help-modal-enhanced .memory-persist-label {
+    color: #1f2937;
+}
+
+.help-modal-enhanced .memory-action-btn {
+    color: #ffffff !important;
+}
+
+.help-modal-enhanced .memory-action-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+body.dark .help-modal-enhanced .memory-persist-row {
+    background: rgba(30, 41, 59, 0.82);
+    border-color: #475569;
+}
+
+body.dark .help-modal-enhanced .memory-persist-label {
+    color: #e2e8f0;
+}
+
+/* Zoom lock hardening for touch devices (iPhone/iPad/Android tablets). */
+@media (hover: none) and (pointer: coarse) {
+    html,
+    body {
+        touch-action: pan-x pan-y;
+    }
+
+    input,
+    textarea,
+    select,
+    #text-input,
+    .upload-context-input {
+        font-size: 16px !important;
+    }
+}
