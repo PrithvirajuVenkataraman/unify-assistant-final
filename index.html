@@ -12616,6 +12616,32 @@ function isLikelyPersonNameCandidate(value) {
     return true;
 }
 
+function expandSingleTokenPersonNameFromSources(name, sources) {
+    const raw = String(name || '').trim();
+    const parts = raw.split(/\s+/).filter(Boolean);
+    if (parts.length !== 1) return raw;
+
+    const surname = parts[0];
+    if (!/^[A-Z][a-z.'-]{2,}$/.test(surname)) return raw;
+
+    const pattern = new RegExp(`\\b([A-Z][a-z.'-]{1,20})\\s+${escapeRegexLiteral(surname)}\\b`, 'g');
+    const voteMap = new Map();
+    for (const item of Array.isArray(sources) ? sources : []) {
+        const text = `${String(item?.title || '')} ${String(item?.description || '')}`;
+        if (!text.trim()) continue;
+        const matches = text.matchAll(pattern);
+        for (const match of matches) {
+            const full = `${match[1]} ${surname}`.trim();
+            if (!isLikelyPersonNameCandidate(full)) continue;
+            voteMap.set(full, (voteMap.get(full) || 0) + 1);
+        }
+    }
+    if (!voteMap.size) return raw;
+
+    const ranked = Array.from(voteMap.entries()).sort((a, b) => b[1] - a[1]);
+    return ranked[0]?.[0] || raw;
+}
+
 function selectBestSportsRoleCandidate(results, entityIntent, intent = null) {
     const relation = String(entityIntent?.relationType || '').toLowerCase();
     const domain = String(entityIntent?.domain || '').toLowerCase();
@@ -12663,11 +12689,28 @@ function selectBestSportsRoleCandidate(results, entityIntent, intent = null) {
     if (!top) return null;
 
     const hasTrustedEvidence = top.trustedScore >= 4;
-    const enoughEvidence = hasTrustedEvidence && (top.count >= 2 || top.trustedScore >= 8);
+    const hasSeasonContext = Boolean(
+        intent?.year ||
+        entityIntent?.year ||
+        entityIntent?.competition
+    );
+    const topHasPreferredSource = (Array.isArray(top.sources) ? top.sources : [])
+        .some(item => scoreSourcePolicy(item?.url, entityIntent.domain) >= 7);
+    const topMentionsTargetYear = !targetYear || (Array.isArray(top.sources) ? top.sources : [])
+        .some(item => new RegExp(`\\b${targetYear}\\b`).test(`${String(item?.title || '')} ${String(item?.description || '')}`));
+
+    // Allow a single preferred trusted source for explicit season queries, while staying fail-closed for vague queries.
+    const singleSourceSeasonOverride =
+        top.count === 1 &&
+        hasSeasonContext &&
+        topHasPreferredSource &&
+        topMentionsTargetYear;
+    const enoughEvidence = hasTrustedEvidence && (top.count >= 2 || top.trustedScore >= 8 || singleSourceSeasonOverride);
     if (!enoughEvidence) return null;
 
+    const normalizedValue = expandSingleTokenPersonNameFromSources(top.value, top.sources);
     return {
-        value: top.value,
+        value: normalizedValue,
         sources: top.sources.slice(0, 4),
         confidence: top.count >= 2 && top.trustedScore >= 8 ? 'high' : 'medium'
     };
@@ -13238,6 +13281,72 @@ async function publishUniversalConsensusAnswer(pipeline, agreement) {
     return true;
 }
 
+function buildBestEffortFactAnswerFromSources(userText, intent, entityIntent, sources) {
+    const pool = Array.isArray(sources) ? sources.filter(Boolean) : [];
+    if (!pool.length) return '';
+
+    const derivedIntent = (entityIntent && typeof entityIntent === 'object' && Object.keys(entityIntent).length)
+        ? entityIntent
+        : extractUniversalEntityIntent(String(userText || ''), intent || extractLiveQueryIntent(String(userText || '')));
+
+    const agreement = buildSourceAgreement(pool.slice(0, 6), derivedIntent);
+    if (agreement?.top?.value) {
+        const consensus = formatConsensusAnswer(derivedIntent, agreement);
+        if (consensus) return consensus;
+
+        if (derivedIntent?.relationType === 'role' && derivedIntent?.targetEntity && derivedIntent?.roleLabel) {
+            return `Based on available sources, the ${derivedIntent.roleLabel} of ${derivedIntent.targetEntity} appears to be ${agreement.top.value}.`;
+        }
+        return `Based on available sources, the best-supported value is ${agreement.top.value}.`;
+    }
+
+    const top = pool[0];
+    const snippet = String(top?.description || '').trim();
+    if (snippet) return `Based on available sources, ${snippet}`;
+
+    const title = String(top?.title || '').trim();
+    if (title) return `Based on available sources, ${title}`;
+    return '';
+}
+
+async function publishBestEffortFromSources(pipeline, sources, options = {}) {
+    const pool = Array.isArray(sources) ? sources.filter(Boolean) : [];
+    if (!pool.length) return false;
+
+    const answer = buildBestEffortFactAnswerFromSources(
+        pipeline?.userText || '',
+        pipeline?.intent || null,
+        pipeline?.entityIntent || null,
+        pool
+    );
+    if (!answer) return false;
+
+    const sourceLines = pool
+        .slice(0, 5)
+        .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+        .join('\n');
+    const finalMsg = `[Best effort - limited verification]\n${answer}\n\n${buildSourceMetaBlock(pool)}\n\nSources:\n${sourceLines}`;
+    addVerifiedAssistantMessage(finalMsg, options?.badge || 'Best-effort live sources');
+    speak(options?.speechText || 'I found the best-supported answer from available sources.');
+    saveToHistory(pipeline?.userText || '', finalMsg);
+    return true;
+}
+
+async function publishSportsRoleKnowledgeFallback(pipeline, options = {}) {
+    const relation = String(pipeline?.entityIntent?.relationType || '').toLowerCase();
+    const domain = String(pipeline?.entityIntent?.domain || '').toLowerCase();
+    if (relation !== 'role' || domain !== 'sports') return false;
+
+    const modelAnswer = String(await buildStrictApiKnowledgeFallback(pipeline?.userText || '') || '').trim();
+    if (!modelAnswer) return false;
+
+    const finalMsg = `[Best effort - verification unavailable]\n${modelAnswer}`;
+    addVerifiedAssistantMessage(finalMsg, options?.badge || 'Best effort');
+    speak(options?.speechText || 'Live verification is unavailable, so here is a best-effort answer from model knowledge.');
+    saveToHistory(pipeline?.userText || '', finalMsg);
+    return true;
+}
+
 async function publishSportsRoleBestEffortAnswer(pipeline, candidate) {
     if (!pipeline?.entityIntent || !candidate?.value) return false;
     const roleLabel = pipeline.entityIntent.roleLabel || 'role';
@@ -13394,10 +13503,10 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
     }, TRUST_FIRST_RELIABILITY_POLICY.verificationBudgetMs);
     try { 
         const deduped = await retrieveUniversalEntitySources(pipeline, controller);
-        const sportsRoleCandidate = selectBestSportsRoleCandidate(deduped, pipeline.entityIntent, pipeline.intent);
         const isSportsRoleQuery =
             pipeline?.entityIntent?.relationType === 'role' &&
             String(pipeline?.entityIntent?.domain || '').toLowerCase() === 'sports';
+        const sportsRoleCandidate = selectBestSportsRoleCandidate(deduped, pipeline.entityIntent, pipeline.intent);
         const verification = buildVerificationSnapshot(
             deduped,
             pipeline.entityIntent.domain || 'general',
@@ -13406,6 +13515,10 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         );
 
         if (!deduped.length) { 
+            if (isSportsRoleQuery) {
+                const knowledgeFallback = await publishSportsRoleKnowledgeFallback(pipeline);
+                if (knowledgeFallback) return true;
+            }
             return publishStrictVerificationClarification(pipeline, {
                 sources: [],
                 speechText: 'I could not verify this from independent trusted sources.',
@@ -13417,16 +13530,19 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
             if (sportsRoleCandidate) {
                 return publishSportsRoleBestEffortAnswer(pipeline, sportsRoleCandidate);
             }
+            const bestEffortPublished = await publishBestEffortFromSources(pipeline, deduped, {
+                speechText: 'I could not fully verify this, so here is the best-supported answer from available sources.'
+            });
+            if (bestEffortPublished) return true;
             if (isSportsRoleQuery) {
-                return publishStrictVerificationClarification(pipeline, {
-                    sources: deduped,
-                    speechText: 'I could not verify a reliable captain or coach name from independent sources.',
-                    badge: 'Verification unavailable'
-                });
+                const knowledgeFallback = await publishSportsRoleKnowledgeFallback(pipeline);
+                if (knowledgeFallback) return true;
             }
             return publishStrictVerificationClarification(pipeline, {
                 sources: deduped,
-                speechText: 'I could not verify this from enough independent trusted sources.',
+                speechText: isSportsRoleQuery
+                    ? 'I could not verify a reliable captain or coach name from independent sources.'
+                    : 'I could not verify this from enough independent trusted sources.',
                 badge: 'Verification unavailable'
             });
         } 
@@ -13441,6 +13557,14 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
             return publishSportsRoleBestEffortAnswer(pipeline, sportsRoleCandidate);
         }
         if (await publishUniversalConsensusAnswer(pipeline, agreement)) return true;
+        const generalBestEffort = await publishBestEffortFromSources(pipeline, deduped, {
+            speechText: 'I could not fully verify this, so here is the best-supported answer from available sources.'
+        });
+        if (generalBestEffort) return true;
+        if (isSportsRoleQuery) {
+            const knowledgeFallback = await publishSportsRoleKnowledgeFallback(pipeline);
+            if (knowledgeFallback) return true;
+        }
         if (isSportsRoleQuery) {
             return publishStrictVerificationClarification(pipeline, {
                 sources: deduped,
@@ -13453,6 +13577,12 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
             if (sportsRoleCandidate) {
                 return publishSportsRoleBestEffortAnswer(pipeline, sportsRoleCandidate);
             }
+            const mixedBestEffort = await publishBestEffortFromSources(pipeline, deduped, {
+                speechText: 'Sources are mixed, so this is the best-supported answer I can provide right now.'
+            });
+            if (mixedBestEffort) return true;
+            const knowledgeFallback = await publishSportsRoleKnowledgeFallback(pipeline);
+            if (knowledgeFallback) return true;
             return publishStrictVerificationClarification(pipeline, {
                 sources: deduped,
                 speechText: 'Independent sources are mixed, so I will not guess.',
@@ -13462,6 +13592,15 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
 
         return await summarizeUniversalEntitySources(pipeline, deduped, controller, true);
     } catch (error) { 
+        const isSportsRoleQuery =
+            pipeline?.entityIntent?.relationType === 'role' &&
+            String(pipeline?.entityIntent?.domain || '').toLowerCase() === 'sports';
+        if (isSportsRoleQuery) {
+            const knowledgeFallback = await publishSportsRoleKnowledgeFallback(pipeline, {
+                speechText: 'Live verification timed out, so here is a best-effort answer from model knowledge.'
+            });
+            if (knowledgeFallback) return true;
+        }
         if (isAbortError(error)) {
             return publishStrictVerificationClarification(pipeline, {
                 sources: [],
@@ -13561,6 +13700,14 @@ async function handleLiveRetrievalQuery(userText) {
         const sourcePool = trusted.length >= 3 ? trusted : deduped;
         const verification = buildVerificationSnapshot(sourcePool, intent.domain || 'general', liveRiskLevel, 'trust_first');
         if (!verification.verified) {
+            const bestEffortPublished = await publishBestEffortFromSources({
+                userText: query,
+                intent,
+                entityIntent
+            }, sourcePool, {
+                speechText: 'I could not fully verify this, so here is the best-supported answer from available sources.'
+            });
+            if (bestEffortPublished) return true;
             return publishStrictVerificationClarification({
                 userText: query,
                 intent,
@@ -13667,6 +13814,14 @@ ${snippets}`
                     badge: 'Verification unavailable'
                 });
             }
+            const bestEffortPublished = await publishBestEffortFromSources({
+                userText: query,
+                intent,
+                entityIntent
+            }, sourcePool, {
+                speechText: 'I could not produce a clean fully verified summary, so here is the best-supported answer from available sources.'
+            });
+            if (bestEffortPublished) return true;
             return publishStrictVerificationClarification({
                 userText: query,
                 intent,
