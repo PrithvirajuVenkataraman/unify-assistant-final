@@ -442,6 +442,25 @@ body.dark {
     background: var(--ui-primary-hover) !important;
 }
 
+.footer-action-btn-mic,
+.footer-action-btn-converse {
+    color: #0f172a !important;
+    background: var(--ui-surface-muted) !important;
+}
+
+body.dark .footer-action-btn-mic,
+body.dark .footer-action-btn-converse {
+    color: #e2e8f0 !important;
+    background: #0f172a !important;
+    border-color: rgba(100, 116, 139, 0.62) !important;
+}
+
+body.dark .footer-action-btn-mic:hover,
+body.dark .footer-action-btn-converse:hover {
+    background: #1e293b !important;
+    border-color: rgba(148, 163, 184, 0.7) !important;
+}
+
 /* Panels and modals */
 .help-modal-enhanced,
 .side-panel,
@@ -526,6 +545,8 @@ body.dark {
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 .continuous-vision-pill {
@@ -782,35 +803,40 @@ body.dark .response-action-btn {
     }
 
     .continuous-vision-preview {
-        right: 8px;
-        width: min(190px, 44vw);
-        max-width: 190px;
-        bottom: calc(98px + env(safe-area-inset-bottom));
+        right: 7px;
+        width: min(330px, calc(100vw - 14px));
+        max-width: calc(100vw - 14px);
+        bottom: calc(var(--input-bar-safe-height) + 18px + env(safe-area-inset-bottom));
         border-radius: 12px;
     }
 
     .continuous-vision-preview-header {
         padding: 5px 6px;
+        gap: 6px;
+        align-items: flex-start;
     }
 
     .continuous-vision-pill {
         font-size: 9px;
         padding: 2px 7px;
+        line-height: 1.15;
     }
 
     .continuous-vision-close,
     .continuous-vision-minimize {
-        padding: 3px 7px;
+        padding: 3px 6px;
         font-size: 10px;
+        min-width: 58px;
+        line-height: 1.1;
     }
 
     .continuous-vision-preview.is-minimized {
-        width: min(165px, 40vw);
-        max-width: 165px;
+        width: min(250px, 62vw);
+        max-width: min(250px, 62vw);
     }
 
     .continuous-vision-video {
-        max-height: 118px;
+        max-height: 180px;
         aspect-ratio: 16 / 10;
     }
 
