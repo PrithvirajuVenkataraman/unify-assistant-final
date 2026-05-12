@@ -528,15 +528,14 @@ function extractGeminiText(payload) {
 }
 
 function safeParseJson(text) {
-    const cleaned = String(text || '')
-        .trim()
-        .replace(/^`?json\s*/i, '')
-        .replace(/^```json\s*/i, '')
-        .replace(/^```\s*/i, '')
-        .replace(/```$/i, '')
+    const cleaned = String(text || '').trim();
+    const unwrapped = cleaned
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .replace(/^json\s*/i, '')
         .trim();
     try {
-        return JSON.parse(cleaned);
+        return JSON.parse(unwrapped);
     } catch (e) {
         return null;
     }
@@ -642,7 +641,3 @@ function normalizeDetected(list) {
             return b.count - a.count;
         });
 }
-
-
-
-
