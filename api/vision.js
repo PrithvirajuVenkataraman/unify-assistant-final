@@ -9,6 +9,7 @@ export default async function handler(req, res) {
         rateLimit: { max: 10, windowMs: 60 * 1000 }
     });
     if (guard.handled) return;
+
     try {
         const { prompt = '', task = 'general_vision', mimeType = 'image/jpeg', imageBase64 = '' } = req.body || {};
         if (String(prompt).length > 2000 || String(task).length > 120) {
@@ -94,67 +95,70 @@ export default async function handler(req, res) {
 }
 
 
+const GEMINI_API_VERSIONS = ['v1beta', 'v1'];
+const GEMINI_MODEL_FALLBACKS = [
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash',
+    'gemini-flash-latest'
+];
+
 async function callGeminiVision({ apiKey, systemPrompt, mimeType, imageBase64 }) {
-    // Ordered fallback list to survive model deprecations/availability changes.
-    const models = [
-        'gemini-2.5-flash',
-        'gemini-2.0-flash',
-        'gemini-1.5-pro',
-        'gemini-1.5-flash'
-    ];
     let lastError = null;
 
-    for (const model of models) {
-        try {
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [
-                            {
-                                parts: [
-                                    { text: systemPrompt },
-                                    {
-                                        inlineData: {
-                                            mimeType,
-                                            data: imageBase64
+    for (const apiVersion of GEMINI_API_VERSIONS) {
+        for (const model of GEMINI_MODEL_FALLBACKS) {
+            try {
+                const response = await fetch(
+                    `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [
+                                {
+                                    parts: [
+                                        { text: systemPrompt },
+                                        {
+                                            inlineData: {
+                                                mimeType,
+                                                data: imageBase64
+                                            }
                                         }
-                                    }
-                                ]
+                                    ]
+                                }
+                            ],
+                            generationConfig: {
+                                temperature: 0.2,
+                                topP: 0.9,
+                                maxOutputTokens: 1500
                             }
-                        ],
-                        generationConfig: {
-                            temperature: 0.2,
-                            topP: 0.9,
-                            maxOutputTokens: 1500
-                        }
-                    })
-                }
-            );
-
-            if (!response.ok) {
-                let errorDetail = '';
-                try {
-                    const raw = await response.text();
-                    if (raw) {
-                        try {
-                            const parsed = JSON.parse(raw);
-                            errorDetail = String(parsed?.error?.message || parsed?.error || raw).trim();
-                        } catch (_) {
-                            errorDetail = String(raw).trim();
-                        }
+                        })
                     }
-                } catch (_) {}
-                const suffix = errorDetail ? `: ${errorDetail}` : '';
-                lastError = new Error(`Model ${model} failed with status ${response.status}${suffix}`);
-                continue;
-            }
+                );
 
-            return await response.json();
-        } catch (err) {
-            lastError = err;
+                if (!response.ok) {
+                    let errorDetail = '';
+                    try {
+                        const raw = await response.text();
+                        if (raw) {
+                            try {
+                                const parsed = JSON.parse(raw);
+                                errorDetail = String(parsed?.error?.message || parsed?.error || raw).trim();
+                            } catch (_) {
+                                errorDetail = String(raw).trim();
+                            }
+                        }
+                    } catch (_) {}
+                    const suffix = errorDetail ? `: ${errorDetail}` : '';
+                    lastError = new Error(`Model ${model} (${apiVersion}) failed with status ${response.status}${suffix}`);
+                    continue;
+                }
+
+                return await response.json();
+            } catch (err) {
+                lastError = err;
+            }
         }
     }
 
@@ -162,55 +166,51 @@ async function callGeminiVision({ apiKey, systemPrompt, mimeType, imageBase64 })
 }
 
 async function callGeminiText({ apiKey, systemPrompt, userPrompt, maxOutputTokens = 2000 }) {
-    const models = [
-        'gemini-2.5-flash',
-        'gemini-2.0-flash',
-        'gemini-1.5-pro',
-        'gemini-1.5-flash'
-    ];
     let lastError = null;
 
-    for (const model of models) {
-        try {
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [
-                            {
-                                parts: [
-                                    { text: String(systemPrompt || '').trim() },
-                                    { text: String(userPrompt || '').trim() }
-                                ]
+    for (const apiVersion of GEMINI_API_VERSIONS) {
+        for (const model of GEMINI_MODEL_FALLBACKS) {
+            try {
+                const response = await fetch(
+                    `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [
+                                {
+                                    parts: [
+                                        { text: String(systemPrompt || '').trim() },
+                                        { text: String(userPrompt || '').trim() }
+                                    ]
+                                }
+                            ],
+                            generationConfig: {
+                                temperature: 0.15,
+                                topP: 0.9,
+                                maxOutputTokens
                             }
-                        ],
-                        generationConfig: {
-                            temperature: 0.15,
-                            topP: 0.9,
-                            maxOutputTokens
-                        }
-                    })
+                        })
+                    }
+                );
+
+                if (!response.ok) {
+                    const raw = await response.text().catch(() => '');
+                    const detail = String(raw || '').trim();
+                    lastError = new Error(`Model ${model} (${apiVersion}) failed with status ${response.status}${detail ? `: ${detail}` : ''}`);
+                    continue;
                 }
-            );
 
-            if (!response.ok) {
-                const raw = await response.text().catch(() => '');
-                const detail = String(raw || '').trim();
-                lastError = new Error(`Model ${model} failed with status ${response.status}${detail ? `: ${detail}` : ''}`);
-                continue;
+                const payload = await response.json();
+                const text = extractGeminiText(payload);
+                if (!text) {
+                    lastError = new Error(`Model ${model} (${apiVersion}) returned empty text`);
+                    continue;
+                }
+                return text;
+            } catch (error) {
+                lastError = error;
             }
-
-            const payload = await response.json();
-            const text = extractGeminiText(payload);
-            if (!text) {
-                lastError = new Error(`Model ${model} returned empty text`);
-                continue;
-            }
-            return text;
-        } catch (error) {
-            lastError = error;
         }
     }
 
