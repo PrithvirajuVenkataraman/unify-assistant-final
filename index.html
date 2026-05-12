@@ -19072,6 +19072,7 @@ async function handleContinuousVisionQuery(text) {
             const textBlock = fullText || textDetected;
             answer = `Detected text:\n${textBlock}`;
         }
+        answer = normalizeVisionAnswerForChat(answer, details);
         if (!answer) answer = 'I can see the image, but I could not generate a clear answer.';
         addChatMessage(answer, false);
         speak(answer);
@@ -19083,6 +19084,75 @@ async function handleContinuousVisionQuery(text) {
     } finally {
         hideThinkingIndicator();
     }
+}
+
+function extractVisionJsonObject(rawText) {
+    const raw = String(rawText || '').trim();
+    if (!raw) return null;
+    const unwrapped = raw
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+    try {
+        return JSON.parse(unwrapped);
+    } catch (_) {}
+
+    const start = unwrapped.indexOf('{');
+    const end = unwrapped.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+        try {
+            return JSON.parse(unwrapped.slice(start, end + 1));
+        } catch (_) {}
+    }
+    return null;
+}
+
+function formatVisionJsonToReadableText(payload) {
+    if (!payload || typeof payload !== 'object') return '';
+    const summary = String(payload.summary || '').trim();
+    const objects = Array.isArray(payload.objects) ? payload.objects : [];
+    const textDetected = Array.isArray(payload.textDetected) ? payload.textDetected : [];
+    const lines = [];
+
+    if (summary) lines.push(`Vision summary: ${summary}`);
+
+    if (objects.length) {
+        const objectLine = objects
+            .slice(0, 8)
+            .map(item => {
+                const label = String(item?.label || 'object').trim();
+                const count = Number(item?.count || 1);
+                const conf = typeof item?.confidence === 'number' ? ` (${Math.round(item.confidence * 100)}%)` : '';
+                return `${label} x${Math.max(1, count)}${conf}`;
+            })
+            .join(', ');
+        lines.push(`Objects: ${objectLine}`);
+    }
+
+    if (textDetected.length) {
+        lines.push(`Detected text: ${textDetected.slice(0, 8).join(' | ')}`);
+    }
+
+    return lines.join('\n\n').trim();
+}
+
+function normalizeVisionAnswerForChat(answer, details = {}) {
+    const raw = String(answer || '').trim();
+    const parsed = extractVisionJsonObject(raw);
+    if (parsed) {
+        const readable = formatVisionJsonToReadableText(parsed);
+        if (readable) return readable;
+    }
+
+    if (!raw && details && typeof details === 'object') {
+        const readable = formatVisionJsonToReadableText(details);
+        if (readable) return readable;
+    }
+
+    return raw
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
 }
 
 function isContinuousVisionQuestion(text) {
