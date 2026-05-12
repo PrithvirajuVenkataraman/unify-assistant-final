@@ -3732,3 +3732,53 @@ body.dark .help-modal-enhanced .memory-action-btn {
         font-size: 16px !important;
     }
 }
+
+/* ========== Dark Mode: Text-Only Memory + Assistant Replies ========== */
+body.dark .help-modal-enhanced .memory-persist-row {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+body.dark .help-modal-enhanced .memory-persist-label,
+body.dark .help-modal-enhanced .memory-action-btn {
+    color: #ffffff !important;
+}
+
+body.dark .help-modal-enhanced .memory-action-btn,
+body.dark .help-modal-enhanced .memory-action-btn:hover,
+body.dark .help-modal-enhanced .memory-action-btn:focus,
+body.dark .help-modal-enhanced .memory-action-btn:focus-visible,
+body.dark .help-modal-enhanced .memory-action-btn:active {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    text-decoration: none !important;
+}
+
+body.dark .help-modal-enhanced .memory-action-btn:hover {
+    opacity: 0.85;
+}
+
+body.dark .chat-bubble-assistant {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+}
+
+body.dark .assistant-avatar,
+body.dark .assistant-source-badge {
+    display: none !important;
+}
+
+body.dark .assistant-action-stack,
+body.dark .message-action-btn,
+body.dark .response-action-row,
+body.dark .response-action-btn {
+    display: none !important;
+}
