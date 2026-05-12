@@ -329,6 +329,7 @@
             <button onclick="triggerEmergencySmsNow()" class="px-4 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white text-sm font-semibold transition-all">SOS SMS</button>
             <button onclick="stopSafetyLiveLocationSharing(); showTemporaryMessage('Live SOS updates stopped.')" class="px-4 py-3 rounded-xl bg-slate-700 hover:bg-slate-800 text-white text-sm font-semibold transition-all">Stop live SOS updates</button>
             <button onclick="shareCurrentLocation()" class="px-4 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all">Share location</button>
+            <button onclick="openNearbyEssentialsSearch()" class="px-4 py-3 rounded-xl bg-rose-100 dark:bg-rose-900/40 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-sm font-semibold transition-all">Nearby essentials</button>
             <button onclick="openNearbySearch('hospital')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest hospital</button>
             <button onclick="openNearbySearch('police station')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest police</button>
             <button onclick="openNearbySearch('pharmacy')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest pharmacy</button>
@@ -14317,6 +14318,14 @@ function detectInputLanguageHint(text) {
                 return;
             }
 
+            if (
+                (/\b(nearest|nearby)\b/i.test(lower) && /\b(police|police station)\b/i.test(lower) && /\b(pharmacy)\b/i.test(lower) && /\b(atm)\b/i.test(lower)) ||
+                (/\b(everything|all|essentials)\b/i.test(lower) && /\b(police|pharmacy|atm)\b/i.test(lower))
+            ) {
+                await openNearbyEssentialsSearch();
+                return;
+            }
+
             if (/\b(nearest|nearby)\s+(hospital|police|police station|pharmacy|atm)\b/i.test(lower)) {
                 const placeMatch = lower.match(/\b(hospital|police station|police|pharmacy|atm)\b/);
                 await openNearbySearch(placeMatch?.[1] === 'police' ? 'police station' : (placeMatch?.[1] || 'hospital'));
@@ -14326,7 +14335,7 @@ function detectInputLanguageHint(text) {
             if (/\b(emergency|help me stay safe|safety help)\b/i.test(lower)) {
                 showSafetyPanel();
                 await deliverApiReply('safety_shortcuts_ready', {
-                    supportedActions: ['share my location', 'nearest hospital', 'nearest police', 'nearest pharmacy']
+                    supportedActions: ['share my location', 'nearest hospital', 'nearest police', 'nearest pharmacy', 'nearest atm', 'nearby essentials']
                 }, { historyKey: text });
                 return;
             }
@@ -17252,11 +17261,57 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             return `Nearby ${String(query || '').trim()}`;
         }
 
-        function buildNearbyResultsMessage(label, results, mapsUrl, webUrl, usedLocation = false) {
+        function normalizeNearbySearchText(value) {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9\s]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function extractNearbyLocationTokens(locationContext = null) {
+            if (!locationContext) return [];
+            const parts = [
+                locationContext.city || '',
+                locationContext.state || '',
+                locationContext.country || '',
+                locationContext.label || ''
+            ]
+                .map(normalizeNearbySearchText)
+                .filter(Boolean);
+            const blocked = new Set(['road', 'street', 'district', 'state', 'country', 'india']);
+            return Array.from(new Set(
+                parts
+                    .flatMap(part => part.split(' '))
+                    .map(token => token.trim())
+                    .filter(token => token.length >= 3 && !blocked.has(token))
+            )).slice(0, 8);
+        }
+
+        function isNearbyResultLocationMatch(result, locationTokens = [], locationContext = null) {
+            if (!locationTokens.length) return true;
+            const text = normalizeNearbySearchText([
+                String(result?.title || ''),
+                String(result?.description || ''),
+                String(result?.url || '')
+            ].join(' '));
+            const overlap = locationTokens.filter(token => text.includes(token)).length;
+            if (overlap >= 1) return true;
+
+            // Hard reject obvious foreign drift when user is in India.
+            const country = String(locationContext?.country || '').toLowerCase();
+            if (country.includes('india') && /\b(united states|usa|maryland|florida|baltimore|jacksonville)\b/.test(text)) {
+                return false;
+            }
+            return false;
+        }
+
+        function buildNearbyResultsMessage(label, results, mapsUrl, webUrl, usedLocation = false, locationLabel = '') {
             const top = (Array.isArray(results) ? results : []).slice(0, 5);
             const heading = `${label}${usedLocation ? ' (using your current location)' : ''}`;
+            const locationLine = usedLocation && locationLabel ? `Location: ${locationLabel}\n\n` : '';
             if (!top.length) {
-                return `${heading}\n\nI could not fetch direct listings right now.\n\n1. [Open in Google Maps](${mapsUrl})\n2. [Open in Google Search](${webUrl})`;
+                return `${heading}\n\n${locationLine}I could not fetch reliable local listings right now.\n\n1. [Open in Google Maps](${mapsUrl})\n2. [Open in Google Search](${webUrl})`;
             }
             const lines = top.map((item, idx) => {
                 const title = (String(item?.title || '').trim() || `Result ${idx + 1}`).replace(/[\[\]]/g, '');
@@ -17265,7 +17320,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 return `${idx + 1}. [${title}](${url})${snippet ? `\n   ${snippet}` : ''}`;
             });
             lines.push('', `Maps: [Open nearby map](${mapsUrl})`, `Search: [Open nearby web results](${webUrl})`);
-            return `${heading}\n\n${lines.join('\n')}`;
+            return `${heading}\n\n${locationLine}${lines.join('\n')}`;
         }
 
         async function openNearbySearch(query) {
@@ -17276,18 +17331,44 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             let lat = null;
             let lon = null;
             let usedLocation = false;
+            let locationContext = null;
             try {
                 const position = await getCurrentPositionAsync();
                 lat = position.coords.latitude;
                 lon = position.coords.longitude;
                 usedLocation = Number.isFinite(lat) && Number.isFinite(lon);
+                if (usedLocation) {
+                    try {
+                        const reverseResponse = await fetch(
+                            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+                            { headers: { 'User-Agent': 'JARVISVoiceAssistant/1.0' } }
+                        );
+                        if (reverseResponse.ok) {
+                            const reverseData = await reverseResponse.json();
+                            const addr = reverseData?.address || {};
+                            const city = addr.city || addr.town || addr.municipality || addr.county || addr.village || addr.hamlet || '';
+                            const state = addr.state || '';
+                            const country = addr.country || '';
+                            const labelParts = [city, state, country].filter(Boolean);
+                            locationContext = {
+                                city,
+                                state,
+                                country,
+                                label: labelParts.join(', ').trim() || String(reverseData?.display_name || '').trim()
+                            };
+                        }
+                    } catch (_) {}
+                }
             } catch (_) {
                 usedLocation = false;
             }
 
-            const locationSuffix = usedLocation ? ` near ${lat},${lon}` : ' near me';
+            const mapsQuery = usedLocation ? `${category} near ${lat},${lon}` : `${category} near me`;
+            const locationSuffix = usedLocation
+                ? ` near ${locationContext?.label || `${lat},${lon}`}`
+                : ' near me';
             const searchQuery = `${category}${locationSuffix}`;
-            const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`;
+            const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
             const webUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
 
             try {
@@ -17298,19 +17379,137 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 });
                 if (!response.ok) throw new Error('nearby_search_failed');
                 const data = await response.json();
-                const results = Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
-                const message = buildNearbyResultsMessage(label, results, mapsUrl, webUrl, usedLocation);
+                const rawResults = Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
+                const locationTokens = extractNearbyLocationTokens(locationContext);
+                const results = usedLocation
+                    ? (locationTokens.length
+                        ? rawResults.filter(item => isNearbyResultLocationMatch(item, locationTokens, locationContext))
+                        : [])
+                    : rawResults;
+                const message = buildNearbyResultsMessage(
+                    label,
+                    results,
+                    mapsUrl,
+                    webUrl,
+                    usedLocation,
+                    locationContext?.label || ''
+                );
                 addVerifiedAssistantMessage(message, 'Nearby search');
-                speak(`I found ${label.toLowerCase()}. Check the links in chat.`);
+                if (results.length) {
+                    speak(`I found ${label.toLowerCase()}. Check the links in chat.`);
+                } else {
+                    speak(`I could not verify local listings, but I added location-anchored map links for ${category}.`);
+                }
                 saveToHistory(`nearby ${category}`, message);
             } catch (_) {
-                const fallback = buildNearbyResultsMessage(label, [], mapsUrl, webUrl, usedLocation);
+                const fallback = buildNearbyResultsMessage(
+                    label,
+                    [],
+                    mapsUrl,
+                    webUrl,
+                    usedLocation,
+                    locationContext?.label || ''
+                );
                 addVerifiedAssistantMessage(fallback, 'Nearby search');
                 speak(`I could not fetch direct listings, but I added nearby search links for ${category}.`);
                 saveToHistory(`nearby ${category}`, fallback);
             } finally {
                 hideThinkingIndicator();
             }
+        }
+
+        async function openNearbyEssentialsSearch() {
+            const categories = ['police station', 'pharmacy', 'atm'];
+            showThinkingIndicator('Finding nearby essentials...');
+
+            let lat = null;
+            let lon = null;
+            let usedLocation = false;
+            let locationContext = null;
+            try {
+                const position = await getCurrentPositionAsync();
+                lat = position.coords.latitude;
+                lon = position.coords.longitude;
+                usedLocation = Number.isFinite(lat) && Number.isFinite(lon);
+                if (usedLocation) {
+                    try {
+                        const reverseResponse = await fetch(
+                            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+                            { headers: { 'User-Agent': 'JARVISVoiceAssistant/1.0' } }
+                        );
+                        if (reverseResponse.ok) {
+                            const reverseData = await reverseResponse.json();
+                            const addr = reverseData?.address || {};
+                            const city = addr.city || addr.town || addr.municipality || addr.county || addr.village || addr.hamlet || '';
+                            const state = addr.state || '';
+                            const country = addr.country || '';
+                            const labelParts = [city, state, country].filter(Boolean);
+                            locationContext = {
+                                city,
+                                state,
+                                country,
+                                label: labelParts.join(', ').trim() || String(reverseData?.display_name || '').trim()
+                            };
+                        }
+                    } catch (_) {}
+                }
+            } catch (_) {
+                usedLocation = false;
+            }
+
+            const heading = `Nearby essentials${usedLocation ? ' (using your current location)' : ''}`;
+            const locationLine = usedLocation && locationContext?.label ? `Location: ${locationContext.label}\n` : '';
+            const locationTokens = extractNearbyLocationTokens(locationContext);
+            const blocks = [];
+
+            for (const category of categories) {
+                const sectionLabel = formatNearbyCategoryLabel(category);
+                const mapsQuery = usedLocation ? `${category} near ${lat},${lon}` : `${category} near me`;
+                const locationSuffix = usedLocation ? ` near ${locationContext?.label || `${lat},${lon}`}` : ' near me';
+                const searchQuery = `${category}${locationSuffix}`;
+                const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
+                const webUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+                let sectionLines = [
+                    `${sectionLabel}:`,
+                    `- Maps: [Open nearby map](${mapsUrl})`,
+                    `- Search: [Open nearby web results](${webUrl})`
+                ];
+                try {
+                    const response = await fetch('/api/search', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query: searchQuery, maxResults: 8 })
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        const rawResults = Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
+                        const filtered = usedLocation
+                            ? (locationTokens.length
+                                ? rawResults.filter(item => isNearbyResultLocationMatch(item, locationTokens, locationContext))
+                                : [])
+                            : rawResults;
+                        const top = filtered.slice(0, 3);
+                        if (top.length) {
+                            sectionLines = [`${sectionLabel}:`];
+                            top.forEach((item, idx) => {
+                                const title = (String(item?.title || '').trim() || `Result ${idx + 1}`).replace(/[\[\]]/g, '');
+                                const url = String(item?.url || '').trim() || webUrl;
+                                const snippet = String(item?.description || '').replace(/\s+/g, ' ').trim();
+                                sectionLines.push(`${idx + 1}. [${title}](${url})${snippet ? `\n   ${snippet}` : ''}`);
+                            });
+                            sectionLines.push(`Maps: [Open nearby map](${mapsUrl})`);
+                            sectionLines.push(`Search: [Open nearby web results](${webUrl})`);
+                        }
+                    }
+                } catch (_) {}
+                blocks.push(sectionLines.join('\n'));
+            }
+
+            const message = `${heading}\n\n${locationLine}${blocks.join('\n\n')}`.trim();
+            addVerifiedAssistantMessage(message, 'Nearby search');
+            speak('I fetched nearby police, pharmacy, and ATM options. Check the links in chat.');
+            saveToHistory('nearby essentials', message);
+            hideThinkingIndicator();
         }
 
         function isLikelyPersonalName(value) {
