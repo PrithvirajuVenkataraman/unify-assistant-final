@@ -126,12 +126,12 @@
                         Help & Options
                     </div>
                 </button>
-                <button onclick="showSafetyPanel()" id="safety-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all" title="Safety">
+                <button onclick="showSafetyPanel()" id="safety-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all" title="Safety & Others">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-rose-600 transition-all">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                     </svg>
                     <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                        Safety
+                        Safety & Others
                     </div>
                 </button>
                 <button onclick="openDocumentPicker()" id="document-upload-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition-all" title="Upload document">
@@ -284,13 +284,13 @@
     <canvas id="continuous-vision-canvas" class="hidden"></canvas>
 
     <div id="safety-panel-backdrop" class="side-panel-backdrop hidden" onclick="closeSafetyPanel()"></div>
-    <aside id="safety-panel" class="side-panel hidden" aria-hidden="true" aria-label="Safety panel">
+    <aside id="safety-panel" class="side-panel hidden" aria-hidden="true" aria-label="Safety & Others panel">
         <div class="flex items-start justify-between gap-4 mb-6">
             <div>
                 <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200 text-xs font-semibold mb-3">
-                    <span>Safety</span>
+                    <span>Safety & Others</span>
                 </div>
-                <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Safety Shortcuts</h2>
+                <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Safety & Others Shortcuts</h2>
                 <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">Quick access to location sharing, nearby emergency places, and check-in tools.</p>
             </div>
             <button onclick="closeSafetyPanel()" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500 dark:text-gray-300 transition-all" aria-label="Close safety panel">
@@ -329,11 +329,11 @@
             <button onclick="triggerEmergencySmsNow()" class="px-4 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white text-sm font-semibold transition-all">SOS SMS</button>
             <button onclick="stopSafetyLiveLocationSharing(); showTemporaryMessage('Live SOS updates stopped.')" class="px-4 py-3 rounded-xl bg-slate-700 hover:bg-slate-800 text-white text-sm font-semibold transition-all">Stop live SOS updates</button>
             <button onclick="shareCurrentLocation()" class="px-4 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all">Share location</button>
-            <button onclick="openNearbyEssentialsSearch()" class="px-4 py-3 rounded-xl bg-rose-100 dark:bg-rose-900/40 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-sm font-semibold transition-all">Nearby essentials</button>
-            <button onclick="openNearbySearch('hospital')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest hospital</button>
-            <button onclick="openNearbySearch('police station')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest police</button>
-            <button onclick="openNearbySearch('pharmacy')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest pharmacy</button>
-            <button onclick="openNearbySearch('atm')" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest ATM</button>
+            <button onclick="closeSafetyPanel(); openNearbyEssentialsSearch();" class="px-4 py-3 rounded-xl bg-rose-100 dark:bg-rose-900/40 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-sm font-semibold transition-all">Nearby essentials</button>
+            <button onclick="closeSafetyPanel(); openNearbySearch('hospital');" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest hospital</button>
+            <button onclick="closeSafetyPanel(); openNearbySearch('police station');" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest police</button>
+            <button onclick="closeSafetyPanel(); openNearbySearch('pharmacy');" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest pharmacy</button>
+            <button onclick="closeSafetyPanel(); openNearbySearch('atm');" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest ATM</button>
         </div>
     </aside>
 
@@ -4431,9 +4431,9 @@ async function handleNameCorrection(text) {
                         </section>
 
                         <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Safety Mode</h3>
+                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Safety & Others Mode</h3>
                             <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p><strong>Open Safety Panel:</strong> Tap the shield button near the input bar.</p>
+                                <p><strong>Open Safety & Others Panel:</strong> Tap the shield button near the input bar.</p>
                                 <p><strong>Quick actions:</strong> Share location, nearest hospital, nearest police, nearest pharmacy, nearest ATM.</p>
                                 <p><strong>Enable safety setup:</strong> Say "enable women's safety mode".</p>
                                 <p><strong>Set trusted contact:</strong> Say "trusted contact is +1..." to save a contact for fast sharing workflows.</p>
