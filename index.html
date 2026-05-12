@@ -17306,21 +17306,208 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             return false;
         }
 
-        function buildNearbyResultsMessage(label, results, mapsUrl, webUrl, usedLocation = false, locationLabel = '') {
-            const top = (Array.isArray(results) ? results : []).slice(0, 5);
+        function scoreNearbyResultQuality(result, category = '') {
+            const title = String(result?.title || '').trim();
+            const desc = String(result?.description || '').trim();
+            const url = String(result?.url || '').trim();
+            const text = normalizeNearbySearchText(`${title} ${desc} ${url}`);
+            const domain = getDomainFromUrl(url);
+
+            let score = 0;
+            if (title) score += 2;
+            if (desc) score += 1;
+
+            // Prefer place-like pages and known local discovery sources.
+            if (/google\.com/.test(domain) && /\/maps/.test(url)) score += 5;
+            if (/practo\.com|lybrate\.com|justdial\.com|sulekha\.com|zomato\.com/.test(domain)) score += 3;
+
+            // De-prioritize listicles/directories/noisy aggregations.
+            if (/\bthe best \d+\b|\btop \d+\b|\bnear [a-z]{2}\s+\d{3,6}\b/.test(text)) score -= 5;
+            if (/\byelp\b|\bhealthgrades\b|\btripadvisor\b/.test(text)) score -= 4;
+            if (/\bdistrict\b|\bgovernment\b|\bdirectory\b|\bofficial portal\b/.test(text)) score -= 3;
+
+            // Category alignment.
+            const q = String(category || '').toLowerCase();
+            if (q === 'hospital' && /\b(hospital|clinic|medical center|healthcare)\b/.test(text)) score += 3;
+            if (q === 'police station' && /\b(police|station|law enforcement)\b/.test(text)) score += 3;
+            if (q === 'pharmacy' && /\b(pharmacy|chemist|medical store|drugstore)\b/.test(text)) score += 3;
+            if (q === 'atm' && /\b(atm|cash|bank)\b/.test(text)) score += 3;
+
+            // Useful contact metadata in snippet.
+            if (/\+?\d[\d\s()-]{7,}/.test(`${title} ${desc}`)) score += 1;
+
+            return score;
+        }
+
+        function rankNearbyResultsForDisplay(results, category = '', limit = 4) {
+            const pool = Array.isArray(results) ? results.filter(Boolean) : [];
+            return pool
+                .map(item => ({ item, score: scoreNearbyResultQuality(item, category) }))
+                .sort((a, b) => b.score - a.score)
+                .slice(0, Math.max(1, limit))
+                .map(entry => entry.item);
+        }
+
+        function summarizeNearbySnippet(value, maxLen = 150) {
+            const raw = String(value || '').replace(/\s+/g, ' ').trim();
+            if (!raw) return '';
+            const cleaned = raw
+                .replace(/^the best \d+[^-]*-\s*/i, '')
+                .replace(/^\s*nearby\s+/i, '');
+            if (cleaned.length <= maxLen) return cleaned;
+            return `${cleaned.slice(0, maxLen - 1).trim()}...`;
+        }
+
+        function buildNearbyDirectionsUrl(result, fallbackMapsUrl, locationContext = null, lat = null, lon = null) {
+            const safeFallback = String(fallbackMapsUrl || '').trim() || 'https://www.google.com/maps';
+            const rawTitle = String(result?.title || '').replace(/[\[\]]/g, '').trim();
+            const destination = [
+                rawTitle,
+                String(locationContext?.city || '').trim(),
+                String(locationContext?.state || '').trim(),
+                String(locationContext?.country || '').trim()
+            ].filter(Boolean).join(', ');
+            if (!destination) return safeFallback;
+            const params = new URLSearchParams({ api: '1', destination });
+            if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                params.set('origin', `${lat},${lon}`);
+            }
+            return `https://www.google.com/maps/dir/?${params.toString()}`;
+        }
+
+        function buildNearbyResultsSummary(label, results, mapsUrl, webUrl, usedLocation = false, locationLabel = '', category = '') {
+            const top = rankNearbyResultsForDisplay(results, category, 4);
             const heading = `${label}${usedLocation ? ' (using your current location)' : ''}`;
-            const locationLine = usedLocation && locationLabel ? `Location: ${locationLabel}\n\n` : '';
+            const locationLine = usedLocation && locationLabel ? `Location: ${locationLabel}\n` : '';
             if (!top.length) {
-                return `${heading}\n\n${locationLine}I could not fetch reliable local listings right now.\n\n1. [Open in Google Maps](${mapsUrl})\n2. [Open in Google Search](${webUrl})`;
+                return `${heading}\n\n${locationLine}\nI could not fetch reliable local listings right now.\n\nQuick actions:\n1. [Open nearby map](${mapsUrl})\n2. [Open nearby web results](${webUrl})`;
             }
             const lines = top.map((item, idx) => {
                 const title = (String(item?.title || '').trim() || `Result ${idx + 1}`).replace(/[\[\]]/g, '');
                 const url = String(item?.url || '').trim() || webUrl;
-                const snippet = String(item?.description || '').replace(/\s+/g, ' ').trim();
+                const snippet = summarizeNearbySnippet(item?.description || '');
                 return `${idx + 1}. [${title}](${url})${snippet ? `\n   ${snippet}` : ''}`;
             });
-            lines.push('', `Maps: [Open nearby map](${mapsUrl})`, `Search: [Open nearby web results](${webUrl})`);
-            return `${heading}\n\n${locationLine}${lines.join('\n')}`;
+            lines.push('', 'Quick actions:', `1. [Open nearby map](${mapsUrl})`, `2. [Open nearby web results](${webUrl})`);
+            return `${heading}\n\n${locationLine}\nTop local matches:\n${lines.join('\n')}`.trim();
+        }
+
+        function buildNearbyResultsCardsHtml(label, results, mapsUrl, webUrl, usedLocation = false, locationLabel = '', category = '', locationContext = null, lat = null, lon = null) {
+            const top = rankNearbyResultsForDisplay(results, category, 4);
+            const heading = `${label}${usedLocation ? ' (using your current location)' : ''}`;
+            const locationLine = usedLocation && locationLabel
+                ? `<p class="nearby-results-location">Location: ${escapeHtml(locationLabel)}</p>`
+                : '';
+
+            if (!top.length) {
+                return `
+                    <div class="nearby-results-wrap">
+                        <div class="nearby-results-header">
+                            <p class="nearby-results-title">${escapeHtml(heading)}</p>
+                            ${locationLine}
+                        </div>
+                        <div class="nearby-results-empty">
+                            <p class="nearby-results-empty-text">I could not fetch reliable local listings right now.</p>
+                            <div class="nearby-actions-row">
+                                <a href="${escapeHtml(mapsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-primary">Open nearby map</a>
+                                <a href="${escapeHtml(webUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Open nearby web results</a>
+                            </div>
+                        </div>
+                    </div>
+                `.trim();
+            }
+
+            const cards = top.map((item, idx) => {
+                const title = (String(item?.title || '').trim() || `Result ${idx + 1}`).replace(/[\[\]]/g, '');
+                const detailsUrl = String(item?.url || '').trim() || webUrl;
+                const directionsUrl = buildNearbyDirectionsUrl(item, mapsUrl, locationContext, lat, lon);
+                const snippet = summarizeNearbySnippet(item?.description || '', 150);
+                return `
+                    <div class="nearby-result-card">
+                        <p class="nearby-result-title">${idx + 1}. ${escapeHtml(title)}</p>
+                        ${snippet ? `<p class="nearby-result-snippet">${escapeHtml(snippet)}</p>` : ''}
+                        <div class="nearby-actions-row">
+                            <a href="${escapeHtml(directionsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-primary">Directions</a>
+                            <a href="${escapeHtml(detailsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Details</a>
+                        </div>
+                    </div>
+                `.trim();
+            }).join('');
+
+            return `
+                <div class="nearby-results-wrap">
+                    <div class="nearby-results-header">
+                        <p class="nearby-results-title">${escapeHtml(heading)}</p>
+                        ${locationLine}
+                    </div>
+                    <div class="nearby-result-grid">
+                        ${cards}
+                    </div>
+                    <div class="nearby-actions-row nearby-actions-footer">
+                        <a href="${escapeHtml(mapsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Open full nearby map</a>
+                        <a href="${escapeHtml(webUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Open nearby web results</a>
+                    </div>
+                </div>
+            `.trim();
+        }
+
+        function buildNearbyEssentialsCardsHtml(sections = [], usedLocation = false, locationLabel = '') {
+            const heading = `Nearby essentials${usedLocation ? ' (using your current location)' : ''}`;
+            const locationLine = usedLocation && locationLabel
+                ? `<p class="nearby-results-location">Location: ${escapeHtml(locationLabel)}</p>`
+                : '';
+
+            const sectionCards = (Array.isArray(sections) ? sections : []).map(section => {
+                const sectionLabel = String(section?.label || '').trim() || 'Nearby';
+                const mapsUrl = String(section?.mapsUrl || '').trim();
+                const webUrl = String(section?.webUrl || '').trim();
+                const items = Array.isArray(section?.results) ? section.results : [];
+                const cards = items.length
+                    ? items.map((item, idx) => {
+                        const title = (String(item?.title || '').trim() || `Result ${idx + 1}`).replace(/[\[\]]/g, '');
+                        const snippet = summarizeNearbySnippet(item?.description || '', 120);
+                        const directionsUrl = String(item?.directionsUrl || mapsUrl).trim() || mapsUrl;
+                        const detailsUrl = String(item?.url || webUrl).trim() || webUrl;
+                        return `
+                            <div class="nearby-result-card">
+                                <p class="nearby-result-title">${idx + 1}. ${escapeHtml(title)}</p>
+                                ${snippet ? `<p class="nearby-result-snippet">${escapeHtml(snippet)}</p>` : ''}
+                                <div class="nearby-actions-row">
+                                    <a href="${escapeHtml(directionsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-primary">Directions</a>
+                                    <a href="${escapeHtml(detailsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Details</a>
+                                </div>
+                            </div>
+                        `.trim();
+                    }).join('')
+                    : `
+                        <div class="nearby-results-empty">
+                            <p class="nearby-results-empty-text">No reliable local listing found right now.</p>
+                        </div>
+                    `.trim();
+
+                return `
+                    <div class="nearby-section-card">
+                        <p class="nearby-section-title">${escapeHtml(sectionLabel)}</p>
+                        <div class="nearby-result-grid">${cards}</div>
+                        <div class="nearby-actions-row nearby-actions-footer">
+                            <a href="${escapeHtml(mapsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Open map</a>
+                            <a href="${escapeHtml(webUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Open web results</a>
+                        </div>
+                    </div>
+                `.trim();
+            }).join('');
+
+            return `
+                <div class="nearby-results-wrap">
+                    <div class="nearby-results-header">
+                        <p class="nearby-results-title">${escapeHtml(heading)}</p>
+                        ${locationLine}
+                    </div>
+                    <div class="nearby-section-grid">
+                        ${sectionCards}
+                    </div>
+                </div>
+            `.trim();
         }
 
         async function openNearbySearch(query) {
@@ -17386,13 +17573,26 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         ? rawResults.filter(item => isNearbyResultLocationMatch(item, locationTokens, locationContext))
                         : [])
                     : rawResults;
-                const message = buildNearbyResultsMessage(
+                const message = buildNearbyResultsCardsHtml(
                     label,
                     results,
                     mapsUrl,
                     webUrl,
                     usedLocation,
-                    locationContext?.label || ''
+                    locationContext?.label || '',
+                    category,
+                    locationContext,
+                    lat,
+                    lon
+                );
+                const summary = buildNearbyResultsSummary(
+                    label,
+                    results,
+                    mapsUrl,
+                    webUrl,
+                    usedLocation,
+                    locationContext?.label || '',
+                    category
                 );
                 addVerifiedAssistantMessage(message, 'Nearby search');
                 if (results.length) {
@@ -17400,19 +17600,32 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 } else {
                     speak(`I could not verify local listings, but I added location-anchored map links for ${category}.`);
                 }
-                saveToHistory(`nearby ${category}`, message);
+                saveToHistory(`nearby ${category}`, summary);
             } catch (_) {
-                const fallback = buildNearbyResultsMessage(
+                const fallback = buildNearbyResultsCardsHtml(
                     label,
                     [],
                     mapsUrl,
                     webUrl,
                     usedLocation,
-                    locationContext?.label || ''
+                    locationContext?.label || '',
+                    category,
+                    locationContext,
+                    lat,
+                    lon
+                );
+                const summary = buildNearbyResultsSummary(
+                    label,
+                    [],
+                    mapsUrl,
+                    webUrl,
+                    usedLocation,
+                    locationContext?.label || '',
+                    category
                 );
                 addVerifiedAssistantMessage(fallback, 'Nearby search');
                 speak(`I could not fetch direct listings, but I added nearby search links for ${category}.`);
-                saveToHistory(`nearby ${category}`, fallback);
+                saveToHistory(`nearby ${category}`, summary);
             } finally {
                 hideThinkingIndicator();
             }
@@ -17461,6 +17674,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const locationLine = usedLocation && locationContext?.label ? `Location: ${locationContext.label}\n` : '';
             const locationTokens = extractNearbyLocationTokens(locationContext);
             const blocks = [];
+            const sectionCardsData = [];
 
             for (const category of categories) {
                 const sectionLabel = formatNearbyCategoryLabel(category);
@@ -17471,8 +17685,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 const webUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
                 let sectionLines = [
                     `${sectionLabel}:`,
-                    `- Maps: [Open nearby map](${mapsUrl})`,
-                    `- Search: [Open nearby web results](${webUrl})`
+                    `Quick actions: [Map](${mapsUrl}) | [Web](${webUrl})`
                 ];
                 try {
                     const response = await fetch('/api/search', {
@@ -17488,27 +17701,65 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                                 ? rawResults.filter(item => isNearbyResultLocationMatch(item, locationTokens, locationContext))
                                 : [])
                             : rawResults;
-                        const top = filtered.slice(0, 3);
+                        const top = rankNearbyResultsForDisplay(filtered, category, 3);
                         if (top.length) {
                             sectionLines = [`${sectionLabel}:`];
                             top.forEach((item, idx) => {
                                 const title = (String(item?.title || '').trim() || `Result ${idx + 1}`).replace(/[\[\]]/g, '');
                                 const url = String(item?.url || '').trim() || webUrl;
-                                const snippet = String(item?.description || '').replace(/\s+/g, ' ').trim();
+                                const snippet = summarizeNearbySnippet(item?.description || '', 120);
                                 sectionLines.push(`${idx + 1}. [${title}](${url})${snippet ? `\n   ${snippet}` : ''}`);
                             });
-                            sectionLines.push(`Maps: [Open nearby map](${mapsUrl})`);
-                            sectionLines.push(`Search: [Open nearby web results](${webUrl})`);
+                            sectionLines.push(`Quick actions: [Map](${mapsUrl}) | [Web](${webUrl})`);
+                            sectionCardsData.push({
+                                category,
+                                label: sectionLabel,
+                                mapsUrl,
+                                webUrl,
+                                results: top.map(item => ({
+                                    ...item,
+                                    directionsUrl: buildNearbyDirectionsUrl(item, mapsUrl, locationContext, lat, lon)
+                                }))
+                            });
+                        } else {
+                            sectionCardsData.push({
+                                category,
+                                label: sectionLabel,
+                                mapsUrl,
+                                webUrl,
+                                results: []
+                            });
                         }
+                    } else {
+                        sectionCardsData.push({
+                            category,
+                            label: sectionLabel,
+                            mapsUrl,
+                            webUrl,
+                            results: []
+                        });
                     }
-                } catch (_) {}
+                } catch (_) {
+                    sectionCardsData.push({
+                        category,
+                        label: sectionLabel,
+                        mapsUrl,
+                        webUrl,
+                        results: []
+                    });
+                }
                 blocks.push(sectionLines.join('\n'));
             }
 
-            const message = `${heading}\n\n${locationLine}${blocks.join('\n\n')}`.trim();
-            addVerifiedAssistantMessage(message, 'Nearby search');
+            const summary = `${heading}\n\n${locationLine}${blocks.join('\n\n')}`.trim();
+            const cardsHtml = buildNearbyEssentialsCardsHtml(
+                sectionCardsData,
+                usedLocation,
+                locationContext?.label || ''
+            );
+            addVerifiedAssistantMessage(cardsHtml, 'Nearby search');
             speak('I fetched nearby police, pharmacy, and ATM options. Check the links in chat.');
-            saveToHistory('nearby essentials', message);
+            saveToHistory('nearby essentials', summary);
             hideThinkingIndicator();
         }
 
