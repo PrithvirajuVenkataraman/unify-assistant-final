@@ -365,6 +365,50 @@ body.dark {
 .input-utility-btn svg {
     width: 18px !important;
     height: 18px !important;
+    display: block;
+    margin: 0;
+    pointer-events: none;
+}
+
+.footer-action-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    line-height: 1 !important;
+    position: relative;
+}
+
+#voice-to-text-btn,
+#converse-mode-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+#voice-to-text-btn .tts-wave-container {
+    position: absolute;
+    inset: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+}
+
+#voice-to-text-btn .tts-wave-container.not-speaking {
+    opacity: 0;
+}
+
+#voice-to-text-btn .tts-wave-container.speaking {
+    opacity: 1;
+}
+
+#voice-to-text-btn .tts-wave-line {
+    width: 16px;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
 }
 
 .message-action-btn {
