@@ -19054,7 +19054,10 @@ async function handleContinuousVisionQuery(text) {
             data = {};
         }
         if (!response.ok || !data?.success) {
-            const failMsg = String(data?.error || 'Vision analysis failed. Please try again.').trim();
+            const rawError = String(data?.error || '').trim();
+            const failMsg = /\bnot found for api version|supported methods|generatecontent|model .* failed with status 404\b/i.test(rawError)
+                ? 'Vision service is temporarily unavailable for the current model. Please retry in a few seconds.'
+                : (rawError || 'Vision analysis failed. Please try again.');
             addChatMessage(failMsg, false);
             speak(failMsg);
             return;
