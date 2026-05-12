@@ -284,7 +284,7 @@
     <canvas id="continuous-vision-canvas" class="hidden"></canvas>
 
     <div id="safety-panel-backdrop" class="side-panel-backdrop hidden" onclick="closeSafetyPanel()"></div>
-    <aside id="safety-panel" class="side-panel hidden" aria-hidden="true" aria-label="Safety & Others panel">
+    <aside id="safety-panel" class="side-panel hidden" aria-hidden="true" aria-label="Safety & Others panel" tabindex="-1">
         <div class="flex items-start justify-between gap-4 mb-6">
             <div>
                 <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200 text-xs font-semibold mb-3">
@@ -325,8 +325,9 @@
             <p class="text-xs text-gray-500 dark:text-gray-400">Note: browsers cannot auto-send SMS silently. JARVIS will keep preparing updated SMS drafts while you move.</p>
         </div>
 
+        <div id="safety-status-live" class="sr-only" role="status" aria-live="assertive" aria-atomic="true"></div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button onclick="triggerEmergencySmsNow()" class="px-4 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white text-sm font-semibold transition-all">SOS SMS</button>
+            <button id="safety-sos-btn" onclick="triggerEmergencySmsNow()" class="safety-sos-btn px-4 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white text-sm font-semibold transition-all">SOS SMS</button>
             <button onclick="stopSafetyLiveLocationSharing(); showTemporaryMessage('Live SOS updates stopped.')" class="px-4 py-3 rounded-xl bg-slate-700 hover:bg-slate-800 text-white text-sm font-semibold transition-all">Stop live SOS updates</button>
             <button onclick="shareCurrentLocation()" class="px-4 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all">Share location</button>
             <button onclick="closeSafetyPanel(); openNearbyEssentialsSearch();" class="px-4 py-3 rounded-xl bg-rose-100 dark:bg-rose-900/40 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-sm font-semibold transition-all">Nearby essentials</button>
@@ -4021,6 +4022,13 @@ async function handleNameCorrection(text) {
             initialDraftDispatched: false,
             latestMessage: ''
         };
+        let safetySosCountdownState = {
+            active: false,
+            remainingSeconds: 0,
+            timerId: null
+        };
+        let safetyPanelLastFocusedElement = null;
+        let safetyPanelKeydownHandler = null;
         let tripState = {
             active: false,
             watchId: null,
@@ -16367,27 +16375,94 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             renderSafetyCard();
         }
 
+        function announceSafetyLiveMessage(message) {
+            const liveRegion = document.getElementById('safety-status-live');
+            if (!liveRegion) return;
+            liveRegion.textContent = '';
+            setTimeout(() => {
+                liveRegion.textContent = String(message || '').trim();
+            }, 40);
+        }
+
+        function getSafetyPanelFocusableElements(panel) {
+            if (!panel) return [];
+            const nodes = panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            return Array.from(nodes).filter(node => {
+                if (!(node instanceof HTMLElement)) return false;
+                const style = window.getComputedStyle(node);
+                return style.display !== 'none' && style.visibility !== 'hidden' && !node.hasAttribute('disabled');
+            });
+        }
+
+        function bindSafetyPanelFocusTrap(panel) {
+            if (!panel || safetyPanelKeydownHandler) return;
+            safetyPanelKeydownHandler = (event) => {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeSafetyPanel();
+                    return;
+                }
+                if (event.key !== 'Tab') return;
+                const focusables = getSafetyPanelFocusableElements(panel);
+                if (!focusables.length) return;
+                const first = focusables[0];
+                const last = focusables[focusables.length - 1];
+                const active = document.activeElement;
+                if (event.shiftKey && active === first) {
+                    event.preventDefault();
+                    last.focus();
+                } else if (!event.shiftKey && active === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            };
+            panel.addEventListener('keydown', safetyPanelKeydownHandler);
+        }
+
+        function unbindSafetyPanelFocusTrap(panel) {
+            if (!panel || !safetyPanelKeydownHandler) return;
+            panel.removeEventListener('keydown', safetyPanelKeydownHandler);
+            safetyPanelKeydownHandler = null;
+        }
+
+        function focusSafetyPanelPrimaryControl(panel) {
+            const focusables = getSafetyPanelFocusableElements(panel);
+            if (focusables.length) {
+                focusables[0].focus();
+            } else {
+                panel.focus();
+            }
+        }
+
         function showSafetyPanel() {
             const panel = document.getElementById('safety-panel');
             const backdrop = document.getElementById('safety-panel-backdrop');
             if (!panel || !backdrop) return;
+            safetyPanelLastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
             renderSafetyCard();
             panel.classList.remove('hidden');
             backdrop.classList.remove('hidden');
             panel.setAttribute('aria-hidden', 'false');
             document.querySelector('.page-shell')?.setAttribute('aria-hidden', 'true');
             document.body.style.overflow = 'hidden';
+            bindSafetyPanelFocusTrap(panel);
+            setTimeout(() => focusSafetyPanelPrimaryControl(panel), 0);
         }
 
         function closeSafetyPanel() {
             const panel = document.getElementById('safety-panel');
             const backdrop = document.getElementById('safety-panel-backdrop');
             if (!panel || !backdrop) return;
+            cancelEmergencySosCountdown({ announce: false });
             panel.classList.add('hidden');
             backdrop.classList.add('hidden');
             panel.setAttribute('aria-hidden', 'true');
             document.querySelector('.page-shell')?.removeAttribute('aria-hidden');
             document.body.style.overflow = '';
+            unbindSafetyPanelFocusTrap(panel);
+            if (safetyPanelLastFocusedElement && document.contains(safetyPanelLastFocusedElement)) {
+                safetyPanelLastFocusedElement.focus();
+            }
         }
 
         function renderSafetyCard() {
@@ -17091,6 +17166,39 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             safetyLiveShareState.latestMessage = '';
         }
 
+        function getSafetySosButton() {
+            return document.getElementById('safety-sos-btn');
+        }
+
+        function setSafetySosButtonState(label, arming = false) {
+            const btn = getSafetySosButton();
+            if (!btn) return;
+            btn.textContent = String(label || 'SOS SMS');
+            btn.classList.toggle('is-arming', !!arming);
+            btn.setAttribute('aria-busy', arming ? 'true' : 'false');
+        }
+
+        function cancelEmergencySosCountdown(options = {}) {
+            if (safetySosCountdownState.timerId) {
+                clearInterval(safetySosCountdownState.timerId);
+            }
+            const hadActive = safetySosCountdownState.active;
+            safetySosCountdownState.active = false;
+            safetySosCountdownState.remainingSeconds = 0;
+            safetySosCountdownState.timerId = null;
+            setSafetySosButtonState('SOS SMS', false);
+            if (hadActive && options.announce) {
+                announceSafetyLiveMessage('SOS countdown cancelled.');
+                showTemporaryMessage('SOS countdown cancelled.');
+            }
+        }
+
+        function getNearbyEtaLabel(miles) {
+            const roadMiles = Math.max(0.1, Number(miles || 0));
+            const speed = getCommuteSpeedMph(commuteProfile?.mode || 'drive');
+            return Math.max(2, Math.round((roadMiles / speed) * 60));
+        }
+
         function buildSafetySmsMessage({ lat, lon, mapUrl, emergency = false }) {
             const template = String(safetyProfile?.sosMessageTemplate || '').trim() || 'Emergency: I need help right now. My live location: {map}';
             const finalText = template
@@ -17194,8 +17302,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             await shareCurrentLocationWithOptions({ emergency: true, source: origin || 'voice_command' });
         }
 
-        async function triggerEmergencySmsNow() {
-            showSafetyPanel();
+        async function executeEmergencySmsNow() {
             const trustedPhone = sanitizePhoneForSms(safetyProfile?.trustedContact || '');
             if (!trustedPhone) {
                 await deliverApiReply('safety_trusted_contact_phone_hint', {
@@ -17209,6 +17316,35 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             if (safetyProfile?.liveSmsUpdatesEnabled) {
                 startSafetyLiveLocationSharing('sos_button_sms');
             }
+        }
+
+        function startEmergencySosCountdown() {
+            cancelEmergencySosCountdown({ announce: false });
+            safetySosCountdownState.active = true;
+            safetySosCountdownState.remainingSeconds = 2;
+            setSafetySosButtonState('Cancel SOS (2)', true);
+            announceSafetyLiveMessage('SOS will trigger in 2 seconds. Tap SOS again to cancel.');
+            showTemporaryMessage('SOS will trigger in 2 seconds. Tap SOS again to cancel.');
+
+            safetySosCountdownState.timerId = setInterval(async () => {
+                safetySosCountdownState.remainingSeconds -= 1;
+                if (safetySosCountdownState.remainingSeconds > 0) {
+                    setSafetySosButtonState(`Cancel SOS (${safetySosCountdownState.remainingSeconds})`, true);
+                    announceSafetyLiveMessage(`SOS will trigger in ${safetySosCountdownState.remainingSeconds} second.`);
+                    return;
+                }
+                cancelEmergencySosCountdown({ announce: false });
+                await executeEmergencySmsNow();
+            }, 1000);
+        }
+
+        async function triggerEmergencySmsNow() {
+            showSafetyPanel();
+            if (safetySosCountdownState.active) {
+                cancelEmergencySosCountdown({ announce: true });
+                return;
+            }
+            startEmergencySosCountdown();
         }
 
         async function shareCurrentLocationWithOptions(options = {}) {
@@ -17231,6 +17367,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     if (!openedWhatsApp) {
                         showWhatsAppFallbackHint(trustedPhone, shareText);
                     }
+                    announceSafetyLiveMessage('SOS drafts prepared for SMS and WhatsApp.');
                     showTemporaryMessage('Emergency draft prepared (SMS + WhatsApp fallback).');
                 } else if (navigator.share) {
                     await navigator.share({
@@ -17246,6 +17383,9 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     }
                 }
             } catch (error) {
+                if (isEmergency) {
+                    announceSafetyLiveMessage('SOS location share failed. Please try again.');
+                }
                 await deliverApiReply('gps_access_error', {
                     feature: 'location_sharing'
                 });
@@ -17375,6 +17515,91 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             return `https://www.google.com/maps/dir/?${params.toString()}`;
         }
 
+        function sanitizeNearbyPhone(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return '';
+            const digitsOnly = raw.replace(/\D/g, '');
+            if (digitsOnly.length < 8 || digitsOnly.length > 15) return '';
+            return raw.startsWith('+') ? `+${digitsOnly}` : digitsOnly;
+        }
+
+        function extractNearbyPhoneNumber(result) {
+            const text = `${String(result?.title || '')} ${String(result?.description || '')}`;
+            const matches = text.match(/(?:\+?\d[\d\s().-]{7,}\d)/g) || [];
+            for (const candidate of matches) {
+                const normalized = sanitizeNearbyPhone(candidate);
+                if (normalized) return normalized;
+            }
+            return '';
+        }
+
+        function formatNearbyDistanceMeta(distanceMeta) {
+            if (!distanceMeta || !Number.isFinite(distanceMeta.distanceKm)) return '';
+            const km = Number(distanceMeta.distanceKm).toFixed(1);
+            const eta = Number.isFinite(distanceMeta.etaMinutes) ? ` - ~${Math.round(distanceMeta.etaMinutes)} min` : '';
+            return `${km} km away${eta}`;
+        }
+
+        async function enrichNearbyResultsWithMeta(results = [], locationContext = null, lat = null, lon = null) {
+            const source = Array.isArray(results) ? results.filter(Boolean) : [];
+            if (!source.length) return [];
+
+            const canMeasure = Number.isFinite(lat) && Number.isFinite(lon);
+            const locationLabel = [
+                String(locationContext?.city || '').trim(),
+                String(locationContext?.state || '').trim(),
+                String(locationContext?.country || '').trim()
+            ].filter(Boolean).join(', ');
+            const geocodeCache = new Map();
+
+            async function resolveCandidate(query) {
+                const key = String(query || '').toLowerCase().trim();
+                if (!key) return null;
+                if (geocodeCache.has(key)) return geocodeCache.get(key);
+                const candidates = await geocodeLocationCandidates(query, 1);
+                const best = Array.isArray(candidates) ? candidates[0] : null;
+                const resolved = (best && Number.isFinite(best.lat) && Number.isFinite(best.lon)) ? best : null;
+                geocodeCache.set(key, resolved);
+                return resolved;
+            }
+
+            return Promise.all(source.map(async (item) => {
+                const enriched = { ...item };
+                const phone = extractNearbyPhoneNumber(item);
+                if (phone) {
+                    enriched.phone = phone;
+                    enriched.callUrl = `tel:${phone}`;
+                }
+
+                if (!canMeasure) return enriched;
+
+                const title = String(item?.title || '').replace(/[\[\]]/g, '').trim();
+                const queryCandidates = [
+                    [title, locationLabel].filter(Boolean).join(', '),
+                    title
+                ].filter(Boolean);
+
+                let place = null;
+                for (const candidateQuery of queryCandidates) {
+                    place = await resolveCandidate(candidateQuery);
+                    if (place) break;
+                }
+                if (!place) return enriched;
+
+                const straightLineMiles = haversineMiles(lat, lon, Number(place.lat), Number(place.lon));
+                if (!Number.isFinite(straightLineMiles)) return enriched;
+                const roadMiles = estimateRoadMiles(straightLineMiles);
+                const distanceKm = milesToKm(roadMiles);
+                const etaMinutes = getNearbyEtaLabel(roadMiles);
+                enriched.distanceMeta = {
+                    distanceKm,
+                    distanceMiles: roadMiles,
+                    etaMinutes
+                };
+                return enriched;
+            }));
+        }
+
         function buildNearbyResultsSummary(label, results, mapsUrl, webUrl, usedLocation = false, locationLabel = '', category = '') {
             const top = rankNearbyResultsForDisplay(results, category, 4);
             const heading = `${label}${usedLocation ? ' (using your current location)' : ''}`;
@@ -17409,8 +17634,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         <div class="nearby-results-empty">
                             <p class="nearby-results-empty-text">I could not fetch reliable local listings right now.</p>
                             <div class="nearby-actions-row">
-                                <a href="${escapeHtml(mapsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-primary">Open nearby map</a>
-                                <a href="${escapeHtml(webUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Open nearby web results</a>
+                                <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-primary">Open nearby map</a>
+                                <a href="${escapeHtml(webUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Open nearby web results</a>
                             </div>
                         </div>
                     </div>
@@ -17422,13 +17647,18 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 const detailsUrl = String(item?.url || '').trim() || webUrl;
                 const directionsUrl = buildNearbyDirectionsUrl(item, mapsUrl, locationContext, lat, lon);
                 const snippet = summarizeNearbySnippet(item?.description || '', 150);
+                const metaLine = formatNearbyDistanceMeta(item?.distanceMeta);
+                const phone = sanitizeNearbyPhone(item?.phone || '');
+                const callUrl = phone ? `tel:${phone}` : '';
                 return `
                     <div class="nearby-result-card">
                         <p class="nearby-result-title">${idx + 1}. ${escapeHtml(title)}</p>
+                        ${metaLine ? `<p class="nearby-result-meta">${escapeHtml(metaLine)}</p>` : ''}
                         ${snippet ? `<p class="nearby-result-snippet">${escapeHtml(snippet)}</p>` : ''}
                         <div class="nearby-actions-row">
-                            <a href="${escapeHtml(directionsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-primary">Directions</a>
-                            <a href="${escapeHtml(detailsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Details</a>
+                            <a href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-primary">Directions</a>
+                            <a href="${escapeHtml(detailsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Details</a>
+                            ${callUrl ? `<a href="${escapeHtml(callUrl)}" class="nearby-action-btn nearby-action-btn-call">Call</a>` : ''}
                         </div>
                     </div>
                 `.trim();
@@ -17444,8 +17674,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         ${cards}
                     </div>
                     <div class="nearby-actions-row nearby-actions-footer">
-                        <a href="${escapeHtml(mapsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Open full nearby map</a>
-                        <a href="${escapeHtml(webUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Open nearby web results</a>
+                        <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Open full nearby map</a>
+                        <a href="${escapeHtml(webUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Open nearby web results</a>
                     </div>
                 </div>
             `.trim();
@@ -17468,13 +17698,18 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         const snippet = summarizeNearbySnippet(item?.description || '', 120);
                         const directionsUrl = String(item?.directionsUrl || mapsUrl).trim() || mapsUrl;
                         const detailsUrl = String(item?.url || webUrl).trim() || webUrl;
+                        const metaLine = formatNearbyDistanceMeta(item?.distanceMeta);
+                        const phone = sanitizeNearbyPhone(item?.phone || '');
+                        const callUrl = phone ? `tel:${phone}` : '';
                         return `
                             <div class="nearby-result-card">
                                 <p class="nearby-result-title">${idx + 1}. ${escapeHtml(title)}</p>
+                                ${metaLine ? `<p class="nearby-result-meta">${escapeHtml(metaLine)}</p>` : ''}
                                 ${snippet ? `<p class="nearby-result-snippet">${escapeHtml(snippet)}</p>` : ''}
                                 <div class="nearby-actions-row">
-                                    <a href="${escapeHtml(directionsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-primary">Directions</a>
-                                    <a href="${escapeHtml(detailsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Details</a>
+                                    <a href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-primary">Directions</a>
+                                    <a href="${escapeHtml(detailsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Details</a>
+                                    ${callUrl ? `<a href="${escapeHtml(callUrl)}" class="nearby-action-btn nearby-action-btn-call">Call</a>` : ''}
                                 </div>
                             </div>
                         `.trim();
@@ -17490,8 +17725,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         <p class="nearby-section-title">${escapeHtml(sectionLabel)}</p>
                         <div class="nearby-result-grid">${cards}</div>
                         <div class="nearby-actions-row nearby-actions-footer">
-                            <a href="${escapeHtml(mapsUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Open map</a>
-                            <a href="${escapeHtml(webUrl)}" target="_blank" class="nearby-action-btn nearby-action-btn-secondary">Open web results</a>
+                            <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Open map</a>
+                            <a href="${escapeHtml(webUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Open web results</a>
                         </div>
                     </div>
                 `.trim();
@@ -17573,9 +17808,10 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         ? rawResults.filter(item => isNearbyResultLocationMatch(item, locationTokens, locationContext))
                         : [])
                     : rawResults;
+                const enrichedResults = await enrichNearbyResultsWithMeta(results, locationContext, lat, lon);
                 const message = buildNearbyResultsCardsHtml(
                     label,
-                    results,
+                    enrichedResults,
                     mapsUrl,
                     webUrl,
                     usedLocation,
@@ -17587,7 +17823,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 );
                 const summary = buildNearbyResultsSummary(
                     label,
-                    results,
+                    enrichedResults,
                     mapsUrl,
                     webUrl,
                     usedLocation,
@@ -17595,7 +17831,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     category
                 );
                 addVerifiedAssistantMessage(message, 'Nearby search');
-                if (results.length) {
+                if (enrichedResults.length) {
                     speak(`I found ${label.toLowerCase()}. Check the links in chat.`);
                 } else {
                     speak(`I could not verify local listings, but I added location-anchored map links for ${category}.`);
@@ -17703,8 +17939,9 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                             : rawResults;
                         const top = rankNearbyResultsForDisplay(filtered, category, 3);
                         if (top.length) {
+                            const enrichedTop = await enrichNearbyResultsWithMeta(top, locationContext, lat, lon);
                             sectionLines = [`${sectionLabel}:`];
-                            top.forEach((item, idx) => {
+                            enrichedTop.forEach((item, idx) => {
                                 const title = (String(item?.title || '').trim() || `Result ${idx + 1}`).replace(/[\[\]]/g, '');
                                 const url = String(item?.url || '').trim() || webUrl;
                                 const snippet = summarizeNearbySnippet(item?.description || '', 120);
@@ -17716,7 +17953,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                                 label: sectionLabel,
                                 mapsUrl,
                                 webUrl,
-                                results: top.map(item => ({
+                                results: enrichedTop.map(item => ({
                                     ...item,
                                     directionsUrl: buildNearbyDirectionsUrl(item, mapsUrl, locationContext, lat, lon)
                                 }))
