@@ -4608,6 +4608,7 @@ async function handleNameCorrection(text) {
         function getVoiceInteractionState() {
             if (isVoiceTyping || isListening) return 'user-listening';
             if (isAssistantSpeaking) return 'assistant-speaking';
+            if (converseMode) return 'converse-ready';
             return 'idle';
         }
 
@@ -4627,6 +4628,8 @@ async function handleNameCorrection(text) {
                 label.textContent = 'Speaking';
             } else if (state === 'user-listening') {
                 label.textContent = 'Listening';
+            } else if (state === 'converse-ready') {
+                label.textContent = 'Converse ON';
             } else {
                 label.textContent = '';
             }
@@ -4638,6 +4641,7 @@ async function handleNameCorrection(text) {
             }
             if (converseBtn) {
                 converseBtn.classList.toggle('is-assistant-speaking', state === 'assistant-speaking');
+                converseBtn.classList.toggle('is-active', !!converseMode && state !== 'assistant-speaking');
             }
         }
 
@@ -5173,6 +5177,7 @@ async function handleNameCorrection(text) {
 
         function updateAssistantModeUI() {
             updateConverseIndicator();
+            updateVoiceInteractionGraphics();
             toggleSendButton();
             syncHelpModalModeButtons();
         }
