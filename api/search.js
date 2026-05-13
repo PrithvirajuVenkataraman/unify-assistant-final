@@ -118,12 +118,14 @@ function buildSearchQueries(query) {
     const aliasedTopic = normalizeSearchTopic(topic);
     const domain = detectQueryDomain(raw);
     const entertainmentVariants = buildEntertainmentQueryVariants(raw, aliasedTopic || topic, domain);
+    const broadFactualVariants = buildBroadFactualEntityVariants(raw, aliasedTopic || topic, domain);
     if (aliasedTopic && aliasedTopic.toLowerCase() !== topic.toLowerCase()) {
         out.push(aliasedTopic);
     }
     const dynamicVariants = buildDynamicQueryVariants(raw, aliasedTopic || topic, domain);
     out.push(...dynamicVariants);
     out.push(...entertainmentVariants);
+    out.push(...broadFactualVariants);
 
     if (isTimeSensitiveQuery(raw)) {
         const timeAwareTopic = raw
@@ -175,6 +177,82 @@ function buildDynamicQueryVariants(rawQuery, topic, domain) {
     }
 
     return out;
+}
+
+function isPureHowToOrCodingConceptSearch(text) {
+    const t = String(text || '').toLowerCase();
+    if (!t.trim()) return false;
+    const technicalSignals = /\b(hld|lld|system design|design pattern|architecture|algorithm|data structure|time complexity|space complexity|javascript|typescript|python|java|react|node|sql|backend|frontend|microservices?|docker|kubernetes|devops|debug|bug fix|refactor|unit test)\b/;
+    const howToSignals = /^(how to|how do i|how can i|tutorial|guide|walk me through|show me how to)\b/;
+    const liveSignals = /\b(current|latest|today|now|news|release|market|price|rate|winner|score)\b/;
+    return (technicalSignals.test(t) && !liveSignals.test(t)) || (howToSignals.test(t) && technicalSignals.test(t));
+}
+
+function isBroadFactualPromptSearch(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return false;
+    if (isPureHowToOrCodingConceptSearch(raw)) return false;
+    if (/^(what do you think of|what are your thoughts on|thoughts on)\b/i.test(raw)) return false;
+    const factualAskPattern = /^(who is|who was|what is|what was|when did|when was|where is|where was|tell me about|define|meaning of|do you know)\b/i;
+    const worldFactSignal = /\b(company|person|founder|ceo|president|prime minister|captain|coach|team|club|country|city|state|movie|film|song|album|actor|actress|director|scientist|astronaut|war|election|festival|holiday|record|title|stats?|score|winner|result)\b/i;
+    return factualAskPattern.test(raw) && worldFactSignal.test(raw);
+}
+
+function extractBroadFactualSubject(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+    const patterns = [
+        /^(?:who is|who was|what is|what was|tell me about|define|meaning of|do you know)\s+(.+?)\??$/i,
+        /^(?:when did|when was)\s+(.+?)\s+(?:release|released|come out|premiere|premiered)\b.*$/i,
+        /^(?:where is|where was)\s+(.+?)\??$/i
+    ];
+    for (const pattern of patterns) {
+        const match = raw.match(pattern);
+        if (match?.[1]) {
+            return normalizeSearchTopic(match[1]
+                .replace(/^(a|an|the)\s+/i, '')
+                .replace(/[?.!,;]+$/g, '')
+                .trim());
+        }
+    }
+    return '';
+}
+
+function extractBroadFactualRole(text) {
+    const match = String(text || '').toLowerCase().match(/\b(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|minister|director general|administrator|head)\b/);
+    return match?.[1] || '';
+}
+
+function getTrustedSourceHintForDomain(domain) {
+    const d = String(domain || '').toLowerCase();
+    if (d === 'sports') return 'site:espncricinfo.com OR site:iplt20.com OR site:fifa.com';
+    if (d === 'finance') return 'site:reuters.com OR site:bloomberg.com OR site:marketwatch.com';
+    if (d === 'politics') return 'site:reuters.com OR site:apnews.com OR site:bbc.com';
+    if (d === 'space_science') return 'site:nasa.gov OR site:isro.gov.in OR site:esa.int';
+    if (d === 'entertainment') return 'site:imdb.com OR site:wikipedia.org';
+    return 'site:reuters.com OR site:apnews.com OR site:bbc.com';
+}
+
+function buildBroadFactualEntityVariants(rawQuery, topic, domain) {
+    const raw = String(rawQuery || '').trim();
+    if (!isBroadFactualPromptSearch(raw)) return [];
+
+    const subject = extractBroadFactualSubject(raw) || String(topic || '').trim();
+    if (!subject) return [];
+    const role = extractBroadFactualRole(raw);
+    const trustedHint = getTrustedSourceHintForDomain(domain);
+    const hints = getDomainHints(domain);
+    const variants = [
+        `${subject} ${hints.primary}`.trim(),
+        `${subject} official profile`.trim(),
+        `${subject} verified sources`.trim(),
+        `${subject} ${trustedHint}`.trim()
+    ];
+    if (role) {
+        variants.push(`${subject} current ${role}`.trim());
+        variants.push(`${subject} ${role} official`.trim());
+    }
+    return Array.from(new Set(variants.filter(Boolean)));
 }
 
 function buildEntertainmentQueryVariants(rawQuery, topic, domain) {
@@ -367,4 +445,3 @@ function extractEntertainmentSubject(text) {
         .replace(/\s+/g, ' ')
         .trim());
 }
-
