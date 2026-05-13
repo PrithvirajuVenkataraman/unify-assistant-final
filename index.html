@@ -938,7 +938,6 @@ async function maybeShowReferenceImageForQuery(userText, assistantText = '') {
 <div class="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white/90 dark:bg-slate-900/60">
   <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2">Reference image: ${escapeHtml(ref.title)}</p>
   <img src="${ref.imageUrl}" alt="${escapeHtml(ref.title)} reference image" class="w-full h-auto max-h-[70vh] object-contain rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800" />
-  <p class="text-[11px] mt-2 text-slate-500 dark:text-slate-400">Source: <a class="underline text-sky-600 dark:text-sky-300" href="${ref.sourceUrl}" target="_blank">Wikipedia</a></p>
 </div>`;
     addChatMessage(card, false, false);
 }
@@ -965,8 +964,13 @@ function isImageGenerationRequest(text) {
     return !!parseImageGenerationPrompt(text);
 }
 
-async function generateImageFromPrompt(prompt, originalUserText = '') {
+async function generateImageFromPrompt(prompt, originalUserText = '', options = {}) {
     const cleanedPrompt = String(prompt || '').trim().slice(0, 500);
+    const referenceImageDataUrl = String(options?.referenceImageDataUrl || '').trim();
+    const isTemplePrecision = Boolean(
+        options?.precisionMode === 'temple' ||
+        /\b(nataraja|nataraj|chidambaram|temple|gopuram|dravidian)\b/i.test(cleanedPrompt)
+    );
     if (!cleanedPrompt) {
         addChatMessage('Please provide an image prompt after the command. Example: "generate image of a neon city in rain".', false);
         return;
@@ -989,7 +993,9 @@ async function generateImageFromPrompt(prompt, originalUserText = '') {
                 prompt: cleanedPrompt,
                 model: 'flux',
                 width: 1024,
-                height: 1024
+                height: 1024,
+                referenceImage: referenceImageDataUrl || '',
+                precisionMode: isTemplePrecision ? 'temple' : ''
             })
         });
         const data = await response.json().catch(() => ({}));
@@ -999,13 +1005,16 @@ async function generateImageFromPrompt(prompt, originalUserText = '') {
 
         const card = `
 <div class="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white/90 dark:bg-slate-900/60">
-  <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2">Generated image</p>
+  <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2 text-center">Generated image</p>
   <img src="${escapeHtml(data.imageUrl)}" alt="${escapeHtml(cleanedPrompt)}" class="w-full h-auto max-h-[70vh] object-contain rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800" loading="lazy" />
   <p class="text-[11px] mt-2 text-slate-500 dark:text-slate-400">Prompt: ${escapeHtml(cleanedPrompt)}</p>
-  <p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Provider: Pollinations (${escapeHtml(String(data?.model || 'flux'))})</p>
-  <p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Source: <a class="underline text-sky-600 dark:text-sky-300" href="${escapeHtml(data.imageUrl)}" target="_blank" rel="noopener noreferrer">Open image URL</a></p>
+  ${referenceImageDataUrl ? `<p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Reference image: ${data?.referenceApplied ? 'Applied' : 'Not applied (fallback used)'}</p>` : ''}
+  ${isTemplePrecision ? `<p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Precision mode: Temple architecture fidelity</p>` : ''}
 </div>`;
         addChatMessage(card, false, false);
+        if (document.getElementById('help-modal')) {
+            showTemporaryMessage('Close Help & Options to see the picture.');
+        }
         const spoken = 'Image is ready.';
         speak(spoken);
         saveToHistory(originalUserText || `Generate image: ${cleanedPrompt}`, `Generated image for prompt: ${cleanedPrompt}`);
@@ -1018,12 +1027,72 @@ async function generateImageFromPrompt(prompt, originalUserText = '') {
     }
 }
 
-function openImageGenerationPrompt() {
+async function pickImageReferenceDataUrl() {
+    return await new Promise((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/png,image/jpeg,image/webp';
+        input.style.display = 'none';
+        document.body.appendChild(input);
+
+        const cleanup = () => {
+            if (input.parentNode) input.parentNode.removeChild(input);
+        };
+
+        input.addEventListener('change', () => {
+            const file = input.files && input.files[0];
+            if (!file) {
+                cleanup();
+                resolve('');
+                return;
+            }
+            if (file.size > 1.2 * 1024 * 1024) {
+                cleanup();
+                addChatMessage('Reference image is too large. Please use an image under 1.2 MB.', false);
+                resolve('');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = () => {
+                const dataUrl = String(reader.result || '');
+                cleanup();
+                resolve(dataUrl);
+            };
+            reader.onerror = () => {
+                cleanup();
+                resolve('');
+            };
+            reader.readAsDataURL(file);
+        }, { once: true });
+
+        input.click();
+    });
+}
+
+async function openImageGenerationPrompt() {
     const prompt = window.prompt('Describe the image you want to generate:');
     if (!prompt) return;
+    let referenceImageDataUrl = '';
+    const wantsReference = window.confirm('Do you want to upload a reference image for customization?');
+    if (wantsReference) {
+        referenceImageDataUrl = await pickImageReferenceDataUrl();
+    }
     const userText = `Generate image of ${prompt}`;
     addChatMessage(userText, true);
-    generateImageFromPrompt(prompt, userText);
+    generateImageFromPrompt(prompt, userText, { referenceImageDataUrl });
+}
+
+async function openImageGenerationPromptWithReference() {
+    const prompt = window.prompt('Describe the image you want to generate:');
+    if (!prompt) return;
+    const referenceImageDataUrl = await pickImageReferenceDataUrl();
+    if (!referenceImageDataUrl) {
+        addChatMessage('Reference image was not selected. Generation cancelled.', false);
+        return;
+    }
+    const userText = `Generate image of ${prompt} with reference image`;
+    addChatMessage(userText, true);
+    generateImageFromPrompt(prompt, userText, { referenceImageDataUrl });
 }
 
 // ========== CONTENT MODERATION ==========
@@ -3831,6 +3900,10 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
 
 const CAG_MAX_ENTRIES = 80;
 const CAG_MAX_CONTEXT_CHARS = 1800;
+const CAG_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const CAG_LIVE_QUERY_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+const CAG_MIN_SIMILARITY = 0.24;
+const CAG_MIN_TOKEN_OVERLAP = 2;
 let cagMemoryEntries = [];
 
 function getCagStorageKey() {
@@ -3848,9 +3921,16 @@ function normalizeCagText(text) {
 function tokenizeCagText(text) {
     return normalizeCagText(text)
         .split(' ')
-        .filter(token => token.length >= 3)
+        .filter(token => token.length >= 3 && !CAG_STOPWORDS.has(token))
         .slice(0, 50);
 }
+
+const CAG_STOPWORDS = new Set([
+    'the', 'and', 'for', 'with', 'this', 'that', 'from', 'your', 'have', 'what',
+    'when', 'where', 'which', 'who', 'will', 'would', 'could', 'should', 'about',
+    'there', 'their', 'they', 'them', 'into', 'also', 'just', 'please', 'tell',
+    'give', 'show', 'today', 'latest', 'current'
+]);
 
 function getCagSimilarity(query, sourceText) {
     const a = new Set(tokenizeCagText(query));
@@ -3864,6 +3944,22 @@ function getCagSimilarity(query, sourceText) {
     return overlap / union;
 }
 
+function getCagTokenOverlap(query, sourceText) {
+    const a = new Set(tokenizeCagText(query));
+    const b = new Set(tokenizeCagText(sourceText));
+    if (!a.size || !b.size) return 0;
+    let overlap = 0;
+    for (const token of a) {
+        if (b.has(token)) overlap += 1;
+    }
+    return overlap;
+}
+
+function isLiveFreshnessQuery(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(latest|recent|current|today|now|as of|right now|live|breaking)\b/.test(t);
+}
+
 function loadCagMemory() {
     cagMemoryEntries = [];
     if (!persistMemoryToDevice) return;
@@ -3872,8 +3968,15 @@ function loadCagMemory() {
         if (!raw) return;
         const parsed = JSON.parse(raw);
         if (!Array.isArray(parsed)) return;
+        const now = Date.now();
         cagMemoryEntries = parsed
-            .filter(item => item && typeof item.user === 'string' && typeof item.assistant === 'string')
+            .filter(item =>
+                item &&
+                typeof item.user === 'string' &&
+                typeof item.assistant === 'string' &&
+                Number.isFinite(Number(item.ts)) &&
+                now - Number(item.ts) <= CAG_MAX_AGE_MS
+            )
             .slice(-CAG_MAX_ENTRIES);
     } catch (_) {}
 }
@@ -3906,13 +4009,18 @@ function buildCagContextForQuery(query) {
     if (!cagModeEnabled) return '';
     const q = String(query || '').trim();
     if (!q || !cagMemoryEntries.length) return '';
+    const now = Date.now();
+    const liveSensitive = isCurrentInfoQuery(q) || isLiveFreshnessQuery(q);
     const scored = cagMemoryEntries
         .map(item => ({
             item,
-            score: getCagSimilarity(q, `${item.user}\n${item.assistant}`)
+            ageMs: Math.max(0, now - Number(item?.ts || 0)),
+            score: getCagSimilarity(q, `${item.user}\n${item.assistant}`),
+            overlap: getCagTokenOverlap(q, `${item.user}\n${item.assistant}`)
         }))
-        .filter(entry => entry.score >= 0.18)
-        .sort((a, b) => b.score - a.score)
+        .filter(entry => Number.isFinite(entry.ageMs) && entry.ageMs <= (liveSensitive ? CAG_LIVE_QUERY_MAX_AGE_MS : CAG_MAX_AGE_MS))
+        .filter(entry => entry.score >= CAG_MIN_SIMILARITY && entry.overlap >= CAG_MIN_TOKEN_OVERLAP)
+        .sort((a, b) => (b.score - a.score) || (a.ageMs - b.ageMs))
         .slice(0, 3);
     if (!scored.length) return '';
 
@@ -4717,14 +4825,14 @@ async function handleNameCorrection(text) {
                                 <div class="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                     <div>
                                         <p class="font-semibold text-gray-900 dark:text-white">CAG Mode</p>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400">Cache-Augmented Generation without vector DB</p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">Uses recent chat context for more consistent replies; turn off for fresh, context-light answers.</p>
                                     </div>
                                     <label class="relative inline-flex items-center cursor-pointer">
                                         <input type="checkbox" id="cag-mode-toggle" class="sr-only peer" ${cagModeEnabled ? 'checked' : ''} onchange="setCagMode(this.checked)">
                                         <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                                     </label>
                                 </div>
-                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg space-y-3">
+                                <div class="image-gen-settings-card p-3 bg-gray-100 dark:bg-gray-700 rounded-lg space-y-3">
                                     <div class="flex items-center justify-between">
                                         <div>
                                             <p class="font-semibold text-gray-900 dark:text-white">Free Image Generation</p>
@@ -4738,7 +4846,10 @@ async function handleNameCorrection(text) {
                                     <button onclick="openImageGenerationPrompt()" class="w-full px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-all">
                                         Generate Image
                                     </button>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">Try prompt: "generate image of a futuristic Chennai skyline at sunrise"</p>
+                                    <button onclick="openImageGenerationPromptWithReference()" class="w-full px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold transition-all">
+                                        Generate With Reference Image
+                                    </button>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">Try prompt: "generate image of a futuristic Chennai skyline at sunrise" (you can also upload a reference image).</p>
                                 </div>
                                 <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg space-y-2">
                                     <p class="font-semibold text-gray-900 dark:text-white">Converse Accuracy</p>
@@ -5204,7 +5315,11 @@ async function handleNameCorrection(text) {
             cagModeEnabled = !!enabled;
             window.cagModeEnabled = cagModeEnabled;
             saveAssistantModes();
-            showTemporaryMessage(cagModeEnabled ? 'CAG mode enabled.' : 'CAG mode disabled.');
+            showTemporaryMessage(
+                cagModeEnabled
+                    ? 'Context memory enabled: replies use relevant recent chat context.'
+                    : 'Context memory disabled: replies prioritize fresh standalone answers.'
+            );
         }
 
         async function setFreeImageGenerationMode(enabled) {
