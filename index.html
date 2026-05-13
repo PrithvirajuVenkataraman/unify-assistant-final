@@ -5450,9 +5450,19 @@ async function handleNameCorrection(text) {
                 : (isOn ? 'Converse mode ON: Hands-free listening' : 'Converse mode OFF');
 
             document.body.appendChild(toast);
+            requestAnimationFrame(() => {
+                toast.classList.add('is-visible');
+            });
+
+            const visibleMs = 2000;
+            const fadeMs = 550;
             setTimeout(() => {
-                toast.remove();
-            }, 2300);
+                toast.classList.remove('is-visible');
+                toast.classList.add('is-hiding');
+                setTimeout(() => {
+                    if (toast.parentNode) toast.remove();
+                }, fadeMs);
+            }, visibleMs);
         }
 
         function updateVoiceToTextButton() {
