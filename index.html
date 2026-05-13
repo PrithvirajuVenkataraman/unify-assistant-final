@@ -4317,6 +4317,10 @@ async function handleNameCorrection(text) {
         let voiceTypingInterimText = '';
         let voiceTypingSilenceTimer = null;
         let voiceTypingAutoSendOnStop = false;
+        let voiceTypingBaseText = '';
+        let voiceTypingCommitOnEnd = false;
+        let voiceTypingStopRequested = false;
+        let vttSpeechDecayTimer = null;
         let inputHistory = [];
         let inputHistoryIndex = -1;
         let lastSubmissionFingerprint = '';
@@ -5527,8 +5531,37 @@ async function handleNameCorrection(text) {
                 return;
             }
 
+            shell.classList.remove('vtt-speaking');
+            if (vttSpeechDecayTimer) {
+                clearTimeout(vttSpeechDecayTimer);
+                vttSpeechDecayTimer = null;
+            }
+
             // Restore default primary-action logic when VTT mode exits.
             toggleSendButton();
+        }
+
+        function setVttSpeechWaveState(isSpeaking = false) {
+            const shell = document.getElementById('input-bar-inner');
+            if (!shell) return;
+            if (!isVoiceTyping) {
+                shell.classList.remove('vtt-speaking');
+                return;
+            }
+            if (isSpeaking) {
+                shell.classList.add('vtt-speaking');
+                if (vttSpeechDecayTimer) {
+                    clearTimeout(vttSpeechDecayTimer);
+                    vttSpeechDecayTimer = null;
+                }
+                return;
+            }
+            if (vttSpeechDecayTimer) clearTimeout(vttSpeechDecayTimer);
+            vttSpeechDecayTimer = setTimeout(() => {
+                const liveShell = document.getElementById('input-bar-inner');
+                if (liveShell) liveShell.classList.remove('vtt-speaking');
+                vttSpeechDecayTimer = null;
+            }, 520);
         }
 
         function initializeVoiceToTextRecognition() {
@@ -5542,8 +5575,18 @@ async function handleNameCorrection(text) {
             voiceTypingRecognition.onstart = () => {
                 stopSpeaking();
                 isVoiceTyping = true;
+                voiceTypingStopRequested = false;
                 updateVoiceToTextButton();
+                setVttSpeechWaveState(false);
                 showTemporaryMessage('Listening... tap the mic again to stop.');
+            };
+
+            voiceTypingRecognition.onspeechstart = () => {
+                setVttSpeechWaveState(true);
+            };
+
+            voiceTypingRecognition.onspeechend = () => {
+                setVttSpeechWaveState(false);
             };
 
             voiceTypingRecognition.onresult = (event) => {
@@ -5557,20 +5600,35 @@ async function handleNameCorrection(text) {
                     }
                 }
                 voiceTypingInterimText = interim.trim();
-                if (voiceTypingSilenceTimer) clearTimeout(voiceTypingSilenceTimer);
-                voiceTypingSilenceTimer = setTimeout(() => {
-                    if (isVoiceTyping) stopVoiceToTextInput(true);
-                }, 2200);
+                const hasSpeechChunk = Boolean((`${voiceTypingFinalText} ${voiceTypingInterimText}`).trim());
+                if (hasSpeechChunk) {
+                    setVttSpeechWaveState(true);
+                }
             };
 
-            voiceTypingRecognition.onerror = () => {
-                isVoiceTyping = false;
-                voiceTypingCommitOnEnd = false;
-                updateVoiceToTextButton();
+            voiceTypingRecognition.onerror = (event) => {
+                const err = String(event?.error || '').toLowerCase();
+                if (err === 'not-allowed' || err === 'service-not-allowed' || err === 'audio-capture') {
+                    isVoiceTyping = false;
+                    voiceTypingStopRequested = true;
+                    voiceTypingCommitOnEnd = false;
+                    setVttSpeechWaveState(false);
+                    updateVoiceToTextButton();
+                }
             };
 
             voiceTypingRecognition.onend = () => {
+                if (!voiceTypingStopRequested) {
+                    try {
+                        voiceTypingRecognition.start();
+                        return;
+                    } catch (e) {
+                        // Fall through to graceful stop when restart is not possible.
+                    }
+                }
+
                 isVoiceTyping = false;
+                setVttSpeechWaveState(false);
                 updateVoiceToTextButton();
                 if (!voiceTypingCommitOnEnd) return;
 
@@ -5590,6 +5648,7 @@ async function handleNameCorrection(text) {
                 voiceTypingFinalText = '';
                 voiceTypingInterimText = '';
                 voiceTypingBaseText = '';
+                voiceTypingStopRequested = false;
                 const shouldAutoSend = !!voiceTypingAutoSendOnStop;
                 voiceTypingAutoSendOnStop = false;
                 if (voiceTypingSilenceTimer) {
@@ -5628,6 +5687,7 @@ async function handleNameCorrection(text) {
             voiceTypingFinalText = '';
             voiceTypingInterimText = '';
             voiceTypingCommitOnEnd = true;
+            voiceTypingStopRequested = false;
 
             try {
                 voiceTypingRecognition.start();
@@ -5636,6 +5696,7 @@ async function handleNameCorrection(text) {
 
         function stopVoiceToTextInput(commitToInput = true) {
             if (!voiceTypingRecognition) return;
+            voiceTypingStopRequested = true;
             voiceTypingCommitOnEnd = !!commitToInput;
             try {
                 voiceTypingRecognition.stop();
@@ -12592,9 +12653,13 @@ const DOMAIN_SOURCE_POLICIES = {
     politics: {
         trustedDomains: [
             'gov.in',
+            'gov.uk',
+            'whitehouse.gov',
             'parliament.uk',
             'congress.gov',
             'eci.gov.in',
+            'wikipedia.org',
+            'britannica.com',
             'reuters.com',
             'apnews.com',
             'bbc.com',
@@ -12604,9 +12669,13 @@ const DOMAIN_SOURCE_POLICIES = {
         ],
         preferredDomains: [
             'gov.in',
+            'gov.uk',
+            'whitehouse.gov',
             'eci.gov.in',
             'parliament.uk',
-            'congress.gov'
+            'congress.gov',
+            'wikipedia.org',
+            'britannica.com'
         ]
     },
     finance: {
@@ -13220,6 +13289,7 @@ function extractRoleQueryParts(text) {
     const rolePatterns = [
         /\b(?:who is|who was|what is)\s+(?:the\s+)?(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor)\s+of\s+(.+?)\s*\??$/i,
         /\b(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\s+of\s+(.+?)\s*\??$/i,
+        /\b(?:who is|who was|what is)\s+(?:the\s+)?(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\s+([A-Za-z][A-Za-z0-9&.\-\s]{2,80})\s*\??$/i,
         /\bwho is\s+(.+?)\s+(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\s*\??$/i,
         /\bwho heads?\s+(.+?)\s*\??$/i
     ];
@@ -13413,7 +13483,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         ? getOfficialCompanySourceHints(subject).join(' ')
         : '';
     const officialDomainHints = entityIntent.domain === 'politics'
-        ? 'site:gov.in OR site:parliament.uk OR site:congress.gov OR site:eci.gov.in OR Reuters OR AP'
+        ? 'site:gov.in OR site:gov.uk OR site:whitehouse.gov OR site:parliament.uk OR site:congress.gov OR site:eci.gov.in OR site:wikipedia.org OR site:britannica.com OR Reuters OR AP'
         : entityIntent.domain === 'space_science'
             ? 'site:nasa.gov OR site:isro.gov.in OR site:esa.int OR site:jaxa.jp OR Reuters'
             : entityIntent.domain === 'arts_literature'
@@ -13709,7 +13779,11 @@ function extractFactCandidate(result, entityIntent) {
 function buildSourceAgreement(results, entityIntent) {
     const votes = new Map();
     for (const item of Array.isArray(results) ? results : []) {
-        const candidateRaw = extractFactCandidate(item, entityIntent);
+        let candidateRaw = extractFactCandidate(item, entityIntent);
+        if (!candidateRaw && isPoliticalLeadershipRoleIntent(entityIntent)) {
+            const combined = `${String(item?.title || '')}. ${String(item?.description || '')}`.replace(/\s+/g, ' ').trim();
+            candidateRaw = extractLeadershipRoleCandidateFromText(combined, entityIntent);
+        }
         if (
             entityIntent?.relationType === 'role' &&
             String(entityIntent?.domain || '').toLowerCase() === 'sports' &&
@@ -14470,6 +14544,72 @@ async function publishUniversalConsensusAnswer(pipeline, agreement) {
     return true;
 }
 
+function isPoliticalLeadershipRoleIntent(entityIntent) {
+    if (String(entityIntent?.relationType || '').toLowerCase() !== 'role') return false;
+    if (String(entityIntent?.domain || '').toLowerCase() !== 'politics') return false;
+    const role = String(entityIntent?.roleLabel || '').toLowerCase();
+    return /\b(president|prime minister|chief minister|governor|mayor|minister|head|leader|administrator|director general|secretary)\b/.test(role);
+}
+
+function extractLeadershipRoleCandidateFromText(text, entityIntent) {
+    const rawText = String(text || '').trim();
+    if (!rawText) return '';
+    if (!isPoliticalLeadershipRoleIntent(entityIntent)) return '';
+
+    const roleLabel = String(entityIntent?.roleLabel || '').trim();
+    const targetEntity = String(entityIntent?.targetEntity || entityIntent?.subject || '').trim();
+    if (!roleLabel || !targetEntity) return '';
+
+    const roleWord = escapeRegexLiteral(roleLabel);
+    const targetWord = escapeRegexLiteral(targetEntity);
+    const namePattern = '([A-Z][A-Za-z.\'-]+(?:\\s+[A-Z][A-Za-z.\'-]+){0,4})';
+    const patterns = [
+        new RegExp(`\\b(?:current\\s+)?${roleWord}\\s+of\\s+${targetWord}\\b[^A-Za-z]{0,16}(?:is|:|-)?\\s*${namePattern}`, 'i'),
+        new RegExp(`\\b${namePattern}\\b\\s+is\\s+(?:the\\s+)?(?:current\\s+)?${roleWord}\\s+of\\s+${targetWord}\\b`, 'i'),
+        new RegExp(`\\b${targetWord}(?:'s|s')\\s+(?:current\\s+)?${roleWord}\\s*(?:is|:|,)\\s*${namePattern}`, 'i'),
+        new RegExp(`\\b${roleWord}\\s+of\\s+${targetWord}\\s*[-:]\\s*${namePattern}`, 'i')
+    ];
+
+    for (const pattern of patterns) {
+        const match = rawText.match(pattern);
+        if (!match?.[1]) continue;
+        const candidate = match[1].trim();
+        if (isLikelyPersonNameCandidate(candidate)) return candidate;
+    }
+
+    return '';
+}
+
+function extractLeadershipRoleCandidateFromSources(entityIntent, sources) {
+    if (!isPoliticalLeadershipRoleIntent(entityIntent)) return '';
+    const votes = new Map();
+
+    for (const item of Array.isArray(sources) ? sources : []) {
+        const combined = `${String(item?.title || '')}. ${String(item?.description || '')}`.replace(/\s+/g, ' ').trim();
+        if (!combined) continue;
+        const candidate = extractLeadershipRoleCandidateFromText(combined, entityIntent);
+        if (!candidate) continue;
+        const key = normalizeAgreementValue(candidate);
+        if (!key) continue;
+        const bucket = votes.get(key) || { value: candidate, count: 0, trustedHits: 0 };
+        bucket.count += 1;
+        if (scoreSourcePolicy(item?.url, entityIntent.domain || 'politics') > 0) {
+            bucket.trustedHits += 1;
+        }
+        votes.set(key, bucket);
+    }
+
+    if (!votes.size) return '';
+    const best = Array.from(votes.values()).sort((a, b) => {
+        if (b.trustedHits !== a.trustedHits) return b.trustedHits - a.trustedHits;
+        if (b.count !== a.count) return b.count - a.count;
+        return b.value.length - a.value.length;
+    })[0];
+    if (!best) return '';
+    if (best.trustedHits >= 1 || best.count >= 2) return best.value;
+    return '';
+}
+
 function buildBestEffortFactAnswerFromSources(userText, intent, entityIntent, sources) {
     const pool = Array.isArray(sources) ? sources.filter(Boolean) : [];
     if (!pool.length) return '';
@@ -14487,6 +14627,11 @@ function buildBestEffortFactAnswerFromSources(userText, intent, entityIntent, so
             return `Based on available sources, the ${derivedIntent.roleLabel} of ${derivedIntent.targetEntity} appears to be ${agreement.top.value}.`;
         }
         return `Based on available sources, the best-supported value is ${agreement.top.value}.`;
+    }
+
+    const leadershipCandidate = extractLeadershipRoleCandidateFromSources(derivedIntent, pool.slice(0, 6));
+    if (leadershipCandidate && derivedIntent?.targetEntity && derivedIntent?.roleLabel) {
+        return `Based on available sources, the ${derivedIntent.roleLabel} of ${derivedIntent.targetEntity} appears to be ${leadershipCandidate}.`;
     }
 
     const top = pool[0];
