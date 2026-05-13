@@ -1,6 +1,7 @@
 export const config = { maxDuration: 60 };
 import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './live-search.js';
 import { applyApiSecurity } from './security.js';
+
 export default async function handler(req, res) {
     const guard = applyApiSecurity(req, res, {
         methods: ['POST'],
@@ -9,6 +10,7 @@ export default async function handler(req, res) {
         rateLimit: { max: 40, windowMs: 60 * 1000 }
     });
     if (guard.handled) return;
+
     try {
         const query = String(req.body?.query || '').trim();
         const maxResults = Math.min(Math.max(Number(req.body?.maxResults || 8), 1), 10);
@@ -24,12 +26,20 @@ export default async function handler(req, res) {
             maxResultsPerQuery: Math.min(maxResults, 6),
             limit: maxResults
         });
-        const results = verified.results.length ? verified.results : await searchWeb(query, maxResults);
+        const rawResults = verified.results.length ? verified.results : await searchWeb(query, maxResults);
+        const asOf = new Date().toISOString();
+        const results = rawResults.map(item => ({
+            ...item,
+            canonicalUrl: buildCanonicalUrl(item?.url || ''),
+            publishedAt: extractPublishedAtIso(item)
+        }));
 
         return res.status(200).json({
             success: true,
             provider: results.length ? 'aggregated-search' : 'none',
             queryVariants: liveQueries,
+            queryVariantsUsed: liveQueries,
+            asOf,
             distinctDomainCount: verified.distinctDomains?.length || 0,
             trustedCount: verified.trustedCount || 0,
             results
@@ -39,18 +49,66 @@ export default async function handler(req, res) {
             success: true,
             provider: 'none',
             queryVariants: [],
+            queryVariantsUsed: [],
+            asOf: new Date().toISOString(),
             distinctDomainCount: 0,
             trustedCount: 0,
             results: [],
             error: 'search_unavailable',
-            details: shouldExposeInternalErrors() ? String(error?.message || error) : undefined
         });
     }
 }
 
-function shouldExposeInternalErrors() {
-    return String(process.env.EXPOSE_INTERNAL_ERRORS || '').toLowerCase() === 'true';
+function buildCanonicalUrl(input) {
+    try {
+        const parsed = new URL(String(input || '').trim());
+        const protocol = parsed.protocol.toLowerCase();
+        if (protocol !== 'http:' && protocol !== 'https:') return '';
+        const dropKeys = new Set([
+            'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+            'utm_id', 'gclid', 'fbclid', 'igshid', 'mc_cid', 'mc_eid', 'ref', 'ref_src'
+        ]);
+        const kept = [];
+        for (const [k, v] of parsed.searchParams.entries()) {
+            if (dropKeys.has(String(k || '').toLowerCase())) continue;
+            kept.push([k, v]);
+        }
+        kept.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+        const normalizedPath = parsed.pathname.replace(/\/+$/, '') || '/';
+        const query = kept.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+        const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+        return `${protocol}//${host}${normalizedPath}${query ? `?${query}` : ''}`;
+    } catch (_) {
+        return '';
+    }
 }
+
+function extractPublishedAtIso(result) {
+    const title = String(result?.title || '');
+    const description = String(result?.description || '');
+    const combined = `${title} ${description}`;
+
+    const monthDayYear = combined.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b/i);
+    if (monthDayYear) {
+        const parsed = Date.parse(monthDayYear[0]);
+        if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+    }
+
+    const ymd = combined.match(/\b(20\d{2})[-\/.](0?[1-9]|1[0-2])[-\/.](0?[1-9]|[12]\d|3[01])\b/);
+    if (ymd) {
+        const parsed = Date.parse(`${ymd[1]}-${String(ymd[2]).padStart(2, '0')}-${String(ymd[3]).padStart(2, '0')}`);
+        if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+    }
+
+    const mdy = combined.match(/\b(0?[1-9]|1[0-2])[-\/.](0?[1-9]|[12]\d|3[01])[-\/.](20\d{2})\b/);
+    if (mdy) {
+        const parsed = Date.parse(`${mdy[3]}-${String(mdy[1]).padStart(2, '0')}-${String(mdy[2]).padStart(2, '0')}`);
+        if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+    }
+
+    return null;
+}
+
 
 function buildSearchQueries(query) {
     const raw = String(query || '').trim();
@@ -309,3 +367,4 @@ function extractEntertainmentSubject(text) {
         .replace(/\s+/g, ' ')
         .trim());
 }
+
