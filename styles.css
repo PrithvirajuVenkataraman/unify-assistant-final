@@ -331,8 +331,8 @@ body.dark {
     min-width: 5px;
     height: 16px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.56);
-    animation: vtt-wave-pulse 1.35s ease-in-out infinite;
+    background: rgba(255, 255, 255, 0.5);
+    animation: vtt-wave-idle 2.1s ease-in-out infinite;
 }
 
 #input-bar-inner.vtt-ui-active #vtt-waveform-lane .wave-seg:nth-child(5n+1) { animation-delay: 0.04s; height: 18px; }
@@ -341,9 +341,20 @@ body.dark {
 #input-bar-inner.vtt-ui-active #vtt-waveform-lane .wave-seg:nth-child(5n+4) { animation-delay: 0.22s; height: 24px; }
 #input-bar-inner.vtt-ui-active #vtt-waveform-lane .wave-seg:nth-child(5n+5) { animation-delay: 0.28s; height: 18px; }
 
+#input-bar-inner.vtt-ui-active.vtt-speaking #vtt-waveform-lane .wave-seg {
+    background: rgba(255, 255, 255, 0.9);
+    animation-name: vtt-wave-pulse;
+    animation-duration: 1.05s;
+}
+
 @keyframes vtt-wave-pulse {
     0%, 100% { transform: scaleY(0.85); opacity: 0.52; }
     50% { transform: scaleY(1.16); opacity: 0.95; }
+}
+
+@keyframes vtt-wave-idle {
+    0%, 100% { transform: scaleY(0.78); opacity: 0.35; }
+    50% { transform: scaleY(0.94); opacity: 0.58; }
 }
 
 /* Typography */
