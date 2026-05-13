@@ -2479,6 +2479,13 @@ async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking
 async function processUserQuery(text) {
     const t = String(text || '').trim();
     if (!t) return;
+    const liveIntent = extractLiveQueryIntent(t);
+    const entityIntent = extractUniversalEntityIntent(t, liveIntent);
+    const broadFactualWeb = isBroadFactualWebQuery(t, entityIntent, liveIntent);
+    if (isExplicitWebSearchRequest(t)) {
+        await handleLiveRetrievalQuery(normalizeExplicitWebSearchQuery(t));
+        return { intent: 'live_retrieval' };
+    }
     const riskLevel = getRiskTierForQuery(t);
     if (isStrictLatestQuery(t)) {
         await handleStrictLatestQuery(t);
@@ -2492,6 +2499,18 @@ async function processUserQuery(text) {
     if (isHeadlineListQuery(t) || shouldUseNewsEndpointForCurrentQuery(t) || isNewsworthyLiveTopic(t)) {
         await fetchAndDisplayNews(t);
         return { intent: 'news' };
+    }
+
+    if (broadFactualWeb) {
+        if (entityIntent?.isEntityFact) {
+            await handleUniversalEntityFactQuery(t, liveIntent);
+            return { intent: 'entity_fact' };
+        }
+        await handleLiveRetrievalQuery(t, {
+            broadFactualWeb: true,
+            forceFailClosed: true
+        });
+        return { intent: 'live_retrieval' };
     }
 
     if (
@@ -4298,9 +4317,9 @@ async function handleNameCorrection(text) {
 
             indicator.dataset.state = state;
             if (state === 'assistant-speaking') {
-                label.textContent = 'Assistant speaking';
+                label.textContent = 'Speaking';
             } else if (state === 'user-listening') {
-                label.textContent = 'Listening to you';
+                label.textContent = 'Listening';
             } else {
                 label.textContent = '';
             }
@@ -5946,6 +5965,7 @@ function normalizeUiTokens(text) {
             const raw = String(input || '').trim();
             if (!raw) return raw;
             const normalized = raw
+                .replace(/sources:\s*sources:/gi, 'Sources:')
                 .replace(/^\s*\[[^\]]+\]\s*/gim, '')
                 .replace(/^\s*As of:\s*.*$/gim, '')
                 .replace(/^\s*Latest source date:\s*.*$/gim, '')
@@ -10883,6 +10903,25 @@ function isLiveRetrievalQuery(text) {
            /\b(middle[\s-]?east|ukraine|russia|israel|gaza|iran|syria|oil market|stock market|economy|inflation|forex|usd|inr|bitcoin|crypto|holiday calendar|release schedule|match schedule)\b/.test(t);
 }
 
+function isExplicitWebSearchRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    return /\b(search (?:the )?(?:web|internet)|web search|browse (?:the )?(?:web|internet)|look ?up (?:on|in)? ?(?:the )?(?:web|internet)|find (?:on|in)? ?(?:the )?(?:web|internet)|google (?:for|about)|check online|online sources?|with sources?)\b/.test(t);
+}
+
+function normalizeExplicitWebSearchQuery(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return raw;
+    const normalized = raw
+        .replace(/^(?:please\s+)?(?:can you|could you|would you)?\s*(?:search|find|look ?up|browse|check)\s+(?:the\s+)?(?:web|internet)\s+(?:for|about|on)?\s*/i, '')
+        .replace(/^(?:please\s+)?(?:google|web search)\s+(?:for|about)?\s*/i, '')
+        .replace(/\b(?:from|using)\s+(?:the\s+)?(?:web|internet)\b/gi, ' ')
+        .replace(/\b(?:with|include)\s+sources?\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return normalized || raw;
+}
+
 function isStrictLatestQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -10954,22 +10993,28 @@ function getStrictLatestOfficialConstraint(domain) {
 function buildStrictLatestQueries(userText, intent = null) {
     const raw = String(userText || '').trim();
     const liveIntent = intent || extractLiveQueryIntent(raw);
+    const entityIntent = extractUniversalEntityIntent(raw, liveIntent);
     const entityTopic = extractStrictLatestEntityTopic(raw, liveIntent) || raw;
     const freshnessMatch = raw.match(/\b(latest|current|today|now|live|as of|recent)\b/i);
     const freshnessToken = freshnessMatch?.[1] ? freshnessMatch[1].toLowerCase() : 'latest';
     const domainHint = getStrictLatestDomainHint(liveIntent.domain);
     const officialConstraint = getStrictLatestOfficialConstraint(liveIntent.domain);
     const explicitYearOrDate = raw.match(/\b(?:19|20)\d{2}\b|(?:\b\d{4}-\d{2}-\d{2}\b)/)?.[0] || '';
+    const isSportsRole = String(entityIntent?.domain || '').toLowerCase() === 'sports' && String(entityIntent?.relationType || '').toLowerCase() === 'role';
+    const currentYear = new Date().getFullYear();
 
     const variants = [
         raw,
         `${entityTopic} ${freshnessToken}`.trim(),
         `${entityTopic} ${domainHint}`.trim(),
         `${entityTopic} ${officialConstraint}`.trim(),
-        explicitYearOrDate ? `${entityTopic} ${explicitYearOrDate}`.trim() : ''
+        explicitYearOrDate ? `${entityTopic} ${explicitYearOrDate}`.trim() : '',
+        isSportsRole ? `${entityTopic} ${currentYear}`.trim() : '',
+        isSportsRole ? `${entityTopic} IPL ${currentYear} site:iplt20.com`.trim() : '',
+        isSportsRole ? `${entityTopic} IPL ${currentYear} site:espncricinfo.com OR site:bcci.tv OR site:cricbuzz.com`.trim() : ''
     ].filter(Boolean);
 
-    return Array.from(new Set(variants)).slice(0, 5);
+    return Array.from(new Set(variants)).slice(0, 7);
 }
 
 function dedupeStrictLatestResults(results) {
@@ -11049,6 +11094,20 @@ function getStrictLatestStaleness(domain, queryText, sources) {
     const ageHours = newestDate ? (Date.now() - newestDate.getTime()) / (1000 * 60 * 60) : Number.POSITIVE_INFINITY;
     const d = String(domain || 'general').toLowerCase();
     const lower = String(queryText || '').toLowerCase();
+    const currentYear = new Date().getFullYear();
+    const roleNeedsSeasonSignal =
+        d === 'sports' &&
+        /\b(captain|coach)\b/.test(lower) &&
+        /\b(ipl|league|season|tournament|team|club|csk|mi|rcb|kkr|srh|dc|pbks|gt|rr|lsg)\b/.test(lower);
+    if (roleNeedsSeasonSignal) {
+        const hasCurrentSeasonEvidence = pool.some(item => {
+            const text = `${String(item?.title || '')} ${String(item?.description || '')}`.toLowerCase();
+            return new RegExp(`\\b${currentYear}\\b`).test(text) || /\bthis season\b/.test(text) || /\bcurrent season\b/.test(text);
+        });
+        if (!hasCurrentSeasonEvidence) {
+            return { stale: true, reason: 'missing_current_season_signal', ageHours, newestDate };
+        }
+    }
 
     if (['news', 'politics', 'sports'].includes(d)) {
         return { stale: ageHours > 72, reason: ageHours > 72 ? 'older_than_72h' : '', ageHours, newestDate };
@@ -11179,14 +11238,15 @@ async function handleStrictLatestQuery(userText) {
         // For role queries, never let a generic summarizer decide the value.
         // Extract the candidate directly from evidence and enforce person-name validation.
         if (String(entityIntent?.relationType || '').toLowerCase() === 'role') {
+            const isSportsRoleQuery = String(entityIntent?.domain || '').toLowerCase() === 'sports';
             let roleValue = '';
-            if (String(entityIntent?.domain || '').toLowerCase() === 'sports') {
+            if (isSportsRoleQuery) {
                 const sportsCandidate = selectBestSportsRoleCandidate(top, entityIntent, intent);
                 if (sportsCandidate?.value && isLikelyPersonNameCandidate(sportsCandidate.value)) {
                     roleValue = sportsCandidate.value;
                 }
             }
-            if (!roleValue) {
+            if (!roleValue && !isSportsRoleQuery) {
                 const roleAgreement = buildSourceAgreement(top, entityIntent);
                 const candidate = String(roleAgreement?.top?.value || '').trim();
                 if (candidate && isLikelyPersonNameCandidate(candidate)) {
@@ -11515,6 +11575,55 @@ function isProfileOrIdentityQuery(text) {
     return true;
 }
 
+function isPureHowToOrCodingConcept(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return false;
+    const t = raw.toLowerCase();
+
+    const technicalConceptSignals = /\b(hld|lld|system design|design pattern|architecture|api design|database design|algorithm|data structure|time complexity|space complexity|java|javascript|typescript|python|react|node|sql|backend|frontend|microservices?|docker|kubernetes|devops|refactor|debug|bug fix|unit test|integration test|recursion|oop|object oriented)\b/;
+    const liveContextSignals = /\b(current|latest|today|now|news|headline|release|version|market|price|rate|winner|score|standings)\b/;
+    const howToSignals = /^(how to|how do i|how can i|guide|tutorial|walk me through|show me how to)\b/;
+
+    if (technicalConceptSignals.test(t) && !liveContextSignals.test(t)) return true;
+    if (howToSignals.test(t) && technicalConceptSignals.test(t)) return true;
+    return false;
+}
+
+function isBroadFactualWebQuery(text, entityIntent = null, liveIntent = null) {
+    const raw = String(text || '').trim();
+    if (!raw) return false;
+    if (isPureHowToOrCodingConcept(raw)) return false;
+
+    const lower = raw.toLowerCase();
+    if (isInappropriateContent(raw)) return false;
+    if (isRecipeRequest(raw) || isGeneralJokeRequest(raw) || isSeriesReferenceJokeRequest(raw) || isTamilJokeRequest(raw)) return false;
+    if (isWeatherIntentText(raw) || isCurrentLocationIntentText(raw)) return false;
+    if (isMathCalculationRequest(raw) || isStepByStepMathRequest(raw)) return false;
+    if (isMedicalEmergencyIntent(raw) || isMedicalAdviceIntent(raw) || isMentalHealthConversation(raw)) return false;
+
+    const factualAskPattern = /^(who is|who was|what is|what was|when did|when was|where is|where was|tell me about|define|meaning of|do you know)\b/i;
+    const likelyWorldFactSignal = /\b(company|person|founder|ceo|president|prime minister|captain|coach|team|club|country|city|state|movie|film|song|album|actor|actress|director|scientist|astronaut|war|election|festival|holiday|title|record|stats?|score|winner|result)\b/;
+    const opinionSignal = /^(what do you think of|what are your thoughts on|thoughts on)\b/i;
+
+    if (opinionSignal.test(raw)) return false;
+
+    const intent = liveIntent || extractLiveQueryIntent(raw);
+    const entity = entityIntent || extractUniversalEntityIntent(raw, intent);
+    if (entity?.isEntityFact) return true;
+
+    if (factualAskPattern.test(raw) && likelyWorldFactSignal.test(lower)) return true;
+    if (factualAskPattern.test(raw)) {
+        const subjectGuess = String(extractKnowledgeSubject(raw) || '')
+            .replace(/[?.!,;]+$/g, '')
+            .trim();
+        if (subjectGuess && subjectGuess.split(/\s+/).length <= 6 && !isGenericNonEntity(subjectGuess)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function isUniversalEntityFactQuestion(text) {
     return classifyUniversalEntityIntent(text).isEntityFact;
 }
@@ -11526,6 +11635,8 @@ function classifyUserMessage(text) {
     const requestedQuantity = extractRequestedQuantity(raw, null, 1, 20); // Max 20 for general facts
     const entityIntent = classifyUniversalEntityIntent(raw, liveIntent);
     const translatorRequest = detectTranslatorRequest(raw);
+    const pureHowToCoding = isPureHowToOrCodingConcept(raw);
+    const broadFactualWeb = isBroadFactualWebQuery(raw, entityIntent, liveIntent);
     const riskLevel = getRiskTierForQuery(raw, liveIntent, entityIntent);
 
     return {
@@ -11538,9 +11649,12 @@ function classifyUserMessage(text) {
         translatorRequest,
         flags: {
             inappropriate: isInappropriateContent(raw),
+            explicitWebSearch: isExplicitWebSearchRequest(raw),
             stableBiography: isStableBiographyQuestion(raw),
             profileIdentity: isProfileOrIdentityQuery(raw),
             universalEntityFact: entityIntent.isEntityFact,
+            pureHowToCoding,
+            broadFactualWeb: broadFactualWeb && !pureHowToCoding,
             currentInfo: isCurrentInfoQuery(raw),
             exchangeRate: isExchangeRateQuery(raw),
             marketPrice: isMarketPriceQuery(raw),
@@ -11576,9 +11690,11 @@ function decideAnswerPath(classification) {
     const medicalModeEnabled = typeof window !== 'undefined' ? !!window.medicalMode : false;
 
     if (flags.inappropriate) return 'moderation';
+    if (flags.explicitWebSearch) return 'web_search';
     if (flags.universalEntityFact) return 'entity_fact';
     if (flags.profileIdentity || flags.stableBiography) return 'live_retrieval';
     if (flags.currentInfo) return 'current_info';
+    if (flags.broadFactualWeb) return 'broad_factual_web';
 
     if (flags.vagueAdvice) return 'vague_advice';
     if (flags.songMoodGame) return 'song_mood_game';
@@ -11646,6 +11762,8 @@ function decideHybridResponseMode(classification) {
     const riskLevel = classification?.riskLevel || getRiskTierForQuery(raw, classification?.liveIntent, classification?.entityIntent);
 
     if (flags.inappropriate) return 'special_handler';
+    if (flags.explicitWebSearch) return 'verify_first';
+    if (flags.broadFactualWeb) return 'verify_first';
     if (flags.universalEntityFact) return 'verify_first';
     if (flags.profileIdentity || flags.stableBiography) return 'verify_first';
     if (flags.news || flags.exchangeRate || flags.marketPrice) return 'verify_first';
@@ -11659,11 +11777,10 @@ function decideHybridResponseMode(classification) {
 
 const ROUTING_REGRESSION_CASES = [
     {
-        name: 'Stable explainer',
+        name: 'Broad factual explainer',
         prompt: 'What is jalebi?',
-        expectedPath: 'default_model',
-        expectedMode: 'chat_first',
-        fallbackContains: 'Jalebi is a popular South Asian sweet'
+        expectedPath: 'broad_factual_web',
+        expectedMode: 'verify_first'
     },
     {
         name: 'Stable biography',
@@ -11696,10 +11813,28 @@ const ROUTING_REGRESSION_CASES = [
         expectedMode: 'chat_first'
     },
     {
+        name: 'Vague factual entity prompt',
+        prompt: 'Tell me about Tesla',
+        expectedPath: 'live_retrieval',
+        expectedMode: 'verify_first'
+    },
+    {
+        name: 'Role office factual prompt',
+        prompt: 'Who is the CEO of Nvidia?',
+        expectedPath: 'entity_fact',
+        expectedMode: 'verify_first'
+    },
+    {
         name: 'Recipe route',
         prompt: 'Give me a recipe for aloo fry',
         expectedPath: 'recipe',
         expectedMode: 'chat_first'
+    },
+    {
+        name: 'Explicit web search route',
+        prompt: 'Search the web for who is the captain of CSK in IPL 2026 with sources',
+        expectedPath: 'web_search',
+        expectedMode: 'verify_first'
     }
 ];
 
@@ -13084,16 +13219,54 @@ function expandSingleTokenPersonNameFromSources(name, sources) {
     return ranked[0]?.[0] || raw;
 }
 
+function isTemporarySportsRoleContext(result, roleLabel = '') {
+    const combined = `${String(result?.title || '')} ${String(result?.description || '')}`.toLowerCase();
+    if (!combined.trim()) return false;
+
+    const normalizedRole = String(roleLabel || '').toLowerCase();
+    const roleScopedRisk = /\b(captain|captaincy|coach)\b/.test(normalizedRole);
+    const replacementSignals = /\b(injury|injured|injury-hit|ruled out|out injured|steps? in|stepping in|stand[-\s]?in|acting|interim|temporary|takes over|took over|replaces|replacement|fills in|cover for|deputy|vice[-\s]?captain)\b/.test(combined);
+    if (!replacementSignals) return false;
+    if (!roleScopedRisk) return true;
+    return /\b(captain|captaincy|coach)\b/.test(combined);
+}
+
+function getSportsRoleContextScore(result, entityIntent, targetYear = 0) {
+    const combined = `${String(result?.title || '')} ${String(result?.description || '')}`.toLowerCase();
+    if (!combined.trim()) return -3;
+
+    const competition = String(entityIntent?.competition || '').toLowerCase();
+    const roleLabel = String(entityIntent?.roleLabel || '').toLowerCase();
+    let score = 0;
+
+    if (competition) {
+        if (combined.includes(competition)) score += 3;
+        if (/\bipl\b/.test(competition) && /\bipl\b/.test(combined)) score += 3;
+    }
+
+    if (roleLabel && combined.includes(roleLabel)) score += 2;
+    if (/\b(current|confirmed|official|named|announced)\b/.test(combined)) score += 1;
+    if (isTemporarySportsRoleContext(result, roleLabel)) score -= 4;
+
+    if (targetYear) {
+        if (new RegExp(`\\b${targetYear}\\b`).test(combined)) score += 2;
+        if (new RegExp(`\\b${targetYear - 1}\\b`).test(combined)) score -= 1;
+    }
+
+    return score;
+}
+
 function selectBestSportsRoleCandidate(results, entityIntent, intent = null) {
     const relation = String(entityIntent?.relationType || '').toLowerCase();
     const domain = String(entityIntent?.domain || '').toLowerCase();
     if (relation !== 'role' || domain !== 'sports') return null;
 
     const voteMap = new Map();
-    const targetYear = Number(intent?.year || entityIntent?.year || 0);
+    const targetYear = Number(intent?.year || entityIntent?.year || new Date().getFullYear() || 0);
     const sample = (Array.isArray(results) ? results : []).slice(0, 8);
 
     for (const item of sample) {
+        if (isTemporarySportsRoleContext(item, entityIntent?.roleLabel || '')) continue;
         const candidateRaw = String(extractFactCandidate(item, entityIntent) || '').trim();
         if (!isLikelyPersonNameCandidate(candidateRaw)) continue;
 
@@ -13101,22 +13274,26 @@ function selectBestSportsRoleCandidate(results, entityIntent, intent = null) {
         if (!key) continue;
 
         const trusted = scoreSourcePolicy(item?.url, entityIntent.domain);
+        const contextScore = getSportsRoleContextScore(item, entityIntent, targetYear);
+        if (contextScore < -2) continue;
         const published = extractResultPublishedDate(item);
         const publishedYear = published?.getFullYear?.() || 0;
         const yearBoost = targetYear && publishedYear === targetYear ? 1 : 0;
         const yearPenalty = targetYear && publishedYear && publishedYear < targetYear - 1 ? -1 : 0;
-        const score = 1 + trusted + yearBoost + yearPenalty;
+        const score = 1 + trusted + contextScore + yearBoost + yearPenalty;
 
         const existing = voteMap.get(key) || {
             value: candidateRaw,
             count: 0,
             score: 0,
             trustedScore: 0,
+            contextScore: 0,
             sources: []
         };
         existing.count += 1;
         existing.score += score;
         existing.trustedScore += trusted;
+        existing.contextScore += contextScore;
         existing.sources.push(item);
         voteMap.set(key, existing);
     }
@@ -13124,6 +13301,7 @@ function selectBestSportsRoleCandidate(results, entityIntent, intent = null) {
     const ranked = Array.from(voteMap.values()).sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;
         if (b.count !== a.count) return b.count - a.count;
+        if (b.contextScore !== a.contextScore) return b.contextScore - a.contextScore;
         return b.trustedScore - a.trustedScore;
     });
 
@@ -13147,7 +13325,7 @@ function selectBestSportsRoleCandidate(results, entityIntent, intent = null) {
         hasSeasonContext &&
         topHasPreferredSource &&
         topMentionsTargetYear;
-    const enoughEvidence = hasTrustedEvidence && (top.count >= 2 || top.trustedScore >= 8 || singleSourceSeasonOverride);
+    const enoughEvidence = hasTrustedEvidence && top.contextScore >= 0 && (top.count >= 2 || top.trustedScore >= 8 || singleSourceSeasonOverride);
     if (!enoughEvidence) return null;
 
     const normalizedValue = expandSingleTokenPersonNameFromSources(top.value, top.sources);
@@ -14066,7 +14244,7 @@ async function handleSportsFactQuery(userText, intent) {
     return handleUniversalEntityFactQuery(userText, intent);
 }
 
-async function handleLiveRetrievalQuery(userText) {
+async function handleLiveRetrievalQuery(userText, options = {}) {
     showThinkingIndicator('Checking current sources...');
     const controller = beginAbortableRequest();
     let failClosed = true;
@@ -14087,8 +14265,10 @@ async function handleLiveRetrievalQuery(userText) {
             intent.directFact = isDirectFactLiveQuery(query);
         }
         const entityIntent = extractUniversalEntityIntent(query, intent);
+        const forceFailClosed = Boolean(options?.forceFailClosed);
+        const broadFactualMode = Boolean(options?.broadFactualWeb || isBroadFactualWebQuery(query, entityIntent, intent));
         liveRiskLevel = getRiskTierForQuery(query, intent, entityIntent);
-        failClosed = liveRiskLevel !== 'low_risk';
+        failClosed = forceFailClosed || broadFactualMode || liveRiskLevel !== 'low_risk';
         const directFactQuery = intent.directFact || isSportsLiveResultQuery(query);
         const conciseFactQuery = isConciseDirectFactQuery(query);
         const queries = buildLiveSearchQueries(query, intent);
@@ -14142,14 +14322,16 @@ async function handleLiveRetrievalQuery(userText) {
         const sourcePool = trusted.length >= 3 ? trusted : deduped;
         const verification = buildVerificationSnapshot(sourcePool, intent.domain || 'general', liveRiskLevel, 'trust_first');
         if (!verification.verified) {
-            const bestEffortPublished = await publishBestEffortFromSources({
-                userText: query,
-                intent,
-                entityIntent
-            }, sourcePool, {
-                speechText: 'I could not fully verify this, so here is the best-supported answer from available sources.'
-            });
-            if (bestEffortPublished) return true;
+            if (!(forceFailClosed || broadFactualMode)) {
+                const bestEffortPublished = await publishBestEffortFromSources({
+                    userText: query,
+                    intent,
+                    entityIntent
+                }, sourcePool, {
+                    speechText: 'I could not fully verify this, so here is the best-supported answer from available sources.'
+                });
+                if (bestEffortPublished) return true;
+            }
             return publishStrictVerificationClarification({
                 userText: query,
                 intent,
@@ -14256,14 +14438,16 @@ ${snippets}`
                     badge: 'Verification unavailable'
                 });
             }
-            const bestEffortPublished = await publishBestEffortFromSources({
-                userText: query,
-                intent,
-                entityIntent
-            }, sourcePool, {
-                speechText: 'I could not produce a clean fully verified summary, so here is the best-supported answer from available sources.'
-            });
-            if (bestEffortPublished) return true;
+            if (!(forceFailClosed || broadFactualMode)) {
+                const bestEffortPublished = await publishBestEffortFromSources({
+                    userText: query,
+                    intent,
+                    entityIntent
+                }, sourcePool, {
+                    speechText: 'I could not produce a clean fully verified summary, so here is the best-supported answer from available sources.'
+                });
+                if (bestEffortPublished) return true;
+            }
             return publishStrictVerificationClarification({
                 userText: query,
                 intent,
@@ -14831,7 +15015,7 @@ function detectInputLanguageHint(text) {
                 if (handled) return;
             }
 
-            if (immediateKnowledgeFallback && isDirectExplainerQuery(cleanText)) {
+            if (answerPath === 'default_model' && immediateKnowledgeFallback && isDirectExplainerQuery(cleanText)) {
                 addModelAssistantMessage(immediateKnowledgeFallback, 'Model answer');
                 speak(immediateKnowledgeFallback);
                 await maybeShowReferenceImageForQuery(text, immediateKnowledgeFallback);
@@ -14906,6 +15090,24 @@ function detectInputLanguageHint(text) {
                 }
 
                 const handled = await handleLiveRetrievalQuery(cleanText);
+                if (handled) return;
+            }
+
+            if (answerPath === 'web_search') {
+                const normalizedWebQuery = normalizeExplicitWebSearchQuery(cleanText);
+                const handled = await handleLiveRetrievalQuery(normalizedWebQuery);
+                if (handled) return;
+            }
+
+            if (answerPath === 'broad_factual_web') {
+                if (fallbackEntityIntent?.isEntityFact) {
+                    const handledEntity = await handleUniversalEntityFactQuery(cleanText, classification.liveIntent);
+                    if (handledEntity) return;
+                }
+                const handled = await handleLiveRetrievalQuery(cleanText, {
+                    broadFactualWeb: true,
+                    forceFailClosed: true
+                });
                 if (handled) return;
             }
 
@@ -19203,14 +19405,9 @@ function showThinkingIndicator(message = 'Thinking') {
         row.className = 'chat-row flex justify-start fade-in';
         row.innerHTML = `
             <div class="chat-bubble-assistant assistant-thinking-bubble inline-flex items-center gap-2.5">
-                <span class="assistant-thinking-avatar" aria-hidden="true"></span>
+                <span class="assistant-thinking-spinner" aria-hidden="true"></span>
                 <span id="chat-thinking-phase" class="assistant-thinking-phase-pill">Reasoning</span>
                 <span id="chat-thinking-text" class="assistant-thinking-text text-xs font-semibold"></span>
-                <span class="thinking-dots professional-thinking-dots" aria-hidden="true">
-                    <span class="thinking-dot professional-thinking-dot"></span>
-                    <span class="thinking-dot professional-thinking-dot"></span>
-                    <span class="thinking-dot professional-thinking-dot"></span>
-                </span>
             </div>
         `;
         chatContainer.appendChild(row);
@@ -19231,10 +19428,8 @@ function showThinkingIndicator(message = 'Thinking') {
     if (bubble) {
         const isSearching = phase.key === 'searching';
         const textEl = document.getElementById('chat-thinking-text');
-        const avatarEl = bubble.querySelector('.assistant-thinking-avatar');
         if (textEl) textEl.style.display = isSearching ? 'none' : '';
         if (phaseEl) phaseEl.style.display = isSearching ? 'none' : '';
-        if (avatarEl) avatarEl.style.display = isSearching ? 'none' : '';
         bubble.classList.toggle('assistant-thinking-minimal', isSearching);
     }
     maybeAutoScroll(chatContainer);
