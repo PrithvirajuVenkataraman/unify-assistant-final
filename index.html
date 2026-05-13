@@ -4948,7 +4948,11 @@ async function handleNameCorrection(text) {
                     });
                     return;
                 }
-                // Keep Converse startup silent to avoid immediate overlap/interruption.
+                // Try immediate start first (important on mobile browsers requiring user gesture).
+                if (!isAssistantSpeaking) {
+                    startListening();
+                }
+                // Keep a retry loop for transient startup issues.
                 let attempts = 0;
                 const ensureConverseListening = () => {
                     attempts += 1;
@@ -4961,7 +4965,7 @@ async function handleNameCorrection(text) {
                         startListening();
                     }
                 };
-                setTimeout(ensureConverseListening, 420);
+                setTimeout(ensureConverseListening, 180);
             } else {
                 stopListening();
                 stopSpeaking();
@@ -5933,10 +5937,38 @@ function normalizeUiTokens(text) {
         }
 
         function addVerifiedAssistantMessage(text, label = 'Verified live sources') {
-            const badge = formatVerifiedSourceBadge(label);
             const body = String(text || '').trim();
-            const finalText = badge ? `${badge}\n${body}`.trim() : body;
+            const finalText = normalizeVerifiedLiveMessage(body);
             addChatMessage(finalText, false, false, { sourceType: 'verified' });
+        }
+
+        function normalizeVerifiedLiveMessage(input) {
+            const raw = String(input || '').trim();
+            if (!raw) return raw;
+            const normalized = raw
+                .replace(/^\s*\[[^\]]+\]\s*/gim, '')
+                .replace(/^\s*As of:\s*.*$/gim, '')
+                .replace(/^\s*Latest source date:\s*.*$/gim, '')
+                .replace(/^\s*Source confidence:\s*.*$/gim, '')
+                .replace(/^\s*Verified sources checked:\s*.*$/gim, '')
+                .replace(/^\s*Verification snapshot:\s*.*$/gim, '')
+                .replace(/^\s*strictLatest:\s*.*$/gim, '')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+
+            const sourceMatch = normalized.match(/(?:^|\n)Sources:\s*\n?/i);
+            if (!sourceMatch) return normalized;
+
+            const idx = sourceMatch.index || 0;
+            const answer = normalized.slice(0, idx).replace(/\n{2,}/g, '\n\n').trim();
+            const sourcesRaw = normalized.slice(idx).replace(/^.*?Sources:\s*\n?/i, '').trim();
+            const sources = sourcesRaw
+                .split('\n')
+                .map(line => line.trim())
+                .filter(Boolean);
+
+            if (!sources.length) return answer;
+            return `${answer}\n\nSources:\n${sources.join('\n')}`.trim();
         }
 
         function formatModelSourceBadge(label = 'Model answer') {
@@ -7851,11 +7883,11 @@ async function handleMarketLookup(text) {
             wakeWordMode = true;
             commandMode = false;
             
-            const voiceBtn = document.getElementById('voice-btn');
-            document.getElementById('mic-icon-bottom')?.classList.remove('hidden');
-            document.getElementById('waveform-bottom')?.classList.add('hidden');
-            voiceBtn?.classList.remove('voice-listening');
-            voiceBtn?.classList.add('gradient-btn');
+            const voiceBtn = document.getElementById('voice-to-text-btn');
+            const visualizer = document.getElementById('tts-visualizer');
+            voiceBtn?.classList.remove('is-active');
+            visualizer?.classList.remove('speaking');
+            visualizer?.classList.add('not-speaking', 'hidden-wave');
 
             if (!isListening) {
                 try { continuousRecognition.start(); } catch(e){}
@@ -8213,6 +8245,22 @@ async function handleMarketLookup(text) {
             };
 
             continuousRecognition.onerror = (event) => { 
+                isListening = false;
+                const err = String(event?.error || '').toLowerCase();
+                if (err === 'not-allowed' || err === 'service-not-allowed') {
+                    converseMode = false;
+                    listeningRequested = false;
+                    isListening = false;
+                    saveAssistantModes();
+                    updateAssistantModeUI();
+                    stopListening();
+                    void deliverApiReply('microphone_permission_denied', {
+                        reason: err
+                    }, {
+                        fallbackText: 'Microphone permission is blocked. Please allow mic access to use Converse mode.'
+                    });
+                    return;
+                }
                 if (converseMode && listeningRequested) {
                     setTimeout(() => {
                         if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking) {
@@ -8225,6 +8273,7 @@ async function handleMarketLookup(text) {
             }; 
  
             continuousRecognition.onend = () => { 
+                isListening = false;
                 if (converseMode && listeningRequested) {
                     setTimeout(() => {
                         if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking) {
@@ -8277,16 +8326,25 @@ async function handleMarketLookup(text) {
                 continuousRecognition.start(); 
 
                 // Update voice button to listening state
-                const voiceBtn = document.getElementById('voice-btn');
-                const micIcon = document.getElementById('mic-icon-bottom');
-                const waveform = document.getElementById('waveform-bottom');
-                micIcon?.classList.add('hidden');
-                waveform?.classList.remove('hidden');
-                voiceBtn?.classList.add('voice-listening');
-                voiceBtn?.classList.remove('voice-pulse', 'gradient-btn');
+                const voiceBtn = document.getElementById('voice-to-text-btn');
+                const visualizer = document.getElementById('tts-visualizer');
+                voiceBtn?.classList.add('is-active');
+                visualizer?.classList.remove('not-speaking', 'hidden-wave');
+                visualizer?.classList.add('speaking');
                 updateVoiceInteractionGraphics();
 
             } catch (e) {
+                isListening = false;
+                const errorName = String(e?.name || '').toLowerCase();
+                // Keep Converse intent alive for transient start-state errors.
+                if (converseMode && listeningRequested && (errorName.includes('invalidstate') || errorName.includes('aborted'))) {
+                    setTimeout(() => {
+                        if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking) {
+                            startListening();
+                        }
+                    }, 260);
+                    return;
+                }
                 stopListening();
             }
         }
@@ -8303,11 +8361,11 @@ async function handleMarketLookup(text) {
             }
 
             // Restore voice button to normal state
-            const voiceBtn = document.getElementById('voice-btn');
-            document.getElementById('mic-icon-bottom')?.classList.remove('hidden');
-            document.getElementById('waveform-bottom')?.classList.add('hidden');
-            voiceBtn?.classList.remove('voice-listening');
-            voiceBtn?.classList.add('gradient-btn');
+            const voiceBtn = document.getElementById('voice-to-text-btn');
+            const visualizer = document.getElementById('tts-visualizer');
+            voiceBtn?.classList.remove('is-active');
+            visualizer?.classList.remove('speaking');
+            visualizer?.classList.add('not-speaking', 'hidden-wave');
             updateVoiceInteractionGraphics();
         }
 
@@ -11052,6 +11110,7 @@ async function handleStrictLatestQuery(userText) {
     try {
         const query = String(userText || '').trim();
         const intent = extractLiveQueryIntent(query);
+        const entityIntent = extractUniversalEntityIntent(query, intent);
         const strictQueries = buildStrictLatestQueries(query, intent);
         const resultSets = await Promise.all(
             strictQueries.map(async (q) => {
@@ -11091,6 +11150,7 @@ async function handleStrictLatestQuery(userText) {
             strictLatest: true,
             query,
             domain: intent.domain || 'general',
+            relationType: entityIntent?.relationType || 'general',
             queryVariantsUsed: strictQueries,
             thresholdChecks: {
                 minSources: 3,
@@ -11114,6 +11174,40 @@ async function handleStrictLatestQuery(userText) {
         if (!verificationSnapshot.pass) {
             const failReason = staleness?.stale ? 'stale_sources' : 'verification_unavailable';
             return publishStrictLatestFailure(query, intent, { reason: failReason });
+        }
+
+        // For role queries, never let a generic summarizer decide the value.
+        // Extract the candidate directly from evidence and enforce person-name validation.
+        if (String(entityIntent?.relationType || '').toLowerCase() === 'role') {
+            let roleValue = '';
+            if (String(entityIntent?.domain || '').toLowerCase() === 'sports') {
+                const sportsCandidate = selectBestSportsRoleCandidate(top, entityIntent, intent);
+                if (sportsCandidate?.value && isLikelyPersonNameCandidate(sportsCandidate.value)) {
+                    roleValue = sportsCandidate.value;
+                }
+            }
+            if (!roleValue) {
+                const roleAgreement = buildSourceAgreement(top, entityIntent);
+                const candidate = String(roleAgreement?.top?.value || '').trim();
+                if (candidate && isLikelyPersonNameCandidate(candidate)) {
+                    roleValue = candidate;
+                }
+            }
+            if (!roleValue) {
+                return publishStrictLatestFailure(query, intent, {
+                    reason: 'verification_unavailable',
+                    speechText: 'I could not verify a reliable role holder name from independent trusted sources.'
+                });
+            }
+            const directRoleAnswer = formatConsensusAnswer(entityIntent, { top: { value: roleValue } });
+            if (!directRoleAnswer) {
+                return publishStrictLatestFailure(query, intent, { reason: 'verification_unavailable' });
+            }
+            const finalRoleMsg = formatStrictLatestAnswer(directRoleAnswer, top);
+            addVerifiedAssistantMessage(finalRoleMsg, 'Verified latest sources');
+            speak('I checked current trusted sources and prepared a concise update.');
+            saveToHistory(query, finalRoleMsg);
+            return true;
         }
 
         const snippets = top
@@ -12941,7 +13035,10 @@ function isLikelyPersonNameCandidate(value) {
         'about', 'after', 'before', 'during', 'under',
         'this', 'that', 'these', 'those',
         'from', 'with', 'without', 'into', 'onto',
-        'lsg', 'csk', 'rcb', 'mi', 'kkr', 'rr', 'dc', 'pbks', 'srh', 'gt'
+        'lsg', 'csk', 'rcb', 'mi', 'kkr', 'rr', 'dc', 'pbks', 'srh', 'gt',
+        'super', 'kings', 'indians', 'riders', 'royals', 'titans', 'giants',
+        'warriors', 'strikers', 'thunder', 'heat', 'capitals', 'knights',
+        'united', 'city', 'club', 'team', 'franchise', 'fc', 'sc', 'cf'
     ]);
     if (lowerParts.some(word => blockedNameWords.has(word))) return false;
     if (parts.length === 1 && /^[A-Z]{2,4}$/.test(parts[0])) return false;
@@ -19130,6 +19227,16 @@ function showThinkingIndicator(message = 'Thinking') {
         phaseEl.textContent = phase.label;
         phaseEl.dataset.phase = phase.key;
     }
+    const bubble = row.querySelector('.assistant-thinking-bubble');
+    if (bubble) {
+        const isSearching = phase.key === 'searching';
+        const textEl = document.getElementById('chat-thinking-text');
+        const avatarEl = bubble.querySelector('.assistant-thinking-avatar');
+        if (textEl) textEl.style.display = isSearching ? 'none' : '';
+        if (phaseEl) phaseEl.style.display = isSearching ? 'none' : '';
+        if (avatarEl) avatarEl.style.display = isSearching ? 'none' : '';
+        bubble.classList.toggle('assistant-thinking-minimal', isSearching);
+    }
     maybeAutoScroll(chatContainer);
 }
 
@@ -19395,7 +19502,7 @@ async function handleContinuousVisionQuery(text) {
             ? `Read the math problem from the image and solve it accurately with clear steps. User query: "${text}".`
             : (isTranslateIntent
                 ? `Extract all readable text and translate it to English. User query: "${text}".`
-                : `Describe only what is actually visible in the current camera frame. Do not explain your own capabilities. If text is visible, prioritize OCR and preserve exact numbers/symbols/equations. Then answer the user question directly: "${text}". Keep the answer concise and practical.`);
+                : `Describe only what is relevant to the user query. If readable text or software UI is visible, focus on that first and ignore background details like wall color unless explicitly asked. If the user asks about a product/part/object, identify it and explain its practical use briefly. Preserve exact numbers/symbols/equations when text exists. User query: "${text}". Keep the answer concise and practical.`);
         const response = await fetch('/api/vision', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -19470,30 +19577,36 @@ function extractVisionJsonObject(rawText) {
 function formatVisionJsonToReadableText(payload) {
     if (!payload || typeof payload !== 'object') return '';
     const summary = String(payload.summary || '').trim();
+    const directAnswer = String(payload.answer || '').trim();
     const objects = Array.isArray(payload.objects) ? payload.objects : [];
-    const textDetected = Array.isArray(payload.textDetected) ? payload.textDetected : [];
-    const lines = [];
+    const fullText = String(payload.fullText || '').trim();
+    const textDetected = Array.isArray(payload.textDetected)
+        ? payload.textDetected.map(v => String(v || '').trim()).filter(Boolean)
+        : [];
+    const compactText = fullText || textDetected.slice(0, 12).join('\n');
 
-    if (summary) lines.push(`Vision summary: ${summary}`);
+    if (compactText) {
+        const parts = [`Detected text:\n${compactText.slice(0, 2400)}`];
+        if (directAnswer) parts.push(directAnswer.replace(/\s+/g, ' ').trim().slice(0, 280));
+        return parts.join('\n\n').trim();
+    }
+
+    if (directAnswer) return directAnswer.replace(/\s+/g, ' ').trim().slice(0, 280);
+    if (summary) return summary.replace(/\s+/g, ' ').trim().slice(0, 280);
 
     if (objects.length) {
         const objectLine = objects
-            .slice(0, 8)
+            .slice(0, 4)
             .map(item => {
                 const label = String(item?.label || 'object').trim();
                 const count = Number(item?.count || 1);
-                const conf = typeof item?.confidence === 'number' ? ` (${Math.round(item.confidence * 100)}%)` : '';
-                return `${label} x${Math.max(1, count)}${conf}`;
+                return `${label} x${Math.max(1, count)}`;
             })
             .join(', ');
-        lines.push(`Objects: ${objectLine}`);
+        return `Visible objects: ${objectLine}`;
     }
 
-    if (textDetected.length) {
-        lines.push(`Detected text: ${textDetected.slice(0, 8).join(' | ')}`);
-    }
-
-    return lines.join('\n\n').trim();
+    return '';
 }
 
 function normalizeVisionAnswerForChat(answer, details = {}) {
