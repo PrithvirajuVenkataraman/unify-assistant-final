@@ -647,6 +647,12 @@ body.dark {
     background: rgba(237, 233, 254, 0.9);
 }
 
+#voice-state-indicator[data-state="converse-ready"] {
+    color: #0f5132;
+    border-color: rgba(16, 185, 129, 0.45);
+    background: rgba(209, 250, 229, 0.9);
+}
+
 #voice-state-indicator[data-state="user-listening"] .voice-state-orb,
 #voice-state-indicator[data-state="assistant-speaking"] .voice-state-orb {
     animation: jarvis-listen-pulse 1.4s ease-out infinite;
@@ -685,6 +691,12 @@ body.dark #voice-state-indicator[data-state="assistant-speaking"] {
     color: #ddd6fe;
     border-color: rgba(139, 92, 246, 0.5);
     background: rgba(76, 29, 149, 0.5);
+}
+
+body.dark #voice-state-indicator[data-state="converse-ready"] {
+    color: #a7f3d0;
+    border-color: rgba(16, 185, 129, 0.5);
+    background: rgba(6, 78, 59, 0.55);
 }
 
 body.dark .footer-action-btn-mic:hover,
@@ -1114,6 +1126,32 @@ body.dark .response-action-btn {
     display: none;
 }
 
+.converse-toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(82px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 70;
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid var(--ui-border);
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    box-shadow: 0 8px 24px rgba(2, 6, 23, 0.18);
+}
+
+.converse-toast.on {
+    border-color: rgba(16, 185, 129, 0.45);
+    background: rgba(16, 185, 129, 0.12);
+}
+
+.converse-toast.off {
+    border-color: rgba(148, 163, 184, 0.55);
+    background: var(--ui-surface-muted);
+}
+
 .is-processing #text-input,
 .is-processing .footer-action-btn-send {
     pointer-events: none;
@@ -1269,8 +1307,6 @@ body.dark .response-action-btn {
 .loading-overlay,
 .weather-card-enhanced,
 .status-indicator,
-.converse-live-indicator,
-.converse-toast,
 .tube-light,
 .tube-light-glow,
 .weather-effect,
