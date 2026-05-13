@@ -14,6 +14,9 @@
     --ui-primary-hover: #1d4ed8;
     --ui-radius: 12px;
     --ui-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --chat-message-font-size: clamp(15px, 1.05rem, 17px);
+    --chat-message-line-height: 1.7;
+    --chat-message-font-weight: 500;
 
     --app-max-width: 1000px;
     --app-gutter-x: 20px;
@@ -408,6 +411,12 @@ body.dark {
     padding: 10px 12px !important;
 }
 
+.chat-bubble-user p {
+    font-size: var(--chat-message-font-size) !important;
+    line-height: var(--chat-message-line-height) !important;
+    font-weight: var(--chat-message-font-weight) !important;
+}
+
 .assistant-message-text,
 .assistant-message-text p,
 .assistant-message-text li,
@@ -417,9 +426,9 @@ body.dark {
     word-break: normal !important;
     overflow-wrap: break-word !important;
     color: var(--ui-text) !important;
-    line-height: 1.7 !important;
-    font-size: clamp(15px, 1.05rem, 17px) !important;
-    font-weight: 500 !important;
+    line-height: var(--chat-message-line-height) !important;
+    font-size: var(--chat-message-font-size) !important;
+    font-weight: var(--chat-message-font-weight) !important;
 }
 
 .assistant-message-text a {
@@ -733,6 +742,12 @@ body.dark .footer-action-btn-converse:hover {
     font-size: 13px !important;
     font-weight: 700 !important;
     border-radius: 10px !important;
+}
+
+.image-gen-settings-card {
+    position: sticky;
+    top: 86px;
+    z-index: 6;
 }
 
 .side-panel {
@@ -1206,6 +1221,10 @@ body.dark .response-action-btn {
 }
 
 @media (max-width: 640px) {
+    .image-gen-settings-card {
+        top: 72px;
+    }
+
     #input-bar-container .max-w-5xl,
     #input-bar-container .max-w-xl,
     #input-bar-container .sm\:max-w-3xl {
