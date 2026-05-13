@@ -1129,8 +1129,8 @@ body.dark .response-action-btn {
 .converse-toast {
     position: fixed;
     left: 50%;
-    bottom: calc(82px + env(safe-area-inset-bottom));
-    transform: translateX(-50%);
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0.97);
     z-index: 70;
     padding: 8px 12px;
     border-radius: 999px;
@@ -1140,6 +1140,19 @@ body.dark .response-action-btn {
     background: var(--ui-surface);
     color: var(--ui-text);
     box-shadow: 0 8px 24px rgba(2, 6, 23, 0.18);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.55s ease, transform 0.55s ease;
+}
+
+.converse-toast.is-visible {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.converse-toast.is-hiding {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.985);
 }
 
 .converse-toast.on {
