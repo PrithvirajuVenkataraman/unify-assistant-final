@@ -2446,10 +2446,11 @@ function getRecentMemoryHint() {
     return blocks.join('\n');
 }
 
-async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking...') {
+async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking...', options = {}) {
     showThinkingIndicator(loadingMessage);
     try {
-        const responsePromise = processUserQuery(message);
+        const useDirectModel = Boolean(options?.directModel);
+        const responsePromise = useDirectModel ? askGeminiAI(message) : processUserQuery(message);
         const minimumThinkMs = converseMode ? 0 : 2000;
         if (minimumThinkMs > 0) {
             await Promise.all([
@@ -2479,6 +2480,10 @@ async function processUserQuery(text) {
     const t = String(text || '').trim();
     if (!t) return;
     const riskLevel = getRiskTierForQuery(t);
+    if (isStrictLatestQuery(t)) {
+        await handleStrictLatestQuery(t);
+        return { intent: 'strict_latest' };
+    }
 
     if (isPersonalHealthStatement(t)) {
         return await askGeminiAI(t);
@@ -4508,30 +4513,6 @@ async function handleNameCorrection(text) {
                                             class="memory-action-btn px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-xs font-semibold transition-all"
                                             title="Clear chat history">
                                             Clear Chat History
-                                        </button>
-                                        <button
-                                            onclick="clearAllAssistantMemoryData()"
-                                            class="memory-action-btn px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-xs font-semibold transition-all"
-                                            title="Clear memory and chat history">
-                                            Clear All
-                                        </button>
-                                        <button
-                                            onclick="exportChatHistoryJson()"
-                                            class="memory-action-btn px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-800 text-xs font-semibold transition-all"
-                                            title="Export chat history JSON">
-                                            Export Chat
-                                        </button>
-                                        <button
-                                            onclick="cleanExistingConversationHistory()"
-                                            class="memory-action-btn px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-semibold transition-all"
-                                            title="Clean existing chat history entries">
-                                            Clean History
-                                        </button>
-                                        <button
-                                            onclick="deleteAllLocalDataNow()"
-                                            class="memory-action-btn px-3 py-1.5 rounded-lg bg-black hover:bg-slate-900 text-xs font-semibold transition-all"
-                                            title="Delete all local app data">
-                                            Delete Local Data
                                         </button>
                                     </div>
                                 </div>
@@ -10844,6 +10825,361 @@ function isLiveRetrievalQuery(text) {
            /\b(middle[\s-]?east|ukraine|russia|israel|gaza|iran|syria|oil market|stock market|economy|inflation|forex|usd|inr|bitcoin|crypto|holiday calendar|release schedule|match schedule)\b/.test(t);
 }
 
+function isStrictLatestQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    const freshnessSignals = /\b(latest|current|today|now|live|as of|recent)\b/;
+    if (!freshnessSignals.test(t)) return false;
+
+    const technicalConceptSignals = /\b(hld|lld|system design|design pattern|architecture|api design|database design|algorithm|data structure|time complexity|space complexity|java|javascript|python|react|node|sql|backend|frontend|microservices?)\b/;
+    if (technicalConceptSignals.test(t) && !/\b(news|headlines?|winner|score|standings|price|rate|market|president|prime minister|ceo|captain|coach|release|movie|song)\b/.test(t)) {
+        return false;
+    }
+    return true;
+}
+
+function buildCanonicalUrlClient(input) {
+    try {
+        const parsed = new URL(String(input || '').trim());
+        const protocol = parsed.protocol.toLowerCase();
+        if (protocol !== 'http:' && protocol !== 'https:') return '';
+        const dropKeys = new Set([
+            'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+            'utm_id', 'gclid', 'fbclid', 'igshid', 'mc_cid', 'mc_eid', 'ref', 'ref_src'
+        ]);
+        const kept = [];
+        for (const [k, v] of parsed.searchParams.entries()) {
+            if (dropKeys.has(String(k || '').toLowerCase())) continue;
+            kept.push([k, v]);
+        }
+        kept.sort((a, b) => String(a[0]).localeCompare(String(b[0])));
+        const normalizedPath = parsed.pathname.replace(/\/+$/, '') || '/';
+        const query = kept.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+        const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+        return `${protocol}//${host}${normalizedPath}${query ? `?${query}` : ''}`;
+    } catch (_) {
+        return '';
+    }
+}
+
+function extractStrictLatestEntityTopic(text, intent = null) {
+    const raw = String(text || '').trim();
+    const liveIntent = intent || extractLiveQueryIntent(raw);
+    const normalized = normalizeLiveTopic(raw);
+    const topic = normalized || liveIntent?.topic || raw;
+    return String(topic || '')
+        .replace(/\b(latest|current|today|now|live|as of|recent|update|updates|status)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function getStrictLatestDomainHint(domain) {
+    const d = String(domain || 'general').toLowerCase();
+    if (d === 'sports') return 'official result standings score';
+    if (d === 'finance') return 'official market price rate';
+    if (d === 'politics' || d === 'news') return 'official statement update';
+    if (d === 'space_science') return 'official mission update';
+    if (d === 'entertainment') return 'official release update';
+    return 'trusted update source';
+}
+
+function getStrictLatestOfficialConstraint(domain) {
+    const d = String(domain || 'general').toLowerCase();
+    if (d === 'sports') return 'site:espn.com OR site:espncricinfo.com OR site:icc-cricket.com';
+    if (d === 'finance') return 'site:bloomberg.com OR site:reuters.com OR site:marketwatch.com';
+    if (d === 'politics' || d === 'news') return 'site:reuters.com OR site:apnews.com OR site:bbc.com';
+    if (d === 'space_science') return 'site:nasa.gov OR site:isro.gov.in OR site:esa.int';
+    if (d === 'entertainment') return 'site:imdb.com OR site:wikipedia.org';
+    return 'site:reuters.com OR site:apnews.com';
+}
+
+function buildStrictLatestQueries(userText, intent = null) {
+    const raw = String(userText || '').trim();
+    const liveIntent = intent || extractLiveQueryIntent(raw);
+    const entityTopic = extractStrictLatestEntityTopic(raw, liveIntent) || raw;
+    const freshnessMatch = raw.match(/\b(latest|current|today|now|live|as of|recent)\b/i);
+    const freshnessToken = freshnessMatch?.[1] ? freshnessMatch[1].toLowerCase() : 'latest';
+    const domainHint = getStrictLatestDomainHint(liveIntent.domain);
+    const officialConstraint = getStrictLatestOfficialConstraint(liveIntent.domain);
+    const explicitYearOrDate = raw.match(/\b(?:19|20)\d{2}\b|(?:\b\d{4}-\d{2}-\d{2}\b)/)?.[0] || '';
+
+    const variants = [
+        raw,
+        `${entityTopic} ${freshnessToken}`.trim(),
+        `${entityTopic} ${domainHint}`.trim(),
+        `${entityTopic} ${officialConstraint}`.trim(),
+        explicitYearOrDate ? `${entityTopic} ${explicitYearOrDate}`.trim() : ''
+    ].filter(Boolean);
+
+    return Array.from(new Set(variants)).slice(0, 5);
+}
+
+function dedupeStrictLatestResults(results) {
+    const deduped = [];
+    const seen = new Set();
+    for (const item of Array.isArray(results) ? results : []) {
+        const canonical = String(item?.canonicalUrl || '').trim() || buildCanonicalUrlClient(item?.url || '');
+        const key = canonical || String(item?.url || '').trim();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        deduped.push({
+            ...item,
+            canonicalUrl: canonical || key
+        });
+    }
+    return deduped;
+}
+
+function getPublishedDateStrictLatest(result) {
+    const direct = String(result?.publishedAt || '').trim();
+    if (direct) {
+        const parsed = Date.parse(direct);
+        if (Number.isFinite(parsed)) return new Date(parsed);
+    }
+    return extractResultPublishedDate(result);
+}
+
+function scoreStrictLatestProvider(provider) {
+    const p = String(provider || '').toLowerCase();
+    if (p === 'serper') return 3;
+    if (p === 'google-news-rss') return 2;
+    if (p === 'duckduckgo-html' || p === 'duckduckgo-api') return 1;
+    return 0;
+}
+
+function scoreStrictLatestRecency(result) {
+    const published = getPublishedDateStrictLatest(result);
+    if (!published) return -2;
+    const ageHours = Math.max(0, (Date.now() - published.getTime()) / (1000 * 60 * 60));
+    if (ageHours <= 24) return 6;
+    if (ageHours <= 72) return 4;
+    if (ageHours <= 168) return 2;
+    return -1;
+}
+
+function rankStrictLatestSources(results, domain, queryText = '') {
+    const tokens = String(queryText || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 12);
+
+    return [...(Array.isArray(results) ? results : [])]
+        .map((item, index) => {
+            const title = String(item?.title || '').toLowerCase();
+            const description = String(item?.description || '').toLowerCase();
+            const overlap = tokens.reduce((acc, token) => acc + (title.includes(token) || description.includes(token) ? 1 : 0), 0);
+            const trust = scoreSourcePolicy(item?.url, domain);
+            const recency = scoreStrictLatestRecency(item);
+            const provider = scoreStrictLatestProvider(item?.provider);
+            return {
+                ...item,
+                __strictScore: (trust * 2) + overlap + recency + provider - (index * 0.01)
+            };
+        })
+        .sort((a, b) => b.__strictScore - a.__strictScore)
+        .map(({ __strictScore, ...item }) => item);
+}
+
+function getStrictLatestStaleness(domain, queryText, sources) {
+    const pool = Array.isArray(sources) ? sources : [];
+    if (!pool.length) return { stale: true, reason: 'no_sources' };
+
+    const newestTs = Math.max(...pool.map(item => getPublishedDateStrictLatest(item)?.getTime() || 0), 0);
+    const newestDate = newestTs ? new Date(newestTs) : null;
+    const ageHours = newestDate ? (Date.now() - newestDate.getTime()) / (1000 * 60 * 60) : Number.POSITIVE_INFINITY;
+    const d = String(domain || 'general').toLowerCase();
+    const lower = String(queryText || '').toLowerCase();
+
+    if (['news', 'politics', 'sports'].includes(d)) {
+        return { stale: ageHours > 72, reason: ageHours > 72 ? 'older_than_72h' : '', ageHours, newestDate };
+    }
+    if (d === 'finance' || /\b(price|rate|exchange|market)\b/.test(lower)) {
+        return { stale: ageHours > 24, reason: ageHours > 24 ? 'older_than_24h' : '', ageHours, newestDate };
+    }
+    if (d === 'entertainment') {
+        const hasDateEvidence = pool.slice(0, 5).some(item => Boolean(getPublishedDateStrictLatest(item)));
+        return { stale: !hasDateEvidence, reason: !hasDateEvidence ? 'missing_release_date_evidence' : '', ageHours, newestDate };
+    }
+    return { stale: false, reason: '', ageHours, newestDate };
+}
+
+function buildStrictLatestRefineHint(intent, queryText) {
+    const d = String(intent?.domain || 'general').toLowerCase();
+    if (d === 'sports') return 'Refine hint: add exact competition + season/year + official site constraint (example: "IPL 2026 winner site:iplt20.com").';
+    if (d === 'finance') return 'Refine hint: add exact asset/currency pair + date/time + source constraint (example: "USD INR today site:reuters.com").';
+    if (d === 'entertainment') return 'Refine hint: add exact artist/actor + release type + year (example: "latest movie of X in 2026 site:imdb.com").';
+    if (d === 'news' || d === 'politics') return 'Refine hint: add exact date/window + location/topic + trusted source constraint (example: "today site:reuters.com").';
+    return 'Refine hint: add exact date/year and an official-source constraint.';
+}
+
+function buildStrictLatestFailureMessage(intent, queryText, reason = 'verification_unavailable') {
+    const prefix = reason === 'stale_sources'
+        ? 'I cannot verify a fresh latest update from sufficiently recent sources right now.'
+        : 'I cannot verify this latest/current request confidently from enough independent trusted sources right now.';
+    return `${prefix}\n${buildStrictLatestRefineHint(intent, queryText)}`;
+}
+
+function formatStrictLatestAnswer(answerText, sources) {
+    const clean = String(answerText || '').replace(/\s+/g, ' ').trim();
+    const sentenceMatches = clean.match(/[^.!?]+[.!?]?/g) || [];
+    const concise = sentenceMatches.map(s => s.trim()).filter(Boolean).slice(0, 3).join(' ').trim() || clean;
+    const sourceLines = (Array.isArray(sources) ? sources : [])
+        .slice(0, 5)
+        .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+        .join('\n');
+    return `${concise}\nAs of: ${formatAsOfTimestamp()}\nSources:\n${sourceLines}`;
+}
+
+async function publishStrictLatestFailure(userText, intent, options = {}) {
+    const message = options?.message || buildStrictLatestFailureMessage(intent, userText, options?.reason || 'verification_unavailable');
+    addVerifiedAssistantMessage(message, 'Verification unavailable');
+    speak(options?.speechText || 'I could not verify this latest update confidently right now.');
+    saveToHistory(userText, message);
+    return true;
+}
+
+async function handleStrictLatestQuery(userText) {
+    showThinkingIndicator('Checking latest trusted sources...');
+    const controller = beginAbortableRequest();
+    const budgetMs = TRUST_FIRST_RELIABILITY_POLICY.verificationBudgetMs;
+    const summaryTimeoutMs = TRUST_FIRST_RELIABILITY_POLICY.summaryTimeoutMs;
+    const budgetTimer = setTimeout(() => {
+        try { controller.abort(); } catch (_) {}
+    }, budgetMs);
+
+    try {
+        const query = String(userText || '').trim();
+        const intent = extractLiveQueryIntent(query);
+        const strictQueries = buildStrictLatestQueries(query, intent);
+        const resultSets = await Promise.all(
+            strictQueries.map(async (q) => {
+                try {
+                    const response = await fetch('/api/search', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        signal: controller.signal,
+                        body: JSON.stringify({ query: q, maxResults: 6 })
+                    });
+                    if (!response.ok) return [];
+                    const data = await response.json();
+                    return Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
+                } catch (_) {
+                    return [];
+                }
+            })
+        );
+
+        const merged = dedupeStrictLatestResults(resultSets.flat());
+        const ranked = rankStrictLatestSources(merged, intent.domain || 'general', query).slice(0, 10);
+        const top = ranked.slice(0, 6);
+
+        const distinctDomains = Array.from(new Set(top.map(item => getDomainFromUrl(item?.url || '')).filter(Boolean)));
+        const trustedCount = top.filter(item => scoreSourcePolicy(item?.url, intent.domain || 'general') > 0).length;
+        const staleness = getStrictLatestStaleness(intent.domain || 'general', query, top);
+        const verificationSnapshot = {
+            sourceCount: top.length,
+            distinctDomainCount: distinctDomains.length,
+            trustedCount,
+            stale: Boolean(staleness?.stale),
+            pass: top.length >= 3 && distinctDomains.length >= 2 && trustedCount >= 2 && !staleness?.stale
+        };
+        window.__lastVerificationSnapshot = verificationSnapshot;
+
+        const debugTrace = {
+            strictLatest: true,
+            query,
+            domain: intent.domain || 'general',
+            queryVariantsUsed: strictQueries,
+            thresholdChecks: {
+                minSources: 3,
+                minDomains: 2,
+                minTrusted: 2,
+                sourceCount: top.length,
+                distinctDomainCount: distinctDomains.length,
+                trustedCount
+            },
+            staleness: {
+                stale: Boolean(staleness?.stale),
+                reason: staleness?.reason || '',
+                newestDate: staleness?.newestDate ? staleness.newestDate.toISOString() : null
+            },
+            topSourceDomains: distinctDomains.slice(0, 6),
+            verificationSnapshot
+        };
+        window.__strictLatestDebug = debugTrace;
+        console.info('[strict-latest-debug]', debugTrace);
+
+        if (!verificationSnapshot.pass) {
+            const failReason = staleness?.stale ? 'stale_sources' : 'verification_unavailable';
+            return publishStrictLatestFailure(query, intent, { reason: failReason });
+        }
+
+        const snippets = top
+            .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}\nPublishedAt: ${r.publishedAt || 'unknown'}`)
+            .join('\n\n');
+
+        let conciseAnswer = '';
+        try {
+            const summaryResponse = await Promise.race([
+                fetch('/api/chat-groq', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        systemPrompt: 'Answer only from provided snippets. Do not guess. Keep answer to 1-3 sentences max.',
+                        message: `User question: "${query}"
+
+Rules:
+- Return only the direct answer in 1-3 sentences.
+- No headings.
+- No confidence labels.
+- No source list.
+- If evidence is mixed or weak, return exactly: "I cannot verify this latest update confidently right now."
+
+Snippets:
+${snippets}`
+                    })
+                }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('strict_latest_summary_timeout')), summaryTimeoutMs))
+            ]);
+            if (!summaryResponse || !summaryResponse.ok) {
+                throw new Error('strict_latest_summary_failed');
+            }
+            const summaryData = await summaryResponse.json();
+            conciseAnswer = String(summaryData?.response || summaryData?.text || '').trim();
+        } catch (_) {
+            conciseAnswer = '';
+        }
+
+        if (!conciseAnswer || /cannot verify this latest update confidently right now/i.test(conciseAnswer)) {
+            return publishStrictLatestFailure(query, intent, { reason: 'verification_unavailable' });
+        }
+
+        const finalMsg = formatStrictLatestAnswer(conciseAnswer, top);
+        addVerifiedAssistantMessage(finalMsg, 'Verified latest sources');
+        speak('I checked current trusted sources and prepared a concise update.');
+        saveToHistory(query, finalMsg);
+        return true;
+    } catch (error) {
+        if (isAbortError(error)) {
+            return publishStrictLatestFailure(String(userText || '').trim(), extractLiveQueryIntent(String(userText || '').trim()), {
+                reason: 'verification_timeout',
+                speechText: 'Verification timed out before confidence threshold.'
+            });
+        }
+        return publishStrictLatestFailure(String(userText || '').trim(), extractLiveQueryIntent(String(userText || '').trim()), {
+            reason: 'verification_unavailable',
+            speechText: 'I hit a verification issue while checking latest sources.'
+        });
+    } finally {
+        clearTimeout(budgetTimer);
+        clearActiveRequest(controller);
+        hideThinkingIndicator();
+    }
+}
+
 function isSportsLiveResultQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -14388,6 +14724,11 @@ function detectInputLanguageHint(text) {
                 return;
             }
 
+            if (isStrictLatestQuery(cleanText)) {
+                const handled = await handleStrictLatestQuery(cleanText);
+                if (handled) return;
+            }
+
             if (answerPath === 'default_model' && isUniversalExplainerRequest(cleanText)) {
                 const handled = await handleUniversalExplainerQuery(cleanText, text);
                 if (handled) return;
@@ -14584,7 +14925,7 @@ Tips:
 
 If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`;
 
-                const recipeResponse = await callAIWithTyping(recipePrompt, 'Preparing recipe...');
+                const recipeResponse = await callAIWithTyping(recipePrompt, 'Preparing recipe...', { directModel: true });
                 if (recipeResponse?.aborted) return;
                 const recipeText = String(recipeResponse?.response || '').trim();
                 const shouldUseRecipeFallback = !recipeText ||
@@ -14647,7 +14988,7 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
             if (answerPath === 'support_intro') {
                 supportConversationMode = true;
                 const introPrompt = buildSupportConversationPrompt(text);
-                const supportIntro = await callAIWithTyping(introPrompt, 'I am here with you...');
+                const supportIntro = await callAIWithTyping(introPrompt, 'I am here with you...', { directModel: true });
                 if (supportIntro?.aborted) return;
                 const introText = supportIntro?.response || await buildOfflineSupportReply(text);
                 const finalIntro = `${introText}\n\nYou can stay in this mode and talk naturally. Say "stop support mode" whenever you want to leave it.`;
@@ -14672,7 +15013,7 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
             if (answerPath === 'support_continue') {
                 supportConversationMode = true;
                 const supportPrompt = buildSupportConversationPrompt(text);
-                const supportReply = await callAIWithTyping(supportPrompt, 'I am here with you...');
+                const supportReply = await callAIWithTyping(supportPrompt, 'I am here with you...', { directModel: true });
                 if (supportReply?.aborted) return;
                 const supportText = supportReply?.response || await buildOfflineSupportReply(text);
                 addModelAssistantMessage(supportText, 'Support conversation');
@@ -14698,7 +15039,7 @@ Format:
 - What you can do now: <2-4 practical steps>
 - Get urgent help if: <red flags>
 - Safer next step: <when to contact a doctor/pharmacist>`;
-                const medicalResponse = await callAIWithTyping(medicalPrompt, 'Preparing safe medical guidance...');
+                const medicalResponse = await callAIWithTyping(medicalPrompt, 'Preparing safe medical guidance...', { directModel: true });
                 if (medicalResponse?.aborted) return;
                 await publishResolvedModelMessage(text, medicalResponse.response, {
                     label: 'Model answer',
@@ -14743,7 +15084,7 @@ Important:
 - Be concrete and specific, not vague
 - Avoid repeating stock phrases used in prior messages
 - Keep it concise and human`;
-                const mhResponse = await callAIWithTyping(mhPrompt, 'I am here with you...');
+                const mhResponse = await callAIWithTyping(mhPrompt, 'I am here with you...', { directModel: true });
                 if (mhResponse?.aborted) return;
                 const upliftingFallback = "You are not failing, you are recovering your energy one step at a time. Take one small win right now: drink water, breathe slowly for 60 seconds, and do one tiny task.";
                 await publishResolvedModelMessage(text, mhResponse.response || upliftingFallback, {
@@ -14763,7 +15104,7 @@ Respond in a debate style that is:
 - Concise, practical, and specific
 
 Do not use repetitive filler or generic wording.`;
-                const debateResponse = await callAIWithTyping(debatePrompt, 'Preparing a focused response...');
+                const debateResponse = await callAIWithTyping(debatePrompt, 'Preparing a focused response...', { directModel: true });
                 if (debateResponse?.aborted) return;
                 await publishResolvedModelMessage(text, debateResponse.response, {
                     label: 'Model answer',
@@ -14800,7 +15141,7 @@ Quick recap: ...
 - Avoid jargon unless you define it immediately.
 - Keep it accurate and practical.
 - Teaching depth: ${teachingDepth}. ${teachingRule}`;
-                const learningResponse = await callAIWithTyping(learningPrompt, 'Preparing a clear explanation...');
+                const learningResponse = await callAIWithTyping(learningPrompt, 'Preparing a clear explanation...', { directModel: true });
                 if (learningResponse?.aborted) return;
                 let learningAnswer = learningResponse.response;
                 if (formulaNeededInLearning && !hasFormulaLikeExpression(learningAnswer)) {
@@ -15349,12 +15690,31 @@ STRICTLY AVOID:
 If the user asks for 1 day, return only Day 1.
 If user asks for 2 days, provide both days with balanced pacing.`;
                 
-                const aiResponse = await callAIWithTyping(itineraryPrompt, '[Plan] Planning your itinerary...');
+                const aiResponse = await callAIWithTyping(itineraryPrompt, '[Plan] Planning your itinerary...', { directModel: true });
                 if (aiResponse?.aborted) return;
-                await publishResolvedModelMessage(text, aiResponse.response, {
-                    label: 'Model answer',
-                    speechText: "I've created an itinerary for you. Check the chat for details!"
-                });
+                if (/\bfallback\b/i.test(String(aiResponse?.intent || ''))) {
+                    await deliverApiReply('itinerary_retry_prompt', {
+                        reason: aiResponse.intent
+                    }, {
+                        fallbackText: 'I could not confidently build a clean itinerary right now. Please retry once, or ask with this format: "Plan a 3-day itinerary in Gokarna".'
+                    });
+                    return;
+                }
+                const itineraryAnswer = postProcessAssistantResponse(
+                    String(aiResponse?.response || aiResponse?.text || '').trim(),
+                    text
+                );
+                if (!itineraryAnswer) {
+                    await deliverApiReply('itinerary_retry_prompt', {
+                        reason: 'empty_response'
+                    }, {
+                        fallbackText: 'I could not generate that itinerary right now. Please retry with city + number of days, like: "Plan a 3-day itinerary in Gokarna".'
+                    });
+                    return;
+                }
+                addModelAssistantMessage(itineraryAnswer, 'Itinerary plan');
+                speak("I've created an itinerary for you. Check the chat for details!");
+                saveToHistory(text, itineraryAnswer);
                 return; 
             }
             
@@ -15407,7 +15767,7 @@ Example for Tamil Nadu region:
 
 DO NOT make up dish names! Only include dishes you're 100% sure exist in that region.`;
                 
-                const aiResponse = await callAIWithTyping(specialtyPrompt);
+                const aiResponse = await callAIWithTyping(specialtyPrompt, 'Assistant is thinking...', { directModel: true });
                 if (aiResponse?.aborted) return;
                 await publishResolvedModelMessage(text, aiResponse.response, {
                     label: 'Model answer',
