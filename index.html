@@ -161,6 +161,17 @@
                     onkeydown="if(event.key === 'Enter'){ event.preventDefault(); sendTextInput(); }"
                     oninput="toggleSendButton()"
                 />
+                <div id="vtt-waveform-lane" class="vtt-waveform-lane" aria-hidden="true">
+                    <span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span>
+                    <span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span>
+                    <span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span>
+                    <span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span>
+                    <span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span>
+                    <span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span>
+                    <span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span>
+                    <span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span>
+                    <span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span>
+                </div>
                 <div id="voice-state-indicator" class="voice-state-indicator is-idle hidden" data-state="idle" aria-live="polite">
                     <span id="voice-state-orb" class="voice-state-orb" aria-hidden="true"></span>
                     <span id="voice-state-bars" class="voice-state-bars" aria-hidden="true">
@@ -930,6 +941,89 @@ async function maybeShowReferenceImageForQuery(userText, assistantText = '') {
   <p class="text-[11px] mt-2 text-slate-500 dark:text-slate-400">Source: <a class="underline text-sky-600 dark:text-sky-300" href="${ref.sourceUrl}" target="_blank">Wikipedia</a></p>
 </div>`;
     addChatMessage(card, false, false);
+}
+
+function parseImageGenerationPrompt(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+    const patterns = [
+        /^(?:imagine|create|generate|draw|make)\s+(?:an?\s+)?image(?:\s+of)?\s+(.+)$/i,
+        /^\/imagine\s+(.+)$/i,
+        /^(?:image|picture|photo)\s+(?:generate|create|make)\s+(.+)$/i,
+        /^(?:show me|give me)\s+(?:an?\s+)?(?:ai\s+)?image\s+(?:of)?\s*(.+)$/i
+    ];
+    for (const pattern of patterns) {
+        const match = raw.match(pattern);
+        if (match?.[1]) {
+            return match[1].replace(/[?.!]\s*$/, '').trim();
+        }
+    }
+    return '';
+}
+
+function isImageGenerationRequest(text) {
+    return !!parseImageGenerationPrompt(text);
+}
+
+async function generateImageFromPrompt(prompt, originalUserText = '') {
+    const cleanedPrompt = String(prompt || '').trim().slice(0, 500);
+    if (!cleanedPrompt) {
+        addChatMessage('Please provide an image prompt after the command. Example: "generate image of a neon city in rain".', false);
+        return;
+    }
+    if (!freeImageGenerationEnabled) {
+        addChatMessage('Free image generation is disabled. Open Help & Options to enable it.', false);
+        return;
+    }
+    if (isInappropriateContent(cleanedPrompt)) {
+        addChatMessage('I cannot generate that image. Please try a safe prompt.', false);
+        return;
+    }
+
+    showThinkingIndicator('Generating image...');
+    try {
+        const response = await fetch('/api/image-free', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prompt: cleanedPrompt,
+                model: 'flux',
+                width: 1024,
+                height: 1024
+            })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data?.success || !data?.imageUrl) {
+            throw new Error(String(data?.error || 'image_generation_failed'));
+        }
+
+        const card = `
+<div class="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white/90 dark:bg-slate-900/60">
+  <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2">Generated image</p>
+  <img src="${escapeHtml(data.imageUrl)}" alt="${escapeHtml(cleanedPrompt)}" class="w-full h-auto max-h-[70vh] object-contain rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800" loading="lazy" />
+  <p class="text-[11px] mt-2 text-slate-500 dark:text-slate-400">Prompt: ${escapeHtml(cleanedPrompt)}</p>
+  <p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Provider: Pollinations (${escapeHtml(String(data?.model || 'flux'))})</p>
+  <p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Source: <a class="underline text-sky-600 dark:text-sky-300" href="${escapeHtml(data.imageUrl)}" target="_blank" rel="noopener noreferrer">Open image URL</a></p>
+</div>`;
+        addChatMessage(card, false, false);
+        const spoken = 'Image is ready.';
+        speak(spoken);
+        saveToHistory(originalUserText || `Generate image: ${cleanedPrompt}`, `Generated image for prompt: ${cleanedPrompt}`);
+    } catch (error) {
+        const msg = 'I could not generate an image right now. Please try again in a moment.';
+        addChatMessage(msg, false);
+        speak(msg);
+    } finally {
+        hideThinkingIndicator();
+    }
+}
+
+function openImageGenerationPrompt() {
+    const prompt = window.prompt('Describe the image you want to generate:');
+    if (!prompt) return;
+    const userText = `Generate image of ${prompt}`;
+    addChatMessage(userText, true);
+    generateImageFromPrompt(prompt, userText);
 }
 
 // ========== CONTENT MODERATION ==========
@@ -3735,6 +3829,101 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
     return text;
 }
 
+const CAG_MAX_ENTRIES = 80;
+const CAG_MAX_CONTEXT_CHARS = 1800;
+let cagMemoryEntries = [];
+
+function getCagStorageKey() {
+    return `${getUserStorageKey()}_cag`;
+}
+
+function normalizeCagText(text) {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function tokenizeCagText(text) {
+    return normalizeCagText(text)
+        .split(' ')
+        .filter(token => token.length >= 3)
+        .slice(0, 50);
+}
+
+function getCagSimilarity(query, sourceText) {
+    const a = new Set(tokenizeCagText(query));
+    const b = new Set(tokenizeCagText(sourceText));
+    if (!a.size || !b.size) return 0;
+    let overlap = 0;
+    for (const token of a) {
+        if (b.has(token)) overlap += 1;
+    }
+    const union = new Set([...a, ...b]).size || 1;
+    return overlap / union;
+}
+
+function loadCagMemory() {
+    cagMemoryEntries = [];
+    if (!persistMemoryToDevice) return;
+    try {
+        const raw = localStorage.getItem(getCagStorageKey());
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return;
+        cagMemoryEntries = parsed
+            .filter(item => item && typeof item.user === 'string' && typeof item.assistant === 'string')
+            .slice(-CAG_MAX_ENTRIES);
+    } catch (_) {}
+}
+
+function saveCagMemory() {
+    try {
+        if (!persistMemoryToDevice) return;
+        localStorage.setItem(getCagStorageKey(), JSON.stringify(cagMemoryEntries.slice(-CAG_MAX_ENTRIES)));
+    } catch (_) {}
+}
+
+function rememberCagTurn(userText, assistantText) {
+    const user = String(userText || '').trim();
+    const assistant = String(assistantText || '').trim();
+    if (!user || !assistant) return;
+    if (assistant.length < 20) return;
+
+    cagMemoryEntries.push({
+        user: user.slice(0, 800),
+        assistant: assistant.slice(0, 1800),
+        ts: Date.now()
+    });
+    if (cagMemoryEntries.length > CAG_MAX_ENTRIES) {
+        cagMemoryEntries = cagMemoryEntries.slice(-CAG_MAX_ENTRIES);
+    }
+    saveCagMemory();
+}
+
+function buildCagContextForQuery(query) {
+    if (!cagModeEnabled) return '';
+    const q = String(query || '').trim();
+    if (!q || !cagMemoryEntries.length) return '';
+    const scored = cagMemoryEntries
+        .map(item => ({
+            item,
+            score: getCagSimilarity(q, `${item.user}\n${item.assistant}`)
+        }))
+        .filter(entry => entry.score >= 0.18)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+    if (!scored.length) return '';
+
+    const lines = ['CAG memory (relevant prior context):'];
+    for (const entry of scored) {
+        lines.push(`- Previous user ask: ${entry.item.user}`);
+        lines.push(`  Helpful context: ${entry.item.assistant.slice(0, 320)}`);
+    }
+    return lines.join('\n').slice(0, CAG_MAX_CONTEXT_CHARS);
+}
+
 async function askGeminiAI(userMessage) {
     let normalizedUserMessage = String(userMessage || '');
     const controller = beginAbortableRequest();
@@ -3839,6 +4028,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             ? 'This is a direct explainer/identity query. Do not give research steps or suggestions to search online. Answer directly with concise factual content.'
             : '';
         const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}${quantityHint}${languageReplyHint}\n${conciseFactHint}\n${directExplainerHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
+        const cagContext = buildCagContextForQuery(normalizedUserMessage);
 
          
         const response = await fetch('/api/chat-groq', { 
@@ -3849,6 +4039,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
                 message: effectiveMessage, 
                 systemPrompt: systemPromptWithTopic,
                 userName: userName,
+                ragContext: cagContext,
                 context: conversationContext
             }) 
         }); 
@@ -3880,6 +4071,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         }
 
         conversationContext.push({ role: 'assistant', text: data.response || data.text });
+        rememberCagTurn(normalizedUserMessage, data.response || data.text || '');
         
         return data;
     } catch (error) {
@@ -4016,6 +4208,7 @@ async function handleNameCorrection(text) {
         let voiceTypingFinalText = '';
         let voiceTypingInterimText = '';
         let voiceTypingSilenceTimer = null;
+        let voiceTypingAutoSendOnStop = false;
         let inputHistory = [];
         let inputHistoryIndex = -1;
         let lastSubmissionFingerprint = '';
@@ -4082,6 +4275,10 @@ async function handleNameCorrection(text) {
         let medicalMode = false;
         let converseMode = false;
         let supportConversationMode = false;
+        let cagModeEnabled = true;
+        let freeImageGenerationEnabled = true;
+        let converseAccuracyMode = 'strict';
+        let converseUseDeviceLocale = true;
 
         // UI/settings state
         let noiseFilterEnabled = false;
@@ -4252,10 +4449,12 @@ async function handleNameCorrection(text) {
             loadUserData();
             loadNoiseFilterSettings();
             loadAssistantModes();
+            loadCagMemory();
             loadCommuteProfile();
             loadSafetyProfile();
             setupInputHistoryNavigation();
             updateVoiceToTextButton();
+            syncVttUiState();
             initChatScrollLock();
             initKeyboardShortcuts();
             initSelectionPromptHelper();
@@ -4376,6 +4575,7 @@ async function handleNameCorrection(text) {
                 if (footerDisclaimer) {
                     footerDisclaimer.className = 'mt-2 text-xs text-gray-500 font-medium text-center';
                 }
+                syncVttUiState();
             } else {
                 // Light mode
                 if (lightSwitch) lightSwitch.classList.add('on');
@@ -4403,6 +4603,7 @@ async function handleNameCorrection(text) {
                     if (footerDisclaimer) {
                         footerDisclaimer.className = 'mt-2 text-xs text-gray-400 font-medium text-center';
                     }
+                    syncVttUiState();
                 }, 800);
             }
         }
@@ -4513,6 +4714,44 @@ async function handleNameCorrection(text) {
                                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Higher = stricter filtering (may miss some commands)</p>
                                 </div>
                                 <p class="text-xs text-gray-500 dark:text-gray-400">Voice: Say "enable noise filter" or "disable noise filter"</p>
+                                <div class="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                    <div>
+                                        <p class="font-semibold text-gray-900 dark:text-white">CAG Mode</p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">Cache-Augmented Generation without vector DB</p>
+                                    </div>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="cag-mode-toggle" class="sr-only peer" ${cagModeEnabled ? 'checked' : ''} onchange="setCagMode(this.checked)">
+                                        <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                                    </label>
+                                </div>
+                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg space-y-3">
+                                    <div class="flex items-center justify-between">
+                                        <div>
+                                            <p class="font-semibold text-gray-900 dark:text-white">Free Image Generation</p>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">Generate with a free diffusion endpoint</p>
+                                        </div>
+                                        <label class="relative inline-flex items-center cursor-pointer">
+                                            <input type="checkbox" id="free-image-mode-toggle" class="sr-only peer" ${freeImageGenerationEnabled ? 'checked' : ''} onchange="setFreeImageGenerationMode(this.checked)">
+                                            <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                                        </label>
+                                    </div>
+                                    <button onclick="openImageGenerationPrompt()" class="w-full px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-all">
+                                        Generate Image
+                                    </button>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">Try prompt: "generate image of a futuristic Chennai skyline at sunrise"</p>
+                                </div>
+                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg space-y-2">
+                                    <p class="font-semibold text-gray-900 dark:text-white">Converse Accuracy</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">Strict mode filters uncertain transcripts more aggressively.</p>
+                                    <div class="flex gap-2">
+                                        <button data-mode-group="converse-accuracy-mode" data-mode-value="balanced" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" onclick="setConverseAccuracyMode('balanced')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${converseAccuracyMode === 'balanced' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Balanced</button>
+                                        <button data-mode-group="converse-accuracy-mode" data-mode-value="strict" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" onclick="setConverseAccuracyMode('strict')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${converseAccuracyMode === 'strict' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Strict</button>
+                                    </div>
+                                    <label class="flex items-center justify-between gap-2 mt-1">
+                                        <span class="text-xs text-gray-600 dark:text-gray-300">Use device locale for speech recognition</span>
+                                        <input type="checkbox" class="h-4 w-4 accent-purple-600" ${converseUseDeviceLocale ? 'checked' : ''} onchange="setConverseUseDeviceLocale(this.checked)">
+                                    </label>
+                                </div>
                                 <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                     <p class="font-semibold text-gray-900 dark:text-white mb-2">Memory</p>
                                     <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Manage saved memory and this account's chat history.</p>
@@ -4651,7 +4890,11 @@ async function handleNameCorrection(text) {
                     responseFormat,
                     newsVerificationMode,
                     medicalMode,
-                    converseMode
+                    converseMode,
+                    cagModeEnabled,
+                    freeImageGenerationEnabled,
+                    converseAccuracyMode,
+                    converseUseDeviceLocale
                 }));
             } catch (e) { console.error('Error saving assistant modes:', e); }
         }
@@ -4672,6 +4915,15 @@ async function handleNameCorrection(text) {
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M21 3 3 11.5l7 2.5 2.5 7L21 3Z"></path>
                     <path d="M10 14 21 3"></path>
+                </svg>
+            `;
+        }
+
+        function getVttSendIconSvg() {
+            return `
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 5v14"></path>
+                    <path d="M6 11l6-6 6 6"></path>
                 </svg>
             `;
         }
@@ -4834,6 +5086,7 @@ async function handleNameCorrection(text) {
             updateModeButtonGroup('response-length', responseLength);
             updateModeButtonGroup('response-format', responseFormat);
             updateModeButtonGroup('medical-mode', medicalMode ? 'on' : 'off');
+            updateModeButtonGroup('converse-accuracy-mode', converseAccuracyMode);
         }
 
         function loadAssistantModes() {
@@ -4844,6 +5097,10 @@ async function handleNameCorrection(text) {
             medicalMode = false;
             converseMode = false;
             supportConversationMode = false;
+            cagModeEnabled = true;
+            freeImageGenerationEnabled = true;
+            converseAccuracyMode = 'strict';
+            converseUseDeviceLocale = true;
             try {
                 const saved = localStorage.getItem('jarvis_assistant_modes');
                 if (saved) {
@@ -4853,6 +5110,10 @@ async function handleNameCorrection(text) {
                     responseFormat = ['paragraph', 'bullet', 'steps'].includes(parsed.responseFormat) ? parsed.responseFormat : 'paragraph';
                     newsVerificationMode = ['normal', 'strict'].includes(parsed.newsVerificationMode) ? parsed.newsVerificationMode : 'normal';
                     medicalMode = !!parsed.medicalMode;
+                    cagModeEnabled = parsed.cagModeEnabled !== false;
+                    freeImageGenerationEnabled = parsed.freeImageGenerationEnabled !== false;
+                    converseAccuracyMode = parsed.converseAccuracyMode === 'balanced' ? 'balanced' : 'strict';
+                    converseUseDeviceLocale = parsed.converseUseDeviceLocale !== false;
                     // Always start with Converse mode OFF unless user explicitly presses it.
                     converseMode = false;
                 }
@@ -4862,6 +5123,10 @@ async function handleNameCorrection(text) {
             window.responseFormat = responseFormat;
             window.newsVerificationMode = newsVerificationMode;
             window.medicalMode = medicalMode;
+            window.cagModeEnabled = cagModeEnabled;
+            window.freeImageGenerationEnabled = freeImageGenerationEnabled;
+            window.converseAccuracyMode = converseAccuracyMode;
+            window.converseUseDeviceLocale = converseUseDeviceLocale;
             updateAssistantModeUI();
             // Do not auto-start listening on load.
         }
@@ -4935,6 +5200,52 @@ async function handleNameCorrection(text) {
             });
         }
 
+        async function setCagMode(enabled) {
+            cagModeEnabled = !!enabled;
+            window.cagModeEnabled = cagModeEnabled;
+            saveAssistantModes();
+            showTemporaryMessage(cagModeEnabled ? 'CAG mode enabled.' : 'CAG mode disabled.');
+        }
+
+        async function setFreeImageGenerationMode(enabled) {
+            freeImageGenerationEnabled = !!enabled;
+            window.freeImageGenerationEnabled = freeImageGenerationEnabled;
+            saveAssistantModes();
+            showTemporaryMessage(freeImageGenerationEnabled ? 'Free image generation enabled.' : 'Free image generation disabled.');
+        }
+
+        function resolveSpeechRecognitionLanguage() {
+            if (!converseUseDeviceLocale) return 'en-US';
+            const fromNavigator = String(navigator?.language || navigator?.languages?.[0] || '').trim();
+            return fromNavigator || 'en-US';
+        }
+
+        function applySpeechRecognitionLanguage() {
+            const lang = resolveSpeechRecognitionLanguage();
+            if (continuousRecognition) continuousRecognition.lang = lang;
+            if (voiceTypingRecognition) voiceTypingRecognition.lang = lang;
+        }
+
+        async function setConverseUseDeviceLocale(enabled) {
+            converseUseDeviceLocale = !!enabled;
+            window.converseUseDeviceLocale = converseUseDeviceLocale;
+            applySpeechRecognitionLanguage();
+            saveAssistantModes();
+            showTemporaryMessage(converseUseDeviceLocale ? 'Converse now uses your device speech locale.' : 'Converse now uses English (US).');
+        }
+
+        async function setConverseAccuracyMode(mode) {
+            converseAccuracyMode = mode === 'balanced' ? 'balanced' : 'strict';
+            window.converseAccuracyMode = converseAccuracyMode;
+            saveAssistantModes();
+            syncHelpModalModeButtons();
+            showTemporaryMessage(
+                converseAccuracyMode === 'strict'
+                    ? 'Converse accuracy set to Strict.'
+                    : 'Converse accuracy set to Balanced.'
+            );
+        }
+
         function toggleConverseMode() {
             if (activeWakeSession) {
                 clearTimeout(followUpTimer);
@@ -4967,6 +5278,7 @@ async function handleNameCorrection(text) {
                     });
                     return;
                 }
+                applySpeechRecognitionLanguage();
                 // Try immediate start first (important on mobile browsers requiring user gesture).
                 if (!isAssistantSpeaking) {
                     startListening();
@@ -5029,17 +5341,11 @@ async function handleNameCorrection(text) {
             if (isVoiceTyping) {
                 btn.classList.add('is-active');
                 btn.innerHTML = `
-                    <span class="vtt-live-icon" aria-hidden="true">
-                        <span class="voice-vtt-wave">
-                            <span class="wave-bar"></span>
-                            <span class="wave-bar"></span>
-                            <span class="wave-bar"></span>
-                            <span class="wave-bar"></span>
-                        </span>
-                    </span>
+                    <span class="vtt-stop-icon" aria-hidden="true">${getStopIconSvg()}</span>
                 `;
                 btn.setAttribute('title', 'Stop voice capture');
                 btn.setAttribute('aria-label', 'Stop voice capture');
+                syncVttUiState();
                 updateVoiceInteractionGraphics();
                 return;
             }
@@ -5056,7 +5362,43 @@ async function handleNameCorrection(text) {
             `;
             btn.setAttribute('title', 'Voice to text');
             btn.setAttribute('aria-label', 'Voice to text');
+            syncVttUiState();
             updateVoiceInteractionGraphics();
+        }
+
+        function handleVttPrimarySendAction() {
+            if (isVoiceTyping) {
+                voiceTypingAutoSendOnStop = true;
+                stopVoiceToTextInput(true);
+                return;
+            }
+            sendTextInput();
+        }
+
+        function syncVttUiState() {
+            const shell = document.getElementById('input-bar-inner');
+            const primaryBtn = document.getElementById('converse-mode-btn');
+            const inputBarContainer = document.getElementById('input-bar-container');
+            if (!shell || !primaryBtn) return;
+
+            shell.classList.toggle('vtt-ui-active', !!isVoiceTyping);
+            if (inputBarContainer) {
+                inputBarContainer.classList.toggle('vtt-ui-active', !!isVoiceTyping);
+            }
+            if (isVoiceTyping) {
+                primaryBtn.dataset.mode = 'send';
+                primaryBtn.onclick = handleVttPrimarySendAction;
+                primaryBtn.innerHTML = getVttSendIconSvg();
+                primaryBtn.classList.remove('is-active');
+                primaryBtn.classList.add('is-send-ready');
+                primaryBtn.setAttribute('aria-pressed', 'false');
+                primaryBtn.setAttribute('aria-label', 'Send message');
+                primaryBtn.title = 'Send message';
+                return;
+            }
+
+            // Restore default primary-action logic when VTT mode exits.
+            toggleSendButton();
         }
 
         function initializeVoiceToTextRecognition() {
@@ -5065,7 +5407,7 @@ async function handleNameCorrection(text) {
             voiceTypingRecognition = new SpeechRecognition();
             voiceTypingRecognition.continuous = true;
             voiceTypingRecognition.interimResults = true;
-            voiceTypingRecognition.lang = 'en-US';
+            voiceTypingRecognition.lang = resolveSpeechRecognitionLanguage();
 
             voiceTypingRecognition.onstart = () => {
                 stopSpeaking();
@@ -5118,9 +5460,14 @@ async function handleNameCorrection(text) {
                 voiceTypingFinalText = '';
                 voiceTypingInterimText = '';
                 voiceTypingBaseText = '';
+                const shouldAutoSend = !!voiceTypingAutoSendOnStop;
+                voiceTypingAutoSendOnStop = false;
                 if (voiceTypingSilenceTimer) {
                     clearTimeout(voiceTypingSilenceTimer);
                     voiceTypingSilenceTimer = null;
+                }
+                if (shouldAutoSend && input && input.value.trim()) {
+                    sendTextInput();
                 }
             };
 
@@ -5966,6 +6313,7 @@ function normalizeUiTokens(text) {
             if (!raw) return raw;
             const normalized = raw
                 .replace(/sources:\s*sources:/gi, 'Sources:')
+                .replace(/(?:^|\n)\s*Sources:\s*(?=\n\s*Sources:\s*)/gi, '\n')
                 .replace(/^\s*\[[^\]]+\]\s*/gim, '')
                 .replace(/^\s*As of:\s*.*$/gim, '')
                 .replace(/^\s*Latest source date:\s*.*$/gim, '')
@@ -5985,7 +6333,7 @@ function normalizeUiTokens(text) {
             const sources = sourcesRaw
                 .split('\n')
                 .map(line => line.trim())
-                .filter(Boolean);
+                .filter(line => line && !/^sources?:\s*$/i.test(line));
 
             if (!sources.length) return answer;
             return `${answer}\n\nSources:\n${sources.join('\n')}`.trim();
@@ -7333,6 +7681,21 @@ ${code}
         }
 
         function toggleSendButton() {
+            if (isVoiceTyping) {
+                const btn = document.getElementById('converse-mode-btn');
+                if (btn) {
+                    btn.dataset.mode = 'send';
+                    btn.onclick = handleVttPrimarySendAction;
+                    btn.innerHTML = getVttSendIconSvg();
+                    btn.classList.remove('is-active');
+                    btn.classList.add('is-send-ready');
+                    btn.setAttribute('aria-pressed', 'false');
+                    btn.setAttribute('aria-label', 'Send message');
+                    btn.title = 'Send message';
+                }
+                syncVttUiState();
+                return;
+            }
             if (activeRequestController || isAssistantProcessing()) {
                 setPrimaryActionButtonToStop();
                 return;
@@ -7956,8 +8319,14 @@ async function handleMarketLookup(text) {
 
             const words = t.split(/\s+/).filter(Boolean);
             if (/^(uh|um|ah|eh|hmm|hm|mm+|noise|background)$/.test(t)) return true;
-            if (confidence > 0 && confidence < 0.55 && words.length < 4) return true;
-            if (words.length < 2 && t.length < 8) return true;
+            const strict = converseAccuracyMode === 'strict';
+            const minConfidence = strict ? 0.7 : 0.55;
+            const minWords = strict ? 3 : 2;
+
+            if (/(.)\1{5,}/.test(t.replace(/\s+/g, ''))) return true;
+            if (/^(?:[a-z]\s*){1,3}$/.test(t)) return true;
+            if (confidence > 0 && confidence < minConfidence && words.length < 5) return true;
+            if (words.length < minWords && t.length < 10) return true;
             return false;
         }
 
@@ -8139,7 +8508,7 @@ async function handleMarketLookup(text) {
             continuousRecognition = new SpeechRecognition();
             continuousRecognition.continuous = true;  
             continuousRecognition.interimResults = true;  
-            continuousRecognition.lang = 'en-US';
+            continuousRecognition.lang = resolveSpeechRecognitionLanguage();
             
             
             continuousRecognition.onstart = () => {
@@ -8343,6 +8712,7 @@ async function handleMarketLookup(text) {
                 stopSpeaking();
                 listeningRequested = true;
                 isListening = true; 
+                continuousRecognition.lang = resolveSpeechRecognitionLanguage();
                 continuousRecognition.start(); 
 
                 // Update voice button to listening state
@@ -11122,20 +11492,52 @@ function getStrictLatestStaleness(domain, queryText, sources) {
     return { stale: false, reason: '', ageHours, newestDate };
 }
 
-function buildStrictLatestRefineHint(intent, queryText) {
-    const d = String(intent?.domain || 'general').toLowerCase();
-    if (d === 'sports') return 'Refine hint: add exact competition + season/year + official site constraint (example: "IPL 2026 winner site:iplt20.com").';
-    if (d === 'finance') return 'Refine hint: add exact asset/currency pair + date/time + source constraint (example: "USD INR today site:reuters.com").';
-    if (d === 'entertainment') return 'Refine hint: add exact artist/actor + release type + year (example: "latest movie of X in 2026 site:imdb.com").';
-    if (d === 'news' || d === 'politics') return 'Refine hint: add exact date/window + location/topic + trusted source constraint (example: "today site:reuters.com").';
-    return 'Refine hint: add exact date/year and an official-source constraint.';
+function buildUniversalLiveRefineHint(queryText, intent = {}, entityIntent = {}, sources = []) {
+    const query = String(queryText || '').trim();
+    const lowerQuery = query.toLowerCase();
+    const relation = String(entityIntent?.relationType || intent?.factType || '').toLowerCase();
+    const subject = String(entityIntent?.subject || '').trim();
+    const hasEntity = Boolean(subject || entityIntent?.targetEntity);
+    const asksFresh = /\b(latest|recent|current|today|now|live|as of|right now)\b/.test(lowerQuery);
+    const hasExplicitTime = Boolean(intent?.year || entityIntent?.year || hasExplicitYearReference(lowerQuery) || /\b(today|this week|this month|this year|as of)\b/.test(lowerQuery));
+    const hasSourceConstraint = /\bsite:[^\s]+|official\s+site|official\s+source|trusted\s+source\b/.test(lowerQuery);
+    const relationNeedsScope = ['role', 'winner', 'score', 'standings', 'qualification', 'stats', 'title_count', 'price', 'latest_work'].includes(relation);
+    const hasOrgOrScope = /\b(of|for|at|in)\b/.test(lowerQuery);
+    const missing = [];
+
+    if (!hasEntity) {
+        missing.push('include the exact person, organization, team, or topic');
+    }
+    if (relationNeedsScope && !hasOrgOrScope) {
+        missing.push('add the exact scope (for example country, organization, institution, league, or product)');
+    }
+    if (asksFresh && !hasExplicitTime) {
+        missing.push('add an exact time window (for example "as of today", a specific date, or a year)');
+    }
+    if (!hasSourceConstraint) {
+        missing.push('add a trusted source constraint (for example site:reuters.com or an official site)');
+    }
+
+    const distinctDomains = Array.from(new Set((Array.isArray(sources) ? sources : []).map(item => getDomainFromUrl(item?.url || '')).filter(Boolean)));
+    if (distinctDomains.length === 1) {
+        missing.push('add one more trusted source constraint to improve cross-source coverage');
+    }
+
+    if (!missing.length) {
+        return 'Refine hint: add one tighter qualifier (exact date/window + exact entity scope + trusted source constraint).';
+    }
+    return `Refine hint: ${missing.slice(0, 3).join('; ')}.`;
 }
 
-function buildStrictLatestFailureMessage(intent, queryText, reason = 'verification_unavailable') {
+function buildStrictLatestRefineHint(intent, queryText, entityIntent = {}, sources = []) {
+    return buildUniversalLiveRefineHint(queryText, intent, entityIntent, sources);
+}
+
+function buildStrictLatestFailureMessage(intent, queryText, reason = 'verification_unavailable', entityIntent = {}, sources = []) {
     const prefix = reason === 'stale_sources'
         ? 'I cannot verify a fresh latest update from sufficiently recent sources right now.'
-        : 'I cannot verify this latest/current request confidently from enough independent trusted sources right now.';
-    return `${prefix}\n${buildStrictLatestRefineHint(intent, queryText)}`;
+        : 'I cannot verify this latest/current request confidently from enough usable independent sources right now.';
+    return `${prefix}\n${buildStrictLatestRefineHint(intent, queryText, entityIntent, sources)}`;
 }
 
 function formatStrictLatestAnswer(answerText, sources) {
@@ -11150,7 +11552,13 @@ function formatStrictLatestAnswer(answerText, sources) {
 }
 
 async function publishStrictLatestFailure(userText, intent, options = {}) {
-    const message = options?.message || buildStrictLatestFailureMessage(intent, userText, options?.reason || 'verification_unavailable');
+    const message = options?.message || buildStrictLatestFailureMessage(
+        intent,
+        userText,
+        options?.reason || 'verification_unavailable',
+        options?.entityIntent || {},
+        options?.sources || []
+    );
     addVerifiedAssistantMessage(message, 'Verification unavailable');
     speak(options?.speechText || 'I could not verify this latest update confidently right now.');
     saveToHistory(userText, message);
@@ -11231,8 +11639,23 @@ async function handleStrictLatestQuery(userText) {
         console.info('[strict-latest-debug]', debugTrace);
 
         if (!verificationSnapshot.pass) {
+            if (top.length) {
+                const bestEffortPublished = await publishBestEffortFromSources({
+                    userText: query,
+                    intent,
+                    entityIntent
+                }, top, {
+                    badge: 'Best-effort latest sources',
+                    speechText: 'I could not fully verify this, so here is the best-supported answer from available sources.'
+                });
+                if (bestEffortPublished) return true;
+            }
             const failReason = staleness?.stale ? 'stale_sources' : 'verification_unavailable';
-            return publishStrictLatestFailure(query, intent, { reason: failReason });
+            return publishStrictLatestFailure(query, intent, {
+                reason: failReason,
+                entityIntent,
+                sources: top
+            });
         }
 
         // For role queries, never let a generic summarizer decide the value.
@@ -11254,14 +11677,29 @@ async function handleStrictLatestQuery(userText) {
                 }
             }
             if (!roleValue) {
+                const bestEffortRole = await publishBestEffortFromSources({
+                    userText: query,
+                    intent,
+                    entityIntent
+                }, top, {
+                    badge: 'Best-effort latest sources',
+                    speechText: 'I could not fully verify the role holder, so here is the best-supported answer from available sources.'
+                });
+                if (bestEffortRole) return true;
                 return publishStrictLatestFailure(query, intent, {
                     reason: 'verification_unavailable',
+                    entityIntent,
+                    sources: top,
                     speechText: 'I could not verify a reliable role holder name from independent trusted sources.'
                 });
             }
             const directRoleAnswer = formatConsensusAnswer(entityIntent, { top: { value: roleValue } });
             if (!directRoleAnswer) {
-                return publishStrictLatestFailure(query, intent, { reason: 'verification_unavailable' });
+                return publishStrictLatestFailure(query, intent, {
+                    reason: 'verification_unavailable',
+                    entityIntent,
+                    sources: top
+                });
             }
             const finalRoleMsg = formatStrictLatestAnswer(directRoleAnswer, top);
             addVerifiedAssistantMessage(finalRoleMsg, 'Verified latest sources');
@@ -11308,7 +11746,20 @@ ${snippets}`
         }
 
         if (!conciseAnswer || /cannot verify this latest update confidently right now/i.test(conciseAnswer)) {
-            return publishStrictLatestFailure(query, intent, { reason: 'verification_unavailable' });
+            const bestEffortPublished = await publishBestEffortFromSources({
+                userText: query,
+                intent,
+                entityIntent
+            }, top, {
+                badge: 'Best-effort latest sources',
+                speechText: 'I could not produce a fully verified latest summary, so here is the best-supported answer from available sources.'
+            });
+            if (bestEffortPublished) return true;
+            return publishStrictLatestFailure(query, intent, {
+                reason: 'verification_unavailable',
+                entityIntent,
+                sources: top
+            });
         }
 
         const finalMsg = formatStrictLatestAnswer(conciseAnswer, top);
@@ -11320,11 +11771,13 @@ ${snippets}`
         if (isAbortError(error)) {
             return publishStrictLatestFailure(String(userText || '').trim(), extractLiveQueryIntent(String(userText || '').trim()), {
                 reason: 'verification_timeout',
+                entityIntent: extractUniversalEntityIntent(String(userText || '').trim(), extractLiveQueryIntent(String(userText || '').trim())),
                 speechText: 'Verification timed out before confidence threshold.'
             });
         }
         return publishStrictLatestFailure(String(userText || '').trim(), extractLiveQueryIntent(String(userText || '').trim()), {
             reason: 'verification_unavailable',
+            entityIntent: extractUniversalEntityIntent(String(userText || '').trim(), extractLiveQueryIntent(String(userText || '').trim())),
             speechText: 'I hit a verification issue while checking latest sources.'
         });
     } finally {
@@ -11388,18 +11841,26 @@ function extractLiveQueryIntent(text) {
     const raw = String(text || '').trim();
     const t = raw.toLowerCase();
     const yearMatch = raw.match(/\b(19|20)\d{2}\b/);
+    const roleHolderQuery = /\b(ceo|founder|president|prime minister|chief minister|minister|governor|mayor|captain|coach|chairman|chairperson|head|leader|administrator|director|dean|chancellor|vice chancellor|principal|secretary|director general)\b/.test(t);
+    const roleContextQuery = roleHolderQuery && /\b(who is|who was|what is|current|latest|as of|today|now|of|at|in|for)\b/.test(t);
+    const institutionalContext = /\b(university|college|school|institute|department|faculty|campus|program|office|ministry|agency|state|government|parliament|senate|team|club|company|corporation)\b/.test(t);
+    const politicalContext = /\b(president|prime minister|chief minister|governor|mayor|minister|party|government|parliament|senate|election)\b/.test(t);
+    const spaceContext = /\b(astronaut|scientist|space|nasa|isro|esa|jaxa|agency|administrator|director general)\b/.test(t);
+    const entertainmentContext = /\b(actor|actress|movie|film|films|cinema|producer|singer|composer|music director|song|songs|album|albums|show|series|web series|filmography|discography|imdb|release|project|artist|poet|painter|writer|author|box office)\b/.test(t) || (/\bdirector\b/.test(t) && /\b(movie|film|cinema|series|show|album|song|music|imdb)\b/.test(t));
 
     let domain = 'general';
     if (isExchangeRateQuery(t) || isMarketPriceQuery(t)) {
         domain = 'finance';
     } else if (isSportsLiveResultQuery(t)) {
         domain = 'sports';
-    } else if (/\b(actor|actress|movie|film|films|cinema|director|producer|singer|composer|music director|song|songs|album|albums|show|series|web series|filmography|discography|imdb|release|project|artist|poet|painter|writer|author)\b/.test(t)) {
-        domain = 'entertainment';
-    } else if (/\b(astronaut|scientist|space|nasa|isro|esa|jaxa|agency|administrator|director general)\b/.test(t)) {
-        domain = 'space_science';
-    } else if (/\b(president|prime minister|chief minister|governor|mayor|minister|party|government|parliament|senate|election)\b/.test(t)) {
+    } else if (politicalContext) {
         domain = 'politics';
+    } else if (spaceContext) {
+        domain = 'space_science';
+    } else if (roleContextQuery && institutionalContext) {
+        domain = 'general';
+    } else if (entertainmentContext && !roleContextQuery) {
+        domain = 'entertainment';
     } else if (shouldUseNewsEndpointForCurrentQuery(t) || isNewsworthyLiveTopic(t)) {
         domain = 'news';
     }
@@ -11407,7 +11868,7 @@ function extractLiveQueryIntent(text) {
     let factType = 'general';
     if (/\b(latest|recent|new|newest|most recent|current|upcoming|future)\b.*\b(movie|film|release|song|album|single|show|series|project)\b|\b(movie|film|release|song|album|single|show|series|project)\b.*\b(latest|recent|new|newest|most recent|current|upcoming|future)\b/.test(t)) {
         factType = 'latest_work';
-    } else if (/\b(?:who is|who was|what is)\b[^?.!]{0,120}\b(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\b|\b(current|latest)\s+(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\b|\b(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\s+of\b|\bwho\s+heads?\b/.test(t)) {
+    } else if (/\b(?:who is|who was|what is)\b[^?.!]{0,140}\b(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director|dean|chancellor|principal|secretary|director general)\b|\b(current|latest)\s+(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director|dean|chancellor|principal|secretary|director general)\b|\b(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director|dean|chancellor|principal|secretary|director general)\s+of\b|\bwho\s+heads?\b/.test(t)) {
         factType = 'role';
     } else if (/\b(known for|famous for|best known for)\b/.test(t)) {
         factType = 'known_for';
@@ -11517,13 +11978,13 @@ function shouldUseNewsEndpointForCurrentQuery(text) {
 function isDirectFactLiveQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    return /\b(who won|who lost|winner|won|lost|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated|ceo|president|prime minister|captain|coach|head of|leader of|director general|administrator|known for|famous for|price|rate|latest movie|latest film|latest song|latest album|most recent film|most recent movie|upcoming film|upcoming movie|upcoming project|next match|upcoming match|upcoming fixture|next holiday|upcoming holiday)\b/.test(t);
+    return /\b(who won|who lost|winner|won|lost|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated|ceo|president|prime minister|captain|coach|head of|leader of|director|director general|administrator|dean|chancellor|principal|known for|famous for|price|rate|latest movie|latest film|latest song|latest album|most recent film|most recent movie|upcoming film|upcoming movie|upcoming project|next match|upcoming match|upcoming fixture|next holiday|upcoming holiday)\b/.test(t);
 }
 
 function isConciseDirectFactQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    const directFactSignals = /\b(how many|who is|who was|who won|who lost|winner|won|lost|what is the current|what is the latest|latest|current|ceo|president|prime minister|captain|coach|head of|leader of|director general|administrator|known for|famous for|price|rate|score|scores|stats?|record|ranking|standings|titles?|cups?|won in total|total titles?|total cups?|qualified|eliminated|result|results|movie|film|song|album|release)\b/;
+    const directFactSignals = /\b(how many|who is|who was|who won|who lost|winner|won|lost|what is the current|what is the latest|latest|current|ceo|president|prime minister|captain|coach|head of|leader of|director|director general|administrator|dean|chancellor|principal|known for|famous for|price|rate|score|scores|stats?|record|ranking|standings|titles?|cups?|won in total|total titles?|total cups?|qualified|eliminated|result|results|movie|film|song|album|release)\b/;
     const strictBinarySignal = isStrictYesNoRequest(t);
     const binaryQuestionStarter = /^(is|are|am|was|were|do|does|did|can|could|should|would|will|has|have|had)\b/.test(t) &&
         !/\b(explain|help|advise|suggest|recommend|walk me through|how to)\b/.test(t);
@@ -12550,10 +13011,11 @@ function detectNormalizedEntityDomain(text, relationType, liveIntent = null) {
         if (/\b(scientist|astronaut|space|nasa|isro|esa|jaxa|physics|chemistry|biology)\b/.test(lower)) return 'space_science';
     }
     if (relationType === 'role') {
+        if (/\b(university|college|school|institute|campus|faculty|department|program|msis|mba|phd)\b/.test(lower)) return 'general';
         if (/\b(president|prime minister|chief minister|minister|governor|mayor|senator|mp|mla|party|government|parliament)\b/.test(lower)) return 'politics';
         if (/\b(ceo|founder|chairman|chairperson|company|organization|corporation|startup|firm|stock|market)\b/.test(lower)) return 'companies_finance';
         if (/\b(astronaut|scientist|agency|administrator|director general|space|nasa|isro|esa|jaxa)\b/.test(lower)) return 'space_science';
-        if (/\b(actor|actress|director|producer|singer|composer|artist|poet|painter|writer|author)\b/.test(lower)) return 'entertainment';
+        if ((/\bdirector\b/.test(lower) && /\b(movie|film|cinema|series|show|music|song|album|imdb)\b/.test(lower)) || /\b(actor|actress|producer|singer|composer|artist|poet|painter|writer|author)\b/.test(lower)) return 'entertainment';
     }
     return 'general';
 }
@@ -13572,7 +14034,7 @@ function shouldRequireVerifiedSources(classificationOrText, liveIntent = null, e
     );
 
     const leadershipOrOffice = entity?.relationType === 'role' &&
-        /\b(president|prime minister|governor|mayor|minister|chief minister|ceo|captain|coach|chairman|chairperson|head of|secretary general|director general|administrator)\b/.test(lower);
+        /\b(president|prime minister|governor|mayor|minister|chief minister|ceo|captain|coach|chairman|chairperson|head of|secretary general|director|director general|dean|chancellor|principal|administrator)\b/.test(lower);
 
     const newsworthy = flags.news ||
         isNewsworthyLiveTopic(text) ||
@@ -13833,40 +14295,17 @@ function buildStrictVerificationClarificationMessage(userText, intent, entityInt
     const query = String(userText || '').trim();
     const relation = String(entityIntent?.relationType || intent?.factType || '').toLowerCase();
     const subject = String(entityIntent?.subject || '').trim();
-    const competition = String(entityIntent?.competition || '').trim();
-    const year = String(intent?.year || entityIntent?.year || '').trim();
-    const lowerQuery = query.toLowerCase();
-    const missing = [];
     const hasEntity = Boolean(subject || entityIntent?.targetEntity);
-    const hasExplicitYear = Boolean(year || hasExplicitYearReference(lowerQuery));
-    const hasCompetitionSignal = Boolean(
-        competition ||
-        /\b(ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|icc|fifa|uefa|world cup|olympics|formula 1|f1)\b/.test(lowerQuery)
-    );
-    const needsCompetition = ['winner', 'score', 'standings', 'qualification', 'stats', 'title_count', 'role'].includes(relation);
-    const asksFresh = /\b(latest|current|today|now|live|as of)\b/.test(lowerQuery);
+    const canRefine = hasEntity || relation !== 'general';
+    const coverageNote = (Array.isArray(sources) && sources.length)
+        ? '\nCoverage note: available evidence is insufficient or conflicting for a high-confidence verification.'
+        : '';
+    const universalHint = buildUniversalLiveRefineHint(query, intent, entityIntent, sources);
 
-    if (!hasEntity) {
-        missing.push('add the exact person/team/organization name');
+    if (!canRefine) {
+        return `I cannot verify this from enough usable independent sources right now.${coverageNote}\n${universalHint}`;
     }
-    if (needsCompetition && !hasCompetitionSignal && /\b(captain|coach|winner|score|standings|table|league|cup|tournament)\b/.test(lowerQuery)) {
-        missing.push('add the exact competition/league');
-    }
-    if (!hasExplicitYear && (relation === 'winner' || relation === 'score' || relation === 'standings' || relation === 'qualification' || asksFresh)) {
-        missing.push('add the exact season/date or year');
-    }
-    if ((relation === 'stats' || relation === 'title_count') && !/\b(career|season|format|test|odi|t20|ipl|league)\b/.test(lowerQuery)) {
-        missing.push('specify stats scope (career, season, or format)');
-    }
-
-    if (missing.length) {
-        return `I cannot verify this yet from independent trusted sources, so I will not guess.\nRefine hint: Please ${missing[0]}.`;
-    }
-
-    if (String(entityIntent?.domain || intent?.domain || '').toLowerCase() === 'sports') {
-        return 'I cannot verify this from enough independent trusted sports sources right now, so I will not guess.\nRefine hint: add exact competition + season/year (example: "CSK captain IPL 2026") or an official-source constraint like site:iplt20.com or site:espncricinfo.com.';
-    }
-    return 'I cannot verify this from enough independent trusted sources right now, so I will not guess.\nRefine hint: add one tighter qualifier (exact date/year or official-source constraint like site:gov.in, site:nasa.gov, site:iplt20.com).';
+    return `I cannot verify this yet from enough usable independent sources.${coverageNote}\n${universalHint}`;
 }
 
 async function publishStrictVerificationClarification(pipeline, options = {}) {
@@ -14081,6 +14520,10 @@ ${snippets}`
     const sourceLines = results.slice(0, 5).map((r, i) => `${i + 1}. [${r.title}](${r.url})`).join('\n');
     const finalAnswer = answer || cleanLiveAnswerText(`Direct answer: ${results[0].title}${results[0].description ? `\n\nKey points:\n- ${results[0].description}` : ''}`);
     if (!answer && strictLiveRequired) {
+        const bestEffortPublished = await publishBestEffortFromSources(pipeline, results, {
+            speechText: 'I could not fully verify a clean direct answer, so here is the best-supported answer from available sources.'
+        });
+        if (bestEffortPublished) return true;
         return publishStrictVerificationClarification(pipeline, {
             sources: results,
             speechText: 'I could not verify a clean direct answer with enough independent evidence.',
@@ -14089,6 +14532,10 @@ ${snippets}`
     }
     if (isDegenerateLatestWorkAnswer(finalAnswer, pipeline.entityIntent)) {
         if (strictLiveRequired) {
+            const bestEffortPublished = await publishBestEffortFromSources(pipeline, results, {
+                speechText: 'I found profile-oriented sources and this is the best-supported answer available right now.'
+            });
+            if (bestEffortPublished) return true;
             return publishStrictVerificationClarification(pipeline, {
                 sources: results,
                 speechText: 'I found profile pages, but I need one more detail to verify the exact latest release.',
@@ -14247,7 +14694,7 @@ async function handleSportsFactQuery(userText, intent) {
 async function handleLiveRetrievalQuery(userText, options = {}) {
     showThinkingIndicator('Checking current sources...');
     const controller = beginAbortableRequest();
-    let failClosed = true;
+    let failClosed = false;
     let liveRiskLevel = 'medium_risk';
     const verificationBudgetMs = TRUST_FIRST_RELIABILITY_POLICY.verificationBudgetMs;
     const summaryTimeoutMs = TRUST_FIRST_RELIABILITY_POLICY.summaryTimeoutMs;
@@ -14266,9 +14713,8 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
         }
         const entityIntent = extractUniversalEntityIntent(query, intent);
         const forceFailClosed = Boolean(options?.forceFailClosed);
-        const broadFactualMode = Boolean(options?.broadFactualWeb || isBroadFactualWebQuery(query, entityIntent, intent));
         liveRiskLevel = getRiskTierForQuery(query, intent, entityIntent);
-        failClosed = forceFailClosed || broadFactualMode || liveRiskLevel !== 'low_risk';
+        failClosed = forceFailClosed;
         const directFactQuery = intent.directFact || isSportsLiveResultQuery(query);
         const conciseFactQuery = isConciseDirectFactQuery(query);
         const queries = buildLiveSearchQueries(query, intent);
@@ -14302,11 +14748,6 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
         }
 
         if (!deduped.length) {
-            if (!failClosed) {
-                addChatMessage('I checked live sources, but I could not produce a final answer right now. Please try again in a moment.', false);
-                speak('I checked live sources, but I could not produce a final answer right now. Please try again in a moment.');
-                return true;
-            }
             return publishStrictVerificationClarification({
                 userText: query,
                 intent,
@@ -14322,16 +14763,14 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
         const sourcePool = trusted.length >= 3 ? trusted : deduped;
         const verification = buildVerificationSnapshot(sourcePool, intent.domain || 'general', liveRiskLevel, 'trust_first');
         if (!verification.verified) {
-            if (!(forceFailClosed || broadFactualMode)) {
-                const bestEffortPublished = await publishBestEffortFromSources({
-                    userText: query,
-                    intent,
-                    entityIntent
-                }, sourcePool, {
-                    speechText: 'I could not fully verify this, so here is the best-supported answer from available sources.'
-                });
-                if (bestEffortPublished) return true;
-            }
+            const bestEffortPublished = await publishBestEffortFromSources({
+                userText: query,
+                intent,
+                entityIntent
+            }, sourcePool, {
+                speechText: 'I could not fully verify this, so here is the best-supported answer from available sources.'
+            });
+            if (bestEffortPublished) return true;
             return publishStrictVerificationClarification({
                 userText: query,
                 intent,
@@ -14343,18 +14782,16 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
             });
         }
         const distinctDomains = Array.from(new Set(sourcePool.map(r => getDomainFromUrl(r.url)).filter(Boolean)));
-        if (!directFactQuery && distinctDomains.length < 2) {
-            if (failClosed) {
-                return publishStrictVerificationClarification({
-                    userText: query,
-                    intent,
-                    entityIntent
-                }, {
-                    sources: sourcePool,
-                    speechText: 'Source coverage is limited. Please narrow the query and I will verify it.',
-                    badge: 'Verification unavailable'
-                });
-            }
+        if (!directFactQuery && distinctDomains.length < 2 && failClosed) {
+            return publishStrictVerificationClarification({
+                userText: query,
+                intent,
+                entityIntent
+            }, {
+                sources: sourcePool,
+                speechText: 'Source coverage is limited. Please narrow the query and I will verify it.',
+                badge: 'Verification unavailable'
+            });
         }
 
         if (directFactQuery) {
@@ -14438,16 +14875,14 @@ ${snippets}`
                     badge: 'Verification unavailable'
                 });
             }
-            if (!(forceFailClosed || broadFactualMode)) {
-                const bestEffortPublished = await publishBestEffortFromSources({
-                    userText: query,
-                    intent,
-                    entityIntent
-                }, sourcePool, {
-                    speechText: 'I could not produce a clean fully verified summary, so here is the best-supported answer from available sources.'
-                });
-                if (bestEffortPublished) return true;
-            }
+            const bestEffortPublished = await publishBestEffortFromSources({
+                userText: query,
+                intent,
+                entityIntent
+            }, sourcePool, {
+                speechText: 'I could not produce a clean fully verified summary, so here is the best-supported answer from available sources.'
+            });
+            if (bestEffortPublished) return true;
             return publishStrictVerificationClarification({
                 userText: query,
                 intent,
@@ -14476,23 +14911,15 @@ ${snippets}`
         return true;
     } catch (error) {
         if (isAbortError(error)) {
-            if (failClosed) {
-                return publishStrictVerificationClarification({
-                    userText: String(userText || '').trim(),
-                    intent: extractLiveQueryIntent(String(userText || '').trim()),
-                    entityIntent: extractUniversalEntityIntent(String(userText || '').trim(), extractLiveQueryIntent(String(userText || '').trim()))
-                }, {
-                    sources: [],
-                    speechText: 'Verification timed out before confidence threshold. Please narrow the query and I will retry.',
-                    badge: 'Verification unavailable'
-                });
-            }
-            return true;
-        }
-        if (!failClosed) {
-            addChatMessage('I hit a temporary processing issue after live search. Please try again.', false);
-            speak('I hit a temporary processing issue after live search. Please try again.');
-            return true;
+            return publishStrictVerificationClarification({
+                userText: String(userText || '').trim(),
+                intent: extractLiveQueryIntent(String(userText || '').trim()),
+                entityIntent: extractUniversalEntityIntent(String(userText || '').trim(), extractLiveQueryIntent(String(userText || '').trim()))
+            }, {
+                sources: [],
+                speechText: 'Verification timed out before confidence threshold. Please narrow the query and I will retry.',
+                badge: 'Verification unavailable'
+            });
         }
         return publishStrictVerificationClarification({
             userText: String(userText || '').trim(),
@@ -14649,6 +15076,7 @@ function deleteAllLocalDataNow() {
         keys.forEach(k => localStorage.removeItem(k));
         conversationHistory = [];
         memoryStore = {};
+        cagMemoryEntries = [];
         lastUploadedDocument = null;
         uploadedDocumentHistory = [];
         showTemporaryMessage('All local app data deleted.');
@@ -14674,6 +15102,12 @@ function detectInputLanguageHint(text) {
                 addChatMessage(greet, false);
                 speak(greet);
                 saveToHistory(text, greet);
+                return;
+            }
+
+            if (isImageGenerationRequest(compact)) {
+                const imagePrompt = parseImageGenerationPrompt(compact);
+                await generateImageFromPrompt(imagePrompt, text);
                 return;
             }
 
@@ -15481,6 +15915,30 @@ Quick recap: ...
                     if (converseMode) toggleConverseMode();
                     return;
                 }
+            }
+
+            if (/\bcag\s+mode\s+(on|off|enable|disable)\b/i.test(cleanText)) {
+                const enabled = /\b(on|enable)\b/i.test(cleanText);
+                await setCagMode(enabled);
+                return;
+            }
+
+            if (/\bimage\s+generation\s+(on|off|enable|disable)\b/i.test(cleanText)) {
+                const enabled = /\b(on|enable)\b/i.test(cleanText);
+                await setFreeImageGenerationMode(enabled);
+                return;
+            }
+
+            if (/\bconverse\s+accuracy\s+(strict|balanced)\b/i.test(cleanText)) {
+                const mode = /\bstrict\b/i.test(cleanText) ? 'strict' : 'balanced';
+                await setConverseAccuracyMode(mode);
+                return;
+            }
+
+            if (/\bconverse\s+(?:locale|language)\s+(device|auto|english|en-us)\b/i.test(cleanText)) {
+                const useDevice = /\b(device|auto)\b/i.test(cleanText);
+                await setConverseUseDeviceLocale(useDevice);
+                return;
             }
 
             const modeCommand = extractDisplayModeCommand(cleanText);
@@ -18968,11 +19426,15 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 localStorage.setItem('jarvis_persist_memory', persistMemoryToDevice ? 'on' : 'off');
             } catch (e) {}
             if (!persistMemoryToDevice) {
+                try {
+                    localStorage.removeItem(getCagStorageKey());
+                } catch (_) {}
                 showTemporaryMessage('Memory persistence disabled for this session. New memory/history will stay in-session only.');
                 return;
             }
             saveUserData();
             saveConversationHistory();
+            saveCagMemory();
             showTemporaryMessage('Memory persistence enabled.');
         }
         
