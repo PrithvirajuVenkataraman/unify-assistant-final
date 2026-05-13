@@ -459,8 +459,13 @@ function buildVisionPrompt(userPrompt, task) {
         'Analyze the provided image and return strictly valid JSON only.',
         'No markdown, no code fences, no extra text.',
         'Do not hallucinate unreadable text. If uncertain, omit that token.',
+        'Primary focus policy:',
+        '- If readable text or software UI is visible, focus on text/UI first and keep background details minimal.',
+        '- Ignore wall color/background/decor unless user explicitly asks for background.',
+        '- If no useful text exists, focus on the main object/product in foreground.',
         'If text appears, preserve character accuracy, punctuation, and line order.',
-        'Detect visible objects including people, animals, food, devices, vehicles, and common items.',
+        'Detect visible objects including products, people, animals, food, devices, vehicles, and common items.',
+        'If user asks "what is this" or "explain this product/part", identify the most likely item and explain its practical purpose briefly.',
         'If text appears in image, include extracted snippets in textDetected and fullText.',
         `Requested task: ${task}.`,
         `Task-specific requirement: ${taskRule}`,
@@ -468,6 +473,7 @@ function buildVisionPrompt(userPrompt, task) {
         'JSON schema:',
         '{',
         '  "summary": "short useful summary",',
+        '  "answer": "direct concise answer to user prompt",',
         '  "objects": [',
         '    { "label": "person", "count": 2, "confidence": 0.88 }',
         '  ],',
@@ -488,11 +494,12 @@ function buildVisionPrompt(userPrompt, task) {
         'Rules:',
         '- Use empty arrays when a section does not apply.',
         '- Confidence values must be between 0 and 1.',
-        '- Keep summary under 60 words.',
+        '- Keep summary under 35 words.',
+        '- Keep answer under 80 words.',
         '- Do not fabricate unreadable text; only include likely readable snippets.',
         isTextTask
             ? '- For OCR tasks: prioritize exact text extraction first. Preserve row order, numbers, totals, units, and symbols exactly.'
-            : '- For non-OCR tasks: keep OCR snippets concise and only when clearly readable.'
+            : '- For non-OCR tasks: if text/UI exists, answer from text first; avoid background narration.'
     ].join('\n');
 }
 
@@ -517,7 +524,7 @@ function getTaskRule(task) {
         case 'translate_to_english':
             return 'Extract visible text and translate it accurately to English.';
         default:
-            return 'Provide a balanced scene analysis including objects, people, animals, and visible text.';
+            return 'Answer user query concisely. Prefer text/software content over scene background. If no text is readable, describe or explain the main foreground object.';
     }
 }
 
@@ -554,21 +561,43 @@ function wantsDetailedVisionResponse(task, userPrompt) {
 }
 
 function formatVisionResponse(data, task, userPrompt = '') {
-    const summary = String(data?.summary || 'Image analyzed.');
+    const summary = String(data?.summary || '').trim();
+    const directAnswer = String(data?.answer || '').trim();
     const objects = normalizeDetected(data?.objects);
     const people = Array.isArray(data?.people) ? data.people : [];
     const animals = normalizeDetected(data?.animals);
-    const textDetected = Array.isArray(data?.textDetected) ? data.textDetected : [];
+    const textDetected = Array.isArray(data?.textDetected)
+        ? data.textDetected.map(v => String(v || '').trim()).filter(Boolean)
+        : [];
     const fullText = String(data?.fullText || '').trim();
     const shoppingItems = Array.isArray(data?.shoppingItems) ? data.shoppingItems : [];
     const bill = data?.bill && typeof data.bill === 'object' ? data.bill : { lineItems: [], totals: [] };
     const billItems = Array.isArray(bill.lineItems) ? bill.lineItems : [];
     const billTotals = Array.isArray(bill.totals) ? bill.totals : [];
+    const hasReadableText = Boolean(fullText || textDetected.length);
+    const compactText = fullText || textDetected.slice(0, 12).join('\n');
 
-    const lines = [`Vision summary: ${summary}`];
-    const wantsDetailed = wantsDetailedVisionResponse(task, userPrompt);
-    if (!wantsDetailed && task !== 'people_count') {
-        return lines.join('\n\n');
+    if (task === 'text_extract') {
+        if (compactText) return `Detected text:\n${compactText.slice(0, 6000)}`;
+        return 'No clear readable text detected.';
+    }
+
+    if (task === 'bill_summary') {
+        const topTotals = billTotals.slice(0, 3);
+        const topItems = billItems.slice(0, 5);
+        const parts = [];
+        if (topTotals.length) parts.push(`Totals: ${topTotals.join(' | ')}`);
+        if (topItems.length) parts.push(`Items: ${topItems.join(' | ')}`);
+        if (compactText && !parts.length) parts.push(`Detected text:\n${compactText.slice(0, 1200)}`);
+        return parts.join('\n\n') || conciseVisionFallback(directAnswer, summary, objects);
+    }
+
+    if (task === 'shopping_extract' || task === 'fridge_items') {
+        if (shoppingItems.length) {
+            return `${task === 'fridge_items' ? 'Fridge items' : 'Shopping items'}: ${shoppingItems.slice(0, 12).join(', ')}`;
+        }
+        if (compactText) return `Detected text:\n${compactText.slice(0, 1200)}`;
+        return conciseVisionFallback(directAnswer, summary, objects);
     }
 
     if (task === 'people_count') {
@@ -577,53 +606,54 @@ function formatVisionResponse(data, task, userPrompt = '') {
             .filter(o => /person|people|human/i.test(String(o?.label || '')))
             .reduce((sum, o) => sum + Number(o?.count || 0), 0);
         const count = Math.max(peopleCountFromList, peopleCountFromObjects);
-        lines.push(`People count: ${count}`);
+        return `People count: ${count}`;
     }
 
-    if (objects.length) {
-        const top = objects
-            .slice(0, 12)
-            .map(o => `${String(o?.label || 'object')} x${Number(o?.count || 1)}${typeof o?.confidence === 'number' ? ` (${Math.round(o.confidence * 100)}%)` : ''}`)
-            .join(', ');
-        lines.push(`Objects: ${top}`);
+    // General/object modes: text-first, then object explanation, then summary.
+    if (hasReadableText) {
+        const parts = [];
+        parts.push(`Detected text:\n${compactText.slice(0, 2400)}`);
+        const conciseAnswer = compactSingleLine(directAnswer);
+        if (conciseAnswer) parts.push(conciseAnswer);
+        return parts.join('\n\n').trim();
     }
 
-    if (people.length) {
-        lines.push(`People: ${people.slice(0, 6).map(p => String(p?.description || 'person')).join(', ')}`);
-    }
-
-    if (animals.length) {
-        lines.push(`Animals: ${animals.slice(0, 8).map(a => `${String(a?.label || 'animal')} x${Number(a?.count || 1)}${typeof a?.confidence === 'number' ? ` (${Math.round(a.confidence * 100)}%)` : ''}`).join(', ')}`);
-    }
-
-    if (textDetected.length) {
-        lines.push(`Detected text: ${textDetected.slice(0, 8).join(' | ')}`);
-    }
-    if (task === 'text_extract' && fullText) {
-        lines.push(`Full text:\n${fullText.slice(0, 6000)}`);
-    }
-    if (task === 'text_extract' && !textDetected.length) {
-        lines.push('No clear text detected.');
-    }
-
-    if (task === 'shopping_extract' && shoppingItems.length) {
-        lines.push(`Shopping items:\n- ${shoppingItems.slice(0, 20).join('\n- ')}`);
-    }
-
-    if (task === 'fridge_items' && shoppingItems.length) {
-        lines.push(`Fridge items:\n- ${shoppingItems.slice(0, 20).join('\n- ')}`);
-    }
-
-    if (task === 'bill_summary') {
-        if (billItems.length) {
-            lines.push(`Bill items:\n- ${billItems.slice(0, 12).join('\n- ')}`);
-        }
-        if (billTotals.length) {
-            lines.push(`Bill totals:\n- ${billTotals.slice(0, 8).join('\n- ')}`);
+    const explainIntent = isObjectExplanationIntent(userPrompt);
+    if (explainIntent) {
+        const topLabel = String(objects?.[0]?.label || '').trim();
+        const objectAnchor = topLabel ? `Likely item: ${topLabel}.` : '';
+        const conciseAnswer = compactSingleLine(directAnswer || summary);
+        if (objectAnchor || conciseAnswer) {
+            return [objectAnchor, conciseAnswer].filter(Boolean).join(' ');
         }
     }
 
-    return lines.join('\n\n');
+    return conciseVisionFallback(directAnswer, summary, objects);
+}
+
+function compactSingleLine(text) {
+    const value = String(text || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!value) return '';
+    return value.slice(0, 280);
+}
+
+function conciseVisionFallback(directAnswer, summary, objects) {
+    const conciseAnswer = compactSingleLine(directAnswer);
+    if (conciseAnswer) return conciseAnswer;
+    const conciseSummary = compactSingleLine(summary);
+    if (conciseSummary) return conciseSummary;
+    if (Array.isArray(objects) && objects.length) {
+        const top = objects.slice(0, 3).map(o => `${String(o?.label || 'object')} x${Number(o?.count || 1)}`).join(', ');
+        return `Visible objects: ${top}`;
+    }
+    return 'I can see the image, but there is not enough clear detail to answer confidently.';
+}
+
+function isObjectExplanationIntent(userPrompt) {
+    const text = String(userPrompt || '').toLowerCase();
+    return /\b(what is this|what is that|identify|explain|about this|about that|product|part|component|use|used for|purpose|how it works)\b/.test(text);
 }
 
 function normalizeDetected(list) {
@@ -641,3 +671,7 @@ function normalizeDetected(list) {
             return b.count - a.count;
         });
 }
+
+
+
+
