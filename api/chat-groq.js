@@ -1,6 +1,9 @@
 export const config = { maxDuration: 60 };
 import { applyApiSecurity } from './security.js';
 
+const LIVE_CAG_TTL_MS = 20 * 60 * 1000;
+const LIVE_CAG_MAX_ENTRIES = 120;
+
 export default async function handler(req, res) {
     const guard = applyApiSecurity(req, res, {
         methods: ['POST'],
@@ -95,7 +98,7 @@ function composeFinalPrompt(systemPrompt, ragBlock, contextBlock, message, lengt
 
 async function runModelWithFallback(finalPrompt, lengthPolicy = {}) {
     const temp = Number.isFinite(Number(lengthPolicy?.temperature)) ? Number(lengthPolicy.temperature) : 0.7;
-    const maxTokens = clampInt(lengthPolicy?.maxTokens, 5000, 512, 10000);
+    const maxTokens = clampInt(lengthPolicy?.maxTokens, 2500, 256, 7000);
     let groqFailureDetail = '';
     let groqTriedModels = [];
     const groqApiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
@@ -325,6 +328,9 @@ async function buildLiveRagContext(message, req, contextTurns = []) {
 
     try {
         const resolvedQuery = resolveContextualLiveQuery(query, contextTurns);
+        const cached = getLiveCagContext(resolvedQuery);
+        if (cached) return cached;
+
         const liveQueries = buildLiveQueries(resolvedQuery);
         const runVerifiedWebSearch = await resolveRunVerifiedWebSearch();
         let results = [];
@@ -354,9 +360,91 @@ async function buildLiveRagContext(message, req, contextTurns = []) {
                 lines.push(`Summary: ${String(item.description).trim()}`);
             }
         }
-        return { ragText: lines.join('\n'), sources: ranked };
+        const built = { ragText: lines.join('\n'), sources: ranked };
+        rememberLiveCagContext(resolvedQuery, built);
+        return built;
     } catch (error) {
         return { ragText: '', sources: [] };
+    }
+}
+
+function getLiveCagStore() {
+    if (!globalThis.__unifyLiveCagStore) {
+        globalThis.__unifyLiveCagStore = new Map();
+    }
+    return globalThis.__unifyLiveCagStore;
+}
+
+function normalizeCagQuery(text) {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function tokenizeCagQuery(text) {
+    return normalizeCagQuery(text)
+        .split(' ')
+        .filter(token => token && token.length >= 3)
+        .slice(0, 30);
+}
+
+function getCagSimilarityScore(a, b) {
+    const as = new Set(tokenizeCagQuery(a));
+    const bs = new Set(tokenizeCagQuery(b));
+    if (!as.size || !bs.size) return 0;
+    let overlap = 0;
+    for (const t of as) {
+        if (bs.has(t)) overlap += 1;
+    }
+    const union = new Set([...as, ...bs]).size || 1;
+    return overlap / union;
+}
+
+function getLiveCagContext(query) {
+    const normalized = normalizeCagQuery(query);
+    if (!normalized) return null;
+    const store = getLiveCagStore();
+    const now = Date.now();
+
+    const direct = store.get(normalized);
+    if (direct && now - direct.timestamp <= LIVE_CAG_TTL_MS) {
+        return direct.payload;
+    }
+
+    let best = null;
+    let bestScore = 0;
+    for (const [key, entry] of store.entries()) {
+        if (!entry || now - entry.timestamp > LIVE_CAG_TTL_MS) continue;
+        const score = getCagSimilarityScore(normalized, key);
+        if (score > bestScore) {
+            bestScore = score;
+            best = entry;
+        }
+    }
+    if (best && bestScore >= 0.64) return best.payload;
+    return null;
+}
+
+function rememberLiveCagContext(query, payload) {
+    const normalized = normalizeCagQuery(query);
+    if (!normalized || !payload || !payload.ragText) return;
+    const store = getLiveCagStore();
+    store.set(normalized, {
+        timestamp: Date.now(),
+        payload: {
+            ragText: String(payload.ragText || ''),
+            sources: Array.isArray(payload.sources) ? payload.sources.slice(0, 8) : []
+        }
+    });
+
+    if (store.size <= LIVE_CAG_MAX_ENTRIES) return;
+    const entries = Array.from(store.entries());
+    entries.sort((a, b) => Number(a?.[1]?.timestamp || 0) - Number(b?.[1]?.timestamp || 0));
+    const excess = Math.max(0, entries.length - LIVE_CAG_MAX_ENTRIES);
+    for (let i = 0; i < excess; i++) {
+        store.delete(entries[i][0]);
     }
 }
 
@@ -908,15 +996,15 @@ function buildLengthPolicy(message, clientSystemPrompt, options = {}) {
     if (detail === 'detailed') {
         return {
             instruction: 'User asked for detail. Provide a structured, in-depth explanation with enough depth to fully answer.',
-            maxTokens: 10000,
+            maxTokens: 4200,
             temperature: 0.7,
             wordSpec: null
         };
     }
     if (detail === 'short') {
-        return { instruction: 'Keep the response brief and direct.', maxTokens: 5000, temperature: 0.5, wordSpec: null };
+        return { instruction: 'Keep the response brief and direct.', maxTokens: 900, temperature: 0.5, wordSpec: null };
     }
-    return { instruction: 'Match response length to the user intent; concise for simple asks, fuller when needed.', maxTokens: 7500, temperature: 0.7, wordSpec: null };
+    return { instruction: 'Match response length to the user intent; concise for simple asks, fuller when needed.', maxTokens: 2500, temperature: 0.7, wordSpec: null };
 }
 
 function applyResponseLengthPostCheck(parsedResponse, lengthPolicy, message, clientSystemPrompt) {
