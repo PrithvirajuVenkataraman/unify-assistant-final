@@ -995,6 +995,7 @@ async function generateImageFromPrompt(prompt, originalUserText = '', options = 
                 width: 1024,
                 height: 1024,
                 referenceImage: referenceImageDataUrl || '',
+                requireReferenceApplied: !!referenceImageDataUrl,
                 precisionMode: isTemplePrecision ? 'temple' : ''
             })
         });
@@ -1008,7 +1009,7 @@ async function generateImageFromPrompt(prompt, originalUserText = '', options = 
   <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2 text-center">Generated image</p>
   <img src="${escapeHtml(data.imageUrl)}" alt="${escapeHtml(cleanedPrompt)}" class="w-full h-auto max-h-[70vh] object-contain rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800" loading="lazy" />
   <p class="text-[11px] mt-2 text-slate-500 dark:text-slate-400">Prompt: ${escapeHtml(cleanedPrompt)}</p>
-  ${referenceImageDataUrl ? `<p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Reference image: ${data?.referenceApplied ? 'Applied' : 'Not applied (fallback used)'}</p>` : ''}
+  ${referenceImageDataUrl ? `<p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Reference image: Applied</p>` : ''}
   ${isTemplePrecision ? `<p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Precision mode: Temple architecture fidelity</p>` : ''}
 </div>`;
         addChatMessage(card, false, false);
@@ -1019,7 +1020,10 @@ async function generateImageFromPrompt(prompt, originalUserText = '', options = 
         speak(spoken);
         saveToHistory(originalUserText || `Generate image: ${cleanedPrompt}`, `Generated image for prompt: ${cleanedPrompt}`);
     } catch (error) {
-        const msg = 'I could not generate an image right now. Please try again in a moment.';
+        const reason = String(error?.message || '');
+        const msg = referenceImageDataUrl && /reference image/i.test(reason)
+            ? 'I could not apply your reference image. Please try a clearer image or a different photo.'
+            : 'I could not generate an image right now. Please try again in a moment.';
         addChatMessage(msg, false);
         speak(msg);
     } finally {
@@ -1072,14 +1076,9 @@ async function pickImageReferenceDataUrl() {
 async function openImageGenerationPrompt() {
     const prompt = window.prompt('Describe the image you want to generate:');
     if (!prompt) return;
-    let referenceImageDataUrl = '';
-    const wantsReference = window.confirm('Do you want to upload a reference image for customization?');
-    if (wantsReference) {
-        referenceImageDataUrl = await pickImageReferenceDataUrl();
-    }
     const userText = `Generate image of ${prompt}`;
     addChatMessage(userText, true);
-    generateImageFromPrompt(prompt, userText, { referenceImageDataUrl });
+    generateImageFromPrompt(prompt, userText);
 }
 
 async function openImageGenerationPromptWithReference() {
@@ -3714,6 +3713,14 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
     const directQuery = isDirectExplainerQuery(userMessage) || isConciseDirectFactQuery(userMessage);
     const freshnessQuery = hasExplicitFreshnessLanguage(userMessage) ||
         /\b(latest|current|today|now|update|updates|news|headlines?|with sources?)\b/i.test(String(userMessage || ''));
+    const liveOrEntityFactQuery = freshnessQuery ||
+        isCurrentInfoQuery(userMessage) ||
+        isLiveRetrievalQuery(userMessage) ||
+        isUniversalEntityFactQuestion(userMessage) ||
+        isProfileOrIdentityQuery(userMessage);
+    const staleCutoffAnswer =
+        /\b(knowledge cutoff|cutoff|cut-off)\b/.test(rawLower) ||
+        /\b(i do not have (?:information|data) (?:after|beyond|for)|i cannot access (?:current|latest) data)\b/.test(rawLower);
     const looksLikeResearchSteps =
         /\b(here(?:'s| are)?\s+(?:the\s+)?steps?\b|steps?\s+you\s+can\s+follow|check\s+online\b|search\s+engines\b|look\s+for\s+(?:his|her|their)\s+biography|you\s+can\s+search\b|to\s+find\s+information\s+about\b)\b/.test(rawLower) ||
         (/(\n|^)\s*\d+\s*[\).:-]\s+/.test(raw) && /\b(check|search|look|find)\b/.test(rawLower));
@@ -3727,6 +3734,9 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
         return '';
     }
     if (freshnessQuery && looksLikeResearchSteps) {
+        return '';
+    }
+    if (liveOrEntityFactQuery && staleCutoffAnswer) {
         return '';
     }
     if (isLowSignalModelAnswer(raw) &&
@@ -14857,10 +14867,6 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         );
 
         if (!deduped.length) { 
-            if (isSportsRoleQuery) {
-                const knowledgeFallback = await publishSportsRoleKnowledgeFallback(pipeline);
-                if (knowledgeFallback) return true;
-            }
             return publishStrictVerificationClarification(pipeline, {
                 sources: [],
                 speechText: 'I could not verify this from independent trusted sources.',
@@ -14876,10 +14882,6 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
                 speechText: 'I could not fully verify this, so here is the best-supported answer from available sources.'
             });
             if (bestEffortPublished) return true;
-            if (isSportsRoleQuery) {
-                const knowledgeFallback = await publishSportsRoleKnowledgeFallback(pipeline);
-                if (knowledgeFallback) return true;
-            }
             return publishStrictVerificationClarification(pipeline, {
                 sources: deduped,
                 speechText: isSportsRoleQuery
@@ -14904,10 +14906,6 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         });
         if (generalBestEffort) return true;
         if (isSportsRoleQuery) {
-            const knowledgeFallback = await publishSportsRoleKnowledgeFallback(pipeline);
-            if (knowledgeFallback) return true;
-        }
-        if (isSportsRoleQuery) {
             return publishStrictVerificationClarification(pipeline, {
                 sources: deduped,
                 speechText: 'I could not verify a reliable captain or coach name from these sources.',
@@ -14923,8 +14921,6 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
                 speechText: 'Sources are mixed, so this is the best-supported answer I can provide right now.'
             });
             if (mixedBestEffort) return true;
-            const knowledgeFallback = await publishSportsRoleKnowledgeFallback(pipeline);
-            if (knowledgeFallback) return true;
             return publishStrictVerificationClarification(pipeline, {
                 sources: deduped,
                 speechText: 'Independent sources are mixed, so I will not guess.',
@@ -14934,15 +14930,6 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
 
         return await summarizeUniversalEntitySources(pipeline, deduped, controller, true);
     } catch (error) { 
-        const isSportsRoleQuery =
-            pipeline?.entityIntent?.relationType === 'role' &&
-            String(pipeline?.entityIntent?.domain || '').toLowerCase() === 'sports';
-        if (isSportsRoleQuery) {
-            const knowledgeFallback = await publishSportsRoleKnowledgeFallback(pipeline, {
-                speechText: 'Live verification timed out, so here is a best-effort answer from model knowledge.'
-            });
-            if (knowledgeFallback) return true;
-        }
         if (isAbortError(error)) {
             return publishStrictVerificationClarification(pipeline, {
                 sources: [],
