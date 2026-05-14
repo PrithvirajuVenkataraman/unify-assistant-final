@@ -25,6 +25,7 @@ export default async function handler(req, res) {
         const height = clampInt(req.body?.height, DEFAULT_HEIGHT, 256, 1536);
         const seed = clampInt(req.body?.seed, Date.now() % 1000000, 0, 9999999);
         const precisionMode = String(req.body?.precisionMode || '').trim().toLowerCase();
+        const requireReferenceApplied = Boolean(req.body?.requireReferenceApplied);
 
         if (!prompt) {
             return res.status(400).json({ success: false, error: 'prompt is required' });
@@ -63,6 +64,12 @@ export default async function handler(req, res) {
                     referenceApplied: true
                 });
             }
+            if (requireReferenceApplied) {
+                return res.status(422).json({
+                    success: false,
+                    error: 'reference image could not be applied'
+                });
+            }
         }
 
         const encodedPrompt = encodeURIComponent(cleanPrompt);
@@ -89,6 +96,52 @@ export default async function handler(req, res) {
 
 async function generateWithReferenceImage({ prompt, model, width, height, seed, referenceImage }) {
     const apiKey = String(process.env.POLLINATIONS_API_KEY || process.env.POLLINATIONS_KEY || '').trim();
+    const isDataImage = /^data:image\//i.test(referenceImage);
+
+    if (isDataImage) {
+        const multipartResult = await generateWithReferenceMultipart({
+            prompt,
+            model,
+            width,
+            height,
+            seed,
+            referenceImage,
+            apiKey
+        });
+        if (multipartResult?.imageUrl) return multipartResult;
+    }
+
+    const jsonResult = await generateWithReferenceJson({
+        prompt,
+        model,
+        width,
+        height,
+        seed,
+        referenceImage,
+        apiKey
+    });
+    if (jsonResult?.imageUrl) return jsonResult;
+
+    if (!isDataImage && /^https?:\/\//i.test(referenceImage)) {
+        const urlAsData = await fetchUrlAsDataUrl(referenceImage);
+        if (urlAsData) {
+            const multipartResult = await generateWithReferenceMultipart({
+                prompt,
+                model,
+                width,
+                height,
+                seed,
+                referenceImage: urlAsData,
+                apiKey
+            });
+            if (multipartResult?.imageUrl) return multipartResult;
+        }
+    }
+
+    return null;
+}
+
+async function generateWithReferenceJson({ prompt, model, width, height, seed, referenceImage, apiKey }) {
     const headers = { 'Content-Type': 'application/json' };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
@@ -111,10 +164,86 @@ async function generateWithReferenceImage({ prompt, model, width, height, seed, 
     if (!response.ok) return null;
 
     const data = await response.json().catch(() => ({}));
-    const imageUrl = String(data?.data?.[0]?.url || '').trim();
+    const imageUrl = extractImageUrlFromProviderPayload(data);
     if (!imageUrl) return null;
+    return { imageUrl, provider: 'pollinations-gen-json' };
+}
 
-    return { imageUrl, provider: 'pollinations-gen' };
+async function generateWithReferenceMultipart({ prompt, model, width, height, seed, referenceImage, apiKey }) {
+    const fileData = dataUrlToFile(referenceImage, 'reference-image');
+    if (!fileData) return null;
+
+    const form = new FormData();
+    form.append('prompt', prompt);
+    form.append('model', model);
+    form.append('size', `${width}x${height}`);
+    form.append('response_format', 'url');
+    form.append('safe', 'true');
+    form.append('n', '1');
+    form.append('seed', String(seed));
+    form.append('image', fileData.blob, fileData.fileName || 'reference-image.png');
+
+    const headers = {};
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+    const response = await fetch('https://gen.pollinations.ai/v1/images/generations', {
+        method: 'POST',
+        headers,
+        body: form
+    });
+    if (!response.ok) return null;
+
+    const data = await response.json().catch(() => ({}));
+    const imageUrl = extractImageUrlFromProviderPayload(data);
+    if (!imageUrl) return null;
+    return { imageUrl, provider: 'pollinations-gen-multipart' };
+}
+
+function extractImageUrlFromProviderPayload(data) {
+    const urlFromData = String(data?.data?.[0]?.url || '').trim();
+    if (urlFromData) return urlFromData;
+
+    const directUrl = String(data?.url || '').trim();
+    if (directUrl) return directUrl;
+
+    const b64 = String(data?.data?.[0]?.b64_json || data?.b64_json || '').trim();
+    if (b64) return `data:image/png;base64,${b64}`;
+    return '';
+}
+
+function dataUrlToFile(dataUrl, baseName = 'reference-image') {
+    const value = String(dataUrl || '').trim();
+    const match = value.match(/^data:(image\/(?:png|jpe?g|webp));base64,([A-Za-z0-9+/=\s]+)$/i);
+    if (!match) return null;
+
+    const mimeType = match[1].toLowerCase();
+    const base64 = match[2].replace(/\s+/g, '');
+    const ext = mimeType === 'image/jpeg' ? 'jpg' : mimeType.replace('image/', '');
+    try {
+        const buffer = Buffer.from(base64, 'base64');
+        const blob = new Blob([buffer], { type: mimeType });
+        return {
+            blob,
+            fileName: `${baseName}.${ext}`,
+            mimeType
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
+async function fetchUrlAsDataUrl(url) {
+    try {
+        const response = await fetch(url);
+        if (!response.ok) return '';
+        const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+        if (!/^image\/(png|jpe?g|webp)/.test(contentType)) return '';
+        const bytes = Buffer.from(await response.arrayBuffer());
+        const base64 = bytes.toString('base64');
+        return `data:${contentType};base64,${base64}`;
+    } catch (_) {
+        return '';
+    }
 }
 
 function isSafeReferenceImage(value) {
