@@ -936,10 +936,6 @@ function isImageGenerationRequest(text) {
 async function generateImageFromPrompt(prompt, originalUserText = '', options = {}) {
     const cleanedPrompt = String(prompt || '').trim().slice(0, 500);
     const referenceImageDataUrl = String(options?.referenceImageDataUrl || '').trim();
-    const isTemplePrecision = Boolean(
-        options?.precisionMode === 'temple' ||
-        /\b(nataraja|nataraj|chidambaram|temple|gopuram|dravidian)\b/i.test(cleanedPrompt)
-    );
     if (!cleanedPrompt) {
         addChatMessage('Please provide an image prompt after the command. Example: "generate image of a neon city in rain".', false);
         return;
@@ -964,8 +960,7 @@ async function generateImageFromPrompt(prompt, originalUserText = '', options = 
                 width: 1024,
                 height: 1024,
                 referenceImage: referenceImageDataUrl || '',
-                requireReferenceApplied: false,
-                precisionMode: isTemplePrecision ? 'temple' : ''
+                requireReferenceApplied: false
             })
         });
         const data = await response.json().catch(() => ({}));
@@ -980,7 +975,6 @@ async function generateImageFromPrompt(prompt, originalUserText = '', options = 
   <p class="text-[11px] mt-2 text-slate-500 dark:text-slate-400">Prompt: ${escapeHtml(cleanedPrompt)}</p>
   ${(referenceImageDataUrl || data?.referenceSource === 'wikipedia') ? `<p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Reference image: ${data?.referenceApplied ? 'Applied' : 'Fallback used'}</p>` : ''}
   ${data?.referenceSource === 'wikipedia' ? `<p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Reference source: Wikipedia thumbnail</p>` : ''}
-  ${isTemplePrecision ? `<p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Precision mode: Temple architecture fidelity</p>` : ''}
 </div>`;
         addChatMessage(card, false, false);
         if (document.getElementById('help-modal')) {
