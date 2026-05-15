@@ -307,6 +307,8 @@ function getWebEscalationDecision(message, firstAnswer) {
 
     const uncertain = /\b(i (?:don'?t|do not) have (?:live|real[- ]?time)|not sure|cannot verify|might be outdated)\b/i.test(answer);
     if (uncertain) return { escalate: true, reason: 'uncertain_or_stale_answer' };
+    const asksUserForSources = /\b(?:provide|share|give)\b[\s\S]{0,40}\b(?:source|sources|links?)\b/i.test(answer);
+    if (asksUserForSources) return { escalate: true, reason: 'model_requested_sources_from_user' };
 
     const asksWhenOrDate = /\b(when|date|first match|opening match|schedule|fixture)\b/i.test(query);
     if (asksWhenOrDate && !extractDateCandidate(answer)) return { escalate: true, reason: 'date_missing_in_answer' };
@@ -423,7 +425,7 @@ function getLiveCagContext(query) {
             best = entry;
         }
     }
-    if (best && bestScore >= 0.64) return best.payload;
+    if (best && bestScore >= 0.42) return best.payload;
     return null;
 }
 
