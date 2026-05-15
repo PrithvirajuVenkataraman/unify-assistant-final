@@ -5,6 +5,7 @@ const DEFAULT_WIDTH = 1024;
 const DEFAULT_HEIGHT = 1024;
 const MAX_PROMPT_CHARS = 500;
 const MAX_REFERENCE_IMAGE_CHARS = 2_000_000;
+const WIKIPEDIA_REF_TIMEOUT_MS = 4500;
 const FREE_MODELS = new Set(['flux', 'turbo', 'sdxl']);
 
 export default async function handler(req, res) {
@@ -24,8 +25,8 @@ export default async function handler(req, res) {
         const width = clampInt(req.body?.width, DEFAULT_WIDTH, 256, 1536);
         const height = clampInt(req.body?.height, DEFAULT_HEIGHT, 256, 1536);
         const seed = clampInt(req.body?.seed, Date.now() % 1000000, 0, 9999999);
-        const precisionMode = String(req.body?.precisionMode || '').trim().toLowerCase();
         const requireReferenceApplied = Boolean(req.body?.requireReferenceApplied);
+        const strictReferenceRequired = requireReferenceApplied && Boolean(referenceImage);
 
         if (!prompt) {
             return res.status(400).json({ success: false, error: 'prompt is required' });
@@ -40,16 +41,22 @@ export default async function handler(req, res) {
             return res.status(400).json({ success: false, error: 'unsupported reference image format' });
         }
 
-        const cleanPrompt = buildPrecisionPrompt(prompt, precisionMode);
+        const cleanPrompt = buildPrompt(prompt);
 
-        if (referenceImage) {
+        const autoReferenceImage = (!referenceImage && shouldAutoReferencePrompt(cleanPrompt))
+            ? await fetchWikipediaReferenceImageUrl(cleanPrompt)
+            : '';
+        const effectiveReferenceImage = referenceImage || autoReferenceImage;
+        const referenceSource = referenceImage ? 'user' : (autoReferenceImage ? 'wikipedia' : null);
+
+        if (effectiveReferenceImage) {
             const referencedResult = await generateWithReferenceImage({
                 prompt: cleanPrompt,
                 model,
                 width,
                 height,
                 seed,
-                referenceImage
+                referenceImage: effectiveReferenceImage
             });
             if (referencedResult?.imageUrl) {
                 return res.status(200).json({
@@ -61,10 +68,11 @@ export default async function handler(req, res) {
                     height,
                     seed,
                     imageUrl: referencedResult.imageUrl,
-                    referenceApplied: true
+                    referenceApplied: true,
+                    referenceSource
                 });
             }
-            if (requireReferenceApplied) {
+            if (strictReferenceRequired) {
                 return res.status(422).json({
                     success: false,
                     error: 'reference image could not be applied'
@@ -84,7 +92,8 @@ export default async function handler(req, res) {
             height,
             seed,
             imageUrl,
-            referenceApplied: false
+            referenceApplied: false,
+            referenceSource
         });
     } catch (error) {
         return res.status(500).json({
@@ -253,12 +262,69 @@ function isSafeReferenceImage(value) {
     return /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=\s]+$/i.test(v);
 }
 
-function buildPrecisionPrompt(prompt, precisionMode = '') {
+function shouldAutoReferencePrompt(prompt) {
+    const text = String(prompt || '').trim();
+    if (!text) return false;
+    const lower = text.toLowerCase();
+
+    // Do not auto-attach wiki references for generic creative/custom artwork prompts.
+    if (/\b(logo|poster|banner|wallpaper|abstract|concept art|mascot|character design|sticker|custom|cyberpunk|fantasy|anime|cartoon)\b/.test(lower)) {
+        return false;
+    }
+    if (/\b(in the style of|style of|photorealistic|cinematic|ultra detailed|vfx|digital art)\b/.test(lower)) {
+        return false;
+    }
+
+    // Auto-reference only when query looks like a concrete real-world entity/place.
+    const entitySignals = /\b(city|country|state|district|town|village|temple|church|mosque|palace|fort|museum|monument|landmark|tower|bridge|mountain|lake|river|beach|island|airport|station)\b/;
+    const subjectTokens = extractWikipediaReferenceSubject(text).split(/\s+/).filter(Boolean);
+    return entitySignals.test(lower) || (subjectTokens.length >= 2 && subjectTokens.length <= 6 && /^[A-Z]/.test(text));
+}
+
+async function fetchWikipediaReferenceImageUrl(prompt) {
+    const subject = extractWikipediaReferenceSubject(prompt);
+    if (!subject) return '';
+
+    const endpoint = `https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(subject)}&gsrlimit=1&prop=pageimages|info&inprop=url&pithumbsize=1024&format=json`;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), WIKIPEDIA_REF_TIMEOUT_MS) : null;
+    try {
+        const response = await fetch(endpoint, controller ? { signal: controller.signal } : undefined);
+        if (!response.ok) return '';
+        const data = await response.json().catch(() => ({}));
+        const pages = data?.query?.pages ? Object.values(data.query.pages) : [];
+        const page = pages.find(item => item && item.thumbnail && !item.missing);
+        const imageUrl = String(page?.thumbnail?.source || '').trim();
+        if (!/^https?:\/\/[^\s]+$/i.test(imageUrl)) return '';
+        return imageUrl;
+    } catch (_) {
+        return '';
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
+
+function extractWikipediaReferenceSubject(prompt) {
+    const raw = String(prompt || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!raw) return '';
+
+    const simplified = raw
+        .replace(/\b(photo(?:realistic)?|cinematic|ultra(?:-|\s)?detailed|highly detailed|8k|4k|hdr|render|digital art|illustration|concept art|octane|unreal|vfx)\b/gi, ' ')
+        .replace(/\b(with|featuring|showing|at|during)\b.*$/i, ' ')
+        .replace(/[^\w\s-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const tokens = simplified.split(' ').filter(Boolean);
+    if (!tokens.length) return '';
+    return tokens.slice(0, 8).join(' ');
+}
+
+function buildPrompt(prompt) {
     const base = String(prompt || '').replace(/\s+/g, ' ').trim();
     if (!base) return '';
-    if (precisionMode === 'temple' || /\b(nataraja|nataraj|chidambaram|temple|gopuram|dravidian)\b/i.test(base)) {
-        return `${base}. Authentic South Indian Dravidian temple architecture, culturally accurate Nataraja iconography, realistic stone and bronze textures, accurate proportions, no fantasy distortions, no western architecture elements.`;
-    }
     return base;
 }
 
