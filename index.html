@@ -115,52 +115,37 @@
         <div class="max-w-5xl mx-auto px-3 py-1">
             <div class="max-w-xl sm:max-w-3xl mx-auto">
             <div id="input-bar-inner" class="flex items-center gap-1.5 modern-input px-2 py-1">
-                <button onclick="showHelpModal()" id="help-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-all" title="Help & Options">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-purple-600 transition-all">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                    </svg>
-                    <!-- Tooltip -->
-                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                        Help & Options
+                <div class="composer-actions">
+                    <button
+                        type="button"
+                        id="composer-plus-btn"
+                        class="composer-plus-btn"
+                        onclick="toggleComposerActionsMenu()"
+                        aria-label="Open actions"
+                        aria-expanded="false"
+                        aria-controls="composer-actions-menu">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                    </button>
+                    <div id="composer-actions-menu" class="composer-actions-menu hidden" role="menu" aria-label="Composer actions">
+                        <button type="button" id="document-upload-btn" class="composer-action-item" onclick="handleComposerAction('upload')" role="menuitem">Upload document</button>
+                        <button type="button" id="vision-toggle-btn" class="composer-action-item" onclick="handleComposerAction('vision')" role="menuitem">Vision analysis</button>
+                        <button type="button" class="composer-action-item" onclick="handleComposerAction('ocr')" role="menuitem">OCR camera</button>
+                        <button type="button" class="composer-action-item" onclick="handleComposerAction('image')" role="menuitem">Generate image</button>
+                        <button type="button" class="composer-action-item" onclick="handleComposerAction('image_ref')" role="menuitem">Image with reference</button>
+                        <button type="button" id="help-btn" class="composer-action-item" onclick="handleComposerAction('help')" role="menuitem">Help & options</button>
+                        <button type="button" id="safety-btn" class="composer-action-item" onclick="handleComposerAction('safety')" role="menuitem">Safety & others</button>
                     </div>
-                </button>
-                <button onclick="showSafetyPanel()" id="safety-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-rose-100 dark:hover:bg-rose-900/30 transition-all" title="Safety & Others">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-rose-600 transition-all">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                    </svg>
-                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                        Safety & Others
-                    </div>
-                </button>
-                <button onclick="openDocumentPicker()" id="document-upload-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-sky-100 dark:hover:bg-sky-900/30 transition-all" title="Upload document">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-sky-600 transition-all">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="17 8 12 3 7 8"></polyline>
-                        <line x1="12" y1="3" x2="12" y2="15"></line>
-                    </svg>
-                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                        Upload PDF/DOCX/PPTX/Bill
-                    </div>
-                </button>
-                <button onclick="toggleContinuousVision()" id="vision-toggle-btn" class="input-utility-btn flex-shrink-0 relative group p-1.5 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all" title="Toggle Continuous Vision">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-500 group-hover:text-blue-600 transition-all">
-                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-                    </svg>
-                    <!-- Tooltip -->
-                    <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg">
-                        Toggle Continuous Vision
-                    </div>
-                </button>
-                <input
-                    type="text"
+                </div>
+                <textarea
                     id="text-input"
+                    rows="1"
                     placeholder="Ask anything..."
                     class="flex-1 bg-transparent outline-none text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm font-medium"
-                    onkeydown="if(event.key === 'Enter'){ event.preventDefault(); sendTextInput(); }"
-                    oninput="toggleSendButton()"
-                />
+                    onkeydown="handleComposerKeydown(event)"
+                    oninput="handleComposerInput()"></textarea>
                 <div id="vtt-waveform-lane" class="vtt-waveform-lane" aria-hidden="true">
                     <span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span>
                     <span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span><span class="wave-seg"></span>
@@ -186,34 +171,17 @@
                 <!-- Voice-to-text + Converse/Send controls -->
                 <div class="footer-action-pill ml-1" role="group" aria-label="Input actions">
                     <button
-                        id="voice-to-text-btn"
-                        onclick="toggleVoiceToTextInput()"
-                        class="footer-action-btn footer-action-btn-mic"
-                        title="Voice to text"
-                        aria-label="Voice to text">
+                        id="converse-mode-btn"
+                        onclick="handlePrimaryActionButtonClick()"
+                        class="footer-action-btn footer-action-btn-primary"
+                        title="Voice input"
+                        aria-label="Voice input"
+                        aria-pressed="false">
                         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
                             <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                             <line x1="12" y1="19" x2="12" y2="22"></line>
                             <line x1="8" y1="22" x2="16" y2="22"></line>
-                        </svg>
-                        <!-- Sine Wave Visualizer -->
-                        <div id="tts-visualizer" class="tts-wave-container hidden-wave not-speaking">
-                            <div class="tts-wave-line"></div>
-                        </div>
-                    </button>
-                    <button
-                        id="converse-mode-btn"
-                        onclick="toggleConverseMode()"
-                        class="footer-action-btn footer-action-btn-converse"
-                        title="Converse mode"
-                        aria-label="Converse mode"
-                        aria-pressed="false">
-                        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M5 12h2"></path>
-                            <path d="M10 8v8"></path>
-                            <path d="M14 6v12"></path>
-                            <path d="M18 9v6"></path>
                         </svg>
                     </button>
                 </div>
@@ -271,7 +239,7 @@
                 
                 <div class="flex items-center justify-between gap-4">
                     <button onclick="closeCameraMode()" class="px-6 py-3 rounded-xl bg-slate-800 text-white font-semibold hover:bg-slate-700 transition-all">Cancel</button>
-                    <button type="button" onclick="rotateCameraPreview()" class="px-4 py-3 rounded-xl bg-slate-700 text-white font-semibold hover:bg-slate-600 transition-all">Rotate</button>
+                    <button type="button" onclick="switchCameraLens()" class="px-4 py-3 rounded-xl bg-slate-700 text-white font-semibold hover:bg-slate-600 transition-all">Switch Cam</button>
                     <button id="capture-btn" onclick="captureAndProcessOCR()" class="flex-1 px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center gap-2">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                         Capture & Analyze
@@ -284,7 +252,7 @@
         <div class="continuous-vision-preview-header">
             <span class="continuous-vision-pill">Live Vision</span>
             <div class="continuous-vision-actions">
-                <button type="button" id="continuous-vision-rotate-btn" class="continuous-vision-minimize" onclick="rotateContinuousVisionPreview()" aria-label="Rotate live vision preview">Rotate</button>
+                <button type="button" id="continuous-vision-rotate-btn" class="continuous-vision-minimize" onclick="rotateContinuousVisionPreview()" aria-label="Switch live camera">Switch Cam</button>
                 <button type="button" id="continuous-vision-minimize-btn" class="continuous-vision-minimize" onclick="toggleContinuousVisionMinimize()" aria-label="Minimize live vision preview" aria-pressed="false">Minimize</button>
                 <button type="button" class="continuous-vision-close" onclick="toggleContinuousVision()" aria-label="Close live vision preview">Close</button>
             </div>
@@ -824,8 +792,9 @@ function shouldTryReferenceImage(userText, assistantText = '') {
     if (blockedIntent.test(q)) return false;
 
     const explicitImageAsk = /\b(image|picture|photo|show me|looks like|look like)\b/;
+    const placeOrLandmarkAsk = /\b(where is|tell me about|what is|who is)\b[\s\S]{0,80}\b(city|town|village|country|state|temple|church|mosque|palace|fort|museum|landmark|tower|bridge|mountain|lake|river|beach|island)\b/;
     // Keep this strict to avoid wrong-topic auto images.
-    return explicitImageAsk.test(q);
+    return explicitImageAsk.test(q) || placeOrLandmarkAsk.test(q);
 }
 
 async function fetchWikipediaReferenceImage(subject) {
@@ -995,7 +964,7 @@ async function generateImageFromPrompt(prompt, originalUserText = '', options = 
                 width: 1024,
                 height: 1024,
                 referenceImage: referenceImageDataUrl || '',
-                requireReferenceApplied: !!referenceImageDataUrl,
+                requireReferenceApplied: false,
                 precisionMode: isTemplePrecision ? 'temple' : ''
             })
         });
@@ -1009,7 +978,8 @@ async function generateImageFromPrompt(prompt, originalUserText = '', options = 
   <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2 text-center">Generated image</p>
   <img src="${escapeHtml(data.imageUrl)}" alt="${escapeHtml(cleanedPrompt)}" class="w-full h-auto max-h-[70vh] object-contain rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800" loading="lazy" />
   <p class="text-[11px] mt-2 text-slate-500 dark:text-slate-400">Prompt: ${escapeHtml(cleanedPrompt)}</p>
-  ${referenceImageDataUrl ? `<p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Reference image: Applied</p>` : ''}
+  ${(referenceImageDataUrl || data?.referenceSource === 'wikipedia') ? `<p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Reference image: ${data?.referenceApplied ? 'Applied' : 'Fallback used'}</p>` : ''}
+  ${data?.referenceSource === 'wikipedia' ? `<p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Reference source: Wikipedia thumbnail</p>` : ''}
   ${isTemplePrecision ? `<p class="text-[11px] mt-1 text-slate-500 dark:text-slate-400">Precision mode: Temple architecture fidelity</p>` : ''}
 </div>`;
         addChatMessage(card, false, false);
@@ -3724,6 +3694,9 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
     const looksLikeResearchSteps =
         /\b(here(?:'s| are)?\s+(?:the\s+)?steps?\b|steps?\s+you\s+can\s+follow|check\s+online\b|search\s+engines\b|look\s+for\s+(?:his|her|their)\s+biography|you\s+can\s+search\b|to\s+find\s+information\s+about\b)\b/.test(rawLower) ||
         (/(\n|^)\s*\d+\s*[\).:-]\s+/.test(raw) && /\b(check|search|look|find)\b/.test(rawLower));
+    const asksForUserProvidedSources =
+        /\b(?:provide|share|give)\b[\s\S]{0,40}\b(?:source|sources|link|links)\b/.test(rawLower) ||
+        /\b(?:send|paste)\b[\s\S]{0,40}\b(?:url|source|link)\b/.test(rawLower);
     const looksLikeWeakExplainerTemplate =
         /follow these steps|quick recap|next thing to learn|to understand (its|the|this) meaning/i.test(raw) ||
         (/(\n|^)\s*1[\).:-]\s+/.test(raw) && /(\n|^)\s*2[\).:-]\s+/.test(raw));
@@ -3737,6 +3710,9 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
         return '';
     }
     if (liveOrEntityFactQuery && staleCutoffAnswer) {
+        return '';
+    }
+    if (liveOrEntityFactQuery && asksForUserProvidedSources) {
         return '';
     }
     if (isLowSignalModelAnswer(raw) &&
@@ -3911,13 +3887,18 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
 const CAG_MAX_ENTRIES = 80;
 const CAG_MAX_CONTEXT_CHARS = 1800;
 const CAG_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
-const CAG_LIVE_QUERY_MAX_AGE_MS = 2 * 60 * 60 * 1000;
-const CAG_MIN_SIMILARITY = 0.24;
-const CAG_MIN_TOKEN_OVERLAP = 2;
+const CAG_LIVE_QUERY_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const CAG_MIN_SIMILARITY = 0.16;
+const CAG_MIN_TOKEN_OVERLAP = 1;
 let cagMemoryEntries = [];
 
 function getCagStorageKey() {
     return `${getUserStorageKey()}_cag`;
+}
+
+function getCandidateCagStorageKeys() {
+    const keys = [getCagStorageKey(), 'unify_user_data_default_user_cag'];
+    return Array.from(new Set(keys.filter(Boolean)));
 }
 
 function normalizeCagText(text) {
@@ -3970,16 +3951,30 @@ function isLiveFreshnessQuery(text) {
     return /\b(latest|recent|current|today|now|as of|right now|live|breaking)\b/.test(t);
 }
 
+function isCagFollowupQuery(text) {
+    const t = String(text || '').trim().toLowerCase();
+    if (!t) return false;
+    const tokenCount = tokenizeCagText(t).length;
+    if (tokenCount <= 4) return true;
+    return /\b(it|this|that|they|them|those|these|same|earlier|previous|continue|also|what about)\b/.test(t);
+}
+
 function loadCagMemory() {
     cagMemoryEntries = [];
     if (!persistMemoryToDevice) return;
     try {
-        const raw = localStorage.getItem(getCagStorageKey());
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return;
+        const all = [];
+        for (const key of getCandidateCagStorageKeys()) {
+            const raw = localStorage.getItem(key);
+            if (!raw) continue;
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) continue;
+            all.push(...parsed);
+        }
+        if (!all.length) return;
         const now = Date.now();
-        cagMemoryEntries = parsed
+        const seen = new Set();
+        cagMemoryEntries = all
             .filter(item =>
                 item &&
                 typeof item.user === 'string' &&
@@ -3987,6 +3982,13 @@ function loadCagMemory() {
                 Number.isFinite(Number(item.ts)) &&
                 now - Number(item.ts) <= CAG_MAX_AGE_MS
             )
+            .filter(item => {
+                const key = `${item.user}||${item.assistant}||${item.ts}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            })
+            .sort((a, b) => Number(a?.ts || 0) - Number(b?.ts || 0))
             .slice(-CAG_MAX_ENTRIES);
     } catch (_) {}
 }
@@ -4002,7 +4004,7 @@ function rememberCagTurn(userText, assistantText) {
     const user = String(userText || '').trim();
     const assistant = String(assistantText || '').trim();
     if (!user || !assistant) return;
-    if (assistant.length < 20) return;
+    if (assistant.length < 8) return;
 
     cagMemoryEntries.push({
         user: user.slice(0, 800),
@@ -4021,6 +4023,10 @@ function buildCagContextForQuery(query) {
     if (!q || !cagMemoryEntries.length) return '';
     const now = Date.now();
     const liveSensitive = isCurrentInfoQuery(q) || isLiveFreshnessQuery(q);
+    const followupLike = isCagFollowupQuery(q);
+    const qTokens = tokenizeCagText(q);
+    const minOverlap = followupLike || qTokens.length <= 4 ? 1 : CAG_MIN_TOKEN_OVERLAP;
+    const minSimilarity = followupLike || qTokens.length <= 4 ? 0.08 : CAG_MIN_SIMILARITY;
     const scored = cagMemoryEntries
         .map(item => ({
             item,
@@ -4029,10 +4035,22 @@ function buildCagContextForQuery(query) {
             overlap: getCagTokenOverlap(q, `${item.user}\n${item.assistant}`)
         }))
         .filter(entry => Number.isFinite(entry.ageMs) && entry.ageMs <= (liveSensitive ? CAG_LIVE_QUERY_MAX_AGE_MS : CAG_MAX_AGE_MS))
-        .filter(entry => entry.score >= CAG_MIN_SIMILARITY && entry.overlap >= CAG_MIN_TOKEN_OVERLAP)
+        .filter(entry => entry.score >= minSimilarity && entry.overlap >= minOverlap)
         .sort((a, b) => (b.score - a.score) || (a.ageMs - b.ageMs))
         .slice(0, 3);
-    if (!scored.length) return '';
+    if (!scored.length) {
+        if (!followupLike) return '';
+        const fallback = cagMemoryEntries
+            .slice(-2)
+            .map(item => ({ item, score: 0.01, ageMs: Math.max(0, now - Number(item?.ts || 0)) }));
+        if (!fallback.length) return '';
+        const lines = ['CAG memory (recent continuity context):'];
+        for (const entry of fallback) {
+            lines.push(`- Previous user ask: ${entry.item.user}`);
+            lines.push(`  Helpful context: ${entry.item.assistant.slice(0, 320)}`);
+        }
+        return lines.join('\n').slice(0, CAG_MAX_CONTEXT_CHARS);
+    }
 
     const lines = ['CAG memory (relevant prior context):'];
     for (const entry of scored) {
@@ -4581,11 +4599,13 @@ async function handleNameCorrection(text) {
             initKeyboardShortcuts();
             initSelectionPromptHelper();
             initUploadContextPanel();
+            initComposerActionsMenu();
             window.addEventListener('online', updateOnlineStatus);
             window.addEventListener('offline', updateOnlineStatus);
             updateOnlineStatus();
             ensureStartupGreeting(true);
             setTimeout(() => ensureStartupGreeting(false), 900);
+            autoResizeComposerTextarea();
 
         };
 
@@ -4989,6 +5009,10 @@ async function handleNameCorrection(text) {
             input.addEventListener('keydown', (event) => {
                 if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
                 if (!inputHistory.length) return;
+                const atStart = Number(input.selectionStart || 0) === 0 && Number(input.selectionEnd || 0) === 0;
+                const atEnd = Number(input.selectionStart || 0) === input.value.length && Number(input.selectionEnd || 0) === input.value.length;
+                if (event.key === 'ArrowUp' && !atStart) return;
+                if (event.key === 'ArrowDown' && !atEnd) return;
 
                 event.preventDefault();
                 if (event.key === 'ArrowUp') {
@@ -5007,6 +5031,7 @@ async function handleNameCorrection(text) {
                 }
                 const idx = inputHistory.length - 1 - inputHistoryIndex;
                 input.value = inputHistory[idx] || '';
+                autoResizeComposerTextarea();
                 toggleSendButton();
             });
         }
@@ -5028,13 +5053,13 @@ async function handleNameCorrection(text) {
             } catch (e) { console.error('Error saving assistant modes:', e); }
         }
 
-        function getConverseIconSvg() {
+        function getMicIconSvg() {
             return `
-                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M5 12h2"></path>
-                    <path d="M10 8v8"></path>
-                    <path d="M14 6v12"></path>
-                    <path d="M18 9v6"></path>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="22"></line>
+                    <line x1="8" y1="22" x2="16" y2="22"></line>
                 </svg>
             `;
         }
@@ -5069,14 +5094,14 @@ async function handleNameCorrection(text) {
             const btn = document.getElementById('converse-mode-btn');
             if (!btn) return;
             const on = !!converseMode;
-            btn.dataset.mode = 'converse';
-            btn.onclick = toggleConverseMode;
-            btn.innerHTML = getConverseIconSvg();
+            btn.dataset.mode = 'mic';
+            btn.onclick = handlePrimaryMicAction;
+            btn.innerHTML = getMicIconSvg();
             btn.classList.remove('is-send-ready');
             btn.classList.toggle('is-active', on);
             btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-            btn.setAttribute('aria-label', on ? 'Converse mode active' : 'Converse mode');
-            btn.title = on ? 'Converse mode is active' : 'Converse mode';
+            btn.setAttribute('aria-label', on ? 'Converse mode active - tap to stop' : 'Start voice mode');
+            btn.title = on ? 'Converse mode is active - tap to stop' : 'Start voice mode';
         }
 
         function setPrimaryActionButtonToSend() {
@@ -5431,6 +5456,19 @@ async function handleNameCorrection(text) {
                     }
                 };
                 setTimeout(ensureConverseListening, 180);
+                // Reliability fallback: if continuous recognition cannot stay active, fallback to voice typing capture.
+                setTimeout(() => {
+                    if (!converseMode || isListening) return;
+                    if (isAssistantSpeaking) return;
+                    try {
+                        startListening();
+                    } catch (_) {}
+                }, 850);
+                setTimeout(() => {
+                    if (!converseMode || isListening || isVoiceTyping) return;
+                    toggleVoiceToTextInput();
+                    showTemporaryMessage('Using voice capture fallback for this browser.');
+                }, 1700);
             } else {
                 stopListening();
                 stopSpeaking();
@@ -6646,7 +6684,52 @@ function normalizeUiTokens(text) {
             return template.innerHTML;
         }
 
+        function toggleComposerActionsMenu(forceOpen = null) {
+            const menu = document.getElementById('composer-actions-menu');
+            const btn = document.getElementById('composer-plus-btn');
+            if (!menu || !btn) return;
+            const willOpen = typeof forceOpen === 'boolean'
+                ? forceOpen
+                : menu.classList.contains('hidden');
+            menu.classList.toggle('hidden', !willOpen);
+            btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+            btn.classList.toggle('is-open', willOpen);
+        }
+
+        function closeComposerActionsMenu() {
+            toggleComposerActionsMenu(false);
+        }
+
+        function handleComposerAction(action) {
+            closeComposerActionsMenu();
+            const key = String(action || '').trim().toLowerCase();
+            if (key === 'upload') return openDocumentPicker();
+            if (key === 'vision') return toggleContinuousVision();
+            if (key === 'ocr') return openCameraMode();
+            if (key === 'image') return openImageGenerationPrompt();
+            if (key === 'image_ref') return openImageGenerationPromptWithReference();
+            if (key === 'help') return showHelpModal();
+            if (key === 'safety') return showSafetyPanel();
+        }
+
+        function initComposerActionsMenu() {
+            if (window.__composerActionsMenuInit) return;
+            window.__composerActionsMenuInit = true;
+            document.addEventListener('mousedown', (event) => {
+                const menu = document.getElementById('composer-actions-menu');
+                const trigger = document.getElementById('composer-plus-btn');
+                if (!menu || menu.classList.contains('hidden')) return;
+                if (menu.contains(event.target) || trigger?.contains(event.target)) return;
+                closeComposerActionsMenu();
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key !== 'Escape') return;
+                closeComposerActionsMenu();
+            });
+        }
+
         function openDocumentPicker() {
+            closeComposerActionsMenu();
             const panel = document.getElementById('upload-context-panel');
             const input = document.getElementById('upload-context-input');
             if (!panel || !input) return;
@@ -6682,10 +6765,11 @@ function normalizeUiTokens(text) {
             triggerHiddenFilePicker();
         }
 
-        let cameraStream = null;
-        let cameraRotationDeg = 0;
-        let tesseractWorkerPromise = null;
-        let tesseractWorkerLangKey = '';
+let cameraStream = null;
+let cameraRotationDeg = 0;
+let cameraFacingMode = 'environment';
+let tesseractWorkerPromise = null;
+let tesseractWorkerLangKey = '';
 
         function normalizeCameraRotation(deg) {
             const n = Number(deg || 0);
@@ -6700,10 +6784,79 @@ function normalizeUiTokens(text) {
             video.style.transformOrigin = 'center center';
         }
 
-        function rotateCameraPreview() {
-            cameraRotationDeg = normalizeCameraRotation(cameraRotationDeg + 90);
-            applyCameraPreviewRotation();
+function rotateCameraPreview() {
+    cameraRotationDeg = normalizeCameraRotation(cameraRotationDeg + 90);
+    applyCameraPreviewRotation();
+}
+
+function normalizeFacingMode(value) {
+    const v = String(value || '').toLowerCase();
+    return v === 'user' ? 'user' : 'environment';
+}
+
+function getTrackFacingMode(track) {
+    const settings = track?.getSettings?.() || {};
+    return normalizeFacingMode(settings?.facingMode || '');
+}
+
+async function requestCameraStreamForFacingMode(targetMode) {
+    const mode = normalizeFacingMode(targetMode);
+    const constraintsExact = {
+        video: {
+            facingMode: { exact: mode },
+            width: { ideal: mode === 'environment' ? 1920 : 1280 },
+            height: { ideal: mode === 'environment' ? 1080 : 720 }
+        },
+        audio: false
+    };
+    const constraintsIdeal = {
+        video: {
+            facingMode: { ideal: mode },
+            width: { ideal: mode === 'environment' ? 1920 : 1280 },
+            height: { ideal: mode === 'environment' ? 1080 : 720 }
+        },
+        audio: false
+    };
+
+    try {
+        return await navigator.mediaDevices.getUserMedia(constraintsExact);
+    } catch (_) {
+        try {
+            return await navigator.mediaDevices.getUserMedia(constraintsIdeal);
+        } catch (_) {
+            return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         }
+    }
+}
+
+async function switchCameraLens() {
+    if (!cameraStream) {
+        rotateCameraPreview();
+        return;
+    }
+
+    const video = document.getElementById('camera-preview');
+    const currentTrack = cameraStream.getVideoTracks?.()[0] || null;
+    const currentFacing = getTrackFacingMode(currentTrack) || normalizeFacingMode(cameraFacingMode);
+    const nextFacing = currentFacing === 'environment' ? 'user' : 'environment';
+
+    try {
+        const newStream = await requestCameraStreamForFacingMode(nextFacing);
+        const newTrack = newStream.getVideoTracks?.()[0] || null;
+        const actualFacing = getTrackFacingMode(newTrack) || nextFacing;
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = newStream;
+        cameraFacingMode = normalizeFacingMode(actualFacing);
+        if (video) {
+            video.srcObject = newStream;
+            await video.play().catch(() => {});
+        }
+        cameraRotationDeg = 0;
+        applyCameraPreviewRotation();
+    } catch (_) {
+        rotateCameraPreview();
+    }
+}
 
         async function openCameraMode() {
             const modal = document.getElementById('camera-modal');
@@ -6718,18 +6871,10 @@ function normalizeUiTokens(text) {
                     return await navigator.mediaDevices.getUserMedia(constraints);
                 };
 
-                let stream = null;
-                try {
-                    stream = await tryConstraints({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-                } catch (_) {
-                    try {
-                        stream = await tryConstraints({ video: { facingMode: 'user' }, audio: false });
-                    } catch (_) {
-                        stream = await tryConstraints({ video: true, audio: false });
-                    }
-                }
+                const stream = await requestCameraStreamForFacingMode('environment');
 
                 cameraStream = stream;
+                cameraFacingMode = getTrackFacingMode(stream.getVideoTracks?.()[0]) || 'environment';
                 video.srcObject = stream;
                 cameraRotationDeg = 0;
                 applyCameraPreviewRotation();
@@ -7881,7 +8026,51 @@ ${code}
             }
         }
 
+        function autoResizeComposerTextarea() {
+            const input = document.getElementById('text-input');
+            if (!input) return;
+            input.style.height = 'auto';
+            const maxHeight = 180;
+            const next = Math.min(maxHeight, Math.max(40, input.scrollHeight));
+            input.style.height = `${next}px`;
+            input.style.overflowY = input.scrollHeight > maxHeight ? 'auto' : 'hidden';
+        }
+
+        function handleComposerInput() {
+            autoResizeComposerTextarea();
+            toggleSendButton();
+        }
+
+        function handleComposerKeydown(event) {
+            if (!event) return;
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendTextInput();
+            }
+        }
+
+        function handlePrimaryMicAction() {
+            if (activeRequestController || isAssistantProcessing()) {
+                stopActiveGeneration();
+                return;
+            }
+            if (converseMode) {
+                toggleConverseMode();
+                return;
+            }
+            toggleConverseMode();
+        }
+
+        function handlePrimaryActionButtonClick() {
+            const btn = document.getElementById('converse-mode-btn');
+            const mode = String(btn?.dataset?.mode || '').toLowerCase();
+            if (mode === 'send') return sendTextInput();
+            if (mode === 'stop') return stopActiveGeneration();
+            return handlePrimaryMicAction();
+        }
+
         function toggleSendButton() {
+            autoResizeComposerTextarea();
             if (isVoiceTyping) {
                 const btn = document.getElementById('converse-mode-btn');
                 if (btn) {
@@ -7913,6 +8102,7 @@ ${code}
         }
 
 async function sendTextInput() {
+            closeComposerActionsMenu();
             if (activeRequestController || isAssistantProcessing()) {
                 stopActiveGeneration();
                 return;
@@ -11701,7 +11891,6 @@ function buildUniversalLiveRefineHint(queryText, intent = {}, entityIntent = {},
     const hasEntity = Boolean(subject || entityIntent?.targetEntity);
     const asksFresh = /\b(latest|recent|current|today|now|live|as of|right now)\b/.test(lowerQuery);
     const hasExplicitTime = Boolean(intent?.year || entityIntent?.year || hasExplicitYearReference(lowerQuery) || /\b(today|this week|this month|this year|as of)\b/.test(lowerQuery));
-    const hasSourceConstraint = /\bsite:[^\s]+|official\s+site|official\s+source|trusted\s+source\b/.test(lowerQuery);
     const relationNeedsScope = ['role', 'winner', 'score', 'standings', 'qualification', 'stats', 'title_count', 'price', 'latest_work'].includes(relation);
     const hasOrgOrScope = /\b(of|for|at|in)\b/.test(lowerQuery);
     const missing = [];
@@ -11715,13 +11904,9 @@ function buildUniversalLiveRefineHint(queryText, intent = {}, entityIntent = {},
     if (asksFresh && !hasExplicitTime) {
         missing.push('add an exact time window (for example "as of today", a specific date, or a year)');
     }
-    if (!hasSourceConstraint) {
-        missing.push('add a trusted source constraint (for example site:reuters.com or an official site)');
-    }
-
     const distinctDomains = Array.from(new Set((Array.isArray(sources) ? sources : []).map(item => getDomainFromUrl(item?.url || '')).filter(Boolean)));
     if (distinctDomains.length === 1) {
-        missing.push('add one more trusted source constraint to improve cross-source coverage');
+        missing.push('add one tighter qualifier (for example exact scope or date) so I can improve source coverage');
     }
 
     if (!missing.length) {
@@ -11753,6 +11938,17 @@ function formatStrictLatestAnswer(answerText, sources) {
 }
 
 async function publishStrictLatestFailure(userText, intent, options = {}) {
+    const bestEffort = await buildVerifiedSearchSummary(userText, {
+        badge: 'Best-effort live sources',
+        speech: 'I could not fully verify this with strict checks, so here is the best-supported live summary.'
+    });
+    if (bestEffort?.text) {
+        addVerifiedAssistantMessage(bestEffort.text, bestEffort.badge || 'Best-effort live sources');
+        speak(bestEffort.speech || 'I found the best-supported live summary.');
+        saveToHistory(userText, bestEffort.text);
+        return true;
+    }
+
     const message = options?.message || buildStrictLatestFailureMessage(
         intent,
         userText,
@@ -14524,6 +14720,17 @@ function buildStrictVerificationClarificationMessage(userText, intent, entityInt
 
 async function publishStrictVerificationClarification(pipeline, options = {}) {
     const sources = Array.isArray(options?.sources) ? options.sources : [];
+    const fallback = await buildVerifiedSearchSummary(pipeline?.userText || '', {
+        badge: 'Best-effort live sources',
+        speech: 'I could not fully verify this with strict checks, so here is the best-supported live summary.'
+    });
+    if (fallback?.text) {
+        addVerifiedAssistantMessage(fallback.text, fallback.badge || 'Best-effort live sources');
+        speak(fallback.speech || 'I found the best-supported live summary.');
+        saveToHistory(pipeline?.userText || '', fallback.text);
+        return true;
+    }
+
     const message = buildStrictVerificationClarificationMessage(
         pipeline?.userText || '',
         pipeline?.intent || {},
@@ -19682,8 +19889,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             } catch (e) {}
         }
 
-        function toggleMemoryPersistence(enabled) {
-            persistMemoryToDevice = !!enabled;
+function toggleMemoryPersistence(enabled) {
+    persistMemoryToDevice = !!enabled;
             try {
                 localStorage.setItem('jarvis_persist_memory', persistMemoryToDevice ? 'on' : 'off');
             } catch (e) {}
@@ -19694,11 +19901,12 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 showTemporaryMessage('Memory persistence disabled for this session. New memory/history will stay in-session only.');
                 return;
             }
-            saveUserData();
-            saveConversationHistory();
-            saveCagMemory();
-            showTemporaryMessage('Memory persistence enabled.');
-        }
+    saveUserData();
+    saveConversationHistory();
+    loadCagMemory();
+    saveCagMemory();
+    showTemporaryMessage('Memory persistence enabled.');
+}
         
         function saveUserData() {
             if (!persistMemoryToDevice) return;
@@ -20263,6 +20471,7 @@ let isContinuousVisionActive = false;
 let continuousVisionTrack = null;
 let isContinuousVisionMinimized = false;
 let continuousVisionRotationDeg = 0;
+let continuousVisionFacingMode = 'environment';
 
 function applyContinuousVisionRotation() {
     const videoEl = document.getElementById('continuous-vision-video');
@@ -20273,9 +20482,34 @@ function applyContinuousVisionRotation() {
 }
 
 function rotateContinuousVisionPreview() {
-    if (!isContinuousVisionActive) return;
-    continuousVisionRotationDeg = normalizeCameraRotation(continuousVisionRotationDeg + 90);
-    applyContinuousVisionRotation();
+    switchContinuousVisionCamera();
+}
+
+async function switchContinuousVisionCamera() {
+    if (!isContinuousVisionActive || !continuousVisionStream) return;
+    const videoEl = document.getElementById('continuous-vision-video');
+    const currentTrack = continuousVisionStream.getVideoTracks?.()[0] || null;
+    const currentFacing = getTrackFacingMode(currentTrack) || normalizeFacingMode(continuousVisionFacingMode);
+    const nextFacing = currentFacing === 'environment' ? 'user' : 'environment';
+
+    try {
+        const newStream = await requestCameraStreamForFacingMode(nextFacing);
+        const newTrack = newStream.getVideoTracks?.()[0] || null;
+        const actualFacing = getTrackFacingMode(newTrack) || nextFacing;
+        continuousVisionStream.getTracks().forEach(track => track.stop());
+        continuousVisionStream = newStream;
+        continuousVisionTrack = newTrack;
+        continuousVisionFacingMode = normalizeFacingMode(actualFacing);
+        if (videoEl) {
+            videoEl.srcObject = newStream;
+            await videoEl.play().catch(() => {});
+        }
+        continuousVisionRotationDeg = 0;
+        applyContinuousVisionRotation();
+    } catch (_) {
+        continuousVisionRotationDeg = normalizeCameraRotation(continuousVisionRotationDeg + 90);
+        applyContinuousVisionRotation();
+    }
 }
 
 function setContinuousVisionMinimized(nextState) {
@@ -20320,30 +20554,7 @@ async function toggleContinuousVision() {
         showTemporaryMessage('Continuous Vision deactivated.');
     } else {
         try {
-            const getCamera = async () => {
-                const preferred = {
-                    video: {
-                        facingMode: { ideal: 'environment' },
-                        width: { ideal: 1920, min: 1280 },
-                        height: { ideal: 1080, min: 720 }
-                    },
-                    audio: false
-                };
-                try {
-                    return await navigator.mediaDevices.getUserMedia(preferred);
-                } catch (_) {
-                    try {
-                        return await navigator.mediaDevices.getUserMedia({
-                            video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-                            audio: false
-                        });
-                    } catch (_) {
-                        return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                    }
-                }
-            };
-
-            continuousVisionStream = await getCamera();
+            continuousVisionStream = await requestCameraStreamForFacingMode('environment');
             videoEl.srcObject = continuousVisionStream;
             videoEl.muted = true;
             continuousVisionRotationDeg = 0;
@@ -20356,6 +20567,7 @@ async function toggleContinuousVision() {
 
             const track = continuousVisionStream.getVideoTracks?.()[0] || null;
             continuousVisionTrack = track;
+            continuousVisionFacingMode = getTrackFacingMode(track) || 'environment';
             if (track?.applyConstraints) {
                 // Best-effort camera tuning for sharper OCR/object detection on phones.
                 await track.applyConstraints({
