@@ -132,6 +132,7 @@
                     <div id="composer-actions-menu" class="composer-actions-menu hidden" role="menu" aria-label="Composer actions">
                         <button type="button" id="document-upload-btn" class="composer-action-item" onclick="handleComposerAction('upload')" role="menuitem">Upload document</button>
                         <button type="button" id="vision-toggle-btn" class="composer-action-item" onclick="handleComposerAction('vision')" role="menuitem">Vision analysis</button>
+                        <button type="button" class="composer-action-item" onclick="handleComposerAction('converse')" role="menuitem">Converse mode</button>
                         <button type="button" class="composer-action-item" onclick="handleComposerAction('ocr')" role="menuitem">OCR camera</button>
                         <button type="button" class="composer-action-item" onclick="handleComposerAction('image')" role="menuitem">Generate image</button>
                         <button type="button" class="composer-action-item" onclick="handleComposerAction('image_ref')" role="menuitem">Image with reference</button>
@@ -5406,6 +5407,9 @@ async function handleNameCorrection(text) {
                 awaitingFollowUpResponse = false;
                 currentSpeechContext = 'none';
             }
+            if (isVoiceTyping) {
+                stopVoiceToTextInput(false);
+            }
             converseMode = !converseMode;
             saveAssistantModes();
             updateAssistantModeUI();
@@ -5458,11 +5462,6 @@ async function handleNameCorrection(text) {
                         startListening();
                     } catch (_) {}
                 }, 850);
-                setTimeout(() => {
-                    if (!converseMode || isListening || isVoiceTyping) return;
-                    toggleVoiceToTextInput();
-                    showTemporaryMessage('Using voice capture fallback for this browser.');
-                }, 1700);
             } else {
                 stopListening();
                 stopSpeaking();
@@ -5557,19 +5556,18 @@ async function handleNameCorrection(text) {
             const inputBarContainer = document.getElementById('input-bar-container');
             if (!shell || !primaryBtn) return;
 
-            shell.classList.toggle('vtt-ui-active', !!isVoiceTyping);
-            if (inputBarContainer) {
-                inputBarContainer.classList.toggle('vtt-ui-active', !!isVoiceTyping);
-            }
+            // Keep composer stable during VTT; avoid switching to a separate capture bar.
+            shell.classList.remove('vtt-ui-active');
+            if (inputBarContainer) inputBarContainer.classList.remove('vtt-ui-active');
             if (isVoiceTyping) {
-                primaryBtn.dataset.mode = 'send';
-                primaryBtn.onclick = handleVttPrimarySendAction;
-                primaryBtn.innerHTML = getVttSendIconSvg();
+                primaryBtn.dataset.mode = 'vtt-stop';
+                primaryBtn.onclick = () => stopVoiceToTextInput(true);
+                primaryBtn.innerHTML = getStopIconSvg();
                 primaryBtn.classList.remove('is-active');
                 primaryBtn.classList.add('is-send-ready');
                 primaryBtn.setAttribute('aria-pressed', 'false');
-                primaryBtn.setAttribute('aria-label', 'Send message');
-                primaryBtn.title = 'Send message';
+                primaryBtn.setAttribute('aria-label', 'Stop voice capture');
+                primaryBtn.title = 'Stop voice capture';
                 return;
             }
 
@@ -6699,6 +6697,7 @@ function normalizeUiTokens(text) {
             const key = String(action || '').trim().toLowerCase();
             if (key === 'upload') return openDocumentPicker();
             if (key === 'vision') return toggleContinuousVision();
+            if (key === 'converse') return toggleConverseMode();
             if (key === 'ocr') return openCameraMode();
             if (key === 'image') return openImageGenerationPrompt();
             if (key === 'image_ref') return openImageGenerationPromptWithReference();
@@ -8052,13 +8051,14 @@ ${code}
                 toggleConverseMode();
                 return;
             }
-            toggleConverseMode();
+            toggleVoiceToTextInput();
         }
 
         function handlePrimaryActionButtonClick() {
             const btn = document.getElementById('converse-mode-btn');
             const mode = String(btn?.dataset?.mode || '').toLowerCase();
             if (mode === 'send') return sendTextInput();
+            if (mode === 'vtt-stop') return stopVoiceToTextInput(true);
             if (mode === 'stop') return stopActiveGeneration();
             return handlePrimaryMicAction();
         }
@@ -8068,14 +8068,14 @@ ${code}
             if (isVoiceTyping) {
                 const btn = document.getElementById('converse-mode-btn');
                 if (btn) {
-                    btn.dataset.mode = 'send';
-                    btn.onclick = handleVttPrimarySendAction;
-                    btn.innerHTML = getVttSendIconSvg();
+                    btn.dataset.mode = 'vtt-stop';
+                    btn.onclick = () => stopVoiceToTextInput(true);
+                    btn.innerHTML = getStopIconSvg();
                     btn.classList.remove('is-active');
                     btn.classList.add('is-send-ready');
                     btn.setAttribute('aria-pressed', 'false');
-                    btn.setAttribute('aria-label', 'Send message');
-                    btn.title = 'Send message';
+                    btn.setAttribute('aria-label', 'Stop voice capture');
+                    btn.title = 'Stop voice capture';
                 }
                 syncVttUiState();
                 return;
@@ -20627,7 +20627,7 @@ async function handleContinuousVisionQuery(text) {
             ? `Read the math problem from the image and solve it accurately with clear steps. User query: "${text}".`
             : (isTranslateIntent
                 ? `Extract all readable text and translate it to English. User query: "${text}".`
-                : `Describe only what is relevant to the user query. If readable text or software UI is visible, focus on that first and ignore background details like wall color unless explicitly asked. If the user asks about a product/part/object, identify it and explain its practical use briefly. Preserve exact numbers/symbols/equations when text exists. User query: "${text}". Keep the answer concise and practical.`);
+                : `Describe only what is relevant to the user query. If readable text or software UI is visible, focus on that first and ignore background details like wall color unless explicitly asked. If the user asks about a product/part/object, identify it and explain its practical use briefly. Preserve exact numbers/symbols/equations when text exists. User query: "${text}". Respond in 1-2 short sentences, concise and practical.`);
         const response = await fetch('/api/vision', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -20739,18 +20739,36 @@ function normalizeVisionAnswerForChat(answer, details = {}) {
     const parsed = extractVisionJsonObject(raw);
     if (parsed) {
         const readable = formatVisionJsonToReadableText(parsed);
-        if (readable) return readable;
+        if (readable) return refineVisionAnswer(readable);
     }
 
     if (!raw && details && typeof details === 'object') {
         const readable = formatVisionJsonToReadableText(details);
-        if (readable) return readable;
+        if (readable) return refineVisionAnswer(readable);
     }
 
-    return raw
+    const normalized = raw
         .replace(/^```(?:json)?\s*/i, '')
         .replace(/\s*```$/i, '')
         .trim();
+    return refineVisionAnswer(normalized);
+}
+
+function refineVisionAnswer(text) {
+    let out = String(text || '').trim();
+    if (!out) return '';
+    out = out
+        .replace(/^likely item:\s*[^.]+\.?\s*/i, '')
+        .replace(/^\s*person\.\s*/i, '')
+        .replace(/\bappears to be\b/gi, 'is')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const sentences = out.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+    if (sentences.length > 2) {
+        out = sentences.slice(0, 2).join(' ');
+    }
+    return out;
 }
 
 function isContinuousVisionQuestion(text) {
