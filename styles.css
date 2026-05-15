@@ -945,7 +945,7 @@ body.dark .footer-action-btn-primary:hover {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: flex-end;
 }
 
@@ -966,6 +966,8 @@ body.dark .footer-action-btn-primary:hover {
     border: 1px solid var(--ui-border);
     border-radius: 8px;
     padding: 4px 8px;
+    min-width: fit-content;
+    white-space: nowrap;
     font-size: 11px;
     font-weight: 700;
     color: var(--ui-text);
@@ -1345,7 +1347,7 @@ body.dark .response-action-btn {
 
     .continuous-vision-preview {
         right: 7px;
-        width: min(330px, calc(100vw - 14px));
+        width: min(360px, calc(100vw - 14px));
         max-width: calc(100vw - 14px);
         bottom: calc(var(--input-bar-safe-height) + 28px + env(safe-area-inset-bottom));
         border-radius: 12px;
@@ -1365,15 +1367,24 @@ body.dark .response-action-btn {
 
     .continuous-vision-close,
     .continuous-vision-minimize {
-        padding: 3px 6px;
+        padding: 3px 7px;
         font-size: 10px;
-        min-width: 58px;
+        min-width: fit-content;
         line-height: 1.1;
     }
 
     .continuous-vision-preview.is-minimized {
-        width: min(250px, 62vw);
-        max-width: min(250px, 62vw);
+        width: min(360px, calc(100vw - 14px));
+        max-width: calc(100vw - 14px);
+    }
+
+    .continuous-vision-preview.is-minimized .continuous-vision-preview-header {
+        align-items: center;
+    }
+
+    .continuous-vision-preview.is-minimized .continuous-vision-actions {
+        flex-wrap: nowrap;
+        gap: 5px;
     }
 
     .continuous-vision-video {
