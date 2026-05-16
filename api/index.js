@@ -1,6 +1,5 @@
   import chatGroqHandler from './chat-groq.js';
   import documentIngestHandler from './document-ingest.js';
-  import imageFreeHandler from './image-free.js';
   import marketsHandler from './markets.js';
   import searchHandler from './search.js';
   import visionHandler from './vision.js';
@@ -24,8 +23,6 @@
         return await marketsHandler(req, res);
       } else if (path.includes('/search')) {
         return await searchHandler(req, res);
-      } else if (path.includes('/image-free')) {
-        return await imageFreeHandler(req, res);
       } else if (path.includes('/vision')) {
         return await visionHandler(req, res);
       }
