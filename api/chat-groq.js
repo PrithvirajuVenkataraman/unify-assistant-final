@@ -3,6 +3,9 @@ import { applyApiSecurity } from './security.js';
 
 const LIVE_CAG_TTL_MS = 20 * 60 * 1000;
 const LIVE_CAG_MAX_ENTRIES = 120;
+const MODEL_FETCH_TIMEOUT_MS = 18_000;
+const INTERNAL_FETCH_TIMEOUT_MS = 8_000;
+const FETCH_RETRIES = 1;
 
 export default async function handler(req, res) {
     const guard = applyApiSecurity(req, res, {
@@ -14,6 +17,7 @@ export default async function handler(req, res) {
     if (guard.handled) return;
 
     try {
+        const requestId = `cg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
         const { message, userName, systemPrompt: clientSystemPrompt, ragContext, context } = req.body || {};
 
         if (!message) {
@@ -66,6 +70,7 @@ export default async function handler(req, res) {
         finalParsed = applyResponseLengthPostCheck(finalParsed, lengthPolicy, message, clientSystemPrompt);
         return res.status(200).json({
             ...finalParsed,
+            requestId,
             modelUsed: selectedPass.modelUsed,
             provider: selectedPass.provider,
             webEscalation: {
@@ -77,6 +82,9 @@ export default async function handler(req, res) {
             }
         });
     } catch (error) {
+        console.error('[chat-groq] handler failure', {
+            reason: String(error?.message || 'unknown_error')
+        });
         return res.status(200).json({
             intent: 'service_error',
             response: 'The AI service hit an internal error. Please try again.',
@@ -118,7 +126,7 @@ async function runModelWithFallback(finalPrompt, lengthPolicy = {}) {
 
         for (const model of groqCandidates) {
             triedModels.push(model);
-            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            const response = await fetchWithTimeoutRetry('https://api.groq.com/openai/v1/chat/completions', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -132,6 +140,9 @@ async function runModelWithFallback(finalPrompt, lengthPolicy = {}) {
                         { role: 'user', content: finalPrompt }
                     ]
                 })
+            }, {
+                timeoutMs: MODEL_FETCH_TIMEOUT_MS,
+                retries: FETCH_RETRIES
             });
 
             if (response.ok) {
@@ -186,7 +197,7 @@ async function runModelWithFallback(finalPrompt, lengthPolicy = {}) {
 
     for (const model of geminiCandidates) {
         triedModels.push(model);
-        const response = await fetch(
+        const response = await fetchWithTimeoutRetry(
             `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
             {
                 method: 'POST',
@@ -204,6 +215,10 @@ async function runModelWithFallback(finalPrompt, lengthPolicy = {}) {
                         maxOutputTokens: maxTokens,
                     }
                 })
+            },
+            {
+                timeoutMs: MODEL_FETCH_TIMEOUT_MS,
+                retries: FETCH_RETRIES
             }
         );
 
@@ -340,7 +355,8 @@ async function buildLiveRagContext(message, req, contextTurns = []) {
         if (runVerifiedWebSearch) {
             const verified = await runVerifiedWebSearch(liveQueries, {
                 maxResultsPerQuery: 6,
-                limit: 12
+                limit: 12,
+                includePageExtract: true
             });
             results = Array.isArray(verified?.results) ? verified.results : [];
         } else {
@@ -360,6 +376,12 @@ async function buildLiveRagContext(message, req, contextTurns = []) {
             lines.push(`URL: ${String(item.url || '').trim()}`);
             if (item.description) {
                 lines.push(`Summary: ${String(item.description).trim()}`);
+            }
+            if (Array.isArray(item.keyEntities) && item.keyEntities.length) {
+                lines.push(`Names: ${item.keyEntities.slice(0, 8).join(', ')}`);
+            }
+            if (item.pageExtract) {
+                lines.push(`Extract: ${String(item.pageExtract).slice(0, 520).trim()}`);
             }
         }
         const built = { ragText: lines.join('\n'), sources: ranked };
@@ -470,10 +492,13 @@ async function fetchFromOwnSearchApi(queries, req) {
         const all = [];
 
         for (const q of list.slice(0, 4)) {
-            const response = await fetch(`${baseUrl}/api/search`, {
+            const response = await fetchWithTimeoutRetry(`${baseUrl}/api/search`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query: String(q || ''), maxResults: 6 })
+            }, {
+                timeoutMs: INTERNAL_FETCH_TIMEOUT_MS,
+                retries: 0
             });
             if (!response.ok) continue;
             const data = await response.json();
@@ -493,6 +518,34 @@ async function fetchFromOwnSearchApi(queries, req) {
     } catch (_) {
         return [];
     }
+}
+
+async function fetchWithTimeoutRetry(url, init = {}, options = {}) {
+    const timeoutMs = clampInt(options.timeoutMs, MODEL_FETCH_TIMEOUT_MS, 1000, 30000);
+    const retries = clampInt(options.retries, FETCH_RETRIES, 0, 3);
+    let lastError = null;
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        const timeoutController = new AbortController();
+        const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
+        try {
+            const upstreamSignal = init?.signal;
+            const signal = (upstreamSignal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function')
+                ? AbortSignal.any([upstreamSignal, timeoutController.signal])
+                : (upstreamSignal || timeoutController.signal);
+            const response = await fetch(url, {
+                ...init,
+                signal
+            });
+            clearTimeout(timeoutId);
+            return response;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            lastError = error;
+            if (attempt >= retries) throw error;
+        }
+    }
+    throw lastError || new Error('fetch_failed');
 }
 
 function isTimeSensitiveInfoRequest(text) {
