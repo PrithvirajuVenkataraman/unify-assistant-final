@@ -57,6 +57,13 @@ const SOURCE_POLICIES = {
     politics: {
         trustedDomains: [
             'gov.in',
+            'gov.uk',
+            'state.gov',
+            'whitehouse.gov',
+            'senate.gov',
+            'house.gov',
+            'europa.eu',
+            'un.org',
             'parliament.uk',
             'congress.gov',
             'eci.gov.in',
@@ -69,6 +76,13 @@ const SOURCE_POLICIES = {
         ],
         preferredDomains: [
             'gov.in',
+            'gov.uk',
+            'state.gov',
+            'whitehouse.gov',
+            'senate.gov',
+            'house.gov',
+            'europa.eu',
+            'un.org',
             'eci.gov.in',
             'parliament.uk',
             'congress.gov'
@@ -127,11 +141,16 @@ const SOURCE_POLICIES = {
             'isro.gov.in',
             'esa.int',
             'jaxa.jp',
+            'cnsa.gov.cn',
+            'roscosmos.ru',
             'spacex.com',
+            'blueorigin.com',
+            'ula.com',
             'space.com',
             'scientificamerican.com',
             'nature.com',
             'science.org',
+            'arxiv.org',
             'reuters.com',
             'apnews.com',
             'bbc.com'
@@ -141,9 +160,81 @@ const SOURCE_POLICIES = {
             'nasa.gov',
             'esa.int',
             'jaxa.jp',
+            'cnsa.gov.cn',
             'spacex.com',
             'nature.com',
             'science.org'
+        ]
+    },
+    science: {
+        trustedDomains: [
+            'nature.com',
+            'science.org',
+            'pnas.org',
+            'cell.com',
+            'sciencedirect.com',
+            'springer.com',
+            'link.springer.com',
+            'arxiv.org',
+            'pubmed.ncbi.nlm.nih.gov',
+            'ncbi.nlm.nih.gov',
+            'acs.org',
+            'rsc.org',
+            'iop.org',
+            'aps.org',
+            'aip.org',
+            'iupac.org',
+            'biorxiv.org',
+            'medrxiv.org',
+            'reuters.com',
+            'apnews.com',
+            'bbc.com'
+        ],
+        preferredDomains: [
+            'nature.com',
+            'science.org',
+            'pnas.org',
+            'cell.com',
+            'arxiv.org',
+            'pubmed.ncbi.nlm.nih.gov',
+            'ncbi.nlm.nih.gov',
+            'acs.org',
+            'rsc.org',
+            'aps.org',
+            'biorxiv.org'
+        ]
+    },
+    ai_ml: {
+        trustedDomains: [
+            'openai.com',
+            'anthropic.com',
+            'deepmind.google',
+            'ai.google',
+            'huggingface.co',
+            'paperswithcode.com',
+            'arxiv.org',
+            'tensorflow.org',
+            'pytorch.org',
+            'nvidia.com',
+            'microsoft.com',
+            'google.com',
+            'meta.com',
+            'ai.meta.com',
+            'reuters.com',
+            'apnews.com',
+            'bloomberg.com',
+            'cnbc.com'
+        ],
+        preferredDomains: [
+            'openai.com',
+            'anthropic.com',
+            'deepmind.google',
+            'huggingface.co',
+            'paperswithcode.com',
+            'arxiv.org',
+            'tensorflow.org',
+            'pytorch.org',
+            'nvidia.com'
         ]
     },
     tech: {
@@ -154,6 +245,16 @@ const SOURCE_POLICIES = {
             'nvidia.com',
             'amd.com',
             'ibm.com',
+            'intel.com',
+            'qualcomm.com',
+            'arm.com',
+            'apple.com',
+            'developer.apple.com',
+            'developer.android.com',
+            'mozilla.org',
+            'developer.mozilla.org',
+            'w3.org',
+            'ieee.org',
             'reuters.com',
             'apnews.com',
             'bloomberg.com',
@@ -165,7 +266,13 @@ const SOURCE_POLICIES = {
             'google.com',
             'nvidia.com',
             'amd.com',
-            'ibm.com'
+            'ibm.com',
+            'intel.com',
+            'qualcomm.com',
+            'arm.com',
+            'developer.mozilla.org',
+            'w3.org',
+            'ieee.org'
         ]
     },
     entertainment: {
@@ -233,6 +340,12 @@ const PROMPT_DECORATOR_PATTERNS = [
     /\b(?:only|just)\s+(?:answer|result|score)\b/gi
 ];
 
+const DEFAULT_FETCH_TIMEOUT_MS = 6500;
+const DEFAULT_FETCH_RETRIES = 1;
+const PAGE_CRAWL_TIMEOUT_MS = 5000;
+const PAGE_CRAWL_MAX_BYTES = 700_000;
+const PAGE_CRAWL_MAX_RESULTS = 4;
+
 export async function searchWeb(query, maxResults = 8) {
     const searchQuery = extractSearchTopic(query) || String(query || '').trim();
     const normalizedMax = Math.min(Math.max(Number(maxResults || 8), 1), 10);
@@ -273,6 +386,7 @@ export async function searchWeb(query, maxResults = 8) {
 export async function runVerifiedWebSearch(queries, options = {}) {
     const maxResultsPerQuery = Math.min(Math.max(Number(options.maxResultsPerQuery || 6), 1), 10);
     const limit = Math.min(Math.max(Number(options.limit || 10), 1), 15);
+    const includePageExtract = Boolean(options.includePageExtract);
     const queryList = Array.isArray(queries) ? queries.filter(Boolean) : [];
     const resultSets = await Promise.all(queryList.map(q => searchWeb(q, maxResultsPerQuery)));
 
@@ -285,7 +399,12 @@ export async function runVerifiedWebSearch(queries, options = {}) {
         merged.push(item);
     }
 
-    const reranked = rerankResults(merged, queryList.join(' ')).slice(0, limit);
+    const rerankedBase = rerankResults(merged, queryList.join(' ')).slice(0, limit);
+    const reranked = includePageExtract
+        ? await enrichResultsWithPageExtract(rerankedBase, {
+            maxResultsToCrawl: Math.min(PAGE_CRAWL_MAX_RESULTS, limit)
+        })
+        : rerankedBase;
     const distinctDomains = Array.from(new Set(reranked.map(item => getDomainFromUrl(item.url)).filter(Boolean)));
     const providerBreakdown = countByProvider(reranked);
     return {
@@ -377,7 +496,7 @@ function tokenize(text) {
 
 function isLikelyNewsQuery(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(news|headlines?|breaking|current events?|latest|recent|current|today|right now|situation|conflict|war|attack|ceasefire|talks|middle[\s-]?east|israel|gaza|iran|ukraine|russia|syria|lebanon|palestine|oil|winner|won|champion|final result|score|scores|live score|stats|standings|points table|rankings?|record|qualified|eliminated|ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup)\b/.test(t);
+    return /\b(news|headlines?|breaking|current events?|latest|recent|current|today|right now|situation|conflict|war|attack|ceasefire|talks|middle[\s-]?east|israel|gaza|iran|ukraine|russia|syria|lebanon|palestine|oil|winner|won|champion|final result|score|scores|live score|stats|standings|points table|rankings?|record|qualified|eliminated|ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup|policy update|election result|model release|openai|anthropic|gemini|llama|nasa|isro|esa|jaxa)\b/.test(t);
 }
 
 function scoreRecency(text) {
@@ -399,13 +518,19 @@ function detectQueryDomain(queryText) {
     if (/\b(ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup|score|winner|standings|rankings|player|team|coach|captain)\b/.test(text)) {
         return 'sports';
     }
-    if (/\b(president|prime minister|minister|senator|mp|mla|election|party|government|parliament|chief minister|mayor)\b/.test(text)) {
+    if (/\b(president|prime minister|minister|senator|mp|mla|election|party|government|parliament|chief minister|mayor|diplomacy|geopolitics|foreign policy|cabinet|bill passed|legislation|sanctions)\b/.test(text)) {
         return 'politics';
     }
     if (/\b(stock|shares|price|market cap|repo rate|interest rate|inflation|bank|rbi|sebi|nasdaq|dow|gold|silver|platinum|diamond|palladium|petrol|diesel|gasoline|brent|wti|crude|commodity|fuel)\b/.test(text)) {
         return 'finance';
     }
-    if (/\b(ceo|founder|company|startup|ai|llm|gpu|cpu|software|chip|nvidia|microsoft|openai|google)\b/.test(text)) {
+    if (/\b(ai|artificial intelligence|llm|gpt|chatgpt|claude|gemini|mistral|llama|transformer|diffusion|rag|prompt engineering|multimodal|agentic|fine[- ]tuning|embedding|vector database|huggingface|paperswithcode)\b/.test(text)) {
+        return 'ai_ml';
+    }
+    if (/\b(physics|quantum|relativity|thermodynamics|electromagnetism|optics|particle physics|chemistry|organic chemistry|inorganic chemistry|biochemistry|biology|genetics|genomics|microbiology|cell biology|ecology|molecular|enzyme|reaction mechanism|periodic table)\b/.test(text)) {
+        return 'science';
+    }
+    if (/\b(ceo|founder|company|startup|gpu|cpu|software|chip|nvidia|microsoft|google|apple|intel|amd|ibm|cloud|kubernetes|docker|linux|windows|android|ios)\b/.test(text)) {
         return 'tech';
     }
     if (/\b(actor|actress|movie|film|films|cinema|director|producer|singer|song|songs|album|albums|show|series|web series|filmography|discography|imdb|box office|release)\b/.test(text)) {
@@ -464,7 +589,7 @@ function sanitizeExternalUrl(url) {
 }
 
 async function searchWithSerper(query, maxResults, apiKey) {
-    const response = await fetch('https://google.serper.dev/search', {
+    const response = await fetchWithTimeoutRetry('https://google.serper.dev/search', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -485,7 +610,7 @@ async function searchWithSerper(query, maxResults, apiKey) {
 
 async function searchWithDuckDuckGo(query, maxResults) {
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
-    const response = await fetch(url);
+    const response = await fetchWithTimeoutRetry(url);
     if (!response.ok) return [];
     const data = await response.json();
     const out = [];
@@ -516,7 +641,7 @@ async function searchWithDuckDuckGo(query, maxResults) {
 }
 
 async function searchWithDuckDuckGoHtml(query, maxResults) {
-    const response = await fetch('https://html.duckduckgo.com/html/', {
+    const response = await fetchWithTimeoutRetry('https://html.duckduckgo.com/html/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: `q=${encodeURIComponent(query)}`
@@ -566,7 +691,7 @@ function normalizeDuckDuckGoResultUrl(href) {
 
 async function searchWithWikipedia(query, maxResults) {
     const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=${Math.min(maxResults, 10)}&format=json`;
-    const response = await fetch(url);
+    const response = await fetchWithTimeoutRetry(url);
     if (!response.ok) return [];
     const data = await response.json();
     const hits = Array.isArray(data?.query?.search) ? data.query.search : [];
@@ -593,7 +718,7 @@ async function fetchWikipediaThumbnailsByTitle(titles) {
     if (!list.length) return new Map();
     const url = `https://en.wikipedia.org/w/api.php?action=query&prop=pageimages|info&inprop=url&pithumbsize=640&titles=${encodeURIComponent(list.join('|'))}&format=json`;
     try {
-        const response = await fetch(url);
+        const response = await fetchWithTimeoutRetry(url);
         if (!response.ok) return new Map();
         const data = await response.json();
         const pages = data?.query?.pages ? Object.values(data.query.pages) : [];
@@ -614,7 +739,7 @@ async function fetchWikipediaThumbnailsByTitle(titles) {
 
 async function searchWithGoogleNewsRss(query, maxResults) {
     const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`;
-    const response = await fetch(url, {
+    const response = await fetchWithTimeoutRetry(url, {
         headers: {
             'Accept': 'application/rss+xml, application/xml, text/xml'
         }
@@ -698,6 +823,175 @@ function countByProvider(results) {
     for (const item of Array.isArray(results) ? results : []) {
         const key = String(item?.provider || 'unknown').trim() || 'unknown';
         out[key] = (out[key] || 0) + 1;
+    }
+    return out;
+}
+
+async function fetchWithTimeoutRetry(url, init = {}, options = {}) {
+    const timeoutMs = clampInt(options.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS, 1000, 20_000);
+    const retries = clampInt(options.retries, DEFAULT_FETCH_RETRIES, 0, 3);
+    let lastError = null;
+
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const response = await fetch(url, {
+                ...init,
+                signal: controller.signal
+            });
+            clearTimeout(timer);
+            return response;
+        } catch (error) {
+            clearTimeout(timer);
+            lastError = error;
+            if (attempt >= retries) throw error;
+        }
+    }
+    throw lastError || new Error('fetch_failed');
+}
+
+function clampInt(value, fallback, min, max) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    const i = Math.round(n);
+    if (i < min) return min;
+    if (i > max) return max;
+    return i;
+}
+
+async function enrichResultsWithPageExtract(results, options = {}) {
+    const list = Array.isArray(results) ? results.slice() : [];
+    if (!list.length) return list;
+    const maxResultsToCrawl = clampInt(options.maxResultsToCrawl, PAGE_CRAWL_MAX_RESULTS, 1, 8);
+    const crawlTargets = list
+        .map((item, index) => ({ item, index }))
+        .filter(entry => shouldCrawlResultUrl(entry.item?.url))
+        .slice(0, maxResultsToCrawl);
+
+    if (!crawlTargets.length) return list;
+
+    const crawled = await Promise.all(
+        crawlTargets.map(async (entry) => {
+            const extract = await fetchAndExtractPage(entry.item.url);
+            return { index: entry.index, extract };
+        })
+    );
+
+    for (const hit of crawled) {
+        if (!hit?.extract) continue;
+        const target = list[hit.index];
+        if (!target) continue;
+        target.pageExtract = hit.extract.excerpt || '';
+        target.pageTitle = hit.extract.pageTitle || target.title || '';
+        target.keyEntities = Array.isArray(hit.extract.names) ? hit.extract.names : [];
+        if (hit.extract.excerpt && (!target.description || target.description.length < 40)) {
+            target.description = hit.extract.excerpt;
+        }
+    }
+
+    return list;
+}
+
+function shouldCrawlResultUrl(url) {
+    const safe = sanitizeExternalUrl(url);
+    if (!safe) return false;
+    const lower = safe.toLowerCase();
+    if (/\.(pdf|zip|rar|7z|png|jpe?g|webp|gif|mp4|mp3|avi|mov)(\?|$)/.test(lower)) return false;
+    return true;
+}
+
+async function fetchAndExtractPage(url) {
+    try {
+        const response = await fetchWithTimeoutRetry(url, {
+            headers: {
+                'Accept': 'text/html,application/xhtml+xml',
+                'User-Agent': 'Mozilla/5.0 (compatible; UnifyAssistantBot/1.0; +https://example.local)'
+            }
+        }, {
+            timeoutMs: PAGE_CRAWL_TIMEOUT_MS,
+            retries: 0
+        });
+        if (!response.ok) return null;
+        const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+        if (!contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) return null;
+
+        const html = await readResponseTextWithLimit(response, PAGE_CRAWL_MAX_BYTES);
+        if (!html) return null;
+        const extracted = extractReadableContentFromHtml(html);
+        if (!extracted.excerpt) return null;
+        return extracted;
+    } catch (_) {
+        return null;
+    }
+}
+
+async function readResponseTextWithLimit(response, maxBytes) {
+    const reader = response?.body?.getReader ? response.body.getReader() : null;
+    if (!reader) {
+        const text = await response.text();
+        return text.length > maxBytes ? text.slice(0, maxBytes) : text;
+    }
+    const decoder = new TextDecoder();
+    let out = '';
+    let total = 0;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value?.byteLength || 0;
+        if (total > maxBytes) break;
+        out += decoder.decode(value, { stream: true });
+    }
+    out += decoder.decode();
+    return out;
+}
+
+function extractReadableContentFromHtml(html) {
+    const raw = String(html || '');
+    if (!raw) return { pageTitle: '', excerpt: '', names: [] };
+
+    const pageTitle = decodeHtmlEntities((raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '').trim());
+    const h1 = decodeHtmlEntities(stripTags((raw.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] || '').trim()));
+    const metaDescription = decodeHtmlEntities(
+        (raw.match(/<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i)?.[1] || '').trim()
+    );
+
+    const bodyClean = raw
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+        .replace(/<svg[\s\S]*?<\/svg>/gi, ' ');
+    const bodyText = decodeHtmlEntities(stripTags(bodyClean))
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const excerptPieces = [h1, metaDescription, bodyText.slice(0, 1200)]
+        .map(v => String(v || '').trim())
+        .filter(Boolean);
+    const excerpt = excerptPieces.join(' ').replace(/\s+/g, ' ').trim().slice(0, 1200);
+    const names = extractNameCandidates(`${h1} ${metaDescription} ${bodyText.slice(0, 2500)}`);
+    return {
+        pageTitle: pageTitle || h1 || '',
+        excerpt,
+        names
+    };
+}
+
+function extractNameCandidates(text) {
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return [];
+    const pattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b/g;
+    const blocked = new Set(['The', 'This', 'That', 'From', 'With', 'News', 'Live', 'Update']);
+    const out = [];
+    const seen = new Set();
+    let match;
+    while ((match = pattern.exec(clean)) && out.length < 12) {
+        const value = String(match[1] || '').trim();
+        if (!value || blocked.has(value)) continue;
+        const key = value.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(value);
     }
     return out;
 }
