@@ -562,8 +562,20 @@ function isFactualQuery(text) {
         /\b(is|are|was|were)\b.+\b\?\s*$/.test(t);
 }
 
+function isStableDefinitionQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    if (/\b(latest|today|current|right now|breaking|news|update|updates|score|price|rate)\b/.test(t)) return false;
+    return /^(what is|what's|define|meaning of|explain)\b/.test(t) || /\bdefinition of\b/.test(t);
+}
+
 function isWebCheckCandidateQuery(text) {
-    return isTimeSensitiveInfoRequest(text) || isFactualQuery(text);
+    const q = String(text || '').trim();
+    if (!q) return false;
+    if (isStableDefinitionQuery(q) && !/\b(with sources?|source links?)\b/i.test(q)) {
+        return false;
+    }
+    return isTimeSensitiveInfoRequest(q) || isFactualQuery(q);
 }
 
 function enforceLiveAnswerStyle(parsedResponse, message, liveSources) {
@@ -617,7 +629,12 @@ function buildLiveQueries(query) {
             q
         ];
     }
-    return [q];
+    return [
+        q,
+        `latest ${q}`,
+        `${q} official update`,
+        `${q} Reuters OR AP OR BBC`
+    ];
 }
 
 function rankLiveSources(query, results) {
