@@ -132,7 +132,6 @@
                     <div id="composer-actions-menu" class="composer-actions-menu hidden" role="menu" aria-label="Composer actions">
                         <button type="button" id="document-upload-btn" class="composer-action-item" onclick="handleComposerAction('upload')" role="menuitem">Upload document</button>
                         <button type="button" id="vision-toggle-btn" class="composer-action-item" onclick="handleComposerAction('vision')" role="menuitem">Vision analysis</button>
-                        <button type="button" class="composer-action-item" onclick="handleComposerAction('converse')" role="menuitem">Converse mode</button>
                         <button type="button" class="composer-action-item" onclick="handleComposerAction('ocr')" role="menuitem">OCR camera</button>
                         <button type="button" class="composer-action-item" onclick="handleComposerAction('image')" role="menuitem">Generate image</button>
                         <button type="button" class="composer-action-item" onclick="handleComposerAction('image_ref')" role="menuitem">Image with reference</button>
@@ -957,6 +956,12 @@ function addTransientImageStatusMessage(text = 'Scribbiling...') {
         return null;
     }
 
+    // Ensure there is only one active transient image status row at a time.
+    const active = window.__jarvisActiveImageStatusRow;
+    if (active && active.parentNode) {
+        active.parentNode.removeChild(active);
+    }
+
     const row = document.createElement('div');
     row.className = 'chat-row flex justify-start items-start gap-3';
     row.dataset.role = 'assistant';
@@ -969,13 +974,18 @@ function addTransientImageStatusMessage(text = 'Scribbiling...') {
         </div>
     `;
     chatContainer.appendChild(row);
+    window.__jarvisActiveImageStatusRow = row;
     maybeAutoScroll(chatContainer);
     return row;
 }
 
 function clearTransientImageStatusMessage(row) {
-    if (!row || !row.parentNode) return;
-    row.parentNode.removeChild(row);
+    const target = row || window.__jarvisActiveImageStatusRow;
+    if (!target || !target.parentNode) return;
+    target.parentNode.removeChild(target);
+    if (window.__jarvisActiveImageStatusRow === target) {
+        window.__jarvisActiveImageStatusRow = null;
+    }
 }
 
 function startTransientImageStatusAnimation(row, baseText = 'Scribbiling') {
@@ -6787,7 +6797,6 @@ function normalizeUiTokens(text) {
             const key = String(action || '').trim().toLowerCase();
             if (key === 'upload') return openDocumentPicker();
             if (key === 'vision') return toggleContinuousVision();
-            if (key === 'converse') return toggleConverseMode();
             if (key === 'ocr') return openCameraMode();
             if (key === 'image') return openImageGenerationPrompt();
             if (key === 'image_ref') return openImageGenerationPromptWithReference();
