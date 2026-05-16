@@ -586,7 +586,7 @@ body.dark .composer-action-item:hover {
 .footer-action-pill {
     display: inline-flex;
     align-items: center;
-    gap: 0;
+    gap: 8px;
     padding: 0;
     background: transparent;
     border: none;
