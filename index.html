@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="light min-h-screen transition-all duration-500">
+
     
     <div id="offline-banner" class="offline-banner hidden" role="status" aria-live="polite">
         Offline mode: some features may be unavailable
@@ -3849,7 +3850,7 @@ async function publishResolvedModelMessage(userMessage, answerText, options = {}
     const finalized = await resolveFinalAssistantAnswer(userMessage, answerText);
     const safeText = String(finalized || '').trim();
     if (!safeText) return false;
-    addModelAssistantMessage(safeText, label);
+    addModelAssistantMessage(safeText, label, { routing: options?.routing || null });
     if (speechText) {
         speak(speechText);
     } else {
@@ -4518,11 +4519,12 @@ async function handleNameCorrection(text) {
         let persistMemoryToDevice = true;
         let medicalMode = false;
         let converseMode = false;
-        let supportConversationMode = false;
-        let cagModeEnabled = true;
-        let freeImageGenerationEnabled = true;
-        let converseAccuracyMode = 'strict';
-        let converseUseDeviceLocale = true;
+let supportConversationMode = false;
+let cagModeEnabled = true;
+let freeImageGenerationEnabled = true;
+let converseAccuracyMode = 'strict';
+let converseUseDeviceLocale = true;
+let showRoutingDebugBadge = true;
 
         // UI/settings state
         let noiseFilterEnabled = false;
@@ -6440,6 +6442,7 @@ async function handleNameCorrection(text) {
                 const hasMap = displayText.includes('<iframe') || displayText.includes('map-container');
                 const containerWidth = hasMap ? 'w-full max-w-4xl' : (hasHtmlContent ? 'w-full max-w-3xl' : 'w-full max-w-3xl');
                 const sourceType = meta?.sourceType || (hasMap ? 'tool' : 'default');
+                const routeBadgeHtml = buildRoutingDebugBadgeHtml(meta?.routing, sourceType);
                 const avatarHtml = '';
 
                 // Store text safely for speech - use data attribute to avoid escaping issues
@@ -6448,6 +6451,7 @@ async function handleNameCorrection(text) {
 
                 messageDiv.innerHTML = `
                     <div class="w-full ${containerWidth}">
+                        ${routeBadgeHtml}
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
                         ${avatarHtml}
                         <div class="min-w-0 flex-1 overflow-hidden ${hasMap ? 'map-message' : ''}">
@@ -6673,11 +6677,32 @@ function normalizeUiTokens(text) {
             return '';
         }
 
-        function addModelAssistantMessage(text, label = 'Model answer') {
+        function addModelAssistantMessage(text, label = 'Model answer', meta = {}) {
             const badge = formatModelSourceBadge(label);
             const body = String(text || '').trim();
             const finalText = badge ? `${badge}\n${body}`.trim() : body;
-            addChatMessage(finalText, false, null, { sourceType: 'model' });
+            addChatMessage(finalText, false, null, { sourceType: 'model', routing: meta.routing || null });
+        }
+
+        function getRoutingDebugBadgeText(routing) {
+            const strategy = String(routing?.strategy || '').trim();
+            if (!strategy) return '';
+            const reason = String(routing?.reason || '').trim();
+            const mode = String(routing?.mode || '').trim();
+            const sourceCount = Number(routing?.preloadedSources || 0);
+            const parts = [`route: ${strategy}`];
+            if (mode) parts.push(`mode: ${mode}`);
+            if (reason) parts.push(`reason: ${reason}`);
+            if (Number.isFinite(sourceCount) && sourceCount > 0) parts.push(`preloaded: ${sourceCount}`);
+            return parts.join(' | ');
+        }
+
+        function buildRoutingDebugBadgeHtml(routing, sourceType = 'default') {
+            if (!showRoutingDebugBadge) return '';
+            if (String(sourceType || '').toLowerCase() !== 'model') return '';
+            const label = getRoutingDebugBadgeText(routing);
+            if (!label) return '';
+            return `<div class="mb-1"><span class="inline-flex items-center rounded-full border border-sky-200/70 bg-sky-50/90 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-700 dark:border-sky-700/70 dark:bg-sky-900/30 dark:text-sky-200">${escapeHtml(label)}</span></div>`;
         }
 
         function isSafeAssistantUrl(url) {
@@ -14565,7 +14590,7 @@ async function publishUniversalModelFallback(pipeline, label = 'Model fallback')
     const ai = await askGeminiAI(pipeline.userText);
     const answer = String(ai?.response || ai?.text || '').trim();
     if (!answer || ai?.aborted || ai?.intent === 'soft_fallback') return false;
-    return await publishResolvedModelMessage(pipeline.userText, answer, { label });
+    return await publishResolvedModelMessage(pipeline.userText, answer, { label, routing: ai?.routing || null });
 }
 
 async function fetchHybridCitationSources(userText, intent, controller) {
@@ -14638,13 +14663,14 @@ async function handleAnswerThenCiteQuery(userText, classification) {
         } else {
             await publishResolvedModelMessage(query, answer, {
                 label: 'Model answer',
-                historyText: finalMsg || answer
+                historyText: finalMsg || answer,
+                routing: ai?.routing || null
             });
         }
         return true;
     } catch (error) {
         if (isAbortError(error)) return true;
-        await publishResolvedModelMessage(query, answer, { label: 'Model answer' });
+        await publishResolvedModelMessage(query, answer, { label: 'Model answer', routing: ai?.routing || null });
         return true;
     } finally {
         clearActiveRequest(controller);
@@ -14660,7 +14686,7 @@ async function handleChatFirstCurrentQuery(userText, classification) {
 
     const answer = String(ai?.response || ai?.text || '').trim();
     if (answer && ai?.intent !== 'soft_fallback') {
-        await publishResolvedModelMessage(query, answer, { label: 'Model answer' });
+        await publishResolvedModelMessage(query, answer, { label: 'Model answer', routing: ai?.routing || null });
         return true;
     }
 
@@ -16297,7 +16323,7 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
                 const supportReply = await callAIWithTyping(supportPrompt, 'I am here with you...', { directModel: true });
                 if (supportReply?.aborted) return;
                 const supportText = supportReply?.response || await buildOfflineSupportReply(text);
-                addModelAssistantMessage(supportText, 'Support conversation');
+                addModelAssistantMessage(supportText, 'Support conversation', { routing: supportReply?.routing || null });
                 await speakApiReply('support_presence', {}, "I'm here with you.");
                 saveToHistory(text, supportText);
                 return;
@@ -16324,7 +16350,8 @@ Format:
                 if (medicalResponse?.aborted) return;
                 await publishResolvedModelMessage(text, medicalResponse.response, {
                     label: 'Model answer',
-                    speechText: "Here is some general medical guidance."
+                    speechText: "Here is some general medical guidance.",
+                    routing: medicalResponse?.routing || null
                 }); 
                 return; 
             } 
@@ -16370,7 +16397,8 @@ Important:
                 const upliftingFallback = "You are not failing, you are recovering your energy one step at a time. Take one small win right now: drink water, breathe slowly for 60 seconds, and do one tiny task.";
                 await publishResolvedModelMessage(text, mhResponse.response || upliftingFallback, {
                     label: 'Model answer',
-                    speechText: "I'm with you. You still have strength, and we'll take this one small step at a time."
+                    speechText: "I'm with you. You still have strength, and we'll take this one small step at a time.",
+                    routing: mhResponse?.routing || null
                 });
                 return;
             }
@@ -16389,7 +16417,8 @@ Do not use repetitive filler or generic wording.`;
                 if (debateResponse?.aborted) return;
                 await publishResolvedModelMessage(text, debateResponse.response, {
                     label: 'Model answer',
-                    speechText: "Here is a focused response."
+                    speechText: "Here is a focused response.",
+                    routing: debateResponse?.routing || null
                 });
                 return;
             }
@@ -16449,7 +16478,8 @@ Quick recap: ...
                 }
                 await publishResolvedModelMessage(text, learningAnswer, {
                     label: 'Model answer',
-                    speechText: "Here is a clear explanation."
+                    speechText: "Here is a clear explanation.",
+                    routing: learningResponse?.routing || null
                 });
                 return;
             }
@@ -17017,7 +17047,7 @@ If user asks for 2 days, provide both days with balanced pacing.`;
                     });
                     return;
                 }
-                addModelAssistantMessage(itineraryAnswer, 'Itinerary plan');
+                addModelAssistantMessage(itineraryAnswer, 'Itinerary plan', { routing: aiResponse?.routing || null });
                 speak("I've created an itinerary for you. Check the chat for details!");
                 saveToHistory(text, itineraryAnswer);
                 return; 
@@ -17076,7 +17106,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 if (aiResponse?.aborted) return;
                 await publishResolvedModelMessage(text, aiResponse.response, {
                     label: 'Model answer',
-                    speechText: "Let me tell you about the local food specialties!"
+                    speechText: "Let me tell you about the local food specialties!",
+                    routing: aiResponse?.routing || null
                 });
                 return; 
             }
@@ -17275,7 +17306,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 const inferredLocation = detectPrimaryLocationFromText(text);
                 const finalizedResponse = await resolveFinalAssistantAnswer(text, aiResponse?.response || aiResponse?.text || '');
                 const safeResponse = sanitizeHallucinatedTerrain(finalizedResponse, text, inferredLocation);
-                addModelAssistantMessage(safeResponse, 'Model answer');
+                addModelAssistantMessage(safeResponse, 'Model answer', { routing: aiResponse?.routing || null });
                 speak(safeResponse);
                 await maybeShowReferenceImageForQuery(text, safeResponse);
 
