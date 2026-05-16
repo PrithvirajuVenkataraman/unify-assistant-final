@@ -6,6 +6,7 @@ const LIVE_CAG_MAX_ENTRIES = 120;
 const MODEL_FETCH_TIMEOUT_MS = 18_000;
 const INTERNAL_FETCH_TIMEOUT_MS = 8_000;
 const FETCH_RETRIES = 1;
+const CHAT_ROUTER_MODE = String(process.env.CHAT_ROUTER_MODE || 'strict_single_pass').trim().toLowerCase();
 
 export default async function handler(req, res) {
     const guard = applyApiSecurity(req, res, {
@@ -33,22 +34,37 @@ export default async function handler(req, res) {
             : '';
         const clientRagBlock = typeof ragContext === 'string' ? ragContext.trim() : '';
         const isInternalSummary = isInternalSummarizerPrompt(message, clientSystemPrompt);
+        const routeDecision = classifyRoutingDecision(message, clientSystemPrompt, {
+            isInternalSummary
+        });
+
+        // Route path: live_first can pre-load web context before the first model call.
+        let preloadedLiveRag = { ragText: '', sources: [] };
+        if (routeDecision.strategy === 'live_first') {
+            preloadedLiveRag = await buildLiveRagContext(message, req, context);
+        }
 
         // Pass 1: model-only (no live search) for speed and cost.
         const lengthPolicy = buildLengthPolicy(message, clientSystemPrompt, { isInternalSummary });
-        const firstPrompt = composeFinalPrompt(systemPrompt, clientRagBlock, contextBlock, message, lengthPolicy.instruction);
+        const firstPrompt = composeFinalPrompt(
+            systemPrompt,
+            [clientRagBlock, preloadedLiveRag.ragText].filter(Boolean).join('\n\n'),
+            contextBlock,
+            message,
+            lengthPolicy.instruction
+        );
         const firstPass = await runModelWithFallback(firstPrompt, lengthPolicy);
         if (!firstPass.ok) {
             return res.status(200).json(firstPass.payload);
         }
 
         let selectedPass = firstPass;
-        let liveRag = { ragText: '', sources: [] };
-        const escalation = isInternalSummary
-            ? { escalate: false, reason: 'internal_summarizer_prompt' }
-            : getWebEscalationDecision(message, firstPass.parsedResponse?.response || '');
+        let liveRag = preloadedLiveRag;
+        const escalation = resolveRouteEscalation(routeDecision, message, firstPass.parsedResponse?.response || '', {
+            strictMode: isStrictSinglePassRouter()
+        });
 
-        // Pass 2: only do live search when the first answer is weak/stale for time-sensitive queries.
+        // Pass 2: do live search only when strategy allows second-pass escalation.
         if (escalation.escalate) {
             liveRag = await buildLiveRagContext(message, req, context);
             if (liveRag.ragText) {
@@ -73,6 +89,13 @@ export default async function handler(req, res) {
             requestId,
             modelUsed: selectedPass.modelUsed,
             provider: selectedPass.provider,
+            routing: {
+                mode: CHAT_ROUTER_MODE,
+                strategy: routeDecision.strategy,
+                reason: routeDecision.reason,
+                webEligible: routeDecision.webEligible,
+                preloadedSources: Array.isArray(preloadedLiveRag.sources) ? preloadedLiveRag.sources.length : 0
+            },
             webEscalation: {
                 considered: isWebCheckCandidateQuery(message),
                 escalated: escalation.escalate,
@@ -297,6 +320,105 @@ function parseModelText(modelText) {
 
 function shouldEscalateToWeb(message, firstAnswer) {
     return getWebEscalationDecision(message, firstAnswer).escalate;
+}
+
+function isStrictSinglePassRouter() {
+    return CHAT_ROUTER_MODE !== 'legacy_two_pass';
+}
+
+function classifyRoutingDecision(message, clientSystemPrompt, options = {}) {
+    if (options?.isInternalSummary || isInternalSummarizerPrompt(message, clientSystemPrompt)) {
+        return {
+            strategy: 'direct',
+            reason: 'internal_summarizer_prompt',
+            webEligible: false
+        };
+    }
+
+    const query = String(message || '').trim();
+    if (!query) {
+        return {
+            strategy: 'direct',
+            reason: 'empty_query',
+            webEligible: false
+        };
+    }
+
+    const asksSources = /\b(with sources?|source links?)\b/i.test(query);
+    if (asksSources) {
+        return {
+            strategy: 'live_first',
+            reason: 'user_requested_sources',
+            webEligible: true
+        };
+    }
+
+    if (isTimeSensitiveInfoRequest(query)) {
+        return {
+            strategy: 'live_first',
+            reason: 'time_sensitive_query',
+            webEligible: true
+        };
+    }
+
+    if (isStableDefinitionQuery(query)) {
+        return {
+            strategy: 'direct',
+            reason: 'stable_definition_query',
+            webEligible: false
+        };
+    }
+
+    if (isFactualQuery(query)) {
+        if (isStrictSinglePassRouter()) {
+            if (isMutableEntityFactQuery(query)) {
+                return {
+                    strategy: 'live_first',
+                    reason: 'mutable_factual_query',
+                    webEligible: true
+                };
+            }
+            return {
+                strategy: 'direct',
+                reason: 'stable_factual_query',
+                webEligible: false
+            };
+        }
+        return {
+            strategy: 'direct_then_live_if_needed',
+            reason: 'factual_query',
+            webEligible: true
+        };
+    }
+
+    return {
+        strategy: 'direct',
+        reason: 'casual_or_non_factual',
+        webEligible: false
+    };
+}
+
+function resolveRouteEscalation(routeDecision, message, firstAnswer, options = {}) {
+    const strictMode = Boolean(options?.strictMode);
+    const strategy = String(routeDecision?.strategy || 'direct');
+    if (strategy === 'live_first') {
+        return { escalate: false, reason: 'live_preloaded_first_pass' };
+    }
+    if (strictMode) {
+        return { escalate: false, reason: 'strict_single_pass_no_second_pass' };
+    }
+    if (strategy === 'direct_then_live_if_needed') {
+        return getWebEscalationDecision(message, firstAnswer);
+    }
+    return { escalate: false, reason: 'strategy_direct' };
+}
+
+function isMutableEntityFactQuery(text) {
+    const t = String(text || '').toLowerCase();
+    if (!t.trim()) return false;
+    if (/\b(with sources?|source links?)\b/.test(t)) return true;
+    if (/\b(current|latest|today|now|as of)\b/.test(t)) return true;
+    return /\b(president|prime minister|chief minister|governor|mayor|ceo|chairman|chairperson|captain|coach|ranking|standings|winner|score|price|rate|market cap|election result)\b/.test(t);
 }
 
 function isInternalSummarizerPrompt(message, clientSystemPrompt) {
@@ -572,6 +694,8 @@ function isStableDefinitionQuery(text) {
 function isWebCheckCandidateQuery(text) {
     const q = String(text || '').trim();
     if (!q) return false;
+    if (/\b(with sources?|source links?)\b/i.test(q)) return true;
+    if (/^(tell me about|do you know|give me info on|share details on)\b/i.test(q)) return true;
     if (isStableDefinitionQuery(q) && !/\b(with sources?|source links?)\b/i.test(q)) {
         return false;
     }
