@@ -1,6 +1,12 @@
 export const SOURCE_POLICIES = {
     general: {
         trustedDomains: [
+            'wikipedia.org',
+            'britannica.com',
+            'investopedia.com',
+            'merriam-webster.com',
+            'dictionary.cambridge.org',
+            'oxfordlearnersdictionaries.com',
             'reuters.com',
             'apnews.com',
             'bbc.com',
@@ -15,7 +21,13 @@ export const SOURCE_POLICIES = {
             'theguardian.com',
             'economist.com'
         ],
-        preferredDomains: []
+        preferredDomains: [
+            'wikipedia.org',
+            'britannica.com',
+            'investopedia.com',
+            'merriam-webster.com',
+            'dictionary.cambridge.org'
+        ]
     },
     sports: {
         trustedDomains: [
@@ -312,6 +324,9 @@ export function detectQueryDomain(text) {
     if (/\b(stock|stocks|share|shares|market|market cap|earnings|price|repo rate|interest rate|inflation|forex|exchange rate|rbi|sebi|imf|gold|silver|platinum|diamond|palladium|petrol|diesel|gasoline|crude|brent|wti|commodity|fuel)\b/.test(t)) {
         return 'finance';
     }
+    if (/\b(real estate|real-estate|property market|housing market|mortgage|home loan)\b/.test(t)) {
+        return 'finance';
+    }
     if (/\b(president|prime minister|election|party|government|minister|parliament|senate|diplomacy|geopolitics|foreign policy|cabinet|bill passed|legislation|sanctions|bjp|aap|dmk|aiadmk|tdp|ysrcp|bjd|nato|eu)\b/.test(t)) {
         return 'politics';
     }
@@ -410,11 +425,11 @@ export function getDomainHints(domain) {
 export function getTrustedSourceHintForDomain(domain) {
     const d = String(domain || '').toLowerCase();
     if (d === 'sports') return 'site:espncricinfo.com OR site:iplt20.com OR site:fifa.com';
-    if (d === 'finance') return 'site:reuters.com OR site:bloomberg.com OR site:marketwatch.com';
+    if (d === 'finance') return 'site:reuters.com OR site:bloomberg.com OR site:marketwatch.com OR site:investopedia.com';
     if (d === 'politics') return 'site:reuters.com OR site:apnews.com OR site:bbc.com OR site:gov.in OR site:gov.uk';
     if (d === 'space_science') return 'site:nasa.gov OR site:isro.gov.in OR site:esa.int';
     if (d === 'science') return 'site:nature.com OR site:science.org OR site:arxiv.org OR site:pubmed.ncbi.nlm.nih.gov';
     if (d === 'ai_ml') return 'site:openai.com OR site:anthropic.com OR site:huggingface.co OR site:arxiv.org';
     if (d === 'entertainment') return 'site:imdb.com OR site:wikipedia.org';
-    return 'site:reuters.com OR site:apnews.com OR site:bbc.com';
+    return 'site:wikipedia.org OR site:britannica.com OR site:investopedia.com OR site:merriam-webster.com';
 }
