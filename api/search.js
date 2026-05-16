@@ -125,7 +125,9 @@ function buildSearchQueries(query) {
         out.push(aliasedTopic);
     }
     const dynamicVariants = buildDynamicQueryVariants(raw, aliasedTopic || topic, domain);
+    const definitionVariants = buildDefinitionQueryVariants(raw, aliasedTopic || topic, domain);
     out.push(...dynamicVariants);
+    out.push(...definitionVariants);
     out.push(...entertainmentVariants);
     out.push(...broadFactualVariants);
 
@@ -149,6 +151,25 @@ function buildSearchQueries(query) {
     }
 
     return Array.from(new Set(out.filter(Boolean)));
+}
+
+function buildDefinitionQueryVariants(rawQuery, topic, domain) {
+    const raw = String(rawQuery || '').trim();
+    const base = String(topic || '').trim();
+    if (!raw || !base) return [];
+    if (!isDefinitionStyleQuery(raw)) return [];
+
+    const hints = getDomainHints(domain);
+    const trusted = getTrustedSourceHintForDomain(domain);
+    return Array.from(new Set([
+        `${base} definition`,
+        `what is ${base}`,
+        `${base} meaning`,
+        `${base} explained`,
+        `${base} simple definition`,
+        `${base} ${hints.context || 'reliable source'}`,
+        `${base} ${trusted}`
+    ].filter(Boolean)));
 }
 
 function isTimeSensitiveQuery(text) {
@@ -198,6 +219,13 @@ function isBroadFactualPromptSearch(text) {
     const factualAskPattern = /^(who is|who was|what is|what was|when did|when was|where is|where was|tell me about|define|meaning of|do you know)\b/i;
     const worldFactSignal = /\b(company|person|founder|ceo|president|prime minister|captain|coach|team|club|country|city|state|movie|film|song|album|actor|actress|director|scientist|astronaut|war|election|festival|holiday|record|title|stats?|score|winner|result)\b/i;
     return factualAskPattern.test(raw) && worldFactSignal.test(raw);
+}
+
+function isDefinitionStyleQuery(text) {
+    const t = String(text || '').trim().toLowerCase();
+    if (!t) return false;
+    if (/\b(latest|today|current|right now|breaking|news|update|updates)\b/.test(t)) return false;
+    return /^(what is|what's|define|meaning of|explain)\b/.test(t);
 }
 
 function extractBroadFactualSubject(text) {
@@ -353,4 +381,3 @@ function extractEntertainmentSubject(text) {
         .replace(/\s+/g, ' ')
         .trim());
 }
-
