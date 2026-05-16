@@ -24,7 +24,8 @@ export default async function handler(req, res) {
         const liveQueries = buildSearchQueries(query);
         const verified = await runVerifiedWebSearch(liveQueries, {
             maxResultsPerQuery: Math.min(maxResults, 6),
-            limit: maxResults
+            limit: maxResults,
+            includePageExtract: true
         });
         const rawResults = verified.results.length ? verified.results : await searchWeb(query, maxResults);
         const asOf = new Date().toISOString();
@@ -445,3 +446,4 @@ function extractEntertainmentSubject(text) {
         .replace(/\s+/g, ' ')
         .trim());
 }
+
