@@ -14,7 +14,6 @@ const SEARCH_STOP_WORDS = new Set([
     'provide', 'include', 'exact', 'please', 'sources', 'source', 'link', 'links',
     'bullet', 'bullets', 'list', 'listed', 'showing'
 ]);
-
 const LEADING_QUERY_PATTERNS = [
     /^(?:can|could|would|will|do|does|did)\s+you\s+/i,
     /^(?:what|which|who|when|where|why|how)\s+(?:is|are|was|were|do|does|did|can|could|would|will|should|has|have|had)\s+/i,
