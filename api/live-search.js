@@ -14,6 +14,7 @@ const SEARCH_STOP_WORDS = new Set([
     'provide', 'include', 'exact', 'please', 'sources', 'source', 'link', 'links',
     'bullet', 'bullets', 'list', 'listed', 'showing'
 ]);
+
 const LEADING_QUERY_PATTERNS = [
     /^(?:can|could|would|will|do|does|did)\s+you\s+/i,
     /^(?:what|which|who|when|where|why|how)\s+(?:is|are|was|were|do|does|did|can|could|would|will|should|has|have|had)\s+/i,
@@ -118,6 +119,7 @@ export function rerankResults(results, query) {
     const queryTerms = tokenize(query);
     const queryText = String(query || '').toLowerCase();
     const wantsRecency = /\b(latest|recent|current|today|right now|as of now|breaking|update|news|headlines?)\b/.test(queryText);
+    const definitionQuery = isDefinitionStyleQuery(queryText);
     const queryDomain = detectQueryDomain(queryText);
     const scored = [...(Array.isArray(results) ? results : [])]
         .map((item, index) => {
@@ -127,11 +129,12 @@ export function rerankResults(results, query) {
             const overlap = queryTerms.reduce((acc, term) => acc + (haystack.includes(term) ? 1 : 0), 0);
             const trustedBoost = scoreSourcePolicy(item?.url, queryDomain);
             const titleBoost = queryTerms.reduce((acc, term) => acc + (title.toLowerCase().includes(term) ? 1 : 0), 0);
-            const recencyBoost = wantsRecency ? scoreRecency(`${title} ${description} ${item?.url || ''}`) : 0;
+            const recencyBoost = wantsRecency && !definitionQuery ? scoreRecency(`${title} ${description} ${item?.url || ''}`) : 0;
+            const definitionBoost = definitionQuery ? scoreDefinitionSource(item?.url, title, description) : 0;
             const providerBoost = scoreProvider(item?.provider);
             return {
                 ...item,
-                __score: trustedBoost + overlap + titleBoost + recencyBoost + providerBoost - (index * 0.01)
+                __score: trustedBoost + overlap + titleBoost + recencyBoost + definitionBoost + providerBoost - (index * 0.01)
             };
         })
         .sort((a, b) => b.__score - a.__score);
@@ -195,6 +198,29 @@ function tokenize(text) {
 function isLikelyNewsQuery(text) {
     const t = String(text || '').toLowerCase();
     return /\b(news|headlines?|breaking|current events?|latest|recent|current|today|right now|situation|conflict|war|attack|ceasefire|talks|middle[\s-]?east|israel|gaza|iran|ukraine|russia|syria|lebanon|palestine|oil|winner|won|champion|final result|score|scores|live score|stats|standings|points table|rankings?|record|qualified|eliminated|ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup|policy update|election result|model release|openai|anthropic|gemini|llama|nasa|isro|esa|jaxa)\b/.test(t);
+}
+
+function isDefinitionStyleQuery(text) {
+    const t = String(text || '').trim().toLowerCase();
+    if (!t) return false;
+    if (/\b(latest|today|current|right now|breaking|news|update|updates)\b/.test(t)) return false;
+    return /^(what is|what's|define|meaning of|explain)\b/.test(t) || /\bdefinition of\b/.test(t);
+}
+
+function scoreDefinitionSource(url, title, description) {
+    const host = getDomainFromUrl(url);
+    const text = `${String(title || '')} ${String(description || '')}`.toLowerCase();
+    let score = 0;
+    if (domainMatches(host, ['wikipedia.org', 'britannica.com', 'investopedia.com', 'merriam-webster.com', 'dictionary.cambridge.org'])) {
+        score += 5;
+    }
+    if (/\b(what is|definition|meaning|explained|overview)\b/.test(text)) {
+        score += 2;
+    }
+    if (/\bnews|breaking|live blog|opinion\b/.test(text)) {
+        score -= 2;
+    }
+    return score;
 }
 
 function scoreRecency(text) {
