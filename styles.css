@@ -21,6 +21,13 @@
     --app-max-width: 1000px;
     --app-gutter-x: 20px;
     --input-bar-safe-height: 128px;
+    --z-menu: 55;
+    --z-side-backdrop: 52;
+    --z-side-panel: 53;
+    --z-live-vision: 35;
+    --z-selection-helper: 120;
+    --z-offline-banner: 60;
+    --z-toast: 70;
 }
 
 body.dark {
@@ -288,7 +295,7 @@ body.dark {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    z-index: 55;
+    z-index: var(--z-menu);
 }
 
 .composer-actions-menu.hidden {
@@ -883,7 +890,7 @@ body.dark .footer-action-btn-primary:hover {
     position: fixed;
     top: 0;
     right: 0;
-    z-index: 53;
+    z-index: var(--z-side-panel);
     width: min(420px, 92vw);
     height: 100vh;
     padding: 24px 18px 120px;
@@ -901,7 +908,7 @@ body.dark .footer-action-btn-primary:hover {
 .side-panel-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 52;
+    z-index: var(--z-side-backdrop);
     background: rgba(15, 23, 42, 0.45);
     opacity: 1;
     transition: opacity 0.25s ease;
@@ -917,7 +924,7 @@ body.dark .footer-action-btn-primary:hover {
     position: fixed;
     right: 12px;
     bottom: calc(86px + env(safe-area-inset-bottom));
-    z-index: 35;
+    z-index: var(--z-live-vision);
     width: min(320px, 46vw);
     border-radius: 14px;
     overflow: hidden;
@@ -1002,7 +1009,7 @@ body.dark .footer-action-btn-primary:hover {
 /* Selection helper */
 .selection-helper-popover {
     position: fixed;
-    z-index: 120;
+    z-index: var(--z-selection-helper);
     display: none;
     align-items: center;
     gap: 8px;
@@ -1231,7 +1238,7 @@ body.dark .response-action-btn {
     top: 12px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 60;
+    z-index: var(--z-offline-banner);
     padding: 8px 14px;
     border-radius: 999px;
     background: #ef4444;
@@ -1250,7 +1257,7 @@ body.dark .response-action-btn {
     left: 50%;
     top: 50%;
     transform: translate(-50%, -50%) scale(0.97);
-    z-index: 70;
+    z-index: var(--z-toast);
     padding: 8px 12px;
     border-radius: 999px;
     font-size: 12px;
