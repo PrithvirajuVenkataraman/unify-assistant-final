@@ -250,10 +250,21 @@
                     <input type="text" id="ocr-comment-input" placeholder="What should I do with this image?" 
                            class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
                 </div>
+                <div class="flex flex-col gap-2">
+                    <label for="ocr-mode-select" class="text-xs font-bold text-slate-400 uppercase tracking-wider">OCR Mode</label>
+                    <select id="ocr-mode-select" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                        <option value="auto" selected>Auto (recommended)</option>
+                        <option value="document">Document text</option>
+                        <option value="receipt">Receipt / bill</option>
+                        <option value="math">Math solve</option>
+                        <option value="translate">Translate to English</option>
+                        <option value="general">General scene</option>
+                    </select>
+                </div>
                 
-                <div class="flex items-center justify-between gap-4">
-                    <button onclick="closeCameraMode()" class="px-6 py-3 rounded-xl bg-slate-800 text-white font-semibold hover:bg-slate-700 transition-all">Cancel</button>
-                    <button type="button" onclick="switchCameraLens()" class="px-4 py-3 rounded-xl bg-slate-700 text-white font-semibold hover:bg-slate-600 transition-all">Switch Cam</button>
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                    <button onclick="closeCameraMode()" class="px-6 py-3 rounded-xl bg-white text-slate-900 font-semibold border border-slate-300 hover:bg-slate-100 transition-all">Cancel</button>
+                    <button type="button" onclick="switchCameraLens()" class="px-4 py-3 rounded-xl bg-slate-200 text-slate-900 font-semibold border border-slate-400 hover:bg-slate-300 transition-all">Switch Cam</button>
                     <button id="capture-btn" onclick="captureAndProcessOCR()" class="flex-1 px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center gap-2">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
                         Capture & Analyze
@@ -323,7 +334,7 @@
             <button id="safety-sos-btn" onclick="triggerEmergencySmsNow()" class="safety-sos-btn px-4 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white text-sm font-semibold transition-all">SOS SMS</button>
             <button onclick="stopSafetyLiveLocationSharing(); showTemporaryMessage('Live SOS updates stopped.')" class="px-4 py-3 rounded-xl bg-slate-700 hover:bg-slate-800 text-white text-sm font-semibold transition-all">Stop live SOS updates</button>
             <button onclick="shareCurrentLocation()" class="px-4 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all">Share location</button>
-            <button onclick="closeSafetyPanel(); openNearbyEssentialsSearch();" class="px-4 py-3 rounded-xl bg-rose-100 dark:bg-rose-900/40 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-sm font-semibold transition-all">Nearby essentials</button>
+            <button onclick="closeSafetyPanel(); openNearbySearch('hotel');" class="px-4 py-3 rounded-xl bg-rose-100 dark:bg-rose-900/40 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-sm font-semibold transition-all">Nearby Hotels</button>
             <button onclick="closeSafetyPanel(); openNearbySearch('hospital');" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest hospital</button>
             <button onclick="closeSafetyPanel(); openNearbySearch('police station');" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest police</button>
             <button onclick="closeSafetyPanel(); openNearbySearch('pharmacy');" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest pharmacy</button>
@@ -6706,17 +6717,23 @@ async function switchCameraLens() {
             }
 
             try {
-                const tryConstraints = async (constraints) => {
-                    return await navigator.mediaDevices.getUserMedia(constraints);
-                };
-
                 const stream = await requestCameraStreamForFacingMode('environment');
 
                 cameraStream = stream;
-                cameraFacingMode = getTrackFacingMode(stream.getVideoTracks?.()[0]) || 'environment';
+                const track = stream.getVideoTracks?.()[0] || null;
+                cameraFacingMode = getTrackFacingMode(track) || 'environment';
                 video.srcObject = stream;
                 cameraRotationDeg = 0;
                 applyCameraPreviewRotation();
+                if (track?.applyConstraints) {
+                    await track.applyConstraints({
+                        advanced: [
+                            { focusMode: 'continuous' },
+                            { exposureMode: 'continuous' },
+                            { whiteBalanceMode: 'continuous' }
+                        ]
+                    }).catch(() => {});
+                }
                 modal.classList.remove('hidden');
                 document.body.classList.add('overflow-hidden');
 
@@ -6725,6 +6742,8 @@ async function switchCameraLens() {
                     input.value = '';
                     input.focus();
                 }
+                const modeSelect = document.getElementById('ocr-mode-select');
+                if (modeSelect) modeSelect.value = 'auto';
             } catch (error) {
                 const msg = 'Camera access is blocked or unavailable. Please allow camera permission and try again.';
                 addChatMessage(msg, false);
@@ -6813,6 +6832,48 @@ async function switchCameraLens() {
             ctx.putImageData(imageData, 0, 0);
         }
 
+        function drawOcrContrastFrame(ctx, video, width, height, rotationDeg = 0) {
+            drawVideoFrameWithRotation(ctx, video, width, height, rotationDeg);
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const d = imageData.data;
+            for (let i = 0; i < d.length; i += 4) {
+                const r = d[i];
+                const g = d[i + 1];
+                const b = d[i + 2];
+                let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                gray = Math.max(0, Math.min(255, (gray - 128) * 1.18 + 128));
+                d[i] = gray;
+                d[i + 1] = gray;
+                d[i + 2] = gray;
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function scoreOcrCandidate(text = '', confidence = 0) {
+            const raw = String(text || '').trim();
+            if (!raw) return 0;
+            const compact = raw.replace(/\s+/g, '');
+            const digits = (raw.match(/\d/g) || []).length;
+            const lines = raw.split('\n').map(v => v.trim()).filter(Boolean).length;
+            const conf = Number.isFinite(Number(confidence)) ? Number(confidence) : 0;
+            return compact.length + (digits * 2) + (lines * 3) + (conf * 4);
+        }
+
+        function normalizeOcrAnalysisText(visionAnswer = '', details = {}) {
+            const readable = normalizeVisionAnswerForChat(String(visionAnswer || ''), details);
+            if (!readable) return '';
+            const cleaned = String(readable || '').replace(/^Detected text:\s*/i, '').trim();
+            if (!cleaned) return '';
+            if (/^\{[\s\S]*\}$/.test(cleaned)) {
+                const parsed = extractVisionJsonObject(cleaned);
+                if (parsed) {
+                    const formatted = formatVisionJsonToReadableText(parsed);
+                    return String(formatted || '').replace(/^Detected text:\s*/i, '').trim();
+                }
+            }
+            return cleaned;
+        }
+
         function extractTextFromVisionDetails(details = {}, visionAnswer = '') {
             const linesFromArray = Array.isArray(details?.textDetected)
                 ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean)
@@ -6820,6 +6881,15 @@ async function switchCameraLens() {
             const fullText = String(details?.fullText || '').trim();
             if (fullText) return fullText;
             if (linesFromArray.length) return linesFromArray.join('\n').trim();
+            const parsed = extractVisionJsonObject(visionAnswer);
+            if (parsed && typeof parsed === 'object') {
+                const parsedFullText = String(parsed?.fullText || '').trim();
+                if (parsedFullText) return parsedFullText;
+                const parsedLines = Array.isArray(parsed?.textDetected)
+                    ? parsed.textDetected.map(v => String(v || '').trim()).filter(Boolean)
+                    : [];
+                if (parsedLines.length) return parsedLines.join('\n').trim();
+            }
             const m = String(visionAnswer || '').match(/Detected text:\s*([\s\S]+)/i);
             return m && m[1] ? String(m[1]).split('\n\n')[0].trim() : '';
         }
@@ -6830,6 +6900,94 @@ async function switchCameraLens() {
             if (/[\u0900-\u097F]/.test(raw)) return 'hin';
             if (/[\u0C00-\u0C7F]/.test(raw)) return 'tel';
             return 'eng';
+        }
+
+        function getOcrCaptureModeConfig(mode, userInstruction = '') {
+            const selectedMode = String(mode || 'auto').toLowerCase();
+            const hint = String(userInstruction || '').trim();
+            const lowerHint = hint.toLowerCase();
+
+            if (selectedMode === 'math') {
+                return {
+                    key: 'math',
+                    label: 'Math solve',
+                    task: 'math_ocr_solve',
+                    prompt: hint || 'Read the math problem from the image and solve it with clear steps.'
+                };
+            }
+            if (selectedMode === 'translate') {
+                return {
+                    key: 'translate',
+                    label: 'Translate to English',
+                    task: 'translate_to_english',
+                    prompt: hint || 'Extract all readable text and translate it to English.'
+                };
+            }
+            if (selectedMode === 'receipt') {
+                return {
+                    key: 'receipt',
+                    label: 'Receipt / bill',
+                    task: 'bill_summary',
+                    prompt: hint || 'Extract receipt line items, taxes, subtotal, and final total with exact numbers.'
+                };
+            }
+            if (selectedMode === 'general') {
+                return {
+                    key: 'general',
+                    label: 'General scene',
+                    task: 'general_vision',
+                    prompt: hint || 'Describe what is most relevant in this image in 1-2 short sentences.'
+                };
+            }
+            if (selectedMode === 'document') {
+                return {
+                    key: 'document',
+                    label: 'Document text',
+                    task: 'text_extract',
+                    prompt: hint || 'Extract all visible text exactly, preserving line order, punctuation, numbers, totals, units, and symbols.'
+                };
+            }
+
+            // Auto mode: infer from instruction keywords.
+            if (/\b(translate|translation|to english|in english)\b/.test(lowerHint)) {
+                return {
+                    key: 'auto_translate',
+                    label: 'Auto: Translate',
+                    task: 'translate_to_english',
+                    prompt: hint || 'Extract all readable text and translate it to English.'
+                };
+            }
+            if (/\b(solve|equation|integral|derivative|algebra|math|calculate|find x|trigonometry|calculus)\b/.test(lowerHint)) {
+                return {
+                    key: 'auto_math',
+                    label: 'Auto: Math',
+                    task: 'math_ocr_solve',
+                    prompt: hint || 'Read the math problem from the image and solve it with clear steps.'
+                };
+            }
+            if (/\b(bill|receipt|invoice|subtotal|tax|total|amount due)\b/.test(lowerHint)) {
+                return {
+                    key: 'auto_receipt',
+                    label: 'Auto: Receipt',
+                    task: 'bill_summary',
+                    prompt: hint || 'Extract receipt line items, taxes, subtotal, and final total with exact numbers.'
+                };
+            }
+            if (/\b(describe|what is this|what is that|object|scene|product)\b/.test(lowerHint)) {
+                return {
+                    key: 'auto_general',
+                    label: 'Auto: General',
+                    task: 'general_vision',
+                    prompt: hint || 'Describe what is most relevant in this image in 1-2 short sentences.'
+                };
+            }
+
+            return {
+                key: 'auto_document',
+                label: 'Auto: Document',
+                task: 'text_extract',
+                prompt: hint || 'Extract all visible text exactly, preserving line breaks and numeric accuracy. Then provide a concise professional summary.'
+            };
         }
 
         async function getTesseractWorker(langHint = 'eng') {
@@ -6849,17 +7007,34 @@ async function switchCameraLens() {
             return tesseractWorkerPromise;
         }
 
-        async function runLocalTesseractOcr(imageBase64, langHint = 'eng') {
+        async function runLocalTesseractOcr(imageBase64, langHint = 'eng', pageSegModes = [6, 11]) {
             try {
                 const worker = await getTesseractWorker(langHint);
                 const dataUrl = `data:image/jpeg;base64,${String(imageBase64 || '').trim()}`;
-                const result = await worker.recognize(dataUrl);
-                const text = String(result?.data?.text || '').trim();
-                const confidence = Number(result?.data?.confidence || 0);
+                const modes = Array.isArray(pageSegModes) && pageSegModes.length ? pageSegModes : [6];
+                let best = { success: false, text: '', confidence: 0, score: 0 };
+                for (const mode of modes) {
+                    await worker.setParameters({
+                        tessedit_pageseg_mode: String(mode),
+                        preserve_interword_spaces: '1'
+                    });
+                    const result = await worker.recognize(dataUrl);
+                    const text = String(result?.data?.text || '').trim();
+                    const confidence = Number(result?.data?.confidence || 0);
+                    const score = scoreOcrCandidate(text, confidence);
+                    if (score > best.score) {
+                        best = {
+                            success: !!text,
+                            text,
+                            confidence: Number.isFinite(confidence) ? confidence : 0,
+                            score
+                        };
+                    }
+                }
                 return {
-                    success: !!text,
-                    text,
-                    confidence: Number.isFinite(confidence) ? confidence : 0
+                    success: best.success,
+                    text: best.text,
+                    confidence: best.confidence
                 };
             } catch (_) {
                 return { success: false, text: '', confidence: 0 };
@@ -6902,20 +7077,25 @@ async function switchCameraLens() {
                 canvas.height = swap ? renderWidth : renderHeight;
                 drawOcrEnhancedFrame(ctx, video, canvas.width, canvas.height, normalizedRotation);
 
-                const enhancedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-                const enhancedBase64 = enhancedDataUrl.split(',')[1];
                 const userInstruction = String(document.getElementById('ocr-comment-input')?.value || '').trim();
+                const modeValue = String(document.getElementById('ocr-mode-select')?.value || 'auto').trim().toLowerCase();
+                const modeConfig = getOcrCaptureModeConfig(modeValue, userInstruction);
                 const ocrLangHint = detectPreferredOcrLangHint(userInstruction);
-                const prompt = userInstruction
-                    ? `Extract all visible text exactly, preserving line order, numbers, totals, symbols, and punctuation. Then answer the instruction using only extracted evidence: "${userInstruction}".`
-                    : 'Extract all visible text exactly, preserving line breaks and numeric accuracy. Then provide a concise professional summary.';
+                const prompt = modeConfig.prompt;
+                const renderJpegQuality = 0.95;
+                const variantFrames = [];
+                variantFrames.push({ name: 'enhanced', imageBase64: canvas.toDataURL('image/jpeg', renderJpegQuality).split(',')[1] });
+                drawOcrContrastFrame(ctx, video, canvas.width, canvas.height, normalizedRotation);
+                variantFrames.push({ name: 'contrast', imageBase64: canvas.toDataURL('image/jpeg', renderJpegQuality).split(',')[1] });
+                drawVideoFrameWithRotation(ctx, video, canvas.width, canvas.height, normalizedRotation);
+                variantFrames.push({ name: 'raw', imageBase64: canvas.toDataURL('image/jpeg', renderJpegQuality).split(',')[1] });
 
                 const attemptOcr = async (imageBase64) => {
                     const response = await fetch('/api/vision', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            task: 'text_extract',
+                            task: modeConfig.task,
                             prompt,
                             mimeType: 'image/jpeg',
                             imageBase64
@@ -6931,48 +7111,40 @@ async function switchCameraLens() {
                     return { ok: response.ok, data };
                 };
 
-                // First pass: enhanced OCR frame
-                let attempt = await attemptOcr(enhancedBase64);
-                let details = attempt?.data?.details && typeof attempt.data.details === 'object' ? attempt.data.details : {};
-                let visionAnswer = String(attempt?.data?.response || details?.summary || '').trim();
-                let extractedText = extractTextFromVisionDetails(details, visionAnswer);
-
-                // Fallback pass: raw camera frame (some scenes perform better without preprocessing)
-                if ((!attempt.ok || !attempt?.data?.success || extractedText.length < 8) && width && height) {
-                    const normalizedRotation = normalizeCameraRotation(cameraRotationDeg);
-                    const swap = normalizedRotation === 90 || normalizedRotation === 270;
-                    canvas.width = swap ? height : width;
-                    canvas.height = swap ? width : height;
-                    drawVideoFrameWithRotation(ctx, video, canvas.width, canvas.height, normalizedRotation);
-                    const rawBase64 = canvas.toDataURL('image/jpeg', 0.95).split(',')[1];
-                    const retry = await attemptOcr(rawBase64);
-                    if (retry.ok && retry?.data?.success) {
-                        const retryDetails = retry.data?.details && typeof retry.data.details === 'object' ? retry.data.details : {};
-                        const retryAnswer = String(retry.data?.response || retryDetails?.summary || '').trim();
-                        const retryText = extractTextFromVisionDetails(retryDetails, retryAnswer);
-                        if (retryText.length > extractedText.length) {
-                            attempt = retry;
-                            details = retryDetails;
-                            visionAnswer = retryAnswer;
-                            extractedText = retryText;
-                        }
+                let attempt = null;
+                let details = {};
+                let visionAnswer = '';
+                let extractedText = '';
+                let bestVisionScore = -1;
+                for (const frame of variantFrames) {
+                    const candidateAttempt = await attemptOcr(frame.imageBase64);
+                    const candidateDetails = candidateAttempt?.data?.details && typeof candidateAttempt.data.details === 'object'
+                        ? candidateAttempt.data.details
+                        : {};
+                    const candidateAnswerRaw = String(candidateAttempt?.data?.response || candidateDetails?.summary || '').trim();
+                    const candidateExtractedText = extractTextFromVisionDetails(candidateDetails, candidateAnswerRaw);
+                    const candidateConfidence = Number(candidateDetails?.ocrConfidence || candidateAttempt?.data?.confidence || 0);
+                    const candidateScore = scoreOcrCandidate(candidateExtractedText, candidateConfidence) + (candidateAttempt?.ok && candidateAttempt?.data?.success ? 20 : 0);
+                    if (candidateScore > bestVisionScore) {
+                        attempt = candidateAttempt;
+                        details = candidateDetails;
+                        visionAnswer = candidateAnswerRaw;
+                        extractedText = candidateExtractedText;
+                        bestVisionScore = candidateScore;
                     }
                 }
 
-                // Free local OCR fallback (Tesseract.js) when model OCR is unavailable or weak.
-                if (extractedText.length < 20) {
-                    const localEnhanced = await runLocalTesseractOcr(enhancedBase64, ocrLangHint);
-                    let localBest = localEnhanced;
-                    if (width && height) {
-                        const normalizedRotation = normalizeCameraRotation(cameraRotationDeg);
-                        const swap = normalizedRotation === 90 || normalizedRotation === 270;
-                        canvas.width = swap ? height : width;
-                        canvas.height = swap ? width : height;
-                        drawVideoFrameWithRotation(ctx, video, canvas.width, canvas.height, normalizedRotation);
-                        const rawBase64 = canvas.toDataURL('image/jpeg', 0.95).split(',')[1];
-                        const localRaw = await runLocalTesseractOcr(rawBase64, ocrLangHint);
-                        if (String(localRaw?.text || '').length > String(localBest?.text || '').length) {
-                            localBest = localRaw;
+                // Free local OCR fallback (Tesseract.js) for text-heavy modes when model OCR is weak.
+                const shouldRunLocalOcrFallback = ['text_extract', 'bill_summary', 'translate_to_english', 'math_ocr_solve'].includes(modeConfig.task);
+                if (shouldRunLocalOcrFallback && extractedText.length < 20) {
+                    let localBest = { success: false, text: '', confidence: 0 };
+                    let localBestScore = -1;
+                    for (const frame of variantFrames) {
+                        const localCandidate = await runLocalTesseractOcr(frame.imageBase64, ocrLangHint, [6, 11, 4]);
+                        const localScore = scoreOcrCandidate(localCandidate?.text || '', localCandidate?.confidence || 0);
+                        if (localScore > localBestScore) {
+                            localBest = localCandidate;
+                            localBestScore = localScore;
                         }
                     }
                     if (localBest?.success && String(localBest.text || '').length > extractedText.length) {
@@ -6985,19 +7157,20 @@ async function switchCameraLens() {
                     }
                 }
 
-                if ((!attempt.ok || !attempt?.data?.success) && extractedText.length < 8) {
+                if ((!attempt?.ok || !attempt?.data?.success) && extractedText.length < 8) {
                     const errMsg = String(attempt?.data?.error || 'OCR analysis failed. Please try again.').trim();
                     addChatMessage(errMsg, false);
                     speak(errMsg);
                     return;
                 }
+                const readableAnalysis = normalizeOcrAnalysisText(visionAnswer, details);
 
                 const card = `
 <div class="p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70">
   <p class="text-xs font-semibold text-slate-500 dark:text-slate-300 mb-1">Camera OCR</p>
-  <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-2">${userInstruction ? 'OCR + instruction result' : 'OCR result'}</p>
+  <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-2">${modeConfig.label}${userInstruction ? ' + instruction result' : ' result'}</p>
   ${extractedText ? `<div class="mb-2"><p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Extracted text</p><p class="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">${escapeHtml(extractedText.slice(0, 3500))}</p></div>` : '<p class="text-sm text-slate-600 dark:text-slate-300 mb-2">No clear text detected.</p>'}
-  ${visionAnswer ? `<div><p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Analysis</p><p class="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">${escapeHtml(visionAnswer)}</p></div>` : ''}
+  ${readableAnalysis ? `<div><p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Analysis</p><p class="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">${escapeHtml(readableAnalysis)}</p></div>` : ''}
 </div>`;
                 addChatMessage(card, false, false);
 
@@ -7009,8 +7182,8 @@ async function switchCameraLens() {
                 lastUploadedDocument = {
                     fileName: `camera_capture_${Date.now()}.jpg`,
                     kind: 'image',
-                    extractedText: extractedText || visionAnswer,
-                    summary: visionAnswer || 'Camera OCR analysis',
+                    extractedText: extractedText || readableAnalysis,
+                    summary: readableAnalysis || 'Camera OCR analysis',
                     bill: parseBillFromVisionDetails(details),
                     userContext: userInstruction || '',
                     uploadedAt: Date.now()
@@ -15676,8 +15849,8 @@ function detectInputLanguageHint(text) {
                 return;
             }
 
-            if (/\b(nearest|nearby)\s+(hospital|police|police station|pharmacy|atm)\b/i.test(lower)) {
-                const placeMatch = lower.match(/\b(hospital|police station|police|pharmacy|atm)\b/);
+            if (/\b(nearest|nearby)\s+(hospital|police|police station|pharmacy|atm|hotel|hotels)\b/i.test(lower)) {
+                const placeMatch = lower.match(/\b(hospital|police station|police|pharmacy|atm|hotel|hotels)\b/);
                 await openNearbySearch(placeMatch?.[1] === 'police' ? 'police station' : (placeMatch?.[1] || 'hospital'));
                 return;
             }
@@ -15685,7 +15858,7 @@ function detectInputLanguageHint(text) {
             if (/\b(emergency|help me stay safe|safety help)\b/i.test(lower)) {
                 showSafetyPanel();
                 await deliverApiReply('safety_shortcuts_ready', {
-                    supportedActions: ['share my location', 'nearest hospital', 'nearest police', 'nearest pharmacy', 'nearest atm', 'nearby essentials']
+                    supportedActions: ['share my location', 'nearby hotels', 'nearest hospital', 'nearest police', 'nearest pharmacy', 'nearest atm']
                 }, { historyKey: text });
                 return;
             }
