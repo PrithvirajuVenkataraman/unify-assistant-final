@@ -7,6 +7,9 @@ const MAX_PROMPT_CHARS = 500;
 const MAX_REFERENCE_IMAGE_CHARS = 2_000_000;
 const WIKIPEDIA_REF_TIMEOUT_MS = 4500;
 const FREE_MODELS = new Set(['flux', 'turbo', 'sdxl']);
+const HTTP_TIMEOUT_MS = 9000;
+const HTTP_RETRIES = 1;
+const MAX_REMOTE_REFERENCE_IMAGE_BYTES = 2_500_000;
 
 export default async function handler(req, res) {
     const guard = applyApiSecurity(req, res, {
@@ -96,6 +99,8 @@ export default async function handler(req, res) {
             referenceSource
         });
     } catch (error) {
+        const reason = String(error?.message || 'unknown_error');
+        console.error('[image-free] generation failed:', { reason });
         return res.status(500).json({
             success: false,
             error: 'free image generation unavailable right now'
@@ -165,11 +170,11 @@ async function generateWithReferenceJson({ prompt, model, width, height, seed, r
         image: referenceImage
     };
 
-    const response = await fetch('https://gen.pollinations.ai/v1/images/generations', {
+    const response = await fetchWithTimeoutRetry('https://gen.pollinations.ai/v1/images/generations', {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
-    });
+    }, { timeoutMs: HTTP_TIMEOUT_MS, retries: HTTP_RETRIES });
     if (!response.ok) return null;
 
     const data = await response.json().catch(() => ({}));
@@ -195,11 +200,11 @@ async function generateWithReferenceMultipart({ prompt, model, width, height, se
     const headers = {};
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
-    const response = await fetch('https://gen.pollinations.ai/v1/images/generations', {
+    const response = await fetchWithTimeoutRetry('https://gen.pollinations.ai/v1/images/generations', {
         method: 'POST',
         headers,
         body: form
-    });
+    }, { timeoutMs: HTTP_TIMEOUT_MS, retries: HTTP_RETRIES });
     if (!response.ok) return null;
 
     const data = await response.json().catch(() => ({}));
@@ -243,11 +248,18 @@ function dataUrlToFile(dataUrl, baseName = 'reference-image') {
 
 async function fetchUrlAsDataUrl(url) {
     try {
-        const response = await fetch(url);
+        if (!isAllowedReferenceRemoteUrl(url)) return '';
+        const response = await fetchWithTimeoutRetry(url, undefined, {
+            timeoutMs: 7000,
+            retries: 0
+        });
         if (!response.ok) return '';
         const contentType = String(response.headers.get('content-type') || '').toLowerCase();
         if (!/^image\/(png|jpe?g|webp)/.test(contentType)) return '';
+        const contentLength = Number(response.headers.get('content-length') || 0);
+        if (Number.isFinite(contentLength) && contentLength > MAX_REMOTE_REFERENCE_IMAGE_BYTES) return '';
         const bytes = Buffer.from(await response.arrayBuffer());
+        if (bytes.byteLength > MAX_REMOTE_REFERENCE_IMAGE_BYTES) return '';
         const base64 = bytes.toString('base64');
         return `data:${contentType};base64,${base64}`;
     } catch (_) {
@@ -258,7 +270,7 @@ async function fetchUrlAsDataUrl(url) {
 function isSafeReferenceImage(value) {
     const v = String(value || '').trim();
     if (!v) return false;
-    if (/^https?:\/\/[^\s]+$/i.test(v)) return true;
+    if (/^https?:\/\/[^\s]+$/i.test(v)) return isAllowedReferenceRemoteUrl(v);
     return /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=\s]+$/i.test(v);
 }
 
@@ -289,7 +301,10 @@ async function fetchWikipediaReferenceImageUrl(prompt) {
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), WIKIPEDIA_REF_TIMEOUT_MS) : null;
     try {
-        const response = await fetch(endpoint, controller ? { signal: controller.signal } : undefined);
+        const response = await fetchWithTimeoutRetry(endpoint, controller ? { signal: controller.signal } : undefined, {
+            timeoutMs: WIKIPEDIA_REF_TIMEOUT_MS,
+            retries: 0
+        });
         if (!response.ok) return '';
         const data = await response.json().catch(() => ({}));
         const pages = data?.query?.pages ? Object.values(data.query.pages) : [];
@@ -335,4 +350,69 @@ function clampInt(value, fallback, min, max) {
     if (i < min) return min;
     if (i > max) return max;
     return i;
+}
+
+function isAllowedReferenceRemoteUrl(input) {
+    try {
+        const parsed = new URL(String(input || '').trim());
+        const protocol = String(parsed.protocol || '').toLowerCase();
+        if (protocol !== 'https:' && protocol !== 'http:') return false;
+        const host = String(parsed.hostname || '').toLowerCase();
+        if (!host) return false;
+        if (host === 'localhost' || host === '0.0.0.0') return false;
+        if (host.endsWith('.local') || host.endsWith('.localhost')) return false;
+        if (isPrivateIpLiteral(host)) return false;
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+function isPrivateIpLiteral(host) {
+    const ipv4 = host.match(/^(\d{1,3})(?:\.(\d{1,3})){3}$/);
+    if (ipv4) {
+        const parts = host.split('.').map(v => Number(v));
+        if (parts.some(n => !Number.isFinite(n) || n < 0 || n > 255)) return true;
+        if (parts[0] === 10) return true;
+        if (parts[0] === 127) return true;
+        if (parts[0] === 192 && parts[1] === 168) return true;
+        if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+        if (parts[0] === 169 && parts[1] === 254) return true;
+        return false;
+    }
+
+    const normalized = host.replace(/^\[|\]$/g, '').toLowerCase();
+    if (normalized === '::1') return true;
+    if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
+    if (normalized.startsWith('fe80')) return true;
+    return false;
+}
+
+async function fetchWithTimeoutRetry(url, init = undefined, options = {}) {
+    const timeoutMs = clampInt(options.timeoutMs, HTTP_TIMEOUT_MS, 1000, 30000);
+    const retries = clampInt(options.retries, HTTP_RETRIES, 0, 3);
+    let lastErr = null;
+
+    for (let i = 0; i <= retries; i++) {
+        const timeoutController = new AbortController();
+        const timeout = setTimeout(() => timeoutController.abort(), timeoutMs);
+        try {
+            const upstreamSignal = init?.signal;
+            const signal = (upstreamSignal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function')
+                ? AbortSignal.any([upstreamSignal, timeoutController.signal])
+                : (upstreamSignal || timeoutController.signal);
+            const merged = {
+                ...(init || {}),
+                signal
+            };
+            const response = await fetch(url, merged);
+            clearTimeout(timeout);
+            return response;
+        } catch (error) {
+            clearTimeout(timeout);
+            lastErr = error;
+            if (i >= retries) throw error;
+        }
+    }
+    throw lastErr || new Error('fetch_failed');
 }
