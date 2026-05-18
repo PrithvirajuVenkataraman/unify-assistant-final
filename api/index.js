@@ -2,6 +2,7 @@
   import documentIngestHandler from './document-ingest.js';
   import marketsHandler from './markets.js';
   import searchHandler from './search.js';
+  import speechHandler from './speech.js';
   import visionHandler from './vision.js';
 
   // Unified API Handler to bypass Vercel's Serverless Function limits
@@ -23,6 +24,8 @@
         return await marketsHandler(req, res);
       } else if (path.includes('/search')) {
         return await searchHandler(req, res);
+      } else if (path.includes('/speech')) {
+        return await speechHandler(req, res);
       } else if (path.includes('/vision')) {
         return await visionHandler(req, res);
       }
