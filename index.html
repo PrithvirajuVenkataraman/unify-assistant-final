@@ -2514,8 +2514,7 @@ async function processUserQuery(text) {
             return { intent: 'entity_fact' };
         }
         await handleLiveRetrievalQuery(t, {
-            broadFactualWeb: true,
-            forceFailClosed: true
+            broadFactualWeb: true
         });
         return { intent: 'live_retrieval' };
     }
@@ -8477,6 +8476,7 @@ User question: "${userQuery}"
 
 Rules:
 - Give a direct answer first.
+- If the user asks for top/best/oldest/newest/largest or a numbered list, return a numbered list using only the snippets.
 - Keep it concise and practical.
 - Do not provide "how to search" instructions.
 - If exact figures are uncertain, say what is clearly supported.
@@ -8491,11 +8491,11 @@ ${snippets}`
             }
         } catch (error) {}
 
-        if (!summaryText) {
+        if (!summaryText || isVerificationRefusalText(summaryText)) {
             const fallbackLines = results
                 .slice(0, 3)
                 .map((r, i) => `${i + 1}. ${r.title}${r.description ? ` - ${r.description}` : ''}`);
-            summaryText = `I checked live sources and found these relevant updates:\n${fallbackLines.join('\n')}`;
+            summaryText = `I checked web sources and found these relevant results:\n${fallbackLines.join('\n')}`;
         }
 
         const sourceLines = formatVerifiedSourcesList(results);
@@ -8508,6 +8508,10 @@ ${snippets}`
     } catch (error) {
         return null;
     }
+}
+
+function isVerificationRefusalText(text) {
+    return /\bI cannot verify\b|\bcannot verify\b|\bRefine hint\b|\benough usable independent sources\b|\bsufficiently recent sources\b/i.test(String(text || ''));
 }
 
 async function handleExchangeRateLookup(text) {
@@ -11839,7 +11843,12 @@ function isStrictLatestQuery(text) {
     if (technicalConceptSignals.test(t) && !/\b(news|headlines?|winner|score|standings|price|rate|market|president|prime minister|ceo|captain|coach|release|movie|song)\b/.test(t)) {
         return false;
     }
-    return true;
+    const intent = extractLiveQueryIntent(t);
+    const entityIntent = extractUniversalEntityIntent(t, intent);
+    if (intent?.domain === 'entertainment' || entityIntent?.domain === 'entertainment') {
+        return false;
+    }
+    return shouldRequireVerifiedSources(t, intent, entityIntent);
 }
 
 function buildCanonicalUrlClient(input) {
@@ -15349,7 +15358,7 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
         const entityIntent = extractUniversalEntityIntent(query, intent);
         const forceFailClosed = Boolean(options?.forceFailClosed);
         liveRiskLevel = getRiskTierForQuery(query, intent, entityIntent);
-        failClosed = forceFailClosed;
+        failClosed = forceFailClosed && shouldRequireVerifiedSources(query, intent, entityIntent);
         const directFactQuery = intent.directFact || isSportsLiveResultQuery(query);
         const conciseFactQuery = isConciseDirectFactQuery(query);
         const queries = buildLiveSearchQueries(query, intent);
@@ -15398,6 +15407,18 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
         const sourcePool = trusted.length >= 3 ? trusted : deduped;
         const verification = buildVerificationSnapshot(sourcePool, intent.domain || 'general', liveRiskLevel, 'trust_first');
         if (!verification.verified) {
+            if (!failClosed) {
+                const searchSummary = await buildVerifiedSearchSummary(query, {
+                    badge: 'Best-effort web sources',
+                    speech: 'I checked web sources and summarized the best-supported result.'
+                });
+                if (searchSummary?.text) {
+                    addVerifiedAssistantMessage(searchSummary.text, searchSummary.badge || 'Best-effort web sources');
+                    speak(searchSummary.speech || 'I checked web sources and summarized the result.');
+                    saveToHistory(userText, searchSummary.text);
+                    return true;
+                }
+            }
             const bestEffortPublished = await publishBestEffortFromSources({
                 userText: query,
                 intent,
@@ -16168,8 +16189,7 @@ function detectInputLanguageHint(text) {
                     if (handledEntity) return;
                 }
                 const handled = await handleLiveRetrievalQuery(cleanText, {
-                    broadFactualWeb: true,
-                    forceFailClosed: true
+                    broadFactualWeb: true
                 });
                 if (handled) return;
             }
