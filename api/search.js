@@ -287,6 +287,16 @@ function buildSearchQueries(query) {
         out.push(aliasedTopic);
     }
 
+    if (isRoleOrOfficeHolderQuery(raw)) {
+        const currentYear = new Date().getUTCFullYear();
+        out.push(`current ${topic}`);
+        out.push(`${topic} as of ${currentYear}`);
+        if (aliasedTopic && aliasedTopic.toLowerCase() !== topic.toLowerCase()) {
+            out.push(`current ${aliasedTopic}`);
+            out.push(`${aliasedTopic} as of ${currentYear}`);
+        }
+    }
+
     if (isTimeSensitiveQuery(raw)) {
         const timeAwareTopic = raw
             .replace(/\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update(?:s)? on|status of|winner|won|champion|score|scores|stats|standings|points table|ranking|rankings|record|qualified|eliminated)\b/gi, ' ')
@@ -308,6 +318,12 @@ function buildSearchQueries(query) {
 function isTimeSensitiveQuery(text) {
     const t = String(text || '').toLowerCase();
     return /\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|updates?|status|price now|rate today|winner|won|champion|scores?|live score|stats?|standings|points table|rankings?|record|qualified|eliminated)\b/.test(t);
+}
+
+function isRoleOrOfficeHolderQuery(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(who is|who's|current|latest)\b/.test(t) &&
+        /\b(pm|prime minister|cm|chief minister|president|governor|mayor|minister|ceo|chairman|chairperson|captain|coach|head of|leader of|administrator|director general)\b/.test(t);
 }
 
 function normalizeSearchTopic(text) {
