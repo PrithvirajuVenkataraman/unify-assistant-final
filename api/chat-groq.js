@@ -34,6 +34,20 @@ export default async function handler(req, res) {
             : '';
         const clientRagBlock = typeof ragContext === 'string' ? ragContext.trim() : '';
         const isInternalSummary = isInternalSummarizerPrompt(message, clientSystemPrompt);
+        const safetyDecision = await classifySafetyWithGroq(message, { isInternalSummary });
+        if (safetyDecision.blocked) {
+            return res.status(200).json({
+                intent: 'moderation_refusal',
+                response: safetyDecision.response,
+                action: null,
+                provider: 'groq',
+                modelUsed: safetyDecision.modelUsed,
+                safety: {
+                    model: safetyDecision.modelUsed,
+                    reason: safetyDecision.reason
+                }
+            });
+        }
         const routeDecision = classifyRoutingDecision(message, clientSystemPrompt, {
             isInternalSummary
         });
@@ -127,6 +141,79 @@ function composeFinalPrompt(systemPrompt, ragBlock, contextBlock, message, lengt
     ].filter(Boolean).join('\n\n');
 }
 
+async function classifySafetyWithGroq(message, options = {}) {
+    if (options?.isInternalSummary) return { blocked: false };
+    const groqApiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
+    if (!groqApiKey) return { blocked: false };
+
+    const model = String(process.env.GROQ_SAFETY_MODEL || 'openai/gpt-oss-safeguard-20b').trim();
+    const userMessage = String(message || '').trim();
+    if (!userMessage) return { blocked: false };
+
+    const policyPrompt = [
+        'Classify the user message under this assistant safety policy.',
+        'Block only clearly disallowed requests: instructions for violent harm, weapons construction, self-harm assistance, sexual content involving minors, credential theft, malware, evading security controls, or explicit wrongdoing.',
+        'Allow benign education, news, fiction, jokes, medical triage, emotional support, and ordinary technical help.',
+        'Return strict JSON only: {"blocked": boolean, "reason": "short label", "safe_response": "brief refusal if blocked"}',
+        `User message: ${userMessage.slice(0, 4000)}`
+    ].join('\n');
+
+    try {
+        const response = await fetchWithTimeoutRetry('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${groqApiKey}`
+            },
+            body: JSON.stringify({
+                model,
+                temperature: 0,
+                max_tokens: 300,
+                messages: [{ role: 'user', content: policyPrompt }]
+            })
+        }, {
+            timeoutMs: 4500,
+            retries: 0
+        });
+        if (!response.ok) return { blocked: false };
+        const data = await response.json();
+        const raw = String(data?.choices?.[0]?.message?.content || '').trim();
+        const parsed = safeParseJsonObject(raw);
+        if (!parsed || parsed.blocked !== true) return { blocked: false };
+        return {
+            blocked: true,
+            modelUsed: model,
+            reason: String(parsed.reason || 'safety_policy').trim(),
+            response: String(parsed.safe_response || 'I cannot help with that request, but I can help with a safer alternative.').trim()
+        };
+    } catch (_) {
+        return { blocked: false };
+    }
+}
+
+function safeParseJsonObject(text) {
+    const raw = String(text || '').trim()
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/```$/i, '')
+        .trim();
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_) {
+        const start = raw.indexOf('{');
+        const end = raw.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            try {
+                const parsed = JSON.parse(raw.slice(start, end + 1));
+                return parsed && typeof parsed === 'object' ? parsed : null;
+            } catch (e) {}
+        }
+        return null;
+    }
+}
+
 async function runModelWithFallback(finalPrompt, lengthPolicy = {}) {
     const temp = Number.isFinite(Number(lengthPolicy?.temperature)) ? Number(lengthPolicy.temperature) : 0.7;
     const maxTokens = clampInt(lengthPolicy?.maxTokens, 2500, 256, 7000);
@@ -138,6 +225,8 @@ async function runModelWithFallback(finalPrompt, lengthPolicy = {}) {
         const groqConfiguredModel = String(process.env.GROQ_MODEL || '').trim();
         const groqCandidates = [
             groqConfiguredModel,
+            'openai/gpt-oss-120b',
+            'openai/gpt-oss-20b',
             'llama-3.3-70b-versatile',
             'llama-3.1-8b-instant'
         ].filter(Boolean);
