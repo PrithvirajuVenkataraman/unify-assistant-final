@@ -10170,14 +10170,186 @@ function isLearningIntent(text) {
     return false;
 }
 
+const GENERIC_INTENT_COMMAND_WORDS = new Set([
+    'a', 'an', 'the', 'me', 'my', 'please', 'pls', 'can', 'could', 'would', 'you',
+    'tell', 'show', 'give', 'find', 'search', 'look', 'lookup', 'check', 'list',
+    'recommend', 'suggest', 'play', 'of', 'by', 'from', 'for', 'about', 'on', 'in',
+    'is', 'are', 'was', 'were', 'do', 'does', 'did', 'to', 'with', 'some', 'good',
+    'latest', 'new', 'newest', 'recent', 'current', 'top', 'best', 'popular',
+    'song', 'songs', 'track', 'tracks', 'music', 'playlist', 'hit', 'hits',
+    'movie', 'movies', 'film', 'films', 'release', 'releases', 'album', 'albums',
+    'single', 'singles', 'show', 'series', 'profile', 'who', 'what', 'which'
+]);
+
+const GENERIC_INTENT_DOMAIN_WORDS = {
+    songs: /\b(song|songs|track|tracks|music|playlist|hit|hits|album|albums|single|singles)\b/i,
+    movie: /\b(movie|movies|film|films|cinema|release|releases)\b/i,
+    weather: /\b(weather|forecast|temperature|rain|humidity|wind)\b/i,
+    news: /\b(news|headlines?|breaking|current events?)\b/i,
+    person: /\b(who is|who was|person|profile|bio|biography|actor|actress|singer|composer|director|artist|ceo|founder|president|prime minister|captain|coach)\b/i,
+    place: /\b(where is|place|city|country|state|nearby|near me|hotel|restaurant|temple|landmark)\b/i
+};
+
+function normalizeGenericIntentText(text) {
+    return String(text || '')
+        .replace(/[“”]/g, '"')
+        .replace(/[’]/g, "'")
+        .replace(/[?!,;:()[\]{}]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function parseGenericIntentModifierSet(text) {
+    const t = String(text || '').toLowerCase();
+    const modifiers = new Set();
+    if (/\b(latest|new|newest|recent|current|most recent|upcoming)\b/.test(t)) modifiers.add('latest');
+    if (/\b(top|best|popular|hit|hits)\b/.test(t)) modifiers.add('top');
+    if (/\b(recommend|suggest|suggestion|recommendation)\b/.test(t)) modifiers.add('recommend');
+    if (/\b(play|youtube|spotify)\b/.test(t)) modifiers.add('play');
+    if (/\b(explain|what is|who is|who was|tell me about|define|meaning of)\b/.test(t)) modifiers.add('explain');
+    if (/\b(search|look up|lookup|web|internet|with sources|check online)\b/.test(t)) modifiers.add('search');
+    const yearMatches = t.match(/\b(?:19|20)\d{2}\b/g) || [];
+    yearMatches.forEach(year => modifiers.add(year));
+    extractRequestedMusicLanguages(t).forEach(lang => modifiers.add(lang));
+    return Array.from(modifiers);
+}
+
+function detectGenericIntentDomain(text) {
+    const raw = String(text || '');
+    const t = raw.toLowerCase();
+    if (GENERIC_INTENT_DOMAIN_WORDS.weather.test(raw)) return 'weather';
+    if (GENERIC_INTENT_DOMAIN_WORDS.news.test(raw)) return 'news';
+    if (GENERIC_INTENT_DOMAIN_WORDS.songs.test(raw)) return 'songs';
+    if (GENERIC_INTENT_DOMAIN_WORDS.movie.test(raw)) return 'movie';
+    if (GENERIC_INTENT_DOMAIN_WORDS.place.test(raw)) return 'place';
+    if (GENERIC_INTENT_DOMAIN_WORDS.person.test(raw) || /^(who is|who was)\b/.test(t)) return 'person';
+    return 'general';
+}
+
+function detectGenericIntentAction(text, domain, modifiers) {
+    const t = String(text || '').toLowerCase();
+    const mods = new Set(modifiers || []);
+    if (mods.has('play')) return 'play';
+    if (mods.has('recommend')) return 'recommend';
+    if (mods.has('search')) return 'search';
+    if (mods.has('explain') || /^(who is|who was|what is|tell me about|define|meaning of)\b/.test(t)) return 'explain';
+    if (mods.has('top')) return 'top';
+    if (mods.has('latest')) return 'latest';
+    if (domain === 'songs' || domain === 'movie') return 'recommend';
+    return 'explain';
+}
+
+function cleanGenericIntentSubject(candidate, domain = 'general') {
+    let value = normalizeGenericIntentText(candidate)
+        .replace(/^(?:can|could|would)\s+you\s+/i, ' ')
+        .replace(/^(?:tell|show|give|list|find|search|look\s+up|lookup|check|recommend|suggest|play)\s+(?:me\s+)?/i, ' ')
+        .replace(/^(?:what\s+is|what's|who\s+is|who's|who\s+was|tell\s+me\s+about|define|meaning\s+of)\s+/i, ' ')
+        .replace(/\b(?:please|pls|for me|right now|now)\b/gi, ' ')
+        .replace(/\b(?:by|of|from|for|about)\s*$/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const domainWords = domain === 'songs'
+        ? /\b(?:latest|new|newest|recent|current|most recent|top|best|popular|song|songs|track|tracks|music|playlist|hit|hits|album|albums|single|singles|composer|singer)\b/gi
+        : domain === 'movie'
+            ? /\b(?:latest|new|newest|recent|current|most recent|upcoming|top|best|popular|movie|movies|film|films|release|releases|actor|actress|director|producer)\b/gi
+            : /\b(?:latest|new|newest|recent|current|most recent|top|best|popular)\b/gi;
+
+    value = value
+        .replace(domainWords, ' ')
+        .replace(/\b(?:of|by|from|for|about|the|a|an)\b/gi, ' ')
+        .replace(/\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const tokens = value.split(/\s+/).filter(Boolean);
+    const filtered = tokens.filter(token => !GENERIC_INTENT_COMMAND_WORDS.has(token.toLowerCase()));
+    const cleaned = (filtered.length ? filtered : tokens).join(' ').trim();
+    if (!cleaned || cleaned.length < 2 || cleaned.length > 100) return '';
+    if (/^(song|songs|movie|movies|film|films|latest|top|best|new|recent)$/i.test(cleaned)) return '';
+    return cleaned;
+}
+
+function extractGenericIntentSubject(text, domain) {
+    const raw = normalizeGenericIntentText(text);
+    if (!raw) return '';
+
+    const subjectPatterns = domain === 'songs' ? [
+        /\b(?:latest|new|newest|recent|current|most recent|top|best|popular)?\s*(?:\d{1,2})?\s*(?:song|songs|track|tracks|music|playlist|hit|hits|album|albums|single|singles)\s+(?:of|by|from)\s+([^?.!,;]+)$/i,
+        /\b(?:latest|new|newest|recent|current|most recent|top|best|popular)\s+([^?.!,;]+?)\s+(?:song|songs|track|tracks|music|playlist|hit|hits|album|albums|single|singles)\b/i,
+        /\b([^?.!,;]+?)\s+(?:latest|new|newest|recent|current|most recent|top|best|popular)?\s*(?:song|songs|track|tracks|music|playlist|hit|hits|album|albums|single|singles)\b/i
+    ] : domain === 'movie' ? [
+        /\b(?:latest|new|newest|recent|current|most recent|upcoming|top|best|popular)?\s*(?:movie|movies|film|films|release|releases)\s+(?:of|by|from)\s+([^?.!,;]+)$/i,
+        /\b(?:latest|new|newest|recent|current|most recent|upcoming)\s+([^?.!,;]+?)\s+(?:movie|movies|film|films|release|releases)\b/i,
+        /\b([^?.!,;]+?)\s+(?:latest|new|newest|recent|current|most recent|upcoming)\s+(?:movie|movies|film|films|release|releases)\b/i
+    ] : [
+        /^(?:who is|who was|what is|tell me about|define|meaning of)\s+([^?.!,;]+)$/i,
+        /\b(?:about|on)\s+([^?.!,;]+)$/i
+    ];
+
+    for (const pattern of subjectPatterns) {
+        const match = raw.match(pattern);
+        if (match?.[1]) {
+            const cleaned = cleanGenericIntentSubject(match[1], domain);
+            if (cleaned) return cleaned;
+        }
+    }
+
+    return cleanGenericIntentSubject(raw, domain);
+}
+
+function parseGenericUserIntent(text) {
+    const raw = String(text || '').trim();
+    if (!raw) {
+        return { raw, intent: 'explain', domain: 'general', subject: '', modifiers: [], count: null, confidence: 0, route: 'model' };
+    }
+
+    const normalized = normalizeGenericIntentText(raw);
+    const domain = detectGenericIntentDomain(normalized);
+    const modifiers = parseGenericIntentModifierSet(normalized);
+    const intent = detectGenericIntentAction(normalized, domain, modifiers);
+    const subject = extractGenericIntentSubject(normalized, domain);
+    const count = extractRequestedQuantity(normalized, null, 1, 30);
+    const hasDomain = domain !== 'general';
+    const hasSubject = Boolean(subject);
+    const hasActionSignal = modifiers.length > 0 || /^(who is|who was|what is|tell me about|define|meaning of)\b/i.test(normalized);
+    const confidence = Math.max(0, Math.min(1, (hasDomain ? 0.35 : 0) + (hasSubject ? 0.45 : 0) + (hasActionSignal ? 0.2 : 0)));
+    const route = domain === 'songs' && intent === 'latest'
+        ? 'live_music'
+        : domain === 'songs'
+            ? 'music_catalog'
+            : domain === 'movie' && intent === 'latest'
+                ? 'live_entertainment'
+                : domain === 'person'
+                    ? 'entity_profile'
+                    : intent === 'search'
+                        ? 'web_search'
+                        : 'model';
+
+    return {
+        raw,
+        normalized,
+        intent,
+        domain,
+        subject,
+        modifiers,
+        count,
+        confidence,
+        route
+    };
+}
+
 function isArtistSongRequest(text) {
+    const genericIntent = parseGenericUserIntent(text);
+    if (genericIntent.domain === 'songs' && genericIntent.confidence >= 0.55) return true;
+
     const t = String(text || '').toLowerCase();
     const hasMusicAsk = /\b(song|songs|track|tracks|music|playlist|hit|hits|melody|melodies)\b/.test(t);
     if (!hasMusicAsk) return false;
 
     return /\b(songs?\s+(of|by|from)|tracks?\s+(of|by|from))\b/.test(t) ||
-           /\b(recommend|suggest|best|top)\b[^?.!]{0,80}\b(song|songs|track|tracks|music|playlist|hit|hits|melody|melodies)\b/.test(t) ||
-           /\b(song|songs|track|tracks|music|playlist|hit|hits|melody|melodies)\b[^?.!]{0,80}\b(recommend|suggest|best|top|of|by|from)\b/.test(t) ||
+           /\b(recommend|suggest|best|top|latest|new|newest|recent)\b[^?.!]{0,80}\b(song|songs|track|tracks|music|playlist|hit|hits|melody|melodies)\b/.test(t) ||
+           /\b(song|songs|track|tracks|music|playlist|hit|hits|melody|melodies)\b[^?.!]{0,80}\b(recommend|suggest|best|top|latest|new|newest|recent|of|by|from)\b/.test(t) ||
            /\b[a-z][a-z0-9.'&\-\s]{2,}\s+songs?\b/.test(t);
 }
 
@@ -10388,6 +10560,11 @@ function extractArtistForEraBlend(text) {
 }
 
 function extractArtistFromSongRequest(text) {
+    const genericIntent = parseGenericUserIntent(text);
+    if (genericIntent.domain === 'songs' && genericIntent.subject && genericIntent.confidence >= 0.55) {
+        return genericIntent.subject;
+    }
+
     const raw = String(text || '').trim();
     if (!raw) return '';
 
@@ -10397,9 +10574,11 @@ function extractArtistFromSongRequest(text) {
             .replace(/^\s*(?:can|could|would)\s+you\s+/i, '')
             .replace(/^\s*(?:give|show|tell|list|suggest|recommend|play)\s+me\s+/i, '')
             .replace(/^\s*(?:i\s+(?:want|need)\s+)\b/i, '')
+            .replace(/^\s*(?:latest|new|newest|recent|current|most\s+recent|upcoming)\s+/i, '')
             .replace(/^\s*(?:top|best)\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i, '')
             .replace(/^\s*(?:songs?|tracks?|hits?|music|playlist)\s+(?:of|by|from)\s+/i, '')
             .replace(/^\s*(?:of|by|from)\s+/i, '')
+            .replace(/\b(?:latest|new|newest|recent|current|most\s+recent|upcoming)\s+(?:songs?|tracks?|hits?|music|playlist)\b/gi, ' ')
             .replace(/\b(?:songs?|tracks?|hits?|music|playlist)\b\s*$/i, '')
             .replace(/\b(?:please|pls|for me|right now|now)\b\s*$/i, '')
             .replace(/[?.!,]+$/g, '')
@@ -10408,6 +10587,8 @@ function extractArtistFromSongRequest(text) {
     };
 
     const patterns = [
+        /(?:latest|new|newest|recent|current|most\s+recent)\s+([a-z0-9.'&\-\s]{2,100})\s+(?:songs?|tracks?|hits?|music|playlist)\b/i,
+        /(?:latest|new|newest|recent|current|most\s+recent)\s+(?:songs?|tracks?|hits?|music|playlist)\s+(?:of|by|from)\s+([a-z0-9.'&\-\s]{2,100})/i,
         /(?:songs?|tracks?|hits?|music|playlist)\s+(?:of|by|from)\s+([a-z0-9.'&\-\s]{2,100})/i,
         /(?:top|best)\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)?\s*(?:songs?|tracks?|hits?)?\s*(?:of|by|from)?\s+([a-z0-9.'&\-\s]{2,100})/i,
         /(?:suggest|recommend|give|show|tell|list)(?:\s+me)?(?:\s+some)?(?:\s+good|\s+best|\s+top)?(?:\s+\d{1,2}|\s+one|\s+two|\s+three|\s+four|\s+five|\s+six|\s+seven|\s+eight|\s+nine|\s+ten|\s+eleven|\s+twelve)?\s*(?:songs?|tracks?|hits?)?(?:\s+(?:of|by|from))?\s+([a-z0-9.'&\-\s]{2,100})/i,
@@ -10429,7 +10610,7 @@ function extractArtistFromSongRequest(text) {
         .replace(/\s+/g, ' ')
         .trim()
         .split(' ')
-        .filter(token => token && !/^(give|show|tell|list|suggest|recommend|play|me|top|best|song|songs|track|tracks|hit|hits|music|playlist|of|by|from|please|pls|now|right|can|could|would|you|i|want|need|some|good|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})$/.test(token))
+        .filter(token => token && !/^(give|show|tell|list|suggest|recommend|play|me|top|best|latest|new|newest|recent|current|upcoming|song|songs|track|tracks|hit|hits|music|playlist|of|by|from|please|pls|now|right|can|could|would|you|i|want|need|some|good|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d{1,2})$/.test(token))
         .join(' ');
 
     return cleanCandidate(heuristic);
@@ -10727,9 +10908,11 @@ function sanitizeArtistName(input) {
         .replace(/^[\s"'`]+|[\s"'`]+$/g, '')
         .replace(/^\s*(?:can|could|would)\s+you\s+/i, '')
         .replace(/^\s*(?:give|show|tell|list|suggest|recommend|play)\s+me\s+/i, '')
+        .replace(/^\s*(?:latest|new|newest|recent|current|most\s+recent|upcoming)\s+/i, '')
         .replace(/^\s*(?:top|best)\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/i, '')
         .replace(/^\s*(?:songs?|tracks?|hits?|music|playlist)\s+(?:of|by|from)\s+/i, '')
         .replace(/^\s*(?:of|by|from)\s+/i, '')
+        .replace(/\b(?:latest|new|newest|recent|current|most\s+recent|upcoming)\s+(?:songs?|tracks?|hits?|music|playlist)\b/gi, ' ')
         .replace(/\b(?:songs?|tracks?|hits?|music|playlist)\b\s*$/i, '')
         .replace(/\b(?:please|pls|for me|right now|now)\b\s*$/i, '')
         .replace(/[?.!,]+$/g, '')
@@ -11094,8 +11277,18 @@ async function handleEraLanguageHitsBlendRequest(text) {
 }
 
 async function parseSongRequestIntent(text) {
-    const fallbackArtist = sanitizeArtistName(extractArtistFromSongRequest(text));
+    const genericIntent = parseGenericUserIntent(text);
+    const genericArtist = genericIntent.domain === 'songs' ? sanitizeArtistName(genericIntent.subject) : '';
+    const fallbackArtist = genericArtist || sanitizeArtistName(extractArtistFromSongRequest(text));
     const fallbackCount = extractRequestedSongCount(text);
+
+    if (genericArtist && genericIntent.confidence >= 0.75) {
+        return {
+            artist: genericArtist,
+            requestedCount: extractRequestedQuantity(text, genericIntent.count ?? fallbackCount, 1, 30),
+            genericIntent
+        };
+    }
 
     const parserPrompt = `Extract music request intent from the user text.
 
@@ -11107,7 +11300,7 @@ Return strict JSON only:
 
 Rules:
 - artist must be only the singer/composer/band name
-- remove command words like "give me", "show me", "top", "best", "songs", "of/by/from"
+- remove command words like "give me", "show me", "top", "best", "latest", "new", "recent", "songs", "of/by/from"
 - if count is not explicit, set count to null
 - no markdown, no explanation
 
@@ -11132,7 +11325,7 @@ User text:
         const requestedCount = extractRequestedQuantity(text, parsed?.count ?? fallbackCount, 1, 30);
 
         if (artist) {
-            return { artist, requestedCount };
+            return { artist, requestedCount, genericIntent };
         }
     } catch (e) {
         // Fall back to deterministic parser below.
@@ -11140,11 +11333,12 @@ User text:
 
     return {
         artist: fallbackArtist, // This will be null if not found by regex
-        requestedCount: extractRequestedQuantity(text, 5, 1, 30)
+        requestedCount: extractRequestedQuantity(text, 5, 1, 30),
+        genericIntent
     };
 }
 
-async function buildSongListFromAIFallback(artist, requestedCount) {
+async function buildSongListFromAIFallback(artist, requestedCount, requestType = 'top/best songs') {
     const prompt = `Return top songs for the artist/composer below as strict JSON only.
 
 Schema:
@@ -11161,7 +11355,9 @@ Schema:
 
 Rules:
 - Artist: "${artist}"
+- Request type: "${requestType}"
 - Return up to ${requestedCount} songs
+- If request type is latest/recent songs, prefer newer releases and avoid presenting the list as all-time best songs.
 - No markdown
 - No extra keys
 - Keep reasons short`;
@@ -11310,10 +11506,11 @@ ${snippetsBlock}`;
     return { items, sources: snippets };
 }
 
-function formatMusicSongReply(artist, requestedCount, items, fallback = false) {
+function formatMusicSongReply(artist, requestedCount, items, fallback = false, mode = 'top') {
     const safeArtist = String(artist || 'Unknown artist').trim();
     const count = clampSongCount(requestedCount, 5);
-    const lines = [`[Music] Top ${count} songs for ${safeArtist}`, ''];
+    const label = mode === 'latest' ? 'Latest' : 'Top';
+    const lines = [`[Music] ${label} ${count} songs for ${safeArtist}`, ''];
     items.slice(0, count).forEach((item, index) => {
         const song = String(item?.song || '').trim();
         if (!song) return;
@@ -11349,6 +11546,8 @@ async function handleArtistSongRequest(text) {
     const parsedIntent = await parseSongRequestIntent(text);
     const artist = parsedIntent.artist;
     const requestedCount = parsedIntent.requestedCount;
+    const wantsLatest = parsedIntent?.genericIntent?.intent === 'latest' ||
+        /\b(latest|new|newest|recent|current|most\s+recent)\b/i.test(String(text || ''));
     if (!artist) {
         const msg = 'Tell me the artist name and I will suggest good songs. Example: "Best songs of AR Rahman".';
         addChatMessage(msg, false);
@@ -11357,10 +11556,13 @@ async function handleArtistSongRequest(text) {
     }
 
     try {
+        if (wantsLatest) {
+            throw new Error('latest song requests should use live web search');
+        }
         const verifiedSongs = await fetchSongsFromVerifiedSources(artist, requestedCount);
         if (verifiedSongs.items.length) {
             const sourceLines = formatLiveSourceLinks(verifiedSongs.sources, 7);
-            const catalogMsg = `${formatMusicSongReply(artist, requestedCount, verifiedSongs.items, false)}\n\nSources:\n${sourceLines}`;
+            const catalogMsg = `${formatMusicSongReply(artist, requestedCount, verifiedSongs.items, false, 'top')}\n\nSources:\n${sourceLines}`;
             addVerifiedAssistantMessage(catalogMsg, 'Verified music sources');
             const catalogSpeech = await composeApiReply('artist_song_verified', {
                 artist
@@ -11381,7 +11583,9 @@ async function handleArtistSongRequest(text) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                query: `${artist} best songs soundtrack composer singer`,
+                query: wantsLatest
+                    ? `${artist} latest songs recent releases soundtrack composer singer`
+                    : `${artist} best songs soundtrack composer singer`,
                 maxResults: 10
             })
         });
@@ -11409,6 +11613,7 @@ async function handleArtistSongRequest(text) {
         const verifyPrompt = `You are doing Retrieval-Augmented Generation (RAG) for song recommendations.
 
 Artist: "${artist}"
+Request type: "${wantsLatest ? 'latest/recent songs' : 'top/best songs'}"
 
 Return strict JSON only in this schema:
 {
@@ -11425,6 +11630,7 @@ Return strict JSON only in this schema:
 
 Rules:
 - Give up to ${requestedCount} songs.
+- If request type is latest/recent songs, prioritize newest or recently released songs from the snippets.
 - Use ONLY evidence from snippet IDs below.
 - Do not include songs without evidence IDs.
 - Do not invent evidence IDs.
@@ -11481,7 +11687,7 @@ ${snippetsBlock}`;
             throw new Error('verification returned no grounded songs');
         }
 
-        const msg = formatMusicSongReply(artist, requestedCount, formattedItems, false);
+        const msg = formatMusicSongReply(artist, requestedCount, formattedItems, false, wantsLatest ? 'latest' : 'top');
 
         addChatMessage(msg, false);
         const groundedSpeech = await composeApiReply('artist_song_grounded', {
@@ -11493,8 +11699,8 @@ ${snippetsBlock}`;
         saveToHistory(text, msg);
     } catch (error) {
         try {
-            const aiFallbackItems = await buildSongListFromAIFallback(artist, requestedCount);
-            const fallbackReply = formatMusicSongReply(artist, requestedCount, aiFallbackItems, true);
+            const aiFallbackItems = await buildSongListFromAIFallback(artist, requestedCount, wantsLatest ? 'latest/recent songs' : 'top/best songs');
+            const fallbackReply = formatMusicSongReply(artist, requestedCount, aiFallbackItems, true, wantsLatest ? 'latest' : 'top');
             addChatMessage(fallbackReply, false);
             const fallbackSpeech = await composeApiReply('artist_song_general', {
                 artist
@@ -11506,7 +11712,7 @@ ${snippetsBlock}`;
         } catch (fallbackError) {
             await deliverApiReply('artist_song_fallback', {
                 artist,
-                fallbackUrl: `https://www.google.com/search?q=${encodeURIComponent(artist + ' best songs')}`
+                fallbackUrl: `https://www.google.com/search?q=${encodeURIComponent(artist + (wantsLatest ? ' latest songs recent releases' : ' best songs'))}`
             }, { historyKey: text });
         }
     } finally {
@@ -12517,6 +12723,10 @@ function isProfileOrIdentityQuery(text) {
     const raw = String(text || '').trim();
     if (!raw) return false;
 
+    if (/\b(current|currently|latest|recent|today|right now|as of now|live|news|headline|headlines|update|updates|status|earnings|results|layoffs|launch|release|lawsuit|investigation|funding|roadmap)\b/i.test(raw)) {
+        return false;
+    }
+
     const profileIntent = /^(who is|who was|tell me about|what do you think of|what are your thoughts on|thoughts on)\b/i;
     if (!profileIntent.test(raw)) return false;
 
@@ -12609,6 +12819,7 @@ function isUniversalEntityFactQuestion(text) {
 function classifyUserMessage(text) {
     const raw = String(text || '').trim();
     const lower = raw.toLowerCase();
+    const genericIntent = parseGenericUserIntent(raw);
     const liveIntent = extractLiveQueryIntent(raw);
     const requestedQuantity = extractRequestedQuantity(raw, null, 1, 20); // Max 20 for general facts
     const entityIntent = classifyUniversalEntityIntent(raw, liveIntent);
@@ -12620,6 +12831,7 @@ function classifyUserMessage(text) {
     return {
         raw,
         lower,
+        genericIntent,
         liveIntent,
         entityIntent,
         riskLevel,
@@ -12646,7 +12858,7 @@ function classifyUserMessage(text) {
             generalJoke: isGeneralJokeRequest(raw),
             recipe: isRecipeRequest(raw),
             classicSongs: isClassicSongDiscoveryRequest(raw),
-            artistSong: isArtistSongRequest(raw),
+            artistSong: genericIntent.domain === 'songs' && genericIntent.confidence >= 0.55 || isArtistSongRequest(raw),
             screenSuggestions: isScreenSuggestionRequest(raw),
             highRiskMentalHealth: isHighRiskMentalHealth(raw),
             supportExit: isSupportConversationExit(raw),
@@ -12669,6 +12881,7 @@ function decideAnswerPath(classification) {
 
     if (flags.inappropriate) return 'moderation';
     if (flags.explicitWebSearch) return 'web_search';
+    if (flags.artistSong) return 'artist_song'; 
     if (flags.universalEntityFact) return 'entity_fact';
     if (flags.profileIdentity || flags.stableBiography) return 'live_retrieval';
     if (flags.currentInfo) return 'current_info';
@@ -12686,7 +12899,6 @@ function decideAnswerPath(classification) {
     if (flags.generalJoke) return 'general_joke';
     if (flags.recipe) return 'recipe';
     if (flags.classicSongs) return 'classic_songs'; 
-    if (flags.artistSong) return 'artist_song'; 
     if (flags.screenSuggestions) return 'screen_suggestions';
  
     if (flags.highRiskMentalHealth) return 'high_risk_mental_health'; 
@@ -12741,6 +12953,7 @@ function decideHybridResponseMode(classification) {
 
     if (flags.inappropriate) return 'special_handler';
     if (flags.explicitWebSearch) return 'verify_first';
+    if (flags.artistSong && classification?.genericIntent?.route === 'live_music') return 'verify_first';
     if (flags.broadFactualWeb) return 'verify_first';
     if (flags.universalEntityFact) return 'verify_first';
     if (flags.profileIdentity || flags.stableBiography) return 'verify_first';
@@ -12813,6 +13026,48 @@ const ROUTING_REGRESSION_CASES = [
         prompt: 'Search the web for who is the captain of CSK in IPL 2026 with sources',
         expectedPath: 'web_search',
         expectedMode: 'verify_first'
+    },
+    {
+        name: 'Latest artist songs route',
+        prompt: 'latest anirudh songs',
+        expectedPath: 'artist_song',
+        expectedMode: 'verify_first',
+        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'anirudh', route: 'live_music' }
+    },
+    {
+        name: 'New songs by artist route',
+        prompt: 'new songs by anirudh',
+        expectedPath: 'artist_song',
+        expectedMode: 'verify_first',
+        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'anirudh', route: 'live_music' }
+    },
+    {
+        name: 'Recent artist tracks route',
+        prompt: 'anirudh recent tracks',
+        expectedPath: 'artist_song',
+        expectedMode: 'verify_first',
+        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'anirudh', route: 'live_music' }
+    },
+    {
+        name: 'Top songs artist route',
+        prompt: 'top 10 ar rahman songs',
+        expectedPath: 'artist_song',
+        expectedMode: 'chat_first',
+        expectedGeneric: { intent: 'top', domain: 'songs', subject: 'ar rahman', route: 'music_catalog' }
+    },
+    {
+        name: 'Latest movie of actor route',
+        prompt: 'latest movie of vijay',
+        expectedPath: 'entity_fact',
+        expectedMode: 'verify_first',
+        expectedGeneric: { intent: 'latest', domain: 'movie', subject: 'vijay', route: 'live_entertainment' }
+    },
+    {
+        name: 'Person identity route',
+        prompt: 'who is anirudh',
+        expectedPath: 'entity_fact',
+        expectedMode: 'verify_first',
+        expectedGeneric: { intent: 'explain', domain: 'person', subject: 'anirudh', route: 'entity_profile' }
     }
 ];
 
@@ -12821,6 +13076,7 @@ function runRoutingRegressionSuite() {
         const classification = classifyUserMessage(testCase.prompt);
         const actualPath = decideAnswerPath(classification);
         const actualMode = decideHybridResponseMode(classification);
+        const genericIntent = classification.genericIntent || {};
         const checks = [
             {
                 label: 'path',
@@ -12835,11 +13091,22 @@ function runRoutingRegressionSuite() {
                 pass: actualMode === testCase.expectedMode
             }
         ];
+        if (testCase.expectedGeneric) {
+            for (const [key, expectedValue] of Object.entries(testCase.expectedGeneric)) {
+                checks.push({
+                    label: `generic.${key}`,
+                    expected: expectedValue,
+                    actual: genericIntent[key],
+                    pass: String(genericIntent[key] || '').toLowerCase() === String(expectedValue || '').toLowerCase()
+                });
+            }
+        }
 
         return {
             ...testCase,
             actualPath,
             actualMode,
+            genericIntent,
             checks,
             passed: checks.every(check => check.pass)
         };
@@ -13571,6 +13838,13 @@ function detectLatestWorkMedium(text) {
 }
 
 function extractLatestWorkSubject(text) {
+    const genericIntent = parseGenericUserIntent(text);
+    if ((genericIntent.domain === 'movie' || genericIntent.domain === 'songs') &&
+        genericIntent.subject &&
+        genericIntent.confidence >= 0.55) {
+        return genericIntent.subject;
+    }
+
     const raw = String(text || '').trim();
     if (!raw) return '';
 
@@ -13644,6 +13918,10 @@ function extractEntitySubject(text, relationType, liveIntent = null) {
     const roleParts = relationType === 'role' ? extractRoleQueryParts(raw) : { targetEntity: '' };
     if (roleParts.targetEntity) {
         return roleParts.targetEntity;
+    }
+    if (relationType === 'latest_work') {
+        const parsedLatestSubject = extractLatestWorkSubject(raw);
+        if (parsedLatestSubject) return parsedLatestSubject;
     }
     const patterns = [
         /\bhow many\b[\w\s]*?\b(?:titles|cups|trophies|championships|wins)\b\s+(?:did|do|has|have)\s+(.+?)\s+(?:win|won|have|has)\b/i,
