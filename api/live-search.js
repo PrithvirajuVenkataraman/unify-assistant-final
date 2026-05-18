@@ -691,4 +691,3 @@ function extractNameCandidates(text) {
     return out;
 }
 
-
