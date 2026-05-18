@@ -68,6 +68,9 @@ export const SOURCE_POLICIES = {
     },
     politics: {
         trustedDomains: [
+            'pmindia.gov.in',
+            'india.gov.in',
+            'tn.gov.in',
             'gov.in',
             'gov.uk',
             'state.gov',
@@ -87,6 +90,9 @@ export const SOURCE_POLICIES = {
             'npr.org'
         ],
         preferredDomains: [
+            'pmindia.gov.in',
+            'india.gov.in',
+            'tn.gov.in',
             'gov.in',
             'gov.uk',
             'state.gov',
@@ -310,11 +316,152 @@ export const SOURCE_POLICIES = {
             'primevideo.com',
             'disneyplus.com'
         ]
+    },
+    health: {
+        trustedDomains: [
+            'who.int',
+            'cdc.gov',
+            'nih.gov',
+            'medlineplus.gov',
+            'mayoclinic.org',
+            'nhs.uk',
+            'pubmed.ncbi.nlm.nih.gov',
+            'ncbi.nlm.nih.gov',
+            'nejm.org',
+            'thelancet.com',
+            'jamanetwork.com',
+            'reuters.com',
+            'apnews.com',
+            'bbc.com'
+        ],
+        preferredDomains: [
+            'who.int',
+            'cdc.gov',
+            'nih.gov',
+            'medlineplus.gov',
+            'mayoclinic.org',
+            'nhs.uk',
+            'pubmed.ncbi.nlm.nih.gov',
+            'ncbi.nlm.nih.gov'
+        ]
+    },
+    legal: {
+        trustedDomains: [
+            'supremecourt.gov',
+            'congress.gov',
+            'law.cornell.edu',
+            'justice.gov',
+            'legislation.gov.uk',
+            'indiacode.nic.in',
+            'reuters.com',
+            'apnews.com',
+            'bbc.com'
+        ],
+        preferredDomains: [
+            'supremecourt.gov',
+            'congress.gov',
+            'law.cornell.edu',
+            'justice.gov',
+            'legislation.gov.uk',
+            'indiacode.nic.in'
+        ]
+    },
+    cybersecurity: {
+        trustedDomains: [
+            'cisa.gov',
+            'nist.gov',
+            'mitre.org',
+            'owasp.org',
+            'cve.org',
+            'first.org',
+            'krebsonsecurity.com',
+            'thehackernews.com',
+            'reuters.com',
+            'apnews.com'
+        ],
+        preferredDomains: [
+            'cisa.gov',
+            'nist.gov',
+            'mitre.org',
+            'owasp.org',
+            'cve.org',
+            'first.org'
+        ]
+    },
+    climate_energy: {
+        trustedDomains: [
+            'ipcc.ch',
+            'noaa.gov',
+            'metoffice.gov.uk',
+            'copernicus.eu',
+            'iea.org',
+            'eia.gov',
+            'irena.org',
+            'unep.org',
+            'reuters.com',
+            'apnews.com',
+            'bbc.com'
+        ],
+        preferredDomains: [
+            'ipcc.ch',
+            'noaa.gov',
+            'metoffice.gov.uk',
+            'copernicus.eu',
+            'iea.org',
+            'eia.gov',
+            'irena.org',
+            'unep.org'
+        ]
+    },
+    education: {
+        trustedDomains: [
+            'ed.gov',
+            'unesco.org',
+            'oecd.org',
+            'coursera.org',
+            'edx.org',
+            'khanacademy.org',
+            'reuters.com',
+            'apnews.com',
+            'bbc.com'
+        ],
+        preferredDomains: [
+            'ed.gov',
+            'unesco.org',
+            'oecd.org',
+            'coursera.org',
+            'edx.org',
+            'khanacademy.org'
+        ]
     }
 };
 
+function normalizeDomainKey(domain) {
+    const raw = String(domain || '').trim().toLowerCase();
+    if (!raw) return 'general';
+    if (raw === 'space_science' || raw === 'space science' || raw === 'space-tech' || raw === 'space_tech') return 'space_science';
+    if (raw === 'ai_ml' || raw === 'ai ml' || raw === 'aiml' || raw === 'ai') return 'ai_ml';
+    if (raw === 'climate_energy' || raw === 'climate energy' || raw === 'climate') return 'climate_energy';
+    return raw.replace(/[\s-]+/g, '_');
+}
+
 export function detectQueryDomain(text) {
     const t = String(text || '').toLowerCase();
+    if (/\b(climate|global warming|carbon emissions?|ghg|greenhouse gas|renewable|solar|wind power|clean energy|grid|battery storage|decarboni[sz]ation|net zero)\b/.test(t)) {
+        return 'climate_energy';
+    }
+    if (/\b(health|medical|medicine|disease|symptom|treatment|drug|vaccine|hospital|clinical trial|diagnosis|mental health|public health)\b/.test(t)) {
+        return 'health';
+    }
+    if (/\b(law|legal|statute|act|bill|constitution|supreme court|high court|judgment|judgement|case law|section \d+|ipc|crpc)\b/.test(t)) {
+        return 'legal';
+    }
+    if (/\b(cybersecurity|cyber security|malware|ransomware|phishing|zero day|zero-day|vulnerability|cve-\d{4}-\d+|exploit|infosec)\b/.test(t)) {
+        return 'cybersecurity';
+    }
+    if (/\b(education|curriculum|syllabus|university|college|school|exam|admission|scholarship|tuition)\b/.test(t)) {
+        return 'education';
+    }
     if (/\b(isro|nasa|esa|jaxa|spacex|rocket|mission|orbiter|lunar|moon|mars|satellite|space station|astronaut)\b/.test(t)) {
         return 'space_science';
     }
@@ -327,7 +474,7 @@ export function detectQueryDomain(text) {
     if (/\b(real estate|real-estate|property market|housing market|mortgage|home loan)\b/.test(t)) {
         return 'finance';
     }
-    if (/\b(president|prime minister|election|party|government|minister|parliament|senate|diplomacy|geopolitics|foreign policy|cabinet|bill passed|legislation|sanctions|bjp|aap|dmk|aiadmk|tdp|ysrcp|bjd|nato|eu)\b/.test(t)) {
+    if (/\b(president|prime minister|pm|chief minister|cm|election|party|government|minister|parliament|senate|diplomacy|geopolitics|foreign policy|cabinet|bill passed|legislation|sanctions|bjp|aap|dmk|aiadmk|tdp|ysrcp|bjd|nato|eu)\b/.test(t)) {
         return 'politics';
     }
     if (/\b(ai|artificial intelligence|llm|gpt|chatgpt|claude|gemini|mistral|llama|transformer|diffusion|rag|prompt engineering|multimodal|agentic|fine[- ]tuning|embedding|vector database|huggingface|paperswithcode)\b/.test(t)) {
@@ -346,7 +493,7 @@ export function detectQueryDomain(text) {
 }
 
 export function getDomainHints(domain) {
-    switch (String(domain || '').toLowerCase()) {
+    switch (normalizeDomainKey(domain)) {
         case 'sports':
             return {
                 primary: 'sports',
@@ -411,6 +558,46 @@ export function getDomainHints(domain) {
                 fresh: 'latest release filmography',
                 official: 'official movie page imdb'
             };
+        case 'health':
+            return {
+                primary: 'health medicine',
+                secondary: 'clinical guidance evidence',
+                context: 'trusted medical authority source',
+                fresh: 'latest health advisory update',
+                official: 'WHO CDC NIH guidance'
+            };
+        case 'legal':
+            return {
+                primary: 'law legal statute',
+                secondary: 'court judgment legislation',
+                context: 'official legal text source',
+                fresh: 'latest legal update',
+                official: 'official government or court source'
+            };
+        case 'cybersecurity':
+            return {
+                primary: 'cybersecurity threat advisory',
+                secondary: 'cve exploit vulnerability',
+                context: 'official security advisory',
+                fresh: 'latest security advisory',
+                official: 'CISA NIST MITRE CVE source'
+            };
+        case 'climate_energy':
+            return {
+                primary: 'climate energy',
+                secondary: 'emissions renewable policy',
+                context: 'official climate data source',
+                fresh: 'latest climate energy update',
+                official: 'IPCC NOAA IEA official report'
+            };
+        case 'education':
+            return {
+                primary: 'education policy',
+                secondary: 'university school exam',
+                context: 'official education source',
+                fresh: 'latest education update',
+                official: 'government or UNESCO OECD source'
+            };
         default:
             return {
                 primary: 'official',
@@ -423,13 +610,18 @@ export function getDomainHints(domain) {
 }
 
 export function getTrustedSourceHintForDomain(domain) {
-    const d = String(domain || '').toLowerCase();
+    const d = normalizeDomainKey(domain);
     if (d === 'sports') return 'site:espncricinfo.com OR site:iplt20.com OR site:fifa.com';
     if (d === 'finance') return 'site:reuters.com OR site:bloomberg.com OR site:marketwatch.com OR site:investopedia.com';
-    if (d === 'politics') return 'site:reuters.com OR site:apnews.com OR site:bbc.com OR site:gov.in OR site:gov.uk';
+    if (d === 'politics') return 'site:reuters.com OR site:apnews.com OR site:bbc.com OR site:pmindia.gov.in OR site:india.gov.in OR site:tn.gov.in OR site:gov.in OR site:gov.uk';
     if (d === 'space_science') return 'site:nasa.gov OR site:isro.gov.in OR site:esa.int';
     if (d === 'science') return 'site:nature.com OR site:science.org OR site:arxiv.org OR site:pubmed.ncbi.nlm.nih.gov';
     if (d === 'ai_ml') return 'site:openai.com OR site:anthropic.com OR site:huggingface.co OR site:arxiv.org';
     if (d === 'entertainment') return 'site:imdb.com OR site:wikipedia.org';
+    if (d === 'health') return 'site:who.int OR site:cdc.gov OR site:nih.gov OR site:mayoclinic.org';
+    if (d === 'legal') return 'site:congress.gov OR site:supremecourt.gov OR site:law.cornell.edu OR site:indiacode.nic.in';
+    if (d === 'cybersecurity') return 'site:cisa.gov OR site:nist.gov OR site:mitre.org OR site:cve.org';
+    if (d === 'climate_energy') return 'site:ipcc.ch OR site:noaa.gov OR site:iea.org OR site:eia.gov';
+    if (d === 'education') return 'site:ed.gov OR site:unesco.org OR site:oecd.org';
     return 'site:wikipedia.org OR site:britannica.com OR site:investopedia.com OR site:merriam-webster.com';
 }
