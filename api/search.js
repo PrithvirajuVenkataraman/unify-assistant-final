@@ -1,7 +1,6 @@
 export const config = { maxDuration: 60 };
 import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './live-search.js';
 import { applyApiSecurity } from './security.js';
-import { detectQueryDomain, getDomainHints, getTrustedSourceHintForDomain } from './_lib/search-domain-policy.js';
 
 export default async function handler(req, res) {
     const guard = applyApiSecurity(req, res, {
@@ -15,6 +14,7 @@ export default async function handler(req, res) {
     try {
         const query = String(req.body?.query || '').trim();
         const maxResults = Math.min(Math.max(Number(req.body?.maxResults || 8), 1), 10);
+        const includeAnswer = Boolean(req.body?.answer || req.body?.includeAnswer || req.body?.mode === 'answer');
         if (!query) {
             return res.status(400).json({ error: 'query is required' });
         }
@@ -35,21 +35,36 @@ export default async function handler(req, res) {
             canonicalUrl: buildCanonicalUrl(item?.url || ''),
             publishedAt: extractPublishedAtIso(item)
         }));
+        const answerPayload = includeAnswer
+            ? await buildGroqSearchAnswer(query, results)
+            : { answer: '', answerProvider: 'none', answerModel: '', answerSources: [], answerError: '' };
 
         return res.status(200).json({
             success: true,
             provider: results.length ? 'aggregated-search' : 'none',
+            answer: answerPayload.answer,
+            answerProvider: answerPayload.answerProvider,
+            answerModel: answerPayload.answerModel,
+            answerSources: answerPayload.answerSources,
+            answerError: answerPayload.answerError,
             queryVariants: liveQueries,
             queryVariantsUsed: liveQueries,
             asOf,
             distinctDomainCount: verified.distinctDomains?.length || 0,
             trustedCount: verified.trustedCount || 0,
+            providerBreakdown: verified.providerBreakdown || {},
+            serperConfigured: Boolean(verified.serperConfigured),
             results
         });
     } catch (error) {
         return res.status(200).json({
             success: true,
             provider: 'none',
+            answer: '',
+            answerProvider: 'none',
+            answerModel: '',
+            answerSources: [],
+            answerError: 'search_unavailable',
             queryVariants: [],
             queryVariantsUsed: [],
             asOf: new Date().toISOString(),
@@ -59,6 +74,155 @@ export default async function handler(req, res) {
             error: 'search_unavailable',
         });
     }
+}
+
+async function buildGroqSearchAnswer(query, results) {
+    const sourcePool = (Array.isArray(results) ? results : [])
+        .filter(item => item?.url && (item?.title || item?.description || item?.pageExtract))
+        .slice(0, 6);
+    if (!sourcePool.length) {
+        return {
+            answer: '',
+            answerProvider: 'none',
+            answerModel: '',
+            answerSources: [],
+            answerError: 'no_sources'
+        };
+    }
+
+    const groqApiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
+    if (!groqApiKey) {
+        return {
+            answer: '',
+            answerProvider: 'none',
+            answerModel: '',
+            answerSources: sourcePool.map(toAnswerSource),
+            answerError: 'groq_unconfigured'
+        };
+    }
+
+    const snippets = sourcePool
+        .map((item, index) => {
+            const title = truncateForPrompt(item?.title || item?.pageTitle || 'Untitled', 180);
+            const description = truncateForPrompt(item?.description || '', 450);
+            const pageExtract = truncateForPrompt(item?.pageExtract || '', 900);
+            const evidence = pageExtract || description || title;
+            return `${index + 1}. ${title}\nEvidence: ${evidence}\nURL: ${item.url}`;
+        })
+        .join('\n\n');
+
+    const prompt = `Answer the user's question using ONLY the web evidence below.
+
+User question: "${query}"
+
+Rules:
+- Start with the direct answer in 1-3 short sentences.
+- If evidence is conflicting or weak, say that clearly.
+- Do not give search instructions.
+- Do not invent facts that are not present in the evidence.
+- Keep it concise.
+- End with a short "Confidence: High/Medium/Low" line.
+
+Web evidence:
+${snippets}`;
+
+    const groqConfiguredModel = String(process.env.GROQ_SEARCH_MODEL || process.env.GROQ_MODEL || '').trim();
+    const candidates = [
+        groqConfiguredModel,
+        'openai/gpt-oss-120b',
+        'openai/gpt-oss-20b',
+        'llama-3.3-70b-versatile',
+        'llama-3.1-8b-instant'
+    ].filter(Boolean);
+
+    let lastError = '';
+    for (const model of candidates) {
+        try {
+            const response = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${groqApiKey}`
+                },
+                body: JSON.stringify({
+                    model,
+                    temperature: 0.2,
+                    max_tokens: 700,
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'You are a web-grounded answer engine. Use only supplied search evidence.'
+                        },
+                        { role: 'user', content: prompt }
+                    ]
+                })
+            }, 8500);
+            if (!response.ok) {
+                const body = await response.text().catch(() => '');
+                lastError = `groq_${response.status}_${body.slice(0, 120)}`;
+                continue;
+            }
+            const data = await response.json();
+            const answer = cleanSearchAnswer(String(data?.choices?.[0]?.message?.content || ''));
+            if (!answer) {
+                lastError = 'empty_groq_answer';
+                continue;
+            }
+            return {
+                answer,
+                answerProvider: 'groq',
+                answerModel: model,
+                answerSources: sourcePool.map(toAnswerSource),
+                answerError: ''
+            };
+        } catch (error) {
+            lastError = String(error?.message || 'groq_request_failed').slice(0, 160);
+        }
+    }
+
+    return {
+        answer: '',
+        answerProvider: 'none',
+        answerModel: '',
+        answerSources: sourcePool.map(toAnswerSource),
+        answerError: lastError || 'groq_answer_failed'
+    };
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, {
+            ...options,
+            signal: controller.signal
+        });
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+function toAnswerSource(item) {
+    return {
+        title: item?.title || item?.pageTitle || '',
+        url: item?.url || '',
+        canonicalUrl: item?.canonicalUrl || buildCanonicalUrl(item?.url || ''),
+        provider: item?.provider || '',
+        publishedAt: item?.publishedAt || extractPublishedAtIso(item)
+    };
+}
+
+function truncateForPrompt(value, maxLength) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+}
+
+function cleanSearchAnswer(value) {
+    return String(value || '')
+        .replace(/^\s*(?:\*\*)?Direct answer:(?:\*\*)?\s*/i, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
 }
 
 function buildCanonicalUrl(input) {
@@ -118,18 +282,9 @@ function buildSearchQueries(query) {
     const topic = extractSearchTopic(raw) || raw;
     const out = [topic];
     const aliasedTopic = normalizeSearchTopic(topic);
-    const domain = detectQueryDomain(raw);
-    const entertainmentVariants = buildEntertainmentQueryVariants(raw, aliasedTopic || topic, domain);
-    const broadFactualVariants = buildBroadFactualEntityVariants(raw, aliasedTopic || topic, domain);
     if (aliasedTopic && aliasedTopic.toLowerCase() !== topic.toLowerCase()) {
         out.push(aliasedTopic);
     }
-    const dynamicVariants = buildDynamicQueryVariants(raw, aliasedTopic || topic, domain);
-    const definitionVariants = buildDefinitionQueryVariants(raw, aliasedTopic || topic, domain);
-    out.push(...dynamicVariants);
-    out.push(...definitionVariants);
-    out.push(...entertainmentVariants);
-    out.push(...broadFactualVariants);
 
     if (isTimeSensitiveQuery(raw)) {
         const timeAwareTopic = raw
@@ -141,168 +296,17 @@ function buildSearchQueries(query) {
             out.push(cleanedTimeAwareTopic);
         }
         out.push(`latest ${cleanedTimeAwareTopic || topic}`);
-        out.push(`${cleanedTimeAwareTopic || topic} Reuters OR AP OR BBC OR Al Jazeera`);
-        out.push(...buildTimeSensitiveDomainVariants(cleanedTimeAwareTopic || topic, domain));
         if (aliasedTopic && aliasedTopic.toLowerCase() !== topic.toLowerCase()) {
             out.push(`latest ${aliasedTopic}`);
-            out.push(`${aliasedTopic} Reuters OR AP OR BBC OR Al Jazeera`);
-            out.push(...buildTimeSensitiveDomainVariants(aliasedTopic, domain));
         }
     }
 
     return Array.from(new Set(out.filter(Boolean)));
 }
 
-function buildDefinitionQueryVariants(rawQuery, topic, domain) {
-    const raw = String(rawQuery || '').trim();
-    const base = String(topic || '').trim();
-    if (!raw || !base) return [];
-    if (!isDefinitionStyleQuery(raw)) return [];
-
-    const hints = getDomainHints(domain);
-    const trusted = getTrustedSourceHintForDomain(domain);
-    return Array.from(new Set([
-        `${base} definition`,
-        `what is ${base}`,
-        `${base} meaning`,
-        `${base} explained`,
-        `${base} simple definition`,
-        `${base} ${hints.context || 'reliable source'}`,
-        `${base} ${trusted}`
-    ].filter(Boolean)));
-}
-
 function isTimeSensitiveQuery(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|update|status|price now|rate today|winner|won|champion|score|scores|live score|stats|standings|points table|ranking|rankings|record|qualified|eliminated|ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|atp|wta|f1|motogp|fifa|uefa|olympics|world cup|nasa|isro|esa|jaxa|cern|bjp|aap|dmk|aiadmk|tdp|ysrcp|bjd|rbi|sebi|imf|nato|eu|tcs|ibm|amd|ai|ml|llm|agi|gpu|cpu)\b/.test(t);
-}
-
-function buildDynamicQueryVariants(rawQuery, topic, domain) {
-    const out = [];
-    const acronymCandidates = extractAcronymCandidates(rawQuery);
-    const domainHints = getDomainHints(domain);
-
-    if (acronymCandidates.length) {
-        out.push(`"${topic}"`);
-        for (const token of acronymCandidates) {
-            out.push(`${token} ${domainHints.primary}`);
-            if (domainHints.secondary) {
-                out.push(`${token} ${domainHints.secondary}`);
-            }
-            if (topic.toLowerCase() !== token.toLowerCase()) {
-                out.push(`"${token}" ${topic}`);
-            }
-        }
-    }
-
-    if (domainHints.context && !topic.toLowerCase().includes(domainHints.context.toLowerCase())) {
-        out.push(`${topic} ${domainHints.context}`);
-    }
-
-    return out;
-}
-
-function isPureHowToOrCodingConceptSearch(text) {
-    const t = String(text || '').toLowerCase();
-    if (!t.trim()) return false;
-    const technicalSignals = /\b(hld|lld|system design|design pattern|architecture|algorithm|data structure|time complexity|space complexity|javascript|typescript|python|java|react|node|sql|backend|frontend|microservices?|docker|kubernetes|devops|debug|bug fix|refactor|unit test)\b/;
-    const howToSignals = /^(how to|how do i|how can i|tutorial|guide|walk me through|show me how to)\b/;
-    const liveSignals = /\b(current|latest|today|now|news|release|market|price|rate|winner|score)\b/;
-    return (technicalSignals.test(t) && !liveSignals.test(t)) || (howToSignals.test(t) && technicalSignals.test(t));
-}
-
-function isBroadFactualPromptSearch(text) {
-    const raw = String(text || '').trim();
-    if (!raw) return false;
-    if (isPureHowToOrCodingConceptSearch(raw)) return false;
-    if (/^(what do you think of|what are your thoughts on|thoughts on)\b/i.test(raw)) return false;
-    const factualAskPattern = /^(who is|who was|what is|what was|when did|when was|where is|where was|tell me about|define|meaning of|do you know)\b/i;
-    const worldFactSignal = /\b(company|person|founder|ceo|president|prime minister|captain|coach|team|club|country|city|state|movie|film|song|album|actor|actress|director|scientist|astronaut|war|election|festival|holiday|record|title|stats?|score|winner|result)\b/i;
-    return factualAskPattern.test(raw) && worldFactSignal.test(raw);
-}
-
-function isDefinitionStyleQuery(text) {
-    const t = String(text || '').trim().toLowerCase();
-    if (!t) return false;
-    if (/\b(latest|today|current|right now|breaking|news|update|updates)\b/.test(t)) return false;
-    return /^(what is|what's|define|meaning of|explain)\b/.test(t);
-}
-
-function extractBroadFactualSubject(text) {
-    const raw = String(text || '').trim();
-    if (!raw) return '';
-    const patterns = [
-        /^(?:who is|who was|what is|what was|tell me about|define|meaning of|do you know)\s+(.+?)\??$/i,
-        /^(?:when did|when was)\s+(.+?)\s+(?:release|released|come out|premiere|premiered)\b.*$/i,
-        /^(?:where is|where was)\s+(.+?)\??$/i
-    ];
-    for (const pattern of patterns) {
-        const match = raw.match(pattern);
-        if (match?.[1]) {
-            return normalizeSearchTopic(match[1]
-                .replace(/^(a|an|the)\s+/i, '')
-                .replace(/[?.!,;]+$/g, '')
-                .trim());
-        }
-    }
-    return '';
-}
-
-function extractBroadFactualRole(text) {
-    const match = String(text || '').toLowerCase().match(/\b(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|minister|director general|administrator|head)\b/);
-    return match?.[1] || '';
-}
-
-function buildBroadFactualEntityVariants(rawQuery, topic, domain) {
-    const raw = String(rawQuery || '').trim();
-    if (!isBroadFactualPromptSearch(raw)) return [];
-
-    const subject = extractBroadFactualSubject(raw) || String(topic || '').trim();
-    if (!subject) return [];
-    const role = extractBroadFactualRole(raw);
-    const trustedHint = getTrustedSourceHintForDomain(domain);
-    const hints = getDomainHints(domain);
-    const variants = [
-        `${subject} ${hints.primary}`.trim(),
-        `${subject} official profile`.trim(),
-        `${subject} verified sources`.trim(),
-        `${subject} ${trustedHint}`.trim()
-    ];
-    if (role) {
-        variants.push(`${subject} current ${role}`.trim());
-        variants.push(`${subject} ${role} official`.trim());
-    }
-    return Array.from(new Set(variants.filter(Boolean)));
-}
-
-function buildEntertainmentQueryVariants(rawQuery, topic, domain) {
-    if (domain !== 'entertainment') return [];
-
-    const out = [];
-    const normalizedRaw = String(rawQuery || '').trim();
-    const subject = extractEntertainmentSubject(normalizedRaw) || String(topic || '').trim();
-    if (!subject) return out;
-
-    if (isLatestFilmQuery(normalizedRaw)) {
-        out.push(`${subject} latest movie`);
-        out.push(`${subject} latest film`);
-        out.push(`${subject} most recent film`);
-        out.push(`${subject} filmography latest movie`);
-        out.push(`${subject} imdb latest movie`);
-        out.push(`${subject} wikipedia filmography`);
-    }
-
-    if (isLatestSongOrAlbumQuery(normalizedRaw)) {
-        out.push(`${subject} latest song`);
-        out.push(`${subject} latest album`);
-        out.push(`${subject} discography latest`);
-    }
-
-    return out;
-}
-
-function expandCriticalQueryAliases(text) {
-    return normalizeSearchTopic(text);
+    return /\b(latest|recent|current|today|right now|as of now|breaking|news|headlines?|updates?|status|price now|rate today|winner|won|champion|scores?|live score|stats?|standings|points table|rankings?|record|qualified|eliminated)\b/.test(t);
 }
 
 function normalizeSearchTopic(text) {
@@ -312,72 +316,3 @@ function normalizeSearchTopic(text) {
         .trim();
 }
 
-function buildTimeSensitiveDomainVariants(topic, domain) {
-    const base = String(topic || '').trim();
-    if (!base) return [];
-
-    const hints = getDomainHints(domain);
-    const out = [];
-    if (hints.fresh) out.push(`${base} ${hints.fresh}`);
-    if (hints.official) out.push(`${base} ${hints.official}`);
-    return out;
-}
-
-function extractAcronymCandidates(text) {
-    const raw = String(text || '');
-    if (!raw) return [];
-
-    const matches = raw.match(/\b[a-zA-Z0-9&.-]{2,10}\b/g) || [];
-    return Array.from(new Set(
-        matches.filter(token => isLikelyAcronymToken(token)).map(token => token.toUpperCase())
-    ));
-}
-
-function isLikelyAcronymToken(token) {
-    const value = String(token || '').trim();
-    if (!value) return false;
-    if (/^\d+$/.test(value)) return false;
-    if (value.length === 1 || value.length > 10) return false;
-    if (/^[A-Z0-9]{2,10}$/.test(value)) return true;
-    return /^[A-Z][a-z0-9]*[A-Z][A-Za-z0-9]*$/.test(value);
-}
-
-function isLatestFilmQuery(text) {
-    const t = String(text || '').toLowerCase();
-    return /\b(latest|recent|new|newest|most recent|current|upcoming)\b/.test(t) &&
-        /\b(movie|film|films|cinema|release|filmography)\b/.test(t);
-}
-
-function isLatestSongOrAlbumQuery(text) {
-    const t = String(text || '').toLowerCase();
-    return /\b(latest|recent|new|newest|most recent|current|upcoming)\b/.test(t) &&
-        /\b(song|songs|album|albums|single|discography)\b/.test(t);
-}
-
-function extractEntertainmentSubject(text) {
-    const raw = String(text || '').trim();
-    if (!raw) return '';
-
-    const patterns = [
-        /\b(?:latest|recent|new|newest|most recent|current|upcoming)\s+(?:movie|film|release)\s+(?:of|from|by)\s+(?:actor|actress|director|singer)?\s*([^?.!,]+)$/i,
-        /\b(?:what is|which is|tell me|show me)\s+(?:the\s+)?(?:latest|recent|new|newest|most recent|current|upcoming)\s+(?:movie|film|release)\s+(?:of|from|by)\s+(?:actor|actress|director|singer)?\s*([^?.!,]+)$/i,
-        /\b(?:actor|actress|director|singer)\s+([^?.!,]+?)\s+(?:latest|recent|new|newest|most recent|current|upcoming)\s+(?:movie|film|release)\b/i,
-        /\b(?:what is|which is|tell me|show me)\s+(?:the\s+)?(?:latest|recent|new|newest|most recent|current|upcoming)\s+([^?.!,]+?)\s+(?:movie|film|release)\b/i,
-        /\b(?:latest|recent|new|newest|most recent|current|upcoming)\s+([^?.!,]+?)\s+(?:movie|film|release)\b/i
-    ];
-
-    for (const pattern of patterns) {
-        const match = raw.match(pattern);
-        if (match?.[1]) {
-            return normalizeSearchTopic(match[1]
-                .replace(/\b(actor|actress|director|singer)\b/gi, ' ')
-                .replace(/\s+/g, ' ')
-                .trim());
-        }
-    }
-
-    return normalizeSearchTopic(raw
-        .replace(/\b(what|which|tell|show|me|is|the|latest|recent|new|newest|most recent|current|upcoming|movie|film|release|of|from|by|actor|actress|director|singer)\b/gi, ' ')
-        .replace(/\s+/g, ' ')
-        .trim());
-}
