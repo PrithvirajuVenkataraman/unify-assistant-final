@@ -20881,7 +20881,7 @@ async function handleContinuousVisionQuery(text) {
             ? `Read the math problem from the image and solve it accurately with clear steps. User query: "${text}".`
             : (isTranslateIntent
                 ? `Extract all readable text and translate it to English. User query: "${text}".`
-                : `Describe only what is relevant to the user query. If readable text or software UI is visible, focus on that first and ignore background details like wall color unless explicitly asked. If the user asks about a product/part/object, identify it and explain its practical use briefly. Preserve exact numbers/symbols/equations when text exists. User query: "${text}". Respond in 1-2 short sentences, concise and practical.`);
+                : `Describe only what is relevant to the user query. Focus on the most prominent foreground object first. If readable text is visible, mention it only as secondary context, for example: "I also see something written as ...". If the user asks about a product/part/object, identify it and explain its practical use briefly. Preserve exact numbers/symbols/equations when text exists. User query: "${text}". Respond in 1-2 short sentences, concise and practical.`);
         const response = await fetch('/api/vision', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -20963,15 +20963,22 @@ function formatVisionJsonToReadableText(payload) {
         ? payload.textDetected.map(v => String(v || '').trim()).filter(Boolean)
         : [];
     const compactText = fullText || textDetected.slice(0, 12).join('\n');
+    const objectLabel = pickReadableVisionObject(objects);
+    const parts = [];
 
-    if (compactText) {
-        const parts = [`Detected text:\n${compactText.slice(0, 2400)}`];
-        if (directAnswer) parts.push(directAnswer.replace(/\s+/g, ' ').trim().slice(0, 280));
-        return parts.join('\n\n').trim();
+    if (objectLabel) {
+        parts.push(`I see ${withReadableArticle(objectLabel)}.`);
+    } else if (directAnswer) {
+        parts.push(directAnswer.replace(/\s+/g, ' ').trim().slice(0, 280));
+    } else if (summary) {
+        parts.push(summary.replace(/\s+/g, ' ').trim().slice(0, 280));
     }
 
-    if (directAnswer) return directAnswer.replace(/\s+/g, ' ').trim().slice(0, 280);
-    if (summary) return summary.replace(/\s+/g, ' ').trim().slice(0, 280);
+    if (compactText) {
+        parts.push(`I also see something written as "${compactVisionTextMention(compactText)}."`);
+    }
+
+    if (parts.length) return parts.join(' ').replace(/\s+/g, ' ').trim();
 
     if (objects.length) {
         const objectLine = objects
@@ -20986,6 +20993,34 @@ function formatVisionJsonToReadableText(payload) {
     }
 
     return '';
+}
+
+function pickReadableVisionObject(objects) {
+    if (!Array.isArray(objects) || !objects.length) return '';
+    const skip = /^(text|words|lettering|logo|label|screen|display|brand|writing|document|paper)$/i;
+    const candidates = objects
+        .map(item => ({
+            label: String(item?.label || '').trim(),
+            confidence: Number(item?.confidence || 0)
+        }))
+        .filter(item => item.label && !skip.test(item.label))
+        .sort((a, b) => b.confidence - a.confidence);
+    return candidates[0]?.label || '';
+}
+
+function withReadableArticle(label) {
+    const clean = String(label || '').trim();
+    if (!clean) return 'an object';
+    if (/^(a|an|the)\s+/i.test(clean)) return clean;
+    return /^[aeiou]/i.test(clean) ? `an ${clean}` : `a ${clean}`;
+}
+
+function compactVisionTextMention(text) {
+    return String(text || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 120)
+        .replace(/["]+/g, "'");
 }
 
 function normalizeVisionAnswerForChat(answer, details = {}) {
@@ -21013,6 +21048,7 @@ function refineVisionAnswer(text) {
     if (!out) return '';
     out = out
         .replace(/^likely item:\s*[^.]+\.?\s*/i, '')
+        .replace(/^detected text:\s*/i, 'I see something written as ')
         .replace(/^\s*person\.\s*/i, '')
         .replace(/\bappears to be\b/gi, 'is')
         .replace(/\s+/g, ' ')
