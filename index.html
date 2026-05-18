@@ -3516,19 +3516,23 @@ async function buildSearchFallbackAnswer(userMessage) {
         const response = await fetch('/api/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, maxResults: 5 })
+            body: JSON.stringify({ query, maxResults: 5, answer: true })
         });
         if (!response.ok) return null;
         const data = await response.json();
         const results = Array.isArray(data?.results) ? data.results : [];
         if (results.length) {
-            const top = results[0];
-            const topSnippet = String(top?.description || '').trim();
             const lines = results
                 .slice(0, 3)
                 .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
                 .join('\n');
+            const groundedAnswer = cleanLiveAnswerText(String(data?.answer || '').trim());
+            if (groundedAnswer && !isVerificationRefusalText(groundedAnswer)) {
+                return `${groundedAnswer}\n\nSources:\n${lines}`;
+            }
 
+            const top = results[0];
+            const topSnippet = String(top?.description || '').trim();
             const lead = topSnippet
                 ? `From web sources: ${topSnippet}`
                 : `I found reliable web sources about ${query}.`;
@@ -12440,6 +12444,9 @@ function buildStrictLatestRefineHint(intent, queryText, entityIntent = {}, sourc
 }
 
 function buildStrictLatestFailureMessage(intent, queryText, reason = 'verification_unavailable', entityIntent = {}, sources = []) {
+    if (String(intent?.domain || '').toLowerCase() === 'finance') {
+        return 'I could not reach live market/search sources for this current finance query right now. Please retry in a moment, or check a live rates source like your bank, Google Finance, XE, Wise, or RBI before using the number.';
+    }
     const prefix = reason === 'stale_sources'
         ? 'I cannot verify a fresh latest update from sufficiently recent sources right now.'
         : 'I cannot verify this latest/current request confidently from enough usable independent sources right now.';
@@ -12467,6 +12474,17 @@ async function publishStrictLatestFailure(userText, intent, options = {}) {
         speak(bestEffort.speech || 'I found the best-supported live summary.');
         saveToHistory(userText, bestEffort.text);
         return true;
+    }
+
+    if (String(intent?.domain || '').toLowerCase() !== 'finance' && isConciseDirectFactQuery(userText)) {
+        const ai = await askGeminiAI(userText);
+        const modelAnswer = String(ai?.response || ai?.text || '').trim();
+        if (modelAnswer && !ai?.aborted && ai?.intent !== 'soft_fallback') {
+            addModelAssistantMessage(modelAnswer, 'Model answer');
+            speak(modelAnswer);
+            saveToHistory(userText, modelAnswer);
+            return true;
+        }
     }
 
     const message = options?.message || buildStrictLatestFailureMessage(
@@ -15727,6 +15745,23 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         try { controller.abort(); } catch (_) {}
     }, TRUST_FIRST_RELIABILITY_POLICY.verificationBudgetMs);
     try { 
+        const searchSummary = await buildVerifiedSearchSummary(pipeline.userText, {
+            badge: 'Search + Groq live answer',
+            speech: 'I checked live search and prepared a concise answer.'
+        });
+        if (searchSummary?.text && !isVerificationRefusalText(searchSummary.text)) {
+            logRoutingDebug('handler decision: universal_entity_fact search_answer', userText, {
+                selectedHandler: 'buildVerifiedSearchSummary',
+                liveIntent: pipeline.intent,
+                entityIntent: pipeline.entityIntent,
+                riskLevel
+            });
+            addVerifiedAssistantMessage(searchSummary.text, searchSummary.badge || 'Search + Groq live answer');
+            speak(searchSummary.speech || 'I checked live search and prepared a concise answer.');
+            saveToHistory(pipeline.userText, searchSummary.text);
+            return true;
+        }
+
         const deduped = await retrieveUniversalEntitySources(pipeline, controller);
         const isSportsRoleQuery =
             pipeline?.entityIntent?.relationType === 'role' &&
@@ -15753,6 +15788,16 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         });
 
         if (!deduped.length) { 
+            const modelFallbackPublished = await publishUniversalModelFallback(pipeline, 'Model answer');
+            if (modelFallbackPublished) {
+                logRoutingDebug('handler exit: universal_entity_fact model_fallback_no_sources', userText, {
+                    selectedHandler: 'publishUniversalModelFallback',
+                    liveIntent: pipeline.intent,
+                    entityIntent: pipeline.entityIntent,
+                    riskLevel
+                });
+                return true;
+            }
             logRoutingDebug('handler exit: universal_entity_fact no_sources', userText, {
                 selectedHandler: 'publishStrictVerificationClarification',
                 liveIntent: pipeline.intent,
@@ -15849,6 +15894,17 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
                 speechText: 'Verification timed out before reaching confidence threshold.',
                 badge: 'Verification unavailable'
             });
+        }
+        const modelFallbackPublished = await publishUniversalModelFallback(pipeline, 'Model answer');
+        if (modelFallbackPublished) {
+            logRoutingDebug('handler exit: universal_entity_fact model_fallback_error', userText, {
+                selectedHandler: 'publishUniversalModelFallback',
+                liveIntent: pipeline.intent,
+                entityIntent: pipeline.entityIntent,
+                riskLevel,
+                error: String(error?.message || error || '')
+            });
+            return true;
         }
         return publishStrictVerificationClarification(pipeline, {
             sources: [],
