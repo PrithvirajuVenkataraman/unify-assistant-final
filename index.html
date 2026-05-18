@@ -2460,33 +2460,81 @@ async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking
 async function processUserQuery(text) {
     const t = String(text || '').trim();
     if (!t) return;
+    if (isArtistSongRequest(t)) {
+        logRoutingDebug('processUserQuery -> artist_song', t, { selectedHandler: 'handleArtistSongRequest' });
+        await handleArtistSongRequest(t);
+        return { intent: 'artist_song' };
+    }
     const liveIntent = extractLiveQueryIntent(t);
     const entityIntent = extractUniversalEntityIntent(t, liveIntent);
     const broadFactualWeb = isBroadFactualWebQuery(t, entityIntent, liveIntent);
+    const riskLevel = getRiskTierForQuery(t, liveIntent, entityIntent);
+    logRoutingDebug('processUserQuery classified', t, {
+        liveIntent,
+        entityIntent,
+        riskLevel,
+        broadFactualWeb
+    });
     if (isExplicitWebSearchRequest(t)) {
+        logRoutingDebug('processUserQuery -> live_retrieval explicit_web', t, {
+            selectedHandler: 'handleLiveRetrievalQuery',
+            normalizedQuery: normalizeExplicitWebSearchQuery(t),
+            liveIntent,
+            entityIntent,
+            riskLevel
+        });
         await handleLiveRetrievalQuery(normalizeExplicitWebSearchQuery(t));
         return { intent: 'live_retrieval' };
     }
-    const riskLevel = getRiskTierForQuery(t);
     if (isStrictLatestQuery(t)) {
+        logRoutingDebug('processUserQuery -> strict_latest', t, {
+            selectedHandler: 'handleStrictLatestQuery',
+            liveIntent,
+            entityIntent,
+            riskLevel
+        });
         await handleStrictLatestQuery(t);
         return { intent: 'strict_latest' };
     }
 
     if (isPersonalHealthStatement(t)) {
+        logRoutingDebug('processUserQuery -> model personal_health', t, {
+            selectedHandler: 'askGeminiAI',
+            liveIntent,
+            entityIntent,
+            riskLevel
+        });
         return await askGeminiAI(t);
     }
 
     if (isHeadlineListQuery(t) || shouldUseNewsEndpointForCurrentQuery(t) || isNewsworthyLiveTopic(t)) {
+        logRoutingDebug('processUserQuery -> news', t, {
+            selectedHandler: 'fetchAndDisplayNews',
+            liveIntent,
+            entityIntent,
+            riskLevel
+        });
         await fetchAndDisplayNews(t);
         return { intent: 'news' };
     }
 
     if (broadFactualWeb) {
         if (entityIntent?.isEntityFact) {
+            logRoutingDebug('processUserQuery -> entity_fact broad_factual', t, {
+                selectedHandler: 'handleUniversalEntityFactQuery',
+                liveIntent,
+                entityIntent,
+                riskLevel
+            });
             await handleUniversalEntityFactQuery(t, liveIntent);
             return { intent: 'entity_fact' };
         }
+        logRoutingDebug('processUserQuery -> live_retrieval broad_factual', t, {
+            selectedHandler: 'handleLiveRetrievalQuery',
+            liveIntent,
+            entityIntent,
+            riskLevel
+        });
         await handleLiveRetrievalQuery(t, {
             broadFactualWeb: true
         });
@@ -2497,19 +2545,43 @@ async function processUserQuery(text) {
         riskLevel !== 'low_risk' &&
         (isCurrentInfoQuery(t) || isLiveRetrievalQuery(t) || isUniversalEntityFactQuestion(t) || isProfileOrIdentityQuery(t))
     ) {
+        logRoutingDebug('processUserQuery -> live_retrieval risk_gate', t, {
+            selectedHandler: 'handleLiveRetrievalQuery',
+            liveIntent,
+            entityIntent,
+            riskLevel
+        });
         await handleLiveRetrievalQuery(t);
         return { intent: 'live_retrieval' };
     }
 
     if (isUniversalExplainerRequest(t)) {
+        logRoutingDebug('processUserQuery -> explainer', t, {
+            selectedHandler: 'handleUniversalExplainerQuery',
+            liveIntent,
+            entityIntent,
+            riskLevel
+        });
         const handled = await handleUniversalExplainerQuery(t);
         if (handled) return { intent: 'explainer' };
     }
 
     if (isWeatherIntentText(t)) {
+        logRoutingDebug('processUserQuery -> weather', t, {
+            selectedHandler: 'weather_intent_return',
+            liveIntent,
+            entityIntent,
+            riskLevel
+        });
         return { intent: 'weather' };
     }
 
+    logRoutingDebug('processUserQuery -> model default', t, {
+        selectedHandler: 'askGeminiAI',
+        liveIntent,
+        entityIntent,
+        riskLevel
+    });
     return await askGeminiAI(t);
 }
 
@@ -2587,6 +2659,86 @@ function buildSourceMetaBlock(items) {
     const confidence = trustedHits >= 3 && domains.size >= 2 ? 'High' : (trustedHits >= 1 ? 'Medium' : 'Low');
     if (!latest) return `${asOf}\nSource confidence: ${confidence}`;
     return `${asOf}\nLatest source date: ${latest}\nSource confidence: ${confidence}`;
+}
+
+function simplifyForRoutingLog(value, depth = 0) {
+    if (value == null) return value;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+    if (depth >= 3) return '[nested]';
+    if (Array.isArray(value)) {
+        return value.slice(0, 8).map(item => simplifyForRoutingLog(item, depth + 1));
+    }
+    if (typeof value === 'object') {
+        const out = {};
+        for (const [key, item] of Object.entries(value)) {
+            if (typeof item === 'function') continue;
+            if (key === 'signal' || key === 'controller') continue;
+            out[key] = simplifyForRoutingLog(item, depth + 1);
+        }
+        return out;
+    }
+    return String(value);
+}
+
+function buildRoutingSnapshot(text, overrides = {}) {
+    const query = String(text || '').trim();
+    let liveIntent = overrides.liveIntent || null;
+    let entityIntent = overrides.entityIntent || null;
+    let classification = overrides.classification || null;
+    let riskLevel = overrides.riskLevel || '';
+    try {
+        liveIntent = liveIntent || (query ? extractLiveQueryIntent(query) : null);
+        entityIntent = entityIntent || (query ? extractUniversalEntityIntent(query, liveIntent) : null);
+        riskLevel = riskLevel || (query ? getRiskTierForQuery(query, liveIntent, entityIntent) : '');
+    } catch (error) {
+        return {
+            query,
+            error: String(error?.message || error || 'routing snapshot failed'),
+            ...overrides
+        };
+    }
+    return {
+        query,
+        answerPath: overrides.answerPath || '',
+        hybridMode: overrides.hybridMode || '',
+        riskLevel,
+        liveIntent,
+        entityIntent,
+        classification,
+        flags: {
+            explicitWebSearch: query ? isExplicitWebSearchRequest(query) : false,
+            strictLatest: query ? isStrictLatestQuery(query) : false,
+            currentInfo: query ? isCurrentInfoQuery(query) : false,
+            liveRetrieval: query ? isLiveRetrievalQuery(query) : false,
+            universalEntityFact: query ? isUniversalEntityFactQuestion(query) : false,
+            profileIdentity: query ? isProfileOrIdentityQuery(query) : false,
+            broadFactualWeb: query ? isBroadFactualWebQuery(query, entityIntent, liveIntent) : false,
+            universalExplainer: query ? isUniversalExplainerRequest(query) : false,
+            weather: query ? isWeatherIntentText(query) : false
+        },
+        ...overrides
+    };
+}
+
+function logRoutingDebug(stage, text, details = {}) {
+    if (!showRoutingDebugBadge) return;
+    const payload = simplifyForRoutingLog({
+        at: new Date().toISOString(),
+        stage,
+        ...buildRoutingSnapshot(text, details)
+    });
+    window.__jarvisRoutingLog = Array.isArray(window.__jarvisRoutingLog) ? window.__jarvisRoutingLog : [];
+    window.__jarvisRoutingLog.push(payload);
+    if (window.__jarvisRoutingLog.length > 100) {
+        window.__jarvisRoutingLog = window.__jarvisRoutingLog.slice(-100);
+    }
+    try {
+        console.groupCollapsed(`[JARVIS route] ${stage}: ${String(text || '').trim().slice(0, 120)}`);
+        console.log(payload);
+        console.groupEnd();
+    } catch (_) {
+        console.info('[JARVIS route]', payload);
+    }
 }
 
 const TRUST_FIRST_RELIABILITY_POLICY = {
@@ -10178,7 +10330,8 @@ const GENERIC_INTENT_COMMAND_WORDS = new Set([
     'latest', 'new', 'newest', 'recent', 'current', 'top', 'best', 'popular',
     'song', 'songs', 'track', 'tracks', 'music', 'playlist', 'hit', 'hits',
     'movie', 'movies', 'film', 'films', 'release', 'releases', 'album', 'albums',
-    'single', 'singles', 'show', 'series', 'profile', 'who', 'what', 'which'
+    'single', 'singles', 'show', 'series', 'profile', 'who', 'what', 'which',
+    'web', 'internet', 'online'
 ]);
 
 const GENERIC_INTENT_DOMAIN_WORDS = {
@@ -10232,6 +10385,7 @@ function detectGenericIntentAction(text, domain, modifiers) {
     if (mods.has('play')) return 'play';
     if (mods.has('recommend')) return 'recommend';
     if (mods.has('search')) return 'search';
+    if ((domain === 'songs' || domain === 'movie') && mods.has('latest')) return 'latest';
     if (mods.has('explain') || /^(who is|who was|what is|tell me about|define|meaning of)\b/.test(t)) return 'explain';
     if (mods.has('top')) return 'top';
     if (mods.has('latest')) return 'latest';
@@ -10923,7 +11077,10 @@ function sanitizeArtistName(input) {
     if (!cleaned || cleaned.length < 2 || cleaned.length > 80) return '';
     if (!/[a-z]/i.test(cleaned)) return '';
     if (/^(song|songs|track|tracks|music|playlist|top|best|suggest|recommend|give|show|tell|list|me)$/i.test(cleaned)) return '';
-    return cleaned;
+    const knownArtistCorrections = {
+        'sean rolden': 'Sean Roldan'
+    };
+    return knownArtistCorrections[cleaned.toLowerCase()] || cleaned;
 }
 
 function clampSongCount(value, fallback = 5) {
@@ -11524,6 +11681,44 @@ function formatMusicSongReply(artist, requestedCount, items, fallback = false, m
     return lines.join('\n');
 }
 
+function formatBestEffortMusicSearchReply(artist, requestedCount, snippets, mode = 'latest') {
+    const safeArtist = String(artist || 'the artist').trim();
+    const count = clampSongCount(requestedCount, mode === 'latest' ? 5 : 8);
+    const sourceItems = (Array.isArray(snippets) ? snippets : [])
+        .filter(item => String(item?.title || '').trim() && String(item?.url || '').trim())
+        .slice(0, Math.max(3, Math.min(count, 6)));
+    const label = mode === 'latest' ? 'Recent music results' : 'Music results';
+    const lines = [`[Music] ${label} for ${safeArtist}`, ''];
+
+    if (!sourceItems.length) {
+        lines.push('I could not fetch music sources right now, but I can still suggest well-known songs if you ask for top songs.');
+        return lines.join('\n');
+    }
+
+    sourceItems.forEach((item, index) => {
+        const title = String(item.title || '').replace(/\s+/g, ' ').trim();
+        const description = String(item.description || '').replace(/\s+/g, ' ').trim();
+        const url = String(item.url || '').trim();
+        lines.push(`${index + 1}. ${title}`);
+        if (description) lines.push(`   ${description.slice(0, 180)}`);
+        lines.push(`   Source: ${url}`);
+    });
+
+    lines.push('');
+    lines.push('Note: I ranked these from live music-search results, so this is a best-effort recent-release view rather than a guaranteed single official discography answer.');
+    return lines.join('\n');
+}
+
+async function publishBestEffortMusicSearchReply(originalText, artist, requestedCount, snippets, wantsLatest) {
+    const reply = formatBestEffortMusicSearchReply(artist, requestedCount, snippets, wantsLatest ? 'latest' : 'top');
+    addVerifiedAssistantMessage(reply, wantsLatest ? 'Best-effort live music sources' : 'Music sources');
+    await speakApiReply('artist_song_grounded', {
+        artist
+    }, wantsLatest ? `Here are recent music results for ${artist}.` : `Here are music results for ${artist}.`);
+    saveToHistory(originalText, reply);
+    return true;
+}
+
 function toCompactLower(input) {
     return String(input || '')
         .toLowerCase()
@@ -11545,9 +11740,13 @@ function isWorkMentionedInEvidence(work, evidenceItems) {
 async function handleArtistSongRequest(text) {
     const parsedIntent = await parseSongRequestIntent(text);
     const artist = parsedIntent.artist;
-    const requestedCount = parsedIntent.requestedCount;
+    const singularLatestAsk = /\b(latest|new|newest|recent|current|most\s+recent)\b/i.test(String(text || '')) &&
+        /\b(song|track|single)\b/i.test(String(text || '')) &&
+        !/\b(songs|tracks|singles|top|best|\d{1,2})\b/i.test(String(text || ''));
+    const requestedCount = singularLatestAsk ? 1 : parsedIntent.requestedCount;
     const wantsLatest = parsedIntent?.genericIntent?.intent === 'latest' ||
         /\b(latest|new|newest|recent|current|most\s+recent)\b/i.test(String(text || ''));
+    let lastMusicSnippets = [];
     if (!artist) {
         const msg = 'Tell me the artist name and I will suggest good songs. Example: "Best songs of AR Rahman".';
         addChatMessage(msg, false);
@@ -11601,6 +11800,7 @@ async function handleArtistSongRequest(text) {
             const url = String(r?.url || '').trim();
             return !!title && /^https?:\/\//i.test(url);
         });
+        lastMusicSnippets = snippets;
         if (!snippets.length) throw new Error('no valid web snippets found');
 
         const snippetsBlock = snippets
@@ -11654,6 +11854,10 @@ ${snippetsBlock}`;
         const items = Array.isArray(parsed?.songs) ? parsed.songs : [];
 
         if (!items.length) {
+            if (wantsLatest) {
+                await publishBestEffortMusicSearchReply(text, artist, requestedCount, snippets, wantsLatest);
+                return;
+            }
             throw new Error('verification returned no songs');
         }
 
@@ -11684,6 +11888,10 @@ ${snippetsBlock}`;
         }
 
         if (!formattedItems.length) {
+            if (wantsLatest) {
+                await publishBestEffortMusicSearchReply(text, artist, requestedCount, snippets, wantsLatest);
+                return;
+            }
             throw new Error('verification returned no grounded songs');
         }
 
@@ -11699,6 +11907,10 @@ ${snippetsBlock}`;
         saveToHistory(text, msg);
     } catch (error) {
         try {
+            if (wantsLatest && lastMusicSnippets.length) {
+                await publishBestEffortMusicSearchReply(text, artist, requestedCount, lastMusicSnippets, wantsLatest);
+                return;
+            }
             const aiFallbackItems = await buildSongListFromAIFallback(artist, requestedCount, wantsLatest ? 'latest/recent songs' : 'top/best songs');
             const fallbackReply = formatMusicSongReply(artist, requestedCount, aiFallbackItems, true, wantsLatest ? 'latest' : 'top');
             addChatMessage(fallbackReply, false);
@@ -12572,7 +12784,7 @@ function extractLiveQueryIntent(text) {
     let factType = 'general';
     if (/\b(latest|recent|new|newest|most recent|current|upcoming|future)\b.*\b(movie|film|release|song|album|single|show|series|project)\b|\b(movie|film|release|song|album|single|show|series|project)\b.*\b(latest|recent|new|newest|most recent|current|upcoming|future)\b/.test(t)) {
         factType = 'latest_work';
-    } else if (/\b(?:who is|who was|what is)\b[^?.!]{0,140}\b(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director|dean|chancellor|principal|secretary|director general)\b|\b(current|latest)\s+(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director|dean|chancellor|principal|secretary|director general)\b|\b(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director|dean|chancellor|principal|secretary|director general)\s+of\b|\bwho\s+heads?\b/.test(t)) {
+    } else if (/\b(?:who is|who was|what is)\b[^?.!]{0,140}\b(ceo|founder|president|prime minister|pm|chief minister|cm|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director|dean|chancellor|principal|secretary|director general)\b|\b(current|latest)\s+(ceo|founder|president|prime minister|pm|chief minister|cm|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director|dean|chancellor|principal|secretary|director general)\b|\b(ceo|founder|president|prime minister|pm|chief minister|cm|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director|dean|chancellor|principal|secretary|director general)\s+of\b|\bwho\s+heads?\b/.test(t)) {
         factType = 'role';
     } else if (/\b(known for|famous for|best known for)\b/.test(t)) {
         factType = 'known_for';
@@ -12645,7 +12857,7 @@ function isCurrentInfoQuery(text) {
 
     const freshnessTerms = /\b(latest|recent|current|today|right now|as of now|live|just now|this year|upcoming|future|next)\b/;
     const resultTerms = /\b(who won|winner|won|result|results|score|scores|what happened|what's happening|status|update|updates|headline|headlines|breaking|next match|upcoming fixture|upcoming holiday|next holiday|upcoming project)\b/;
-    const unstableEntityTerms = /\b(president|prime minister|ceo|chairman|captain|coach|champion|title holder|world cup|tournament|final|match|fixture|schedule|holiday|festival|war|conflict|ceasefire|attack|election|release|project|album|film|movie|song)\b/;
+    const unstableEntityTerms = /\b(president|prime minister|pm|chief minister|cm|ceo|chairman|captain|coach|champion|title holder|world cup|tournament|final|match|fixture|schedule|holiday|festival|war|conflict|ceasefire|attack|election|release|project|album|film|movie|song)\b/;
     const businessEventTerms = /\b(layoff|layoffs|firing|firings|job cuts|cuts|restructuring|reorganization|earnings|results|merger|acquisition|recall|bankruptcy|probe|investigation|antitrust|strike|walkout)\b/;
     const hasYearReference = hasExplicitYearReference(t);
 
@@ -12668,7 +12880,7 @@ function shouldUseNewsEndpointForCurrentQuery(text) {
     const technicalConceptSignals = /\b(hld|lld|system design|design pattern|architecture|api design|database design|algorithm|data structure|time complexity|space complexity|java|javascript|python|react|node|sql|backend|frontend|microservices?)\b/;
     if (technicalConceptSignals.test(t)) return false;
 
-    const directQuestionSignals = /\b(who won|who lost|winner|won|lost|score|scores|stat|stats|how many|what happened|what's happening|status|update me|brief me|tell me about|ceo|president|prime minister|captain|coach|price|rate)\b/;
+    const directQuestionSignals = /\b(who won|who lost|winner|won|lost|score|scores|stat|stats|how many|what happened|what's happening|status|update me|brief me|tell me about|ceo|president|prime minister|pm|chief minister|cm|captain|coach|price|rate)\b/;
     const businessEventTerms = /\b(layoff|layoffs|firing|firings|job cuts|restructuring|reorganization|earnings|merger|acquisition|recall|bankruptcy|probe|investigation|antitrust|strike|walkout)\b/;
     if (directQuestionSignals.test(t)) return false;
 
@@ -12682,13 +12894,13 @@ function shouldUseNewsEndpointForCurrentQuery(text) {
 function isDirectFactLiveQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    return /\b(who won|who lost|winner|won|lost|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated|ceo|president|prime minister|captain|coach|head of|leader of|director|director general|administrator|dean|chancellor|principal|known for|famous for|price|rate|latest movie|latest film|latest song|latest album|most recent film|most recent movie|upcoming film|upcoming movie|upcoming project|next match|upcoming match|upcoming fixture|next holiday|upcoming holiday)\b/.test(t);
+    return /\b(who won|who lost|winner|won|lost|champion|champions|score|scores|stat|stats|how many|title holder|final result|result|results|standing|standings|points table|rank|ranking|record|records|qualified|eliminated|ceo|president|prime minister|pm|chief minister|cm|captain|coach|head of|leader of|director|director general|administrator|dean|chancellor|principal|known for|famous for|price|rate|latest movie|latest film|latest song|latest album|most recent film|most recent movie|upcoming film|upcoming movie|upcoming project|next match|upcoming match|upcoming fixture|next holiday|upcoming holiday)\b/.test(t);
 }
 
 function isConciseDirectFactQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    const directFactSignals = /\b(how many|who is|who was|who won|who lost|winner|won|lost|what is the current|what is the latest|latest|current|ceo|president|prime minister|captain|coach|head of|leader of|director|director general|administrator|dean|chancellor|principal|known for|famous for|price|rate|score|scores|stats?|record|ranking|standings|titles?|cups?|won in total|total titles?|total cups?|qualified|eliminated|result|results|movie|film|song|album|release)\b/;
+    const directFactSignals = /\b(how many|who is|who was|who won|who lost|winner|won|lost|what is the current|what is the latest|latest|current|ceo|president|prime minister|pm|chief minister|cm|captain|coach|head of|leader of|director|director general|administrator|dean|chancellor|principal|known for|famous for|price|rate|score|scores|stats?|record|ranking|standings|titles?|cups?|won in total|total titles?|total cups?|qualified|eliminated|result|results|movie|film|song|album|release)\b/;
     const strictBinarySignal = isStrictYesNoRequest(t);
     const binaryQuestionStarter = /^(is|are|am|was|were|do|does|did|can|could|should|would|will|has|have|had)\b/.test(t) &&
         !/\b(explain|help|advise|suggest|recommend|walk me through|how to)\b/.test(t);
@@ -12880,8 +13092,8 @@ function decideAnswerPath(classification) {
     const medicalModeEnabled = typeof window !== 'undefined' ? !!window.medicalMode : false;
 
     if (flags.inappropriate) return 'moderation';
-    if (flags.explicitWebSearch) return 'web_search';
     if (flags.artistSong) return 'artist_song'; 
+    if (flags.explicitWebSearch) return 'web_search';
     if (flags.universalEntityFact) return 'entity_fact';
     if (flags.profileIdentity || flags.stableBiography) return 'live_retrieval';
     if (flags.currentInfo) return 'current_info';
@@ -12952,8 +13164,8 @@ function decideHybridResponseMode(classification) {
     const riskLevel = classification?.riskLevel || getRiskTierForQuery(raw, classification?.liveIntent, classification?.entityIntent);
 
     if (flags.inappropriate) return 'special_handler';
+    if (flags.artistSong) return 'tolerant_entertainment';
     if (flags.explicitWebSearch) return 'verify_first';
-    if (flags.artistSong && classification?.genericIntent?.route === 'live_music') return 'verify_first';
     if (flags.broadFactualWeb) return 'verify_first';
     if (flags.universalEntityFact) return 'verify_first';
     if (flags.profileIdentity || flags.stableBiography) return 'verify_first';
@@ -13028,31 +13240,38 @@ const ROUTING_REGRESSION_CASES = [
         expectedMode: 'verify_first'
     },
     {
+        name: 'Explicit web music route stays tolerant',
+        prompt: 'search the web for sean rolden songs',
+        expectedPath: 'artist_song',
+        expectedMode: 'tolerant_entertainment',
+        expectedGeneric: { intent: 'search', domain: 'songs', subject: 'sean rolden', route: 'music_catalog' }
+    },
+    {
         name: 'Latest artist songs route',
         prompt: 'latest anirudh songs',
         expectedPath: 'artist_song',
-        expectedMode: 'verify_first',
+        expectedMode: 'tolerant_entertainment',
         expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'anirudh', route: 'live_music' }
     },
     {
         name: 'New songs by artist route',
         prompt: 'new songs by anirudh',
         expectedPath: 'artist_song',
-        expectedMode: 'verify_first',
+        expectedMode: 'tolerant_entertainment',
         expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'anirudh', route: 'live_music' }
     },
     {
         name: 'Recent artist tracks route',
         prompt: 'anirudh recent tracks',
         expectedPath: 'artist_song',
-        expectedMode: 'verify_first',
+        expectedMode: 'tolerant_entertainment',
         expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'anirudh', route: 'live_music' }
     },
     {
         name: 'Top songs artist route',
         prompt: 'top 10 ar rahman songs',
         expectedPath: 'artist_song',
-        expectedMode: 'chat_first',
+        expectedMode: 'tolerant_entertainment',
         expectedGeneric: { intent: 'top', domain: 'songs', subject: 'ar rahman', route: 'music_catalog' }
     },
     {
@@ -13061,6 +13280,13 @@ const ROUTING_REGRESSION_CASES = [
         expectedPath: 'entity_fact',
         expectedMode: 'verify_first',
         expectedGeneric: { intent: 'latest', domain: 'movie', subject: 'vijay', route: 'live_entertainment' }
+    },
+    {
+        name: 'Latest Harris Jayaraj song route',
+        prompt: 'what is the latest song of harris jayaraj',
+        expectedPath: 'artist_song',
+        expectedMode: 'tolerant_entertainment',
+        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'harris jayaraj', route: 'live_music' }
     },
     {
         name: 'Person identity route',
@@ -13235,6 +13461,9 @@ const DOMAIN_SOURCE_POLICIES = {
     },
     politics: {
         trustedDomains: [
+            'pmindia.gov.in',
+            'india.gov.in',
+            'tn.gov.in',
             'gov.in',
             'gov.uk',
             'whitehouse.gov',
@@ -13251,6 +13480,9 @@ const DOMAIN_SOURCE_POLICIES = {
             'npr.org'
         ],
         preferredDomains: [
+            'pmindia.gov.in',
+            'india.gov.in',
+            'tn.gov.in',
             'gov.in',
             'gov.uk',
             'whitehouse.gov',
@@ -13614,6 +13846,8 @@ function buildLiveSearchQueries(userText, intent = null) {
 
 function expandKnownQueryAliases(text) {
     const aliasMap = {
+        tamilnadu: 'tamil nadu',
+        tn: 'tamil nadu',
         ipl: 'indian premier league',
         psl: 'pakistan super league',
         bbl: 'big bash league',
@@ -13689,6 +13923,7 @@ function normalizeSportsFactKey(value) {
 
 function normalizeEntitySearchText(value) {
     return String(value || '')
+        .replace(/\btamilnadu\b/gi, 'Tamil Nadu')
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, ' ')
         .replace(/\s+/g, ' ')
@@ -13732,7 +13967,7 @@ const UNIVERSAL_ENTITY_RELATION_PATTERNS = [
     { type: 'team_membership', test: (t) => /\b(plays? for|play for|current team|which team|belongs to which team|signed for|signed with|joined)\b/.test(t) },
     { type: 'party_membership', test: (t) => /\b(belongs to which party|party affiliation|which party|current party|member of which party|political party)\b/.test(t) },
     { type: 'known_for', test: (t) => /\b(known for|famous for|best known for|what is .+ known for|what are .+ known for)\b/.test(t) },
-    { type: 'role', test: (t) => /\b(who is|who was|current ceo|ceo of|founder of|president of|prime minister of|captain of|coach of|role|position|office|designation|profession|job|what does .+ do|astronaut|scientist|head of|leader of|administrator of|director of)\b/.test(t) },
+    { type: 'role', test: (t) => /\b(who is|who was|current ceo|ceo of|founder of|president of|prime minister of|pm of|chief minister of|cm of|captain of|coach of|role|position|office|designation|profession|job|what does .+ do|astronaut|scientist|head of|leader of|administrator of|director of)\b/.test(t) },
     { type: 'winner', test: (t) => /\b(who won|winner|champion|champions|won|won in|lifted|clinched)\b/.test(t) },
     { type: 'score', test: (t) => /\b(score|scored|result|final result|live score)\b/.test(t) },
     { type: 'stats', test: (t) => /\b(stats?|record|records|average|goals|runs|wickets|points|assists|medals|podiums|laps|ranked how many)\b/.test(t) },
@@ -13818,7 +14053,7 @@ function extractEntityCompetition(text, liveIntent = null) {
 function detectEntityType(text, relationType, domain) { 
     const lower = normalizeEntitySearchText(text); 
     if (relationType === 'party_membership' || /\b(party|alliance)\b/.test(lower)) return 'party'; 
-    if (/\b(president|prime minister|minister|senator|mp|mla|governor|mayor|leader)\b/.test(lower)) return 'politician'; 
+    if (/\b(president|prime minister|pm|chief minister|cm|minister|senator|mp|mla|governor|mayor|leader)\b/.test(lower)) return 'politician'; 
     if (/\b(astronaut|cosmonaut|taikonaut|scientist|researcher|physicist|chemist)\b/.test(lower)) return 'science_person';
     if (/\b(player|batsman|bowler|footballer|striker|goalkeeper|quarterback|driver|fighter|boxer|captain|coach)\b/.test(lower)) return 'player'; 
     if (domain === 'sports' || relationType === 'title_count' || relationType === 'winner' || /\b(team|club|franchise|fc|united|city|kings|super kings|knight riders|indians)\b/.test(lower)) return 'team';
@@ -13876,11 +14111,18 @@ function extractRoleQueryParts(text) {
         return { roleLabel: '', targetEntity: '' };
     }
 
+    const normalizeRoleLabel = (value) => {
+        const role = String(value || '').trim().toLowerCase();
+        if (role === 'pm') return 'prime minister';
+        if (role === 'cm') return 'chief minister';
+        return role;
+    };
+    const roleAlternatives = 'ceo|founder|president|prime minister|pm|chief minister|cm|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general';
     const rolePatterns = [
-        /\b(?:who is|who was|what is)\s+(?:the\s+)?(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor)\s+of\s+(.+?)\s*\??$/i,
-        /\b(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\s+of\s+(.+?)\s*\??$/i,
-        /\b(?:who is|who was|what is)\s+(?:the\s+)?(?:current\s+)?(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\s+([A-Za-z][A-Za-z0-9&.\-\s]{2,80})\s*\??$/i,
-        /\bwho is\s+(.+?)\s+(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)\s*\??$/i,
+        new RegExp(`\\b(?:who is|who was|what is)\\s+(?:the\\s+)?(?:current\\s+)?(${roleAlternatives})\\s+of\\s+(.+?)\\s*\\??$`, 'i'),
+        new RegExp(`\\b(?:current\\s+)?(${roleAlternatives})\\s+of\\s+(.+?)\\s*\\??$`, 'i'),
+        new RegExp(`\\b(?:who is|who was|what is)\\s+(?:the\\s+)?(?:current\\s+)?(${roleAlternatives})\\s+([A-Za-z][A-Za-z0-9&.\\-\\s]{2,80})\\s*\\??$`, 'i'),
+        new RegExp(`\\bwho is\\s+(.+?)\\s+(${roleAlternatives})\\s*\\??$`, 'i'),
         /\bwho heads?\s+(.+?)\s*\??$/i
     ];
 
@@ -13889,7 +14131,7 @@ function extractRoleQueryParts(text) {
         if (match?.[1] && match?.[2]) {
             const first = String(match[1]).trim().toLowerCase();
             const second = String(match[2]).trim();
-            const roleFirst = /^(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor|head|leader|administrator|director general)$/i.test(first);
+            const roleFirst = new RegExp(`^(${roleAlternatives})$`, 'i').test(first);
             const rawTarget = (roleFirst ? second : match[1]).replace(/[?.!,;]+$/g, '').trim();
             const cleanedTarget = rawTarget
                 .replace(/\b(?:in|for)\s+(?:the\s+)?(ipl|psl|bbl|cpl|isl|pkl|ucl|uel|epl|nba|nfl|mlb|nhl|icc|fifa|uefa|world cup|olympics|formula 1|f1)(?:\s+\d{4})?\b.*$/i, '')
@@ -13897,7 +14139,7 @@ function extractRoleQueryParts(text) {
                 .replace(/\s+/g, ' ')
                 .trim();
             return {
-                roleLabel: roleFirst ? first : second.toLowerCase(),
+                roleLabel: normalizeRoleLabel(roleFirst ? first : second),
                 targetEntity: cleanedTarget || rawTarget
             };
         }
@@ -13949,7 +14191,7 @@ function extractEntitySubject(text, relationType, liveIntent = null) {
 
     let subject = raw
         .replace(/\b(who|what|which|how many|tell me|show me|give me|do you know|can you tell me|could you tell me|would you tell me)\b/gi, ' ')
-        .replace(/\b(current|latest|recent|new|newest|most recent|upcoming|total|number of|how many|won|win|wins|titles?|cups?|troph(?:y|ies)|championships?|stats?|record|records|score|scores|standings|rankings?|table|points|party|affiliation|team|role|position|office|profession|player|players|politician|politicians|astronaut|astronauts|scientist|scientists|ceo|founder|president|prime minister|movie|film|release|song|album|single|show|series|actor|actress|director|producer|singer|for|in|of|the|a|an|which|does|did|has|have|is|was)\b/gi, ' ')
+        .replace(/\b(current|latest|recent|new|newest|most recent|upcoming|total|number of|how many|won|win|wins|titles?|cups?|troph(?:y|ies)|championships?|stats?|record|records|score|scores|standings|rankings?|table|points|party|affiliation|team|role|position|office|profession|player|players|politician|politicians|astronaut|astronauts|scientist|scientists|ceo|founder|president|prime minister|pm|chief minister|cm|movie|film|release|song|album|single|show|series|actor|actress|director|producer|singer|for|in|of|the|a|an|which|does|did|has|have|is|was)\b/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
@@ -14077,7 +14319,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         ? getOfficialCompanySourceHints(subject).join(' ')
         : '';
     const officialDomainHints = entityIntent.domain === 'politics'
-        ? 'site:gov.in OR site:gov.uk OR site:whitehouse.gov OR site:parliament.uk OR site:congress.gov OR site:eci.gov.in OR site:wikipedia.org OR site:britannica.com OR Reuters OR AP'
+        ? 'site:gov.in OR site:pmindia.gov.in OR site:india.gov.in OR site:tn.gov.in OR site:gov.uk OR site:whitehouse.gov OR site:parliament.uk OR site:congress.gov OR site:eci.gov.in OR site:wikipedia.org OR site:britannica.com OR Reuters OR AP'
         : entityIntent.domain === 'space_science'
             ? 'site:nasa.gov OR site:isro.gov.in OR site:esa.int OR site:jaxa.jp OR Reuters'
             : entityIntent.domain === 'arts_literature'
@@ -14085,7 +14327,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
                 : entityIntent.domain === 'entertainment'
                     ? 'site:imdb.com OR site:wikipedia.org OR Reuters'
                     : '';
-    const politicalRole = entityIntent.relationType === 'role' && /\b(president|prime minister|governor|mayor|minister|chief minister)\b/.test(roleLabel);
+    const politicalRole = entityIntent.relationType === 'role' && /\b(president|prime minister|pm|governor|mayor|minister|chief minister|cm)\b/.test(roleLabel);
  
     return Array.from(new Set([ 
         userText, 
@@ -14093,7 +14335,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} ${roleLabel}` : '',
         entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} current ${roleLabel} official` : '',
         politicalRole && entityIntent.targetEntity ? `${roleTarget} official government ${roleLabel}` : '',
-        politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} site:gov.in OR site:pmindia.gov.in OR site:india.gov.in` : '',
+        politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} site:gov.in OR site:pmindia.gov.in OR site:india.gov.in OR site:tn.gov.in` : '',
         politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} Reuters OR AP OR BBC` : '',
         `${subjectWithCompetition} ${relationHint}`.replace(/\s+/g, ' ').trim(), 
         `${subjectWithCompetition} ${entityIntent.timeframe || ''} ${relationHint} ${sourceBias}`.replace(/\s+/g, ' ').trim(), 
@@ -15444,6 +15686,14 @@ ${snippets}`
 async function handleUniversalEntityFactQuery(userText, liveIntent = null) { 
     const pipeline = buildUniversalFactPipelineContext(userText, liveIntent);
     const riskLevel = getRiskTierForQuery(pipeline.userText, pipeline.intent, pipeline.entityIntent);
+    logRoutingDebug('handler enter: universal_entity_fact', userText, {
+        selectedHandler: 'handleUniversalEntityFactQuery',
+        liveIntent: pipeline.intent,
+        entityIntent: pipeline.entityIntent,
+        riskLevel,
+        conciseFactQuery: pipeline.conciseFactQuery,
+        hasKnownFact: Boolean(pipeline.knownFact)
+    });
     showThinkingIndicator('Checking verified sources...'); 
     const controller = beginAbortableRequest(); 
     const budgetTimer = setTimeout(() => {
@@ -15461,8 +15711,27 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
             riskLevel,
             'trust_first'
         );
+        logRoutingDebug('handler sources: universal_entity_fact', userText, {
+            selectedHandler: 'handleUniversalEntityFactQuery',
+            liveIntent: pipeline.intent,
+            entityIntent: pipeline.entityIntent,
+            riskLevel,
+            resultCount: deduped.length,
+            sourceDomains: Array.from(new Set(deduped.map(item => getDomainFromUrl(item?.url || '')).filter(Boolean))),
+            verification,
+            sportsRoleCandidate: sportsRoleCandidate ? {
+                value: sportsRoleCandidate.value || '',
+                confidence: sportsRoleCandidate.confidence || ''
+            } : null
+        });
 
         if (!deduped.length) { 
+            logRoutingDebug('handler exit: universal_entity_fact no_sources', userText, {
+                selectedHandler: 'publishStrictVerificationClarification',
+                liveIntent: pipeline.intent,
+                entityIntent: pipeline.entityIntent,
+                riskLevel
+            });
             return publishStrictVerificationClarification(pipeline, {
                 sources: [],
                 speechText: 'I could not verify this from independent trusted sources.',
@@ -15471,6 +15740,13 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         }
 
         if (!verification.verified) {
+            logRoutingDebug('handler decision: universal_entity_fact best_effort', userText, {
+                selectedHandler: sportsRoleCandidate ? 'publishSportsRoleBestEffortAnswer' : 'publishBestEffortFromSources',
+                liveIntent: pipeline.intent,
+                entityIntent: pipeline.entityIntent,
+                riskLevel,
+                verification
+            });
             if (sportsRoleCandidate) {
                 return publishSportsRoleBestEffortAnswer(pipeline, sportsRoleCandidate);
             }
@@ -15489,10 +15765,24 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
 
         const ambiguity = detectEntityIdentityAmbiguity(deduped, pipeline.entityIntent);
         if (ambiguity.isAmbiguous) {
+            logRoutingDebug('handler exit: universal_entity_fact ambiguous', userText, {
+                selectedHandler: 'publishUniversalEntityAmbiguity',
+                liveIntent: pipeline.intent,
+                entityIntent: pipeline.entityIntent,
+                riskLevel,
+                ambiguity
+            });
             return publishUniversalEntityAmbiguity(pipeline, ambiguity, deduped);
         }
 
         const agreement = buildSourceAgreement(deduped.slice(0, 6), pipeline.entityIntent);
+        logRoutingDebug('handler agreement: universal_entity_fact', userText, {
+            selectedHandler: 'buildSourceAgreement',
+            liveIntent: pipeline.intent,
+            entityIntent: pipeline.entityIntent,
+            riskLevel,
+            agreement
+        });
         if (isSportsRoleQuery && sportsRoleCandidate) {
             return publishSportsRoleBestEffortAnswer(pipeline, sportsRoleCandidate);
         }
@@ -15550,6 +15840,10 @@ async function handleSportsFactQuery(userText, intent) {
 }
 
 async function handleLiveRetrievalQuery(userText, options = {}) {
+    logRoutingDebug('handler enter: live_retrieval', userText, {
+        selectedHandler: 'handleLiveRetrievalQuery',
+        options
+    });
     showThinkingIndicator('Checking current sources...');
     const controller = beginAbortableRequest();
     let failClosed = false;
@@ -15576,6 +15870,17 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
         const directFactQuery = intent.directFact || isSportsLiveResultQuery(query);
         const conciseFactQuery = isConciseDirectFactQuery(query);
         const queries = buildLiveSearchQueries(query, intent);
+        logRoutingDebug('handler classified: live_retrieval', query, {
+            selectedHandler: 'handleLiveRetrievalQuery',
+            liveIntent: intent,
+            entityIntent,
+            riskLevel: liveRiskLevel,
+            failClosed,
+            directFactQuery,
+            conciseFactQuery,
+            queries,
+            options
+        });
         const resultSets = await Promise.all(
             queries.map(async (q) => {
                 try {
@@ -15604,8 +15909,28 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
             deduped.push(item);
             if (deduped.length >= 10) break;
         }
+        logRoutingDebug('handler sources: live_retrieval', query, {
+            selectedHandler: 'handleLiveRetrievalQuery',
+            liveIntent: intent,
+            entityIntent,
+            riskLevel: liveRiskLevel,
+            resultCount: deduped.length,
+            trustedCount: deduped.filter(r => scoreSourcePolicy(r.url, intent.domain || 'general') > 0).length,
+            sourceDomains: Array.from(new Set(deduped.map(r => getDomainFromUrl(r.url)).filter(Boolean))),
+            topSources: deduped.slice(0, 5).map(r => ({
+                title: r.title || '',
+                url: r.url || '',
+                provider: r.provider || ''
+            }))
+        });
 
         if (!deduped.length) {
+            logRoutingDebug('handler exit: live_retrieval no_sources', query, {
+                selectedHandler: 'publishStrictVerificationClarification',
+                liveIntent: intent,
+                entityIntent,
+                riskLevel: liveRiskLevel
+            });
             return publishStrictVerificationClarification({
                 userText: query,
                 intent,
@@ -15620,8 +15945,23 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
         const trusted = deduped.filter(r => scoreSourcePolicy(r.url, intent.domain || 'general') > 0);
         const sourcePool = trusted.length >= 3 ? trusted : deduped;
         const verification = buildVerificationSnapshot(sourcePool, intent.domain || 'general', liveRiskLevel, 'trust_first');
+        logRoutingDebug('handler verification: live_retrieval', query, {
+            selectedHandler: 'handleLiveRetrievalQuery',
+            liveIntent: intent,
+            entityIntent,
+            riskLevel: liveRiskLevel,
+            sourcePoolCount: sourcePool.length,
+            verification
+        });
         if (!verification.verified) {
             if (!failClosed) {
+                logRoutingDebug('handler decision: live_retrieval best_effort_summary', query, {
+                    selectedHandler: 'buildVerifiedSearchSummary',
+                    liveIntent: intent,
+                    entityIntent,
+                    riskLevel: liveRiskLevel,
+                    verification
+                });
                 const searchSummary = await buildVerifiedSearchSummary(query, {
                     badge: 'Best-effort web sources',
                     speech: 'I checked web sources and summarized the best-supported result.'
@@ -15666,6 +16006,13 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
 
         if (directFactQuery) {
             const agreement = buildSourceAgreement(sourcePool.slice(0, 6), extractUniversalEntityIntent(query, intent));
+            logRoutingDebug('handler agreement: live_retrieval direct_fact', query, {
+                selectedHandler: 'buildSourceAgreement',
+                liveIntent: intent,
+                entityIntent,
+                riskLevel: liveRiskLevel,
+                agreement
+            });
             if (agreement.agreed && agreement.top) {
                 const entityIntent = extractUniversalEntityIntent(query, intent);
                 const directAnswer = formatConsensusAnswer(entityIntent, agreement);
@@ -16002,6 +16349,10 @@ function detectInputLanguageHint(text) {
 
             // Deterministic routing for weather and scientific calculations.
             if (isWeatherIntentText(compact)) {
+                logRoutingDebug('processCommand -> weather deterministic', compact, {
+                    selectedHandler: 'weather',
+                    location: extractLocationFromSentence(compact) || ''
+                });
                 const location = extractLocationFromSentence(compact);
                 if (location) {
                     await getWeatherByCity(location);
@@ -16011,10 +16362,16 @@ function detectInputLanguageHint(text) {
                 return;
             }
             if (isStepByStepMathRequest(compact)) {
+                logRoutingDebug('processCommand -> math step_by_step', compact, {
+                    selectedHandler: 'handleMathStepByStepRequest'
+                });
                 await handleMathStepByStepRequest(compact);
                 return;
             }
             if (isMathCalculationRequest(compact)) {
+                logRoutingDebug('processCommand -> math calculation', compact, {
+                    selectedHandler: 'handleMathCalculationRequest'
+                });
                 await handleMathCalculationRequest(compact);
                 return;
             }
@@ -16289,8 +16646,22 @@ function detectInputLanguageHint(text) {
             const answerPath = decideAnswerPath(classification);
             const hybridMode = decideHybridResponseMode(classification);
             const fallbackEntityIntent = classification.entityIntent || classifyUniversalEntityIntent(cleanText, classification.liveIntent);
+            logRoutingDebug('processCommand classified', cleanText, {
+                classification,
+                answerPath,
+                hybridMode,
+                liveIntent: classification.liveIntent,
+                entityIntent: fallbackEntityIntent,
+                riskLevel: getRiskTierForQuery(cleanText, classification.liveIntent, fallbackEntityIntent)
+            });
 
             if (answerPath === 'moderation') {
+                logRoutingDebug('processCommand -> moderation', cleanText, {
+                    selectedHandler: 'deliverApiReply',
+                    answerPath,
+                    hybridMode,
+                    classification
+                });
                 await deliverApiReply('moderation_refusal', {
                     userRequest: cleanText
                 }, { historyKey: text });
@@ -16298,17 +16669,37 @@ function detectInputLanguageHint(text) {
             }
 
             if (isStrictLatestQuery(cleanText)) {
+                logRoutingDebug('processCommand -> strict_latest', cleanText, {
+                    selectedHandler: 'handleStrictLatestQuery',
+                    answerPath,
+                    hybridMode,
+                    classification
+                });
                 const handled = await handleStrictLatestQuery(cleanText);
                 if (handled) return;
             }
 
             if (answerPath === 'default_model' && isUniversalExplainerRequest(cleanText)) {
+                logRoutingDebug('processCommand -> explainer', cleanText, {
+                    selectedHandler: 'handleUniversalExplainerQuery',
+                    answerPath,
+                    hybridMode,
+                    classification
+                });
                 const handled = await handleUniversalExplainerQuery(cleanText, text);
                 if (handled) return;
             }
 
             if (answerPath === 'entity_fact') {
                 const entityFactIntent = classification.liveIntent;
+                logRoutingDebug('processCommand -> entity_fact', cleanText, {
+                    selectedHandler: 'handleUniversalEntityFactQuery',
+                    answerPath,
+                    hybridMode,
+                    classification,
+                    liveIntent: entityFactIntent,
+                    entityIntent: fallbackEntityIntent
+                });
 
                 if (isFutureYearLiveQuery(entityFactIntent)) {
                     const futureMsg = await buildFutureYearResponse(entityFactIntent);
@@ -16326,11 +16717,24 @@ function detectInputLanguageHint(text) {
                 hybridMode === 'verify_first' &&
                 !isStableBiographyQuestion(cleanText) &&
                 fallbackEntityIntent?.isEntityFact) {
+                logRoutingDebug('processCommand -> entity_fact verify_first fallback', cleanText, {
+                    selectedHandler: 'handleUniversalEntityFactQuery',
+                    answerPath,
+                    hybridMode,
+                    classification,
+                    entityIntent: fallbackEntityIntent
+                });
                 const handled = await handleUniversalEntityFactQuery(cleanText, classification.liveIntent);
                 if (handled) return;
             }
 
             if (answerPath === 'current_info') {
+                logRoutingDebug('processCommand -> current_info', cleanText, {
+                    selectedHandler: 'current_info_router',
+                    answerPath,
+                    hybridMode,
+                    classification
+                });
                 const liveIntent = classification.liveIntent;
 
                 if (isFutureYearLiveQuery(liveIntent)) {
@@ -16377,11 +16781,25 @@ function detectInputLanguageHint(text) {
 
             if (answerPath === 'web_search') {
                 const normalizedWebQuery = normalizeExplicitWebSearchQuery(cleanText);
+                logRoutingDebug('processCommand -> web_search', cleanText, {
+                    selectedHandler: 'handleLiveRetrievalQuery',
+                    normalizedWebQuery,
+                    answerPath,
+                    hybridMode,
+                    classification
+                });
                 const handled = await handleLiveRetrievalQuery(normalizedWebQuery);
                 if (handled) return;
             }
 
             if (answerPath === 'broad_factual_web') {
+                logRoutingDebug('processCommand -> broad_factual_web', cleanText, {
+                    selectedHandler: fallbackEntityIntent?.isEntityFact ? 'handleUniversalEntityFactQuery' : 'handleLiveRetrievalQuery',
+                    answerPath,
+                    hybridMode,
+                    classification,
+                    entityIntent: fallbackEntityIntent
+                });
                 if (fallbackEntityIntent?.isEntityFact) {
                     const handledEntity = await handleUniversalEntityFactQuery(cleanText, classification.liveIntent);
                     if (handledEntity) return;
