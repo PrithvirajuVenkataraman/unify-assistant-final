@@ -3,15 +3,15 @@ import { extractSearchTopic, getDomainFromUrl, isTrustedLiveSource, runVerifiedW
 import { applyApiSecurity } from './security.js';
 
 export default async function handler(req, res) {
-    const guard = applyApiSecurity(req, res, {
-        methods: ['POST'],
-        routeKey: 'market-intel',
-        maxBodyBytes: 64 * 1024,
-        rateLimit: { max: 50, windowMs: 60 * 1000 }
-    });
-    if (guard.handled) return;
-
     try {
+        const guard = applyApiSecurity(req, res, {
+            methods: ['POST'],
+            routeKey: 'market-intel',
+            maxBodyBytes: 64 * 1024,
+            rateLimit: { max: 50, windowMs: 60 * 1000 }
+        });
+        if (guard.handled) return;
+
         const mode = resolveMode(req.body);
         if (mode === 'news') {
             return await handleNewsLookup(req, res);
@@ -27,9 +27,10 @@ export default async function handler(req, res) {
         }
         return await handleMarketLookup(req, res);
     } catch (error) {
-        return res.status(500).json({
+        return res.status(200).json({
             success: false,
             error: 'market intelligence lookup failed',
+            errorDetail: req?.body?.debug ? String(error?.message || error || '').slice(0, 300) : undefined
         });
     }
 }
@@ -684,14 +685,39 @@ async function handleExchangeLookup(req, res) {
             return res.status(502).json({ error: 'Exchange rate unavailable.' });
         }
 
-        const verified = await runVerifiedWebSearch([
-            `${from} ${to} exchange rate today`,
-            `${from} to ${to} rate xe oanda x-rates`,
-            `${from} ${to} exchange rate Reuters OR ECB`
-        ], {
-            maxResultsPerQuery: 4,
-            limit: 8
-        });
+        let verified = {
+            results: [],
+            distinctDomains: [],
+            trustedCount: 0
+        };
+        try {
+            verified = await runVerifiedWebSearch([
+                `${from} ${to} exchange rate today`,
+                `${from} to ${to} rate xe oanda x-rates`,
+                `${from} ${to} exchange rate Reuters OR ECB`
+            ], {
+                maxResultsPerQuery: 4,
+                limit: 8
+            });
+        } catch (_) {}
+
+        const providerSource = {
+            title: `Frankfurter exchange rates ${from}/${to}`,
+            url: endpoint,
+            description: `Live exchange-rate API response dated ${data?.date || date || 'latest'}.`
+        };
+        const sourceResults = [providerSource, ...((verified.results || []).slice(0, 4).map(item => ({
+            title: item.title,
+            url: item.url,
+            description: item.description
+        })))];
+        const distinctDomains = Array.from(new Set(sourceResults.map(item => {
+            try {
+                return new URL(item.url).hostname.toLowerCase().replace(/^www\./, '');
+            } catch (_) {
+                return '';
+            }
+        }).filter(Boolean)));
 
         return res.status(200).json({
             success: true,
@@ -703,18 +729,16 @@ async function handleExchangeLookup(req, res) {
             amount,
             rate,
             convertedAmount: amount * rate,
-            sourceCount: verified.results.length,
-            distinctDomainCount: verified.distinctDomains.length,
-            sources: verified.results.slice(0, 5).map(item => ({
-                title: item.title,
-                url: item.url,
-                description: item.description
-            }))
+            sourceCount: sourceResults.length,
+            distinctDomainCount: distinctDomains.length,
+            trustedCount: verified.trustedCount || 0,
+            sources: sourceResults
         });
     } catch (error) {
-        return res.status(500).json({
+        return res.status(200).json({
             success: false,
             error: 'exchange lookup failed',
+            errorDetail: req?.body?.debug ? String(error?.message || error || '').slice(0, 300) : undefined
         });
     }
 }
