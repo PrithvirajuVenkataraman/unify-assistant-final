@@ -999,15 +999,6 @@ function isInappropriateContent(text) {
     return false;
 }
 
-function getContentModerationResponse() {
-    const responses = [
-        "I'm designed to be a helpful assistant for travel, weather, and general knowledge. I can't help with that request. Is there something else I can assist you with?",
-        "I'm here to help with travel planning, weather, and useful information. Let me know if you have any questions in those areas!",
-        "I'm not able to help with that kind of request. I'm great at travel planning, weather updates, and general questions though!",
-        "That's not something I can assist with. I'm happy to help with travel itineraries, weather, or other helpful tasks!"
-    ];
-    return responses[Math.floor(Math.random() * responses.length)];
-}
 // ========== END CONTENT MODERATION ==========
 
 // ========== VERIFIED PLACES + BUDGET + CALENDAR FEATURES ==========
@@ -1268,23 +1259,6 @@ Quick recap: ...
     } finally {
         hideThinkingIndicator();
     }
-}
-
-function isBatmanWhyDoWeFallQuery(text) {
-    const t = String(text || '').toLowerCase();
-    if (!t.trim()) return false;
-    return /\bwhy do we fall\b/.test(t) && /\b(batman|bruce|alfred|dark knight)\b/.test(t);
-}
-
-async function handleBatmanWhyDoWeFallQuery(text) {
-    const answer = [
-        'In Batman context, "Why do we fall?" means we fail so we can learn and rise stronger.',
-        'The famous line is from Alfred in Batman Begins (2005): "Why do we fall, sir? So that we can learn to pick ourselves up."'
-    ].join('\n');
-    addModelAssistantMessage(answer, 'Model answer');
-    speak('It means we fall so we can learn and rise stronger.');
-    saveToHistory(text, answer);
-    return true;
 }
 
 async function handleVerifiedPlacesMode(text) {
@@ -3467,34 +3441,9 @@ async function buildLocalAssistantFallback(userMessage, error) {
     return '';
 }
 
-function buildDirectKnowledgeFallback(userMessage) {
-    const text = String(userMessage || '').trim();
-    if (!text || !isDirectExplainerQuery(text)) return '';
-
-    const subject = normalizeKnowledgeSubject(extractKnowledgeSubject(text)).toLowerCase();
-    if (!subject) return '';
-
-    const factMap = {
-        jalebi: 'Jalebi is a popular South Asian sweet made by deep-frying fermented batter in spiral shapes and soaking it in sugar syrup.',
-        recursion: 'Recursion is a technique where a function solves a problem by calling itself on smaller inputs until it reaches a base case.',
-        'oop pillars': 'The four OOP pillars are encapsulation, abstraction, inheritance, and polymorphism.',
-        'object oriented programming': 'Object-oriented programming organizes code into objects that combine data and behavior, commonly using encapsulation, inheritance, and polymorphism.'
-    };
-
-    if (factMap[subject]) return factMap[subject];
-    if (subject.includes('oop')) return factMap['oop pillars'];
-    if (subject.includes('object oriented')) return factMap['object oriented programming'];
-    return '';
-}
-
 async function buildUniversalSoftFallback(userMessage) {
     const text = String(userMessage || '').trim();
     const normalized = text.toLowerCase();
-
-    const directKnowledgeFallback = buildDirectKnowledgeFallback(text);
-    if (directKnowledgeFallback) {
-        return directKnowledgeFallback;
-    }
 
     if (isDirectExplainerQuery(text) || isConciseDirectFactQuery(text)) {
         return await composeApiReply('direct_fact_retry', {
@@ -3605,9 +3554,6 @@ async function resolveFinalAssistantAnswer(userMessage, answerText) {
 
     const strictApiFallback = await buildStrictApiKnowledgeFallback(userMessage);
     if (strictApiFallback) return strictApiFallback;
-
-    const directKnowledgeFallback = buildDirectKnowledgeFallback(userMessage);
-    if (directKnowledgeFallback) return directKnowledgeFallback;
 
     return await buildUniversalSoftFallback(userMessage);
 }
@@ -12875,7 +12821,6 @@ function runRoutingRegressionSuite() {
         const classification = classifyUserMessage(testCase.prompt);
         const actualPath = decideAnswerPath(classification);
         const actualMode = decideHybridResponseMode(classification);
-        const fallback = buildDirectKnowledgeFallback(testCase.prompt);
         const checks = [
             {
                 label: 'path',
@@ -12890,15 +12835,6 @@ function runRoutingRegressionSuite() {
                 pass: actualMode === testCase.expectedMode
             }
         ];
-
-        if (testCase.fallbackContains) {
-            checks.push({
-                label: 'fallback',
-                expected: `contains "${testCase.fallbackContains}"`,
-                actual: fallback ? `contains "${testCase.fallbackContains}"` : '(empty)',
-                pass: String(fallback || '').includes(testCase.fallbackContains)
-            });
-        }
 
         return {
             ...testCase,
@@ -15804,11 +15740,6 @@ function detectInputLanguageHint(text) {
                 await handleMathCalculationRequest(compact);
                 return;
             }
-            if (isBatmanWhyDoWeFallQuery(compact)) {
-                await handleBatmanWhyDoWeFallQuery(compact);
-                return;
-            }
-
             if (isContinuousVisionQuestion(lower)) {
                 if (!isContinuousVisionActive) {
                     const msg = 'Vision mode is off. Tap the vision icon first, then ask again.';
@@ -16080,7 +16011,6 @@ function detectInputLanguageHint(text) {
             const answerPath = decideAnswerPath(classification);
             const hybridMode = decideHybridResponseMode(classification);
             const fallbackEntityIntent = classification.entityIntent || classifyUniversalEntityIntent(cleanText, classification.liveIntent);
-            const immediateKnowledgeFallback = buildDirectKnowledgeFallback(cleanText);
 
             if (answerPath === 'moderation') {
                 await deliverApiReply('moderation_refusal', {
@@ -16097,16 +16027,6 @@ function detectInputLanguageHint(text) {
             if (answerPath === 'default_model' && isUniversalExplainerRequest(cleanText)) {
                 const handled = await handleUniversalExplainerQuery(cleanText, text);
                 if (handled) return;
-            }
-
-            if (answerPath === 'default_model' && immediateKnowledgeFallback && isDirectExplainerQuery(cleanText)) {
-                addModelAssistantMessage(immediateKnowledgeFallback, 'Model answer');
-                speak(immediateKnowledgeFallback);
-                await maybeShowReferenceImageForQuery(text, immediateKnowledgeFallback);
-                saveToHistory(text, immediateKnowledgeFallback);
-                suggestQuickReplies(immediateKnowledgeFallback);
-                addFeedbackButtons(text, immediateKnowledgeFallback);
-                return;
             }
 
             if (answerPath === 'entity_fact') {
