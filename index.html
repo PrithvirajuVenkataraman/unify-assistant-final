@@ -239,9 +239,12 @@
     />
 
     <!-- Camera/OCR Modal -->
-    <div id="camera-modal" class="hidden fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-4">
-        <div class="relative w-full max-w-2xl bg-slate-900 rounded-3xl overflow-hidden shadow-2xl">
-            <video id="camera-preview" class="w-full h-[60vh] object-cover bg-black" autoplay playsinline></video>
+    <div id="camera-modal" class="hidden fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-3 sm:p-4">
+        <div class="relative w-full max-w-2xl max-h-[calc(100vh-1.5rem)] bg-slate-900 rounded-3xl overflow-y-auto shadow-2xl">
+            <div class="absolute top-3 right-3 z-10">
+                <button type="button" onclick="closeCameraMode()" class="px-4 py-2 rounded-xl bg-black/70 text-white text-sm font-semibold border border-white/20 hover:bg-black/90 transition-all" aria-label="Close camera OCR and return to chat">Back to chat</button>
+            </div>
+            <video id="camera-preview" class="w-full h-[52vh] min-h-[280px] object-cover bg-black" autoplay playsinline></video>
             <canvas id="camera-canvas" class="hidden"></canvas>
             
             <div class="p-6 space-y-4">
@@ -4220,6 +4223,11 @@ async function handleNameCorrection(text) {
         let voiceTypingBaseText = '';
         let voiceTypingCommitOnEnd = false;
         let voiceTypingStopRequested = false;
+        let groqVoiceTypingRecorder = null;
+        let groqVoiceTypingStream = null;
+        let groqVoiceTypingChunks = [];
+        let groqVoiceTypingMimeType = '';
+        let groqVoiceTypingCommitOnStop = true;
         let vttSpeechDecayTimer = null;
         let inputHistory = [];
         let inputHistoryIndex = -1;
@@ -5540,7 +5548,136 @@ let showRoutingDebugBadge = true;
             return true;
         }
 
+        function getGroqVoiceTypingMimeType() {
+            const candidates = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/mp4',
+                'audio/ogg;codecs=opus'
+            ];
+            if (typeof MediaRecorder === 'undefined') return '';
+            return candidates.find(type => MediaRecorder.isTypeSupported(type)) || '';
+        }
+
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const raw = String(reader.result || '');
+                    resolve(raw.includes(',') ? raw.split(',')[1] : raw);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        async function startGroqVoiceToTextInput() {
+            if (typeof MediaRecorder === 'undefined') return false;
+            const mimeType = getGroqVoiceTypingMimeType();
+            if (!mimeType) return false;
+
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            groqVoiceTypingStream = stream;
+            groqVoiceTypingChunks = [];
+            groqVoiceTypingMimeType = mimeType;
+            groqVoiceTypingRecorder = new MediaRecorder(stream, { mimeType });
+            groqVoiceTypingRecorder.ondataavailable = event => {
+                if (event.data && event.data.size > 0) {
+                    groqVoiceTypingChunks.push(event.data);
+                }
+            };
+            groqVoiceTypingRecorder.onstop = () => {
+                void finishGroqVoiceToTextInput();
+            };
+
+            stopSpeaking();
+            const input = document.getElementById('text-input');
+            voiceTypingBaseText = input?.value ? input.value.trim() : '';
+            voiceTypingCommitOnEnd = true;
+            voiceTypingStopRequested = false;
+            groqVoiceTypingCommitOnStop = true;
+            isVoiceTyping = true;
+            updateVoiceToTextButton();
+            setVttSpeechWaveState(true);
+            showTemporaryMessage('Listening with Groq Whisper... tap the mic again to stop.');
+            groqVoiceTypingRecorder.start();
+            return true;
+        }
+
+        async function finishGroqVoiceToTextInput() {
+            const chunks = groqVoiceTypingChunks.slice();
+            const mimeType = groqVoiceTypingMimeType || 'audio/webm';
+            const commitToInput = groqVoiceTypingCommitOnStop;
+            groqVoiceTypingChunks = [];
+            groqVoiceTypingRecorder = null;
+            groqVoiceTypingMimeType = '';
+            if (groqVoiceTypingStream) {
+                groqVoiceTypingStream.getTracks().forEach(track => track.stop());
+                groqVoiceTypingStream = null;
+            }
+
+            try {
+                if (!commitToInput || !chunks.length) return;
+                const audioBlob = new Blob(chunks, { type: mimeType });
+                const audioBase64 = await blobToBase64(audioBlob);
+                const response = await fetch('/api/speech', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        mode: 'transcribe',
+                        audioBase64,
+                        mimeType
+                    })
+                });
+                const data = await response.json().catch(() => ({}));
+                const captured = String(data?.text || '').replace(/\s+/g, ' ').trim();
+                const input = document.getElementById('text-input');
+                const base = String(voiceTypingBaseText || '').trim();
+                const merged = [base, captured].filter(Boolean).join(base && captured ? ' ' : '');
+                if (input && merged) {
+                    input.value = merged.trim();
+                    toggleSendButton();
+                }
+                if (!captured) {
+                    showTemporaryMessage('No speech captured. Try again and speak closer to the mic.');
+                }
+                const shouldAutoSend = !!voiceTypingAutoSendOnStop;
+                voiceTypingAutoSendOnStop = false;
+                if (shouldAutoSend && input && input.value.trim()) {
+                    sendTextInput();
+                }
+            } catch (_) {
+                showTemporaryMessage('Groq transcription failed. Browser speech fallback is still available.');
+            } finally {
+                isVoiceTyping = false;
+                voiceTypingBaseText = '';
+                voiceTypingCommitOnEnd = false;
+                voiceTypingStopRequested = false;
+                groqVoiceTypingCommitOnStop = true;
+                setVttSpeechWaveState(false);
+                updateVoiceToTextButton();
+            }
+        }
+
         function toggleVoiceToTextInput() {
+            if (groqVoiceTypingRecorder && isVoiceTyping) {
+                stopVoiceToTextInput(true);
+                return;
+            }
+
+            if (!isVoiceTyping) {
+                startGroqVoiceToTextInput()
+                    .then(started => {
+                        if (!started) startBrowserVoiceToTextInput();
+                    })
+                    .catch(() => startBrowserVoiceToTextInput());
+                return;
+            }
+
+            stopVoiceToTextInput(true);
+        }
+
+        function startBrowserVoiceToTextInput() {
             if (!voiceTypingRecognition && !initializeVoiceToTextRecognition()) {
                 void deliverApiReply('voice_to_text_unsupported', {}, {
                     fallbackText: 'Voice-to-text is not supported in this browser.'
@@ -5572,6 +5709,15 @@ let showRoutingDebugBadge = true;
         }
 
         function stopVoiceToTextInput(commitToInput = true) {
+            if (groqVoiceTypingRecorder) {
+                groqVoiceTypingCommitOnStop = !!commitToInput;
+                try {
+                    groqVoiceTypingRecorder.stop();
+                } catch (_) {
+                    void finishGroqVoiceToTextInput();
+                }
+                return;
+            }
             if (!voiceTypingRecognition) return;
             voiceTypingStopRequested = true;
             voiceTypingCommitOnEnd = !!commitToInput;
@@ -10078,10 +10224,12 @@ function isLearningIntent(text) {
 
 function isArtistSongRequest(text) {
     const t = String(text || '').toLowerCase();
-    const hasMusicAsk = /\b(song|songs|track|tracks|music|playlist|recommend|suggest|best|top|hit|hits|melody|melodies)\b/.test(t);
+    const hasMusicAsk = /\b(song|songs|track|tracks|music|playlist|hit|hits|melody|melodies)\b/.test(t);
     if (!hasMusicAsk) return false;
 
-    return /\b(songs?\s+(of|by|from)|tracks?\s+(of|by|from)|recommend|suggest|best|top)\b/.test(t) ||
+    return /\b(songs?\s+(of|by|from)|tracks?\s+(of|by|from))\b/.test(t) ||
+           /\b(recommend|suggest|best|top)\b[^?.!]{0,80}\b(song|songs|track|tracks|music|playlist|hit|hits|melody|melodies)\b/.test(t) ||
+           /\b(song|songs|track|tracks|music|playlist|hit|hits|melody|melodies)\b[^?.!]{0,80}\b(recommend|suggest|best|top|of|by|from)\b/.test(t) ||
            /\b[a-z][a-z0-9.'&\-\s]{2,}\s+songs?\b/.test(t);
 }
 
@@ -12469,6 +12617,8 @@ function isBroadFactualWebQuery(text, entityIntent = null, liveIntent = null) {
     const entity = entityIntent || extractUniversalEntityIntent(raw, intent);
     if (entity?.isEntityFact) return true;
 
+    if (isRankedWorldFactListQuery(raw)) return true;
+
     if (factualAskPattern.test(raw) && likelyWorldFactSignal.test(lower)) return true;
     if (factualAskPattern.test(raw)) {
         const subjectGuess = String(extractKnowledgeSubject(raw) || '')
@@ -12480,6 +12630,23 @@ function isBroadFactualWebQuery(text, entityIntent = null, liveIntent = null) {
     }
 
     return false;
+}
+
+function isRankedWorldFactListQuery(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    if (/\b(song|songs|track|tracks|music|playlist|album|albums|movie|movies|film|films|show|series)\b/.test(t)) {
+        return false;
+    }
+
+    const rankedListSignal = /\b(top|best|oldest|newest|largest|biggest|smallest|highest|lowest|most|least|popular|famous)\b/;
+    const listableWorldSignal = /\b(mall|malls|place|places|temple|temples|school|schools|college|colleges|university|universities|hospital|hospitals|restaurant|restaurants|hotel|hotels|park|parks|beach|beaches|bridge|bridges|building|buildings|company|companies|startup|startups|city|cities|state|states|country|countries|monument|monuments|museum|museums|airport|airports|station|stations|market|markets)\b/;
+    const locationOrScopeSignal = /\b(in|near|around|of|from|within|across)\s+[a-z0-9][a-z0-9\s.'-]{1,80}\b/;
+    const listCommandSignal = /^(list|show|give|tell me|find)\b/;
+
+    return rankedListSignal.test(t) &&
+        listableWorldSignal.test(t) &&
+        (locationOrScopeSignal.test(t) || listCommandSignal.test(t));
 }
 
 function isUniversalEntityFactQuestion(text) {
@@ -19929,6 +20096,7 @@ function toggleMemoryPersistence(enabled) {
         let currentUtterance = null; 
         let currentSpeakerButton = null; 
         let currentExternalAudio = null;
+        let currentSpeechSessionId = 0;
         
         // Toggle speak using stored text ID (safer for special characters)
         function toggleSpeakById(speechId, button) {
@@ -20104,6 +20272,72 @@ function toggleMemoryPersistence(enabled) {
             setTimeout(speakNext, 30);
         }
 
+        function splitTextForGroqTts(text) {
+            const raw = String(text || '').replace(/\s+/g, ' ').trim();
+            if (!raw) return [];
+            const sentences = raw.match(/[^.!?]+[.!?]?/g) || [raw];
+            const chunks = [];
+            let current = '';
+            const pushCurrent = () => {
+                const value = current.trim();
+                if (value) chunks.push(value.slice(0, 190));
+                current = '';
+            };
+
+            for (const sentence of sentences) {
+                const part = sentence.trim();
+                if (!part) continue;
+                if ((current + ' ' + part).trim().length <= 190) {
+                    current = (current ? `${current} ${part}` : part).trim();
+                    continue;
+                }
+                pushCurrent();
+                if (part.length <= 190) {
+                    current = part;
+                } else {
+                    for (let i = 0; i < part.length; i += 190) {
+                        chunks.push(part.slice(i, i + 190).trim());
+                    }
+                }
+            }
+            pushCurrent();
+            return chunks.slice(0, 8);
+        }
+
+        async function speakWithGroqTts(cleanText, speechSessionId) {
+            const chunks = splitTextForGroqTts(cleanText);
+            if (!chunks.length) return false;
+
+            for (const chunk of chunks) {
+                if (speechSessionId !== currentSpeechSessionId) return true;
+                const response = await fetch('/api/speech', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        mode: 'tts',
+                        text: chunk,
+                        responseFormat: 'wav'
+                    })
+                });
+                if (!response.ok) return false;
+                const data = await response.json();
+                if (!data?.success || !data?.audioBase64) return false;
+
+                const audio = new Audio(`data:${data.mimeType || 'audio/wav'};base64,${data.audioBase64}`);
+                currentExternalAudio = audio;
+                await new Promise((resolve, reject) => {
+                    audio.onended = resolve;
+                    audio.onerror = reject;
+                    audio.play().catch(reject);
+                });
+            }
+
+            if (speechSessionId === currentSpeechSessionId) {
+                onSpeechPlaybackEnded();
+            }
+            return true;
+        }
+
         function sanitizeTextForSpeech(text) {
             return String(text || '')
                 .replace(/```[\s\S]*?```/g, ' ')
@@ -20135,13 +20369,25 @@ function toggleMemoryPersistence(enabled) {
             isAssistantSpeaking = true;
             updateTTSVisualizer(true);
 
-            speakWithWebSpeech(cleanText, speechProfile);
+            const speechSessionId = ++currentSpeechSessionId;
+            speakWithGroqTts(cleanText, speechSessionId)
+                .then(usedGroq => {
+                    if (!usedGroq && speechSessionId === currentSpeechSessionId) {
+                        speakWithWebSpeech(cleanText, speechProfile);
+                    }
+                })
+                .catch(() => {
+                    if (speechSessionId === currentSpeechSessionId) {
+                        speakWithWebSpeech(cleanText, speechProfile);
+                    }
+                });
         }
         
         
         function stopSpeaking() { 
             isAssistantSpeaking = false;
             currentSpeechTextLower = '';
+            currentSpeechSessionId += 1;
             updateTTSVisualizer(false);
             if (currentExternalAudio) {
                 try { currentExternalAudio.pause(); } catch (e) {}
