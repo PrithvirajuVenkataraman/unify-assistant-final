@@ -3,15 +3,15 @@ import { extractSearchTopic, runVerifiedWebSearch, searchWeb } from './live-sear
 import { applyApiSecurity } from './security.js';
 
 export default async function handler(req, res) {
-    const guard = applyApiSecurity(req, res, {
-        methods: ['POST'],
-        routeKey: 'search',
-        maxBodyBytes: 48 * 1024,
-        rateLimit: { max: 40, windowMs: 60 * 1000 }
-    });
-    if (guard.handled) return;
-
     try {
+        const guard = applyApiSecurity(req, res, {
+            methods: ['POST'],
+            routeKey: 'search',
+            maxBodyBytes: 48 * 1024,
+            rateLimit: { max: 40, windowMs: 60 * 1000 }
+        });
+        if (guard.handled) return;
+
         const query = String(req.body?.query || '').trim();
         const maxResults = Math.min(Math.max(Number(req.body?.maxResults || 8), 1), 10);
         const includeAnswer = Boolean(req.body?.answer || req.body?.includeAnswer || req.body?.mode === 'answer');
@@ -72,6 +72,7 @@ export default async function handler(req, res) {
             trustedCount: 0,
             results: [],
             error: 'search_unavailable',
+            errorDetail: req?.body?.debug ? String(error?.message || error || '').slice(0, 300) : undefined
         });
     }
 }
