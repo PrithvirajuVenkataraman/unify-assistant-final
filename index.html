@@ -5091,6 +5091,16 @@ let showRoutingDebugBadge = true;
             btn.title = 'Stop generating';
         }
 
+        function resetPrimaryActionButtonWhenIdle() {
+            if (activeRequestController || isAssistantProcessing()) return;
+            const input = document.getElementById('text-input');
+            if (input && input.value.trim()) {
+                setPrimaryActionButtonToSend();
+            } else {
+                setPrimaryActionButtonToConverse();
+            }
+        }
+
         function isAbortError(error) {
             const message = String(error?.message || error || '').toLowerCase();
             return error?.name === 'AbortError' || message.includes('aborted');
@@ -5145,9 +5155,14 @@ let showRoutingDebugBadge = true;
         }
 
         function clearActiveRequest(controller) {
-            if (controller && activeRequestController !== controller) return;
+            if (controller && activeRequestController !== controller) {
+                endAssistantProcessing();
+                resetPrimaryActionButtonWhenIdle();
+                return;
+            }
             activeRequestController = null;
             endAssistantProcessing();
+            resetPrimaryActionButtonWhenIdle();
         }
 
         function stopActiveGeneration() {
@@ -8423,6 +8438,7 @@ async function sendTextInput() {
                     speak('I hit a temporary issue. Please try again.');
                 } finally {
                     endAssistantProcessing();
+                    resetPrimaryActionButtonWhenIdle();
                 }
             }
         }
@@ -15381,6 +15397,10 @@ function buildStrictVerificationClarificationMessage(userText, intent, entityInt
     const query = String(userText || '').trim();
     const relation = String(entityIntent?.relationType || intent?.factType || '').toLowerCase();
     const subject = String(entityIntent?.subject || '').trim();
+    const noSources = !(Array.isArray(sources) && sources.length);
+    if (noSources && shouldRequireVerifiedSources(query, intent, entityIntent)) {
+        return `I could not reach usable live sources for this current fact, so I will not present a stale model-only answer.\n\nAs of: ${formatAsOfTimestamp()}\n\nSearch/source status: unavailable or no usable results.`;
+    }
     const hasEntity = Boolean(subject || entityIntent?.targetEntity);
     const canRefine = hasEntity || relation !== 'general';
     const coverageNote = (Array.isArray(sources) && sources.length)
@@ -15788,15 +15808,17 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         });
 
         if (!deduped.length) { 
-            const modelFallbackPublished = await publishUniversalModelFallback(pipeline, 'Model answer');
-            if (modelFallbackPublished) {
-                logRoutingDebug('handler exit: universal_entity_fact model_fallback_no_sources', userText, {
-                    selectedHandler: 'publishUniversalModelFallback',
-                    liveIntent: pipeline.intent,
-                    entityIntent: pipeline.entityIntent,
-                    riskLevel
-                });
-                return true;
+            if (!requiresStrictLiveVerification(pipeline.userText, pipeline.intent, pipeline.entityIntent)) {
+                const modelFallbackPublished = await publishUniversalModelFallback(pipeline, 'Model answer');
+                if (modelFallbackPublished) {
+                    logRoutingDebug('handler exit: universal_entity_fact model_fallback_no_sources', userText, {
+                        selectedHandler: 'publishUniversalModelFallback',
+                        liveIntent: pipeline.intent,
+                        entityIntent: pipeline.entityIntent,
+                        riskLevel
+                    });
+                    return true;
+                }
             }
             logRoutingDebug('handler exit: universal_entity_fact no_sources', userText, {
                 selectedHandler: 'publishStrictVerificationClarification',
@@ -15895,16 +15917,18 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
                 badge: 'Verification unavailable'
             });
         }
-        const modelFallbackPublished = await publishUniversalModelFallback(pipeline, 'Model answer');
-        if (modelFallbackPublished) {
-            logRoutingDebug('handler exit: universal_entity_fact model_fallback_error', userText, {
-                selectedHandler: 'publishUniversalModelFallback',
-                liveIntent: pipeline.intent,
-                entityIntent: pipeline.entityIntent,
-                riskLevel,
-                error: String(error?.message || error || '')
-            });
-            return true;
+        if (!requiresStrictLiveVerification(pipeline.userText, pipeline.intent, pipeline.entityIntent)) {
+            const modelFallbackPublished = await publishUniversalModelFallback(pipeline, 'Model answer');
+            if (modelFallbackPublished) {
+                logRoutingDebug('handler exit: universal_entity_fact model_fallback_error', userText, {
+                    selectedHandler: 'publishUniversalModelFallback',
+                    liveIntent: pipeline.intent,
+                    entityIntent: pipeline.entityIntent,
+                    riskLevel,
+                    error: String(error?.message || error || '')
+                });
+                return true;
+            }
         }
         return publishStrictVerificationClarification(pipeline, {
             sources: [],
@@ -16812,6 +16836,28 @@ function detectInputLanguageHint(text) {
                 return;
             }
 
+            if (answerPath === 'exchange_rate') {
+                logRoutingDebug('processCommand -> exchange_rate', cleanText, {
+                    selectedHandler: 'handleExchangeRateLookup',
+                    answerPath,
+                    hybridMode,
+                    classification
+                });
+                const handled = await handleExchangeRateLookup(cleanText);
+                if (handled) return;
+            }
+
+            if (answerPath === 'market_price') {
+                logRoutingDebug('processCommand -> market_price', cleanText, {
+                    selectedHandler: 'handleMarketLookup',
+                    answerPath,
+                    hybridMode,
+                    classification
+                });
+                const handled = await handleMarketLookup(cleanText);
+                if (handled) return;
+            }
+
             if (isStrictLatestQuery(cleanText)) {
                 logRoutingDebug('processCommand -> strict_latest', cleanText, {
                     selectedHandler: 'handleStrictLatestQuery',
@@ -16974,16 +17020,6 @@ function detectInputLanguageHint(text) {
             if (answerPath === 'news') {
                 await fetchAndDisplayNews(cleanText);
                 return;
-            }
-
-            if (answerPath === 'exchange_rate') {
-                const handled = await handleExchangeRateLookup(cleanText);
-                if (handled) return;
-            }
-
-            if (answerPath === 'market_price') {
-                const handled = await handleMarketLookup(cleanText);
-                if (handled) return;
             }
 
             if (answerPath === 'live_retrieval') {
