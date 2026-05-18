@@ -5270,6 +5270,7 @@ let showRoutingDebugBadge = true;
             updateAssistantModeUI();
             showConverseToast(converseMode, false);
             if (converseMode) {
+                stopSpeaking();
                 wakeWordMode = false;
                 commandMode = false;
                 isPassiveListening = false;
@@ -5292,27 +5293,24 @@ let showRoutingDebugBadge = true;
                 }
                 applySpeechRecognitionLanguage();
                 // Try immediate start first (important on mobile browsers requiring user gesture).
-                if (!isAssistantSpeaking) {
-                    startListening();
-                }
+                startListening();
                 // Keep a retry loop for transient startup issues.
                 let attempts = 0;
                 const ensureConverseListening = () => {
                     attempts += 1;
                     if (!converseMode || !listeningRequested || isListening) return;
                     if (isAssistantSpeaking && attempts < 8) {
+                        stopSpeaking();
                         setTimeout(ensureConverseListening, 320);
                         return;
                     }
-                    if (!isAssistantSpeaking) {
-                        startListening();
-                    }
+                    startListening();
                 };
                 setTimeout(ensureConverseListening, 180);
                 // Reliability fallback: if continuous recognition cannot stay active, fallback to voice typing capture.
                 setTimeout(() => {
                     if (!converseMode || isListening) return;
-                    if (isAssistantSpeaking) return;
+                    if (isAssistantSpeaking) stopSpeaking();
                     try {
                         startListening();
                     } catch (_) {}
@@ -20310,17 +20308,27 @@ function toggleMemoryPersistence(enabled) {
 
             for (const chunk of chunks) {
                 if (speechSessionId !== currentSpeechSessionId) return true;
-                const response = await fetch('/api/speech', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        mode: 'tts',
-                        text: chunk,
-                        responseFormat: 'wav'
-                    })
-                });
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 6500);
+                let response;
+                try {
+                    response = await fetch('/api/speech', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        signal: controller.signal,
+                        body: JSON.stringify({
+                            mode: 'tts',
+                            text: chunk,
+                            responseFormat: 'wav'
+                        })
+                    });
+                } finally {
+                    clearTimeout(timeoutId);
+                }
+                if (speechSessionId !== currentSpeechSessionId) return true;
                 if (!response.ok) return false;
                 const data = await response.json();
+                if (speechSessionId !== currentSpeechSessionId) return true;
                 if (!data?.success || !data?.audioBase64) return false;
 
                 const audio = new Audio(`data:${data.mimeType || 'audio/wav'};base64,${data.audioBase64}`);
