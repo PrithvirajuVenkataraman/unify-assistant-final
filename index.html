@@ -2764,7 +2764,7 @@ function getRiskTierForQuery(text, liveIntent = null, entityIntent = null) {
     const lower = query.toLowerCase();
     const isEntityFact = Boolean(entity?.isEntityFact || isUniversalEntityFactQuestion(query));
     const explicitFreshnessOrYear = hasExplicitFreshnessLanguage(query) || hasExplicitYearReference(query);
-    const highImpactLeadership = /\b(president|prime minister|chief minister|governor|mayor|ceo|chairman|chairperson|secretary general|director general|administrator|head of|captain|coach)\b/.test(lower);
+    const highImpactLeadership = /\b(president|prime minister|pm|chief minister|cm|governor|mayor|ceo|chairman|chairperson|secretary general|director general|administrator|head of|captain|coach)\b/.test(lower);
     const strictVerificationNeeded = shouldRequireVerifiedSources(query, intent, entity);
 
     // Universal trust-first policy: all entity factual queries are at least medium risk.
@@ -8548,7 +8548,8 @@ async function buildVerifiedSearchSummary(query, options = {}) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 query: userQuery,
-                maxResults: 8
+                maxResults: 8,
+                answer: true
             })
         });
         if (!searchResponse.ok) return null;
@@ -8556,13 +8557,13 @@ async function buildVerifiedSearchSummary(query, options = {}) {
         const results = Array.isArray(searchData?.results) ? searchData.results.filter(Boolean) : [];
         if (!results.length) return null;
 
+        let summaryText = cleanLiveAnswerText(String(searchData?.answer || '').trim());
         const snippets = results
             .slice(0, 6)
             .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}`)
             .join('\n\n');
 
-        let summaryText = '';
-        try {
+        if (!summaryText) try {
             const summaryResponse = await fetch('/api/chat-groq', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -12757,10 +12758,10 @@ function extractLiveQueryIntent(text) {
     const raw = String(text || '').trim();
     const t = raw.toLowerCase();
     const yearMatch = raw.match(/\b(19|20)\d{2}\b/);
-    const roleHolderQuery = /\b(ceo|founder|president|prime minister|chief minister|minister|governor|mayor|captain|coach|chairman|chairperson|head|leader|administrator|director|dean|chancellor|vice chancellor|principal|secretary|director general)\b/.test(t);
+    const roleHolderQuery = /\b(ceo|founder|president|prime minister|pm|chief minister|cm|minister|governor|mayor|captain|coach|chairman|chairperson|head|leader|administrator|director|dean|chancellor|vice chancellor|principal|secretary|director general)\b/.test(t);
     const roleContextQuery = roleHolderQuery && /\b(who is|who was|what is|current|latest|as of|today|now|of|at|in|for)\b/.test(t);
     const institutionalContext = /\b(university|college|school|institute|department|faculty|campus|program|office|ministry|agency|state|government|parliament|senate|team|club|company|corporation)\b/.test(t);
-    const politicalContext = /\b(president|prime minister|chief minister|governor|mayor|minister|party|government|parliament|senate|election)\b/.test(t);
+    const politicalContext = /\b(president|prime minister|pm|chief minister|cm|governor|mayor|minister|party|government|parliament|senate|election)\b/.test(t);
     const spaceContext = /\b(astronaut|scientist|space|nasa|isro|esa|jaxa|agency|administrator|director general)\b/.test(t);
     const entertainmentContext = /\b(actor|actress|movie|film|films|cinema|producer|singer|composer|music director|song|songs|album|albums|show|series|web series|filmography|discography|imdb|release|project|artist|poet|painter|writer|author|box office)\b/.test(t) || (/\bdirector\b/.test(t) && /\b(movie|film|cinema|series|show|album|song|music|imdb)\b/.test(t));
 
@@ -12916,7 +12917,7 @@ function isStableBiographyQuestion(text) {
     if (/\b(current|currently|latest|recent|today|right now|as of now|live|news|headline|headlines|update|updates|status|what happened|what's happening)\b/.test(lower)) {
         return false;
     }
-    if (/\b(president|prime minister|ceo|captain|coach|governor|mayor|senator|minister|chairman|chairperson|chief minister)\b/.test(lower)) {
+    if (/\b(president|prime minister|pm|ceo|captain|coach|governor|mayor|senator|minister|chairman|chairperson|chief minister|cm)\b/.test(lower)) {
         return false;
     }
 
@@ -13461,11 +13462,17 @@ const DOMAIN_SOURCE_POLICIES = {
     },
     politics: {
         trustedDomains: [
-            'pmindia.gov.in',
-            'india.gov.in',
-            'tn.gov.in',
+            'gov',
             'gov.in',
             'gov.uk',
+            'gov.au',
+            'govt.nz',
+            'gc.ca',
+            'canada.ca',
+            'gouv.fr',
+            'bund.de',
+            'gov.br',
+            'gob.mx',
             'whitehouse.gov',
             'parliament.uk',
             'congress.gov',
@@ -13480,11 +13487,17 @@ const DOMAIN_SOURCE_POLICIES = {
             'npr.org'
         ],
         preferredDomains: [
-            'pmindia.gov.in',
-            'india.gov.in',
-            'tn.gov.in',
+            'gov',
             'gov.in',
             'gov.uk',
+            'gov.au',
+            'govt.nz',
+            'gc.ca',
+            'canada.ca',
+            'gouv.fr',
+            'bund.de',
+            'gov.br',
+            'gob.mx',
             'whitehouse.gov',
             'eci.gov.in',
             'parliament.uk',
@@ -13691,6 +13704,22 @@ function domainMatchesPolicy(domain, list) {
     return Array.isArray(list) && list.some(d => domain === d || domain.endsWith(`.${d}`));
 }
 
+function isGovernmentHost(domain) {
+    const host = String(domain || '').toLowerCase();
+    if (!host) return false;
+    return (
+        /\.gov(?:\.|$)/.test(host) ||
+        /\.gob(?:\.|$)/.test(host) ||
+        /\.gouv(?:\.|$)/.test(host) ||
+        host.endsWith('.gc.ca') ||
+        host.endsWith('.canada.ca') ||
+        host.endsWith('.govt.nz') ||
+        host.endsWith('.bund.de') ||
+        host.endsWith('.europa.eu') ||
+        host.endsWith('.un.org')
+    );
+}
+
 function isTrustedLiveSource(url) {
     const domain = getDomainFromUrl(url);
     if (!domain) return false;
@@ -13701,6 +13730,7 @@ function scoreSourcePolicy(url, domain) {
     const host = getDomainFromUrl(url);
     const policy = getDomainSourcePolicy(domain);
     if (!host) return 0;
+    if (String(domain || '').toLowerCase() === 'politics' && isGovernmentHost(host)) return 6;
     if (domainMatchesPolicy(host, policy.preferredDomains)) return 7;
     if (domainMatchesPolicy(host, policy.trustedDomains)) return 4;
     if (domainMatchesPolicy(host, DOMAIN_SOURCE_POLICIES.general.trustedDomains)) return 2;
@@ -13846,8 +13876,6 @@ function buildLiveSearchQueries(userText, intent = null) {
 
 function expandKnownQueryAliases(text) {
     const aliasMap = {
-        tamilnadu: 'tamil nadu',
-        tn: 'tamil nadu',
         ipl: 'indian premier league',
         psl: 'pakistan super league',
         bbl: 'big bash league',
@@ -13923,7 +13951,6 @@ function normalizeSportsFactKey(value) {
 
 function normalizeEntitySearchText(value) {
     return String(value || '')
-        .replace(/\btamilnadu\b/gi, 'Tamil Nadu')
         .toLowerCase()
         .replace(/[^a-z0-9\s]/g, ' ')
         .replace(/\s+/g, ' ')
@@ -13940,7 +13967,7 @@ const UNIVERSAL_ENTITY_DOMAIN_PACKS = {
         entityHints: /\b(csk|rcb|mi|kkr|srh|rr|dc|pbks|gt|lsg|royal challengers|super kings|mumbai indians|knight riders|sunrisers|rajasthan royals|punjab kings|gujarat titans|lucknow super giants)\b/
     },
     politics: {
-        keywords: /\b(president|prime minister|minister|senator|mp|mla|mlc|governor|mayor|party|alliance|election|government|parliament|congress|bjp|dmk|aiadmk|aap|tdp|ysrcp|chief minister|cabinet|head of state|head of government|foreign minister|home minister|leader of opposition|chancellor)\b/,
+        keywords: /\b(president|prime minister|pm|minister|senator|mp|mla|mlc|governor|mayor|party|alliance|election|government|parliament|congress|bjp|dmk|aiadmk|aap|tdp|ysrcp|chief minister|cm|cabinet|head of state|head of government|foreign minister|home minister|leader of opposition|chancellor)\b/,
         entityHints: /\b(white house|downing street|parliament|senate|lok sabha|rajya sabha|kremlin|elysee|10 downing|capitol hill)\b/
     },
     space_science: {
@@ -14029,7 +14056,7 @@ function detectNormalizedEntityDomain(text, relationType, liveIntent = null) {
     }
     if (relationType === 'role') {
         if (/\b(university|college|school|institute|campus|faculty|department|program|msis|mba|phd)\b/.test(lower)) return 'general';
-        if (/\b(president|prime minister|chief minister|minister|governor|mayor|senator|mp|mla|party|government|parliament)\b/.test(lower)) return 'politics';
+        if (/\b(president|prime minister|pm|chief minister|cm|minister|governor|mayor|senator|mp|mla|party|government|parliament)\b/.test(lower)) return 'politics';
         if (/\b(ceo|founder|chairman|chairperson|company|organization|corporation|startup|firm|stock|market)\b/.test(lower)) return 'companies_finance';
         if (/\b(astronaut|scientist|agency|administrator|director general|space|nasa|isro|esa|jaxa)\b/.test(lower)) return 'space_science';
         if ((/\bdirector\b/.test(lower) && /\b(movie|film|cinema|series|show|music|song|album|imdb)\b/.test(lower)) || /\b(actor|actress|producer|singer|composer|artist|poet|painter|writer|author)\b/.test(lower)) return 'entertainment';
@@ -14319,7 +14346,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         ? getOfficialCompanySourceHints(subject).join(' ')
         : '';
     const officialDomainHints = entityIntent.domain === 'politics'
-        ? 'site:gov.in OR site:pmindia.gov.in OR site:india.gov.in OR site:tn.gov.in OR site:gov.uk OR site:whitehouse.gov OR site:parliament.uk OR site:congress.gov OR site:eci.gov.in OR site:wikipedia.org OR site:britannica.com OR Reuters OR AP'
+        ? 'official government source Reuters AP BBC Wikipedia Britannica'
         : entityIntent.domain === 'space_science'
             ? 'site:nasa.gov OR site:isro.gov.in OR site:esa.int OR site:jaxa.jp OR Reuters'
             : entityIntent.domain === 'arts_literature'
@@ -14335,7 +14362,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} ${roleLabel}` : '',
         entityIntent.relationType === 'role' && entityIntent.targetEntity ? `${roleTarget} current ${roleLabel} official` : '',
         politicalRole && entityIntent.targetEntity ? `${roleTarget} official government ${roleLabel}` : '',
-        politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} site:gov.in OR site:pmindia.gov.in OR site:india.gov.in OR site:tn.gov.in` : '',
+        politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} official government source` : '',
         politicalRole && entityIntent.targetEntity ? `${roleTarget} ${roleLabel} Reuters OR AP OR BBC` : '',
         `${subjectWithCompetition} ${relationHint}`.replace(/\s+/g, ' ').trim(), 
         `${subjectWithCompetition} ${entityIntent.timeframe || ''} ${relationHint} ${sourceBias}`.replace(/\s+/g, ' ').trim(), 
@@ -15881,6 +15908,67 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
             queries,
             options
         });
+
+        try {
+            const answerResponse = await fetch('/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
+                body: JSON.stringify({
+                    query,
+                    maxResults: 8,
+                    answer: true
+                })
+            });
+            if (answerResponse.ok) {
+                const answerData = await answerResponse.json();
+                const directAnswer = cleanLiveAnswerText(String(answerData?.answer || '').trim());
+                const answerResults = Array.isArray(answerData?.results) ? answerData.results.filter(Boolean) : [];
+                if (directAnswer && answerResults.length) {
+                    const sourceLines = answerResults
+                        .slice(0, 5)
+                        .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+                        .join('\n');
+                    const conciseAnswer = conciseFactQuery
+                        ? directAnswer
+                            .split(/\n\s*Key points:\s*/i)[0]
+                            .split(/\n\s*Confidence:\s*/i)[0]
+                            .trim()
+                        : directAnswer;
+                    const finalMsg = `${conciseAnswer}\n\n${buildSourceMetaBlock(answerResults)}\n\nSources:\n${sourceLines}`;
+                    logRoutingDebug('handler decision: live_retrieval search_answer', query, {
+                        selectedHandler: 'api/search answer=true',
+                        liveIntent: intent,
+                        entityIntent,
+                        riskLevel: liveRiskLevel,
+                        answerProvider: answerData?.answerProvider || '',
+                        answerModel: answerData?.answerModel || '',
+                        serperConfigured: Boolean(answerData?.serperConfigured),
+                        providerBreakdown: answerData?.providerBreakdown || {},
+                        resultCount: answerResults.length
+                    });
+                    addVerifiedAssistantMessage(finalMsg, 'Search + Groq live answer');
+                    await speakApiReply('live_summary_ready', {}, 'I checked current sources and summarized what I found.');
+                    saveToHistory(userText, finalMsg);
+                    hideThinkingIndicator();
+                    return true;
+                }
+                logRoutingDebug('handler fallback: live_retrieval search_answer_empty', query, {
+                    selectedHandler: 'handleLiveRetrievalQuery',
+                    answerProvider: answerData?.answerProvider || '',
+                    answerError: answerData?.answerError || '',
+                    serperConfigured: Boolean(answerData?.serperConfigured),
+                    providerBreakdown: answerData?.providerBreakdown || {}
+                });
+            }
+        } catch (answerError) {
+            if (isAbortError(answerError)) throw answerError;
+            logRoutingDebug('handler fallback: live_retrieval search_answer_error', query, {
+                selectedHandler: 'handleLiveRetrievalQuery',
+                error: String(answerError?.message || answerError || '')
+            });
+        }
+
         const resultSets = await Promise.all(
             queries.map(async (q) => {
                 try {
