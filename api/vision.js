@@ -22,14 +22,14 @@ export default async function handler(req, res) {
             return res.status(400).json({ success: false, error: 'Unsupported mimeType' });
         }
 
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            return res.status(500).json({ success: false, error: 'API key not configured' });
+        const providers = getVisionProviders();
+        if (!providers.groqApiKey && !providers.geminiApiKey) {
+            return res.status(500).json({ success: false, error: 'Vision API key not configured' });
         }
 
         if (task === 'math_ocr_solve') {
             const result = await runMathOcrSolvePipeline({
-                apiKey,
+                providers,
                 mimeType,
                 imageBase64,
                 userPrompt: prompt
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
         }
         if (task === 'translate_to_english') {
             const result = await runTranslateToEnglishPipeline({
-                apiKey,
+                providers,
                 mimeType,
                 imageBase64,
                 userPrompt: prompt
@@ -57,14 +57,12 @@ export default async function handler(req, res) {
         }
 
         const systemPrompt = buildVisionPrompt(prompt, task);
-        const geminiResponse = await callGeminiVision({
-            apiKey,
+        const rawText = await callVisionText({
+            providers,
             systemPrompt,
             mimeType,
             imageBase64
         });
-
-        const rawText = extractGeminiText(geminiResponse);
         if (!rawText) {
             return res.status(502).json({ success: false, error: 'Vision model returned an empty response' });
         }
@@ -102,12 +100,102 @@ const GEMINI_MODEL_FALLBACKS = [
     'gemini-2.0-flash',
     'gemini-flash-latest'
 ];
+const GROQ_VISION_MODEL_FALLBACKS = [
+    'meta-llama/llama-4-scout-17b-16e-instruct',
+    'llama-3.2-90b-vision-preview',
+    'llama-3.2-11b-vision-preview'
+];
+const GROQ_TEXT_MODEL_FALLBACKS = [
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant'
+];
 
-async function callGeminiVision({ apiKey, systemPrompt, mimeType, imageBase64 }) {
+function getVisionProviders() {
+    return {
+        groqApiKey: process.env.GROQ_API_KEY || process.env.GROQ_KEY || '',
+        geminiApiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
+        groqVisionModel: String(process.env.GROQ_VISION_MODEL || '').trim(),
+        groqModel: String(process.env.GROQ_MODEL || '').trim(),
+        geminiModel: String(process.env.GEMINI_MODEL || '').trim()
+    };
+}
+
+async function callVisionText({ providers, systemPrompt, mimeType, imageBase64 }) {
+    if (providers?.groqApiKey) {
+        const text = await callGroqVisionText({
+            apiKey: providers.groqApiKey,
+            configuredModel: providers.groqVisionModel,
+            systemPrompt,
+            mimeType,
+            imageBase64
+        });
+        if (text) return text;
+    }
+
+    if (providers?.geminiApiKey) {
+        const payload = await callGeminiVision({
+            apiKey: providers.geminiApiKey,
+            configuredModel: providers.geminiModel,
+            systemPrompt,
+            mimeType,
+            imageBase64
+        });
+        return extractGeminiText(payload);
+    }
+
+    return '';
+}
+
+async function callGroqVisionText({ apiKey, configuredModel, systemPrompt, mimeType, imageBase64 }) {
+    const candidates = [
+        String(configuredModel || '').trim(),
+        ...GROQ_VISION_MODEL_FALLBACKS
+    ].filter(Boolean);
+    const dataUrl = `data:${mimeType || 'image/jpeg'};base64,${imageBase64}`;
+
+    for (const model of candidates) {
+        try {
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model,
+                    temperature: 0.15,
+                    max_tokens: 3000,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: [
+                                { type: 'text', text: systemPrompt },
+                                { type: 'image_url', image_url: { url: dataUrl } }
+                            ]
+                        }
+                    ]
+                })
+            });
+            if (!response.ok) continue;
+            const data = await response.json();
+            const text = extractGroqText(data);
+            if (text) return text;
+        } catch (_) {}
+    }
+    return '';
+}
+
+async function callGeminiVision({ apiKey, configuredModel = '', systemPrompt, mimeType, imageBase64 }) {
     let lastError = null;
+    const modelFallbacks = [
+        String(configuredModel || '').trim(),
+        ...GEMINI_MODEL_FALLBACKS
+    ].filter(Boolean);
 
     for (const apiVersion of GEMINI_API_VERSIONS) {
-        for (const model of GEMINI_MODEL_FALLBACKS) {
+        for (const model of modelFallbacks) {
             try {
                 const response = await fetch(
                     `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`,
@@ -165,11 +253,73 @@ async function callGeminiVision({ apiKey, systemPrompt, mimeType, imageBase64 })
     throw lastError || new Error('No vision model available');
 }
 
-async function callGeminiText({ apiKey, systemPrompt, userPrompt, maxOutputTokens = 2000 }) {
+async function callModelText({ providers, systemPrompt, userPrompt, maxOutputTokens = 2000 }) {
+    if (providers?.groqApiKey) {
+        const text = await callGroqText({
+            apiKey: providers.groqApiKey,
+            configuredModel: providers.groqModel,
+            systemPrompt,
+            userPrompt,
+            maxOutputTokens
+        });
+        if (text) return text;
+    }
+
+    if (providers?.geminiApiKey) {
+        return await callGeminiText({
+            apiKey: providers.geminiApiKey,
+            configuredModel: providers.geminiModel,
+            systemPrompt,
+            userPrompt,
+            maxOutputTokens
+        });
+    }
+
+    return '';
+}
+
+async function callGroqText({ apiKey, configuredModel, systemPrompt, userPrompt, maxOutputTokens = 2000 }) {
+    const candidates = [
+        String(configuredModel || '').trim(),
+        ...GROQ_TEXT_MODEL_FALLBACKS
+    ].filter(Boolean);
+
+    for (const model of candidates) {
+        try {
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model,
+                    temperature: 0.15,
+                    max_tokens: maxOutputTokens,
+                    messages: [
+                        { role: 'system', content: String(systemPrompt || '').trim() },
+                        { role: 'user', content: String(userPrompt || '').trim() }
+                    ]
+                })
+            });
+            if (!response.ok) continue;
+            const payload = await response.json();
+            const text = extractGroqText(payload);
+            if (text) return text;
+        } catch (_) {}
+    }
+    return '';
+}
+
+async function callGeminiText({ apiKey, configuredModel = '', systemPrompt, userPrompt, maxOutputTokens = 2000 }) {
     let lastError = null;
+    const modelFallbacks = [
+        String(configuredModel || '').trim(),
+        ...GEMINI_MODEL_FALLBACKS
+    ].filter(Boolean);
 
     for (const apiVersion of GEMINI_API_VERSIONS) {
-        for (const model of GEMINI_MODEL_FALLBACKS) {
+        for (const model of modelFallbacks) {
             try {
                 const response = await fetch(
                     `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`,
@@ -238,7 +388,7 @@ function normalizeMathOcrText(details = {}) {
     return snippets.join('\n').trim();
 }
 
-async function runMathOcrSolvePipeline({ apiKey, mimeType, imageBase64, userPrompt }) {
+async function runMathOcrSolvePipeline({ providers, mimeType, imageBase64, userPrompt }) {
     const extractionPrompt = [
         'Extract the math problem from the image.',
         'Return strict JSON only:',
@@ -255,13 +405,12 @@ async function runMathOcrSolvePipeline({ apiKey, mimeType, imageBase64, userProm
         `User intent: ${String(userPrompt || 'Solve the problem in the image.').trim()}`
     ].join('\n');
 
-    const ocrPayload = await callGeminiVision({
-        apiKey,
+    const ocrRawText = await callVisionText({
+        providers,
         systemPrompt: extractionPrompt,
         mimeType,
         imageBase64
     });
-    const ocrRawText = extractGeminiText(ocrPayload);
     if (!ocrRawText) throw new Error('OCR stage returned empty response');
 
     const ocrJson = extractJsonFromText(ocrRawText) || {};
@@ -285,8 +434,8 @@ async function runMathOcrSolvePipeline({ apiKey, mimeType, imageBase64, userProm
         'No prose outside JSON.'
     ].join('\n');
 
-    const plannerText = await callGeminiText({
-        apiKey,
+    const plannerText = await callModelText({
+        providers,
         systemPrompt: plannerSystemPrompt,
         userPrompt: `Problem:\n${effectiveProblem}`
     });
@@ -307,8 +456,8 @@ async function runMathOcrSolvePipeline({ apiKey, mimeType, imageBase64, userProm
         'Set approved=false if core symbols/values are ambiguous.'
     ].join('\n');
 
-    const criticText = await callGeminiText({
-        apiKey,
+    const criticText = await callModelText({
+        providers,
         systemPrompt: criticSystemPrompt,
         userPrompt: `OCR JSON:\n${JSON.stringify(ocrJson, null, 2)}\n\nPlanner JSON:\n${JSON.stringify(plannerJson, null, 2)}`
     });
@@ -336,8 +485,8 @@ async function runMathOcrSolvePipeline({ apiKey, mimeType, imageBase64, userProm
         ? criticJson.revisedPlan
         : (Array.isArray(plannerJson?.strategy) ? plannerJson.strategy : []);
 
-    const solverText = await callGeminiText({
-        apiKey,
+    const solverText = await callModelText({
+        providers,
         systemPrompt: solverSystemPrompt,
         userPrompt: [
             `Problem:\n${canonicalProblem}`,
@@ -381,7 +530,7 @@ async function runMathOcrSolvePipeline({ apiKey, mimeType, imageBase64, userProm
     };
 }
 
-async function runTranslateToEnglishPipeline({ apiKey, mimeType, imageBase64, userPrompt }) {
+async function runTranslateToEnglishPipeline({ providers, mimeType, imageBase64, userPrompt }) {
     const extractionPrompt = [
         'Extract text from this image with high fidelity.',
         'Return strict JSON only:',
@@ -395,13 +544,12 @@ async function runTranslateToEnglishPipeline({ apiKey, mimeType, imageBase64, us
         '- Do not translate at this stage.'
     ].join('\n');
 
-    const ocrPayload = await callGeminiVision({
-        apiKey,
+    const ocrRawText = await callVisionText({
+        providers,
         systemPrompt: extractionPrompt,
         mimeType,
         imageBase64
     });
-    const ocrRawText = extractGeminiText(ocrPayload);
     if (!ocrRawText) throw new Error('Translation OCR stage returned empty response');
 
     const ocrJson = extractJsonFromText(ocrRawText) || {};
@@ -423,8 +571,8 @@ async function runTranslateToEnglishPipeline({ apiKey, mimeType, imageBase64, us
         'No markdown, no code fences, no prose outside JSON.'
     ].join('\n');
 
-    const translationText = await callGeminiText({
-        apiKey,
+    const translationText = await callModelText({
+        providers,
         systemPrompt: translatorSystemPrompt,
         userPrompt: [
             `User intent: ${String(userPrompt || 'Translate this image text to English.').trim()}`,
@@ -455,14 +603,16 @@ function buildVisionPrompt(userPrompt, task) {
     const isTextTask = task === 'text_extract' || task === 'bill_summary' || task === 'shopping_extract';
     const taskRule = getTaskRule(task);
     return [
-        'You are a production-grade vision OCR and analysis engine.',
+        'You are a production-grade vision and OCR engine.',
         'Analyze the provided image and return strictly valid JSON only.',
         'No markdown, no code fences, no extra text.',
         'Do not hallucinate unreadable text. If uncertain, omit that token.',
         'Primary focus policy:',
-        '- If readable text or software UI is visible, focus on text/UI first and keep background details minimal.',
+        isTextTask
+            ? '- For OCR/document tasks, focus on readable text first.'
+            : '- For general vision, focus on the most prominent foreground object first. Do not let small background text dominate the answer.',
         '- Ignore wall color/background/decor unless user explicitly asks for background.',
-        '- If no useful text exists, focus on the main object/product in foreground.',
+        '- If a clear product or object is prominent, name it in answer and summary.',
         'If text appears, preserve character accuracy, punctuation, and line order.',
         'Detect visible objects including products, people, animals, food, devices, vehicles, and common items.',
         'If user asks "what is this" or "explain this product/part", identify the most likely item and explain its practical purpose briefly.',
@@ -499,7 +649,7 @@ function buildVisionPrompt(userPrompt, task) {
         '- Do not fabricate unreadable text; only include likely readable snippets.',
         isTextTask
             ? '- For OCR tasks: prioritize exact text extraction first. Preserve row order, numbers, totals, units, and symbols exactly.'
-            : '- For non-OCR tasks: if text/UI exists, answer from text first; avoid background narration.'
+            : '- For non-OCR tasks: answer with the main visible object first. Mention readable text only briefly as secondary context.'
     ].join('\n');
 }
 
@@ -532,6 +682,22 @@ function extractGeminiText(payload) {
     const parts = payload?.candidates?.[0]?.content?.parts;
     if (!Array.isArray(parts)) return '';
     return parts.map(p => (typeof p?.text === 'string' ? p.text : '')).join('\n').trim();
+}
+
+function extractGroqText(data) {
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content === 'string') return content.trim();
+    if (Array.isArray(content)) {
+        return content
+            .map(part => {
+                if (typeof part === 'string') return part;
+                if (typeof part?.text === 'string') return part.text;
+                return '';
+            })
+            .join('\n')
+            .trim();
+    }
+    return '';
 }
 
 function safeParseJson(text) {
@@ -609,26 +775,77 @@ function formatVisionResponse(data, task, userPrompt = '') {
         return `People count: ${count}`;
     }
 
-    // General/object modes: text-first, then object explanation, then summary.
-    if (hasReadableText) {
-        const parts = [];
-        parts.push(`Detected text:\n${compactText.slice(0, 2400)}`);
-        const conciseAnswer = compactSingleLine(directAnswer);
-        if (conciseAnswer) parts.push(conciseAnswer);
-        return parts.join('\n\n').trim();
-    }
-
     const explainIntent = isObjectExplanationIntent(userPrompt);
-    if (explainIntent) {
-        const topLabel = String(objects?.[0]?.label || '').trim();
-        const objectAnchor = topLabel ? `Likely item: ${topLabel}.` : '';
-        const conciseAnswer = compactSingleLine(directAnswer || summary);
-        if (objectAnchor || conciseAnswer) {
-            return [objectAnchor, conciseAnswer].filter(Boolean).join(' ');
-        }
+    const objectFirstAnswer = buildObjectFirstVisionAnswer({
+        directAnswer,
+        summary,
+        objects,
+        compactText,
+        explainIntent,
+        includeText: hasReadableText
+    });
+    if (objectFirstAnswer) {
+        return objectFirstAnswer;
     }
 
     return conciseVisionFallback(directAnswer, summary, objects);
+}
+
+function buildObjectFirstVisionAnswer({ directAnswer, summary, objects, compactText, explainIntent, includeText }) {
+    const topObject = pickTopObjectLabel(objects);
+    const answer = removeDetectedTextLead(compactSingleLine(directAnswer || summary));
+    const parts = [];
+
+    if (topObject) {
+        parts.push(`I see ${withArticle(topObject)}.`);
+    } else if (answer) {
+        parts.push(answer);
+    }
+
+    if (explainIntent && answer && topObject && !answer.toLowerCase().includes(topObject.toLowerCase())) {
+        parts.push(answer);
+    }
+
+    if (includeText && compactText) {
+        parts.push(`I also see something written as "${compactTextForMention(compactText)}."`);
+    }
+
+    return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function pickTopObjectLabel(objects) {
+    if (!Array.isArray(objects) || !objects.length) return '';
+    const skip = /^(text|words|lettering|logo|label|screen|display|brand|writing|document|paper)$/i;
+    const sorted = objects
+        .map(item => ({
+            label: String(item?.label || '').trim(),
+            confidence: Number(item?.confidence || 0)
+        }))
+        .filter(item => item.label && !skip.test(item.label))
+        .sort((a, b) => b.confidence - a.confidence);
+    return sorted[0]?.label || '';
+}
+
+function withArticle(label) {
+    const clean = String(label || '').trim();
+    if (!clean) return 'an object';
+    if (/^(a|an|the)\s+/i.test(clean)) return clean;
+    return /^[aeiou]/i.test(clean) ? `an ${clean}` : `a ${clean}`;
+}
+
+function compactTextForMention(text) {
+    return String(text || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 120)
+        .replace(/["]+/g, "'");
+}
+
+function removeDetectedTextLead(text) {
+    return String(text || '')
+        .replace(/^detected text:\s*[^.?!]+[.?!]?\s*/i, '')
+        .replace(/^i can read\s+[^.?!]+[.?!]?\s*/i, '')
+        .trim();
 }
 
 function compactSingleLine(text) {
