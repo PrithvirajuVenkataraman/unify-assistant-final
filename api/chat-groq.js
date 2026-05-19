@@ -1200,6 +1200,14 @@ function buildLengthPolicy(message, clientSystemPrompt, options = {}) {
     }
 
     const detail = inferDetailLevel(message);
+    if (isRecipeGenerationRequest(message)) {
+        return {
+            instruction: 'User asked for a recipe. Provide the complete recipe with all required sections and finish every step cleanly. Keep it concise but do not truncate the final cooking/resting step.',
+            maxTokens: 5000,
+            temperature: 0.6,
+            wordSpec: null
+        };
+    }
     if (isLongTravelPlanningRequest(message)) {
         return {
             instruction: 'User asked for a substantial travel plan. Provide the full itinerary without truncating: use clear day-by-day sections, practical timing, transit, food guidance, and concise bullets for each stop.',
@@ -1220,6 +1228,13 @@ function buildLengthPolicy(message, clientSystemPrompt, options = {}) {
         return { instruction: 'Keep the response brief and direct.', maxTokens: 900, temperature: 0.5, wordSpec: null };
     }
     return { instruction: 'Match response length to the user intent; concise for simple asks, fuller when needed.', maxTokens: 2500, temperature: 0.7, wordSpec: null };
+}
+
+function isRecipeGenerationRequest(message) {
+    const text = String(message || '').toLowerCase();
+    if (!text.trim()) return false;
+    return /\b(recipe|ingredients|steps|how to make|how do i make|how can i make|cook|prepare)\b/.test(text) &&
+        /\b(biryani|chicken|mutton|rice|curry|masala|pasta|pizza|noodles|soup|cake|bread|dessert|dish|food|aloo|potato|fry|sabzi|poriyal|bhaji|stir fry|thalassery|tellicherry|malabar)\b/.test(text);
 }
 
 function isLongTravelPlanningRequest(message) {
@@ -1303,7 +1318,7 @@ function padToWordCount(text, target) {
         out = `${out} ${filler}`.trim();
         if (countWords(out) > target) {
             out = trimToWordCount(out, target);
-            break; 
+            break;
         }
     }
     return out;
