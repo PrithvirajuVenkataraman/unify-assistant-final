@@ -20,7 +20,7 @@
 
     --app-max-width: 1000px;
     --app-gutter-x: 20px;
-    --input-bar-safe-height: 128px;
+    --input-bar-safe-height: 150px;
     --z-menu: 55;
     --z-side-backdrop: 52;
     --z-side-panel: 53;
@@ -155,7 +155,7 @@ body.dark {
     width: 100%;
     min-width: 0;
     min-height: 0;
-    max-height: calc(100dvh - var(--input-bar-safe-height));
+    max-height: calc(100dvh - var(--input-bar-safe-height) - env(safe-area-inset-bottom));
     overflow: hidden;
 }
 
@@ -174,7 +174,8 @@ body.dark {
     border: none !important;
     background: transparent !important;
     box-shadow: none !important;
-    padding: 16px !important;
+    padding: 16px 16px calc(var(--input-bar-safe-height) + 24px + env(safe-area-inset-bottom)) !important;
+    scroll-padding-bottom: calc(var(--input-bar-safe-height) + 24px + env(safe-area-inset-bottom));
     overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -1338,7 +1339,7 @@ body.dark .response-action-btn {
 @media (max-width: 768px) {
     :root {
         --app-gutter-x: 10px;
-        --input-bar-safe-height: 148px;
+        --input-bar-safe-height: 172px;
     }
 
     .app-shell {
@@ -1347,7 +1348,7 @@ body.dark .response-action-btn {
 
     #chat-container {
         border-radius: 12px;
-        padding: 12px;
+        padding: 12px 12px calc(var(--input-bar-safe-height) + 24px + env(safe-area-inset-bottom)) !important;
     }
 
     .continuous-vision-preview {
