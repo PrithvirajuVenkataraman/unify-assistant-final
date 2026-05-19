@@ -1300,6 +1300,6 @@ function padToWordCount(text, target) {
             out = trimToWordCount(out, target);
             break;
         }
-    }
+    } 
     return out;
 }
