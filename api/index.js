@@ -1,7 +1,5 @@
   import chatGroqHandler from './chat-groq.js';
-  import documentIngestHandler from './document-ingest.js';
   import marketsHandler from './markets.js';
-  import searchHandler from './search.js';
   import speechHandler from './speech.js';
   import visionHandler from './vision.js';
 
@@ -16,14 +14,20 @@
         return res.status(410).json({
           success: false,
           error: 'The legacy /api/rag endpoint has been retired.',
-          hint: 'Use /api/document-ingest for uploads and /api/chat-groq for Q&A.'
+          hint: 'Document upload and live retrieval have been retired in this focused build.'
         });
       } else if (path.includes('/document-ingest')) {
-        return await documentIngestHandler(req, res);
+        return res.status(410).json({
+          success: false,
+          error: 'Document upload has been retired. Use camera OCR through /api/vision.'
+        });
       } else if (path.includes('/markets')) {
         return await marketsHandler(req, res);
       } else if (path.includes('/search')) {
-        return await searchHandler(req, res);
+        return res.status(410).json({
+          success: false,
+          error: 'Live web search has been retired in this focused build.'
+        });
       } else if (path.includes('/speech')) {
         return await speechHandler(req, res);
       } else if (path.includes('/vision')) {
