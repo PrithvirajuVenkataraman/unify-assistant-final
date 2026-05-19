@@ -551,56 +551,7 @@ function getWebEscalationDecision(message, firstAnswer) {
 }
 
 async function buildLiveRagContext(message, req, contextTurns = []) {
-    const query = String(message || '').trim();
-    if (!query || !isWebCheckCandidateQuery(query)) return { ragText: '', sources: [] };
-
-    try {
-        const resolvedQuery = resolveContextualLiveQuery(query, contextTurns);
-        const cached = getLiveCagContext(resolvedQuery);
-        if (cached) return cached;
-
-        const liveQueries = buildLiveQueries(resolvedQuery);
-        const runVerifiedWebSearch = await resolveRunVerifiedWebSearch();
-        let results = [];
-
-        if (runVerifiedWebSearch) {
-            const verified = await runVerifiedWebSearch(liveQueries, {
-                maxResultsPerQuery: 6,
-                limit: 12,
-                includePageExtract: true
-            });
-            results = Array.isArray(verified?.results) ? verified.results : [];
-        } else {
-            results = await fetchFromOwnSearchApi(liveQueries, req);
-        }
-
-        const ranked = rankLiveSources(resolvedQuery, results).slice(0, 6);
-        if (!ranked.length) return { ragText: '', sources: [] };
-
-        const lines = [`Live web verification for: "${query}"`];
-        if (resolvedQuery.toLowerCase() !== query.toLowerCase()) {
-            lines.push(`Resolved query: "${resolvedQuery}"`);
-        }
-        for (let i = 0; i < ranked.length; i++) {
-            const item = ranked[i] || {};
-            lines.push(`${i + 1}. ${String(item.title || 'Untitled').trim()}`);
-            lines.push(`URL: ${String(item.url || '').trim()}`);
-            if (item.description) {
-                lines.push(`Summary: ${String(item.description).trim()}`);
-            }
-            if (Array.isArray(item.keyEntities) && item.keyEntities.length) {
-                lines.push(`Names: ${item.keyEntities.slice(0, 8).join(', ')}`);
-            }
-            if (item.pageExtract) {
-                lines.push(`Extract: ${String(item.pageExtract).slice(0, 520).trim()}`);
-            }
-        }
-        const built = { ragText: lines.join('\n'), sources: ranked };
-        rememberLiveCagContext(resolvedQuery, built);
-        return built;
-    } catch (error) {
-        return { ragText: '', sources: [] };
-    }
+    return { ragText: '', sources: [] };
 }
 
 function getLiveCagStore() {
@@ -680,54 +631,6 @@ function rememberLiveCagContext(query, payload) {
     const excess = Math.max(0, entries.length - LIVE_CAG_MAX_ENTRIES);
     for (let i = 0; i < excess; i++) {
         store.delete(entries[i][0]);
-    }
-}
-
-async function resolveRunVerifiedWebSearch() {
-    try {
-        const mod = await import('./live-search.js');
-        if (typeof mod?.runVerifiedWebSearch === 'function') {
-            return mod.runVerifiedWebSearch;
-        }
-    } catch (_) {}
-    return null;
-}
-
-async function fetchFromOwnSearchApi(queries, req) {
-    try {
-        const host = String(req?.headers?.host || '').trim();
-        if (!host) return [];
-        const proto = String(req?.headers?.['x-forwarded-proto'] || 'https').trim();
-        const baseUrl = `${proto}://${host}`;
-        const list = Array.isArray(queries) ? queries : [String(queries || '')];
-        const all = [];
-
-        for (const q of list.slice(0, 4)) {
-            const response = await fetchWithTimeoutRetry(`${baseUrl}/api/search`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: String(q || ''), maxResults: 6 })
-            }, {
-                timeoutMs: INTERNAL_FETCH_TIMEOUT_MS,
-                retries: 0
-            });
-            if (!response.ok) continue;
-            const data = await response.json();
-            const results = Array.isArray(data?.results) ? data.results : [];
-            all.push(...results);
-        }
-
-        const seen = new Set();
-        const deduped = [];
-        for (const item of all) {
-            const key = String(item?.url || '').trim();
-            if (!key || seen.has(key)) continue;
-            seen.add(key);
-            deduped.push(item);
-        }
-        return deduped;
-    } catch (_) {
-        return [];
     }
 }
 
