@@ -363,7 +363,6 @@ body.dark .composer-action-item:hover {
 
 #input-bar-inner.vtt-ui-active #help-btn,
 #input-bar-inner.vtt-ui-active #safety-btn,
-#input-bar-inner.vtt-ui-active #document-upload-btn,
 #input-bar-inner.vtt-ui-active #vision-toggle-btn,
 #input-bar-inner.vtt-ui-active #composer-plus-btn,
 #input-bar-inner.vtt-ui-active #composer-actions-menu,
@@ -832,7 +831,6 @@ body.dark .footer-action-btn-primary:hover {
 /* Panels and modals */
 .help-modal-enhanced,
 .side-panel,
-.upload-context-panel,
 .selection-helper-popover,
 .suggestions-container,
 .suggestion-chip {
@@ -1418,14 +1416,6 @@ body.dark .response-action-btn {
         padding-right: var(--app-gutter-x) !important;
     }
 
-    .upload-context-row {
-        flex-wrap: wrap;
-    }
-
-    .upload-context-btn {
-        flex: 1 1 calc(50% - 4px);
-    }
-
     #text-input {
         font-size: 16px !important;
     }
@@ -1440,8 +1430,7 @@ body.dark .response-action-btn {
     input,
     textarea,
     select,
-    #text-input,
-    .upload-context-input {
+    #text-input {
         font-size: 16px !important;
     }
 }
