@@ -15271,6 +15271,7 @@ function normalizeRecipeOutputText(text) {
         .replace(/½/g, '1/2')
         .replace(/¾/g, '3/4')
         .replace(/\s+%/g, ' percent')
+        .replace(/^(\s*)\d+\.\s+/gm, '$1- ')
         .replace(/[ \t]+/g, ' ')
         .replace(/[ \t]+\n/g, '\n')
         .replace(/\n{3,}/g, '\n\n')
@@ -15284,7 +15285,8 @@ function isLikelyIncompleteRecipe(text) {
     if (!hasRecipeShape) return false;
     if (/[(\[,;:-]\s*$/.test(raw)) return true;
     if (/\b(?:with|and|or|to|for|a|an|the|lid|cover|until|then|about|of|in)\s*$/i.test(raw)) return true;
-    if (/\nSteps\s*:/i.test(raw) && !/\nTips\s*:\s*\n\s*-/i.test(raw)) return true;
+    if (!/\nIngredients\s*:\s*\n\s*-/i.test(raw)) return true;
+    if (!/\nSteps\s*:\s*\n\s*-/i.test(raw)) return true;
     return false;
 }
 
@@ -15309,7 +15311,8 @@ Requirements:
 - Complete the recipe, do not stop mid-sentence.
 - Use plain ASCII only: write 1/2, 1 1/2, 70 percent, normal hyphens.
 - Keep it under 850 words.
-- Include exactly these sections:
+- Use bullet points only for Ingredients and Steps. Do not use numbered steps.
+- Include exactly these sections, in this order:
 Recipe:
 Style:
 Serves:
@@ -15320,9 +15323,6 @@ Ingredients:
 - ...
 
 Steps:
-1. ...
-
-Tips:
 - ...
 - ...`
             })
@@ -17066,6 +17066,8 @@ Rules:
 - Complete every required section and end cleanly. Do not stop mid-sentence.
 - Keep the full recipe under 850 words.
 - Use plain ASCII only: write 1/2, 1 1/2, 70 percent, and normal hyphens. Do not use Unicode fractions, nonbreaking spaces, or curly quotes.
+- Always put Ingredients before Steps.
+- Use bullet points only for Ingredients and Steps. Do not use numbered steps.
 - If exact authenticity varies by household or region, say that briefly.
 - If the dish is obscure, highly regional, or ambiguous, do not pretend the recipe is fully verified or universally authentic.
 - For ambiguous or obscure dishes, label the style as "Approximate common-style version" or "Traditional-style approximation" instead of claiming certainty.
@@ -17085,13 +17087,9 @@ Ingredients:
 - <ingredient 2>
 
 Steps:
-1. <step 1>
-2. <step 2>
-3. <step 3>
-
-Tips:
-- <tip 1>
-- <tip 2>
+- <step 1>
+- <step 2>
+- <step 3>
 
 If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`;
 
