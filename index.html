@@ -64,22 +64,6 @@
                         </div>
                     </div>
 
-                        <div id="commute-section" class="hidden bg-gradient-to-br from-sky-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 p-6 rounded-2xl mt-6 border border-sky-100 dark:border-slate-600">
-                            <div class="flex items-center gap-3 mb-4">
-                                <div class="p-2 bg-sky-100 dark:bg-sky-900/30 rounded-xl">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-sky-600 dark:text-sky-400">
-                                        <path d="M3 12h5l3 8 4-16 3 8h3"></path>
-                                    </svg>
-                                </div>
-                                <h2 class="text-xl font-bold text-gray-800 dark:text-white">Commute</h2>
-                            </div>
-                            <div id="commute-summary" class="space-y-2 text-sm text-gray-700 dark:text-gray-300"></div>
-                            <div class="mt-4 flex flex-wrap gap-2">
-                                <button onclick="promptCommuteSetup()" class="px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold transition-all">Setup commute</button>
-                                <button onclick="estimateLeaveTime()" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-slate-900/70 border border-sky-200 dark:border-slate-600 text-sky-700 dark:text-sky-300 text-sm font-semibold transition-all">Leave-time estimate</button>
-                            </div>
-                        </div>
-
                     </div>
 
                     <!-- Right Column: Chat -->
@@ -130,7 +114,6 @@
                         </svg>
                     </button>
                     <div id="composer-actions-menu" class="composer-actions-menu hidden" role="menu" aria-label="Composer actions">
-                        <button type="button" id="document-upload-btn" class="composer-action-item" onclick="handleComposerAction('upload')" role="menuitem">Upload document</button>
                         <button type="button" id="vision-toggle-btn" class="composer-action-item" onclick="handleComposerAction('vision')" role="menuitem">Vision analysis</button>
                         <button type="button" class="composer-action-item" onclick="handleComposerAction('ocr')" role="menuitem">OCR camera</button>
                         <button type="button" id="help-btn" class="composer-action-item" onclick="handleComposerAction('help')" role="menuitem">Help & options</button>
@@ -200,19 +183,6 @@
                     </button>
                 </div>
             </div>
-            <div id="upload-context-panel" class="upload-context-panel hidden" role="group" aria-label="Upload context">
-                <div class="upload-context-row">
-                    <input
-                        type="text"
-                        id="upload-context-input"
-                        class="upload-context-input"
-                        maxlength="500"
-                        placeholder='Optional file context (e.g. "extract bill totals and tax split")' />
-                    <button type="button" class="upload-context-btn secondary" onclick="skipUploadContextAndPickFile()">Skip</button>
-                    <button type="button" class="upload-context-btn primary" onclick="applyUploadContextAndPickFile()">Choose File</button>
-                </div>
-            </div>
-            
             </div>
             <p id="footer-disclaimer" class="mt-2 text-xs text-gray-400 font-medium text-center">AI can make mistakes. Check important info.</p>
             <!-- Footer controls -->
@@ -230,14 +200,6 @@
             </div>
         </div>
     </div>
-    <input
-        id="document-upload-input"
-        type="file"
-        class="hidden"
-        accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.csv,image/*"
-        onchange="handleDocumentSelection(event)"
-    />
-
     <!-- Camera/OCR Modal -->
     <div id="camera-modal" class="hidden fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-3 sm:p-4">
         <div class="relative w-full max-w-2xl max-h-[calc(100vh-1.5rem)] bg-slate-900 rounded-3xl overflow-y-auto shadow-2xl">
@@ -249,7 +211,7 @@
             
             <div class="p-6 space-y-4">
                 <div class="flex flex-col gap-2">
-                    <label class="text-xs font-bold text-slate-400 uppercase tracking-wider">Optional Instruction (e.g. "Translate to Tamil")</label>
+                    <label class="text-xs font-bold text-slate-400 uppercase tracking-wider">Optional Instruction (e.g. "translate this to English")</label>
                     <input type="text" id="ocr-comment-input" placeholder="What should I do with this image?" 
                            class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
                 </div>
@@ -257,10 +219,14 @@
                     <label for="ocr-mode-select" class="text-xs font-bold text-slate-400 uppercase tracking-wider">OCR Mode</label>
                     <select id="ocr-mode-select" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
                         <option value="auto" selected>Auto (recommended)</option>
-                        <option value="document">Document text</option>
-                        <option value="receipt">Receipt / bill</option>
                         <option value="math">Math solve</option>
                         <option value="translate">Translate to English</option>
+                        <option value="translate_hindi">Hindi to English</option>
+                        <option value="translate_kannada">Kannada to English</option>
+                        <option value="translate_malayalam">Malayalam to English</option>
+                        <option value="translate_telugu">Telugu to English</option>
+                        <option value="translate_tamil">Tamil to English</option>
+                        <option value="document">Extract visible text</option>
                         <option value="general">General scene</option>
                     </select>
                 </div>
@@ -4276,7 +4242,6 @@ async function handleNameCorrection(text) {
                 name: null,
                 email: '',
                 memory: {},
-                commute: { home: '', office: '', arrivalTime: '09:00', mode: 'drive' },
                 safety: {
                     womenSafetyMode: false,
                     trustedContact: '',
@@ -4343,7 +4308,6 @@ async function handleNameCorrection(text) {
         let translatorMode = false;
         let translatorLanguage = null;
         let lastBudgetPlan = null;
-        let commuteProfile = { home: '', office: '', arrivalTime: '09:00', mode: 'drive' };
         let safetyProfile = {
             womenSafetyMode: false,
             trustedContact: '',
@@ -4571,7 +4535,6 @@ let showRoutingDebugBadge = true;
             loadNoiseFilterSettings();
             loadAssistantModes();
             loadCagMemory();
-            loadCommuteProfile();
             loadSafetyProfile();
             setupInputHistoryNavigation();
             updateVoiceToTextButton();
@@ -4579,7 +4542,6 @@ let showRoutingDebugBadge = true;
             initChatScrollLock();
             initKeyboardShortcuts();
             initSelectionPromptHelper();
-            initUploadContextPanel();
             initComposerActionsMenu();
             window.addEventListener('online', updateOnlineStatus);
             window.addEventListener('offline', updateOnlineStatus);
@@ -5906,31 +5868,6 @@ let showRoutingDebugBadge = true;
             });
         }
 
-        function initUploadContextPanel() {
-            const contextInput = document.getElementById('upload-context-input');
-            if (!contextInput || contextInput.dataset.bound === '1') return;
-            contextInput.dataset.bound = '1';
-            contextInput.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    applyUploadContextAndPickFile();
-                    return;
-                }
-                if (event.key === 'Escape') {
-                    event.preventDefault();
-                    closeUploadContextPanel();
-                }
-            });
-
-            document.addEventListener('mousedown', (event) => {
-                const panel = document.getElementById('upload-context-panel');
-                const trigger = document.getElementById('document-upload-btn');
-                if (!panel || panel.classList.contains('hidden')) return;
-                if (panel.contains(event.target) || trigger?.contains(event.target)) return;
-                closeUploadContextPanel();
-            });
-        }
-
         function initChatScrollLock() {
             const chatContainer = document.getElementById('chat-container');
             if (!chatContainer || chatContainer.dataset.scrollLockBound === '1') return;
@@ -6213,27 +6150,24 @@ let showRoutingDebugBadge = true;
                 detail: (window.SpeechRecognition || window.webkitSpeechRecognition) ? 'Web Speech API available' : 'Web Speech API unavailable'
             });
 
-            const [chatPing, searchPing, marketsPing] = await Promise.all([
+            const [chatPing, visionPing] = await Promise.all([
                 pingEndpoint('/api/chat-groq', { message: 'health check' }),
-                pingEndpoint('/api/search', { query: 'weather today', maxResults: 1 }),
-                pingEndpoint('/api/markets', { mode: 'news', query: 'latest news', verificationMode: 'strict', riskLevel: 'high_risk' })
+                pingEndpoint('/api/vision', { task: 'health_check', imageBase64: 'x', mimeType: 'text/plain' }, { allowClientError: true })
             ]);
 
             checks.push({ label: 'LLM API (/api/chat-groq)', ok: chatPing.ok, detail: chatPing.detail });
-            checks.push({ label: 'Live web search (/api/search)', ok: searchPing.ok, detail: searchPing.detail });
-            checks.push({ label: 'News/markets (/api/markets)', ok: marketsPing.ok, detail: marketsPing.detail });
+            checks.push({ label: 'Vision API route (/api/vision)', ok: visionPing.ok, detail: visionPing.detail });
 
             const locationReady = checks.find(c => c.label === 'Live location support')?.ok;
-            const marketsReady = checks.find(c => c.label === 'News/markets (/api/markets)')?.ok;
             checks.push({
-                label: 'Weather + AQI readiness',
-                ok: !!(locationReady && marketsReady),
-                detail: (locationReady && marketsReady) ? 'Location + weather backend available' : 'Missing location permission/support or weather backend'
+                label: 'Weather readiness',
+                ok: !!locationReady,
+                detail: locationReady ? 'Location support available' : 'Missing location permission/support'
             });
             checks.push({
-                label: 'Itinerary + transport readiness',
-                ok: !!(chatPing.ok && searchPing.ok),
-                detail: (chatPing.ok && searchPing.ok) ? 'Planner + search path available' : 'Planner/search path has issues'
+                label: 'Itinerary + learning readiness',
+                ok: !!chatPing.ok,
+                detail: chatPing.ok ? 'Planner and learning model route available' : 'Planner/model route unavailable'
             });
             checks.push({
                 label: 'Follow-up + general Q&A readiness',
@@ -6815,7 +6749,10 @@ function normalizeUiTokens(text) {
         function handleComposerAction(action) {
             closeComposerActionsMenu();
             const key = String(action || '').trim().toLowerCase();
-            if (key === 'upload') return openDocumentPicker();
+            if (key === 'upload') {
+                showTemporaryMessage('Document upload is turned off. Use OCR camera for quick image text instead.');
+                return;
+            }
             if (key === 'vision') return toggleContinuousVision();
             if (key === 'ocr') return openCameraMode();
             if (key === 'help') return showHelpModal();
@@ -6836,43 +6773,6 @@ function normalizeUiTokens(text) {
                 if (event.key !== 'Escape') return;
                 closeComposerActionsMenu();
             });
-        }
-
-        function openDocumentPicker() {
-            closeComposerActionsMenu();
-            const panel = document.getElementById('upload-context-panel');
-            const input = document.getElementById('upload-context-input');
-            if (!panel || !input) return;
-            panel.classList.remove('hidden');
-            input.value = pendingUploadContext || '';
-            setTimeout(() => input.focus(), 0);
-        }
-
-        function closeUploadContextPanel() {
-            const panel = document.getElementById('upload-context-panel');
-            if (!panel) return;
-            panel.classList.add('hidden');
-        }
-
-        function triggerHiddenFilePicker() {
-            const fileInput = document.getElementById('document-upload-input');
-            if (!fileInput) return;
-            fileInput.click();
-        }
-
-        function applyUploadContextAndPickFile() {
-            const contextInput = document.getElementById('upload-context-input');
-            pendingUploadContext = String(contextInput?.value || '').trim().slice(0, 500);
-            closeUploadContextPanel();
-            triggerHiddenFilePicker();
-        }
-
-        function skipUploadContextAndPickFile() {
-            pendingUploadContext = '';
-            const contextInput = document.getElementById('upload-context-input');
-            if (contextInput) contextInput.value = '';
-            closeUploadContextPanel();
-            triggerHiddenFilePicker();
         }
 
 let cameraStream = null;
@@ -7159,7 +7059,22 @@ async function switchCameraLens() {
             if (/[\u0B80-\u0BFF]/.test(raw)) return 'tam';
             if (/[\u0900-\u097F]/.test(raw)) return 'hin';
             if (/[\u0C00-\u0C7F]/.test(raw)) return 'tel';
+            if (/[\u0C80-\u0CFF]/.test(raw)) return 'kan';
+            if (/[\u0D00-\u0D7F]/.test(raw)) return 'mal';
+            if (/\bkannada\b/i.test(raw)) return 'kan';
+            if (/\bmalayalam\b/i.test(raw)) return 'mal';
             return 'eng';
+        }
+
+        function buildTranslateToEnglishOcrMode(languageName, languageCode, userInstruction = '') {
+            const hint = String(userInstruction || '').trim();
+            return {
+                key: `translate_${languageCode}`,
+                label: `${languageName} to English`,
+                task: 'translate_to_english',
+                ocrLangHint: languageCode,
+                prompt: hint || `Extract all readable ${languageName} text from the image and translate it to natural English. Include the original text and the English translation.`
+            };
         }
 
         function getOcrCaptureModeConfig(mode, userInstruction = '') {
@@ -7180,9 +7095,15 @@ async function switchCameraLens() {
                     key: 'translate',
                     label: 'Translate to English',
                     task: 'translate_to_english',
-                    prompt: hint || 'Extract all readable text and translate it to English.'
+                    ocrLangHint: detectPreferredOcrLangHint(hint),
+                    prompt: hint || 'Extract all readable text and translate it to English. Include the original text and the English translation.'
                 };
             }
+            if (selectedMode === 'translate_hindi') return buildTranslateToEnglishOcrMode('Hindi', 'hin', hint);
+            if (selectedMode === 'translate_kannada') return buildTranslateToEnglishOcrMode('Kannada', 'kan', hint);
+            if (selectedMode === 'translate_malayalam') return buildTranslateToEnglishOcrMode('Malayalam', 'mal', hint);
+            if (selectedMode === 'translate_telugu') return buildTranslateToEnglishOcrMode('Telugu', 'tel', hint);
+            if (selectedMode === 'translate_tamil') return buildTranslateToEnglishOcrMode('Tamil', 'tam', hint);
             if (selectedMode === 'receipt') {
                 return {
                     key: 'receipt',
@@ -7214,7 +7135,8 @@ async function switchCameraLens() {
                     key: 'auto_translate',
                     label: 'Auto: Translate',
                     task: 'translate_to_english',
-                    prompt: hint || 'Extract all readable text and translate it to English.'
+                    ocrLangHint: detectPreferredOcrLangHint(hint),
+                    prompt: hint || 'Extract all readable text and translate it to English. Include the original text and the English translation.'
                 };
             }
             if (/\b(solve|equation|integral|derivative|algebra|math|calculate|find x|trigonometry|calculus)\b/.test(lowerHint)) {
@@ -7340,7 +7262,7 @@ async function switchCameraLens() {
                 const userInstruction = String(document.getElementById('ocr-comment-input')?.value || '').trim();
                 const modeValue = String(document.getElementById('ocr-mode-select')?.value || 'auto').trim().toLowerCase();
                 const modeConfig = getOcrCaptureModeConfig(modeValue, userInstruction);
-                const ocrLangHint = detectPreferredOcrLangHint(userInstruction);
+                const ocrLangHint = modeConfig.ocrLangHint || detectPreferredOcrLangHint(userInstruction);
                 const prompt = modeConfig.prompt;
                 const renderJpegQuality = 0.95;
                 const variantFrames = [];
@@ -7463,6 +7385,11 @@ async function switchCameraLens() {
 
         async function handleDocumentSelection(event) {
             const input = event?.target;
+            if (input) input.value = '';
+            const msg = 'Document upload is turned off. Use OCR camera for quick image text and translation.';
+            addChatMessage(msg, false);
+            speak(msg);
+            return;
             const file = input?.files?.[0];
             if (!file) return;
             input.value = '';
@@ -8141,6 +8068,7 @@ async function switchCameraLens() {
         }
 
         async function handleUploadedDocumentFollowup(text) {
+            return false;
             const q = String(text || '').trim();
             const targetDoc = resolveDocumentForQuestion(q);
             if (!q || !targetDoc || !isLikelyDocumentQuestion(q, targetDoc)) return false;
@@ -13128,19 +13056,19 @@ function decideAnswerPath(classification) {
 
     if (flags.inappropriate) return 'moderation';
     if (flags.artistSong) return 'artist_song'; 
-    if (flags.explicitWebSearch) return 'web_search';
-    if (flags.universalEntityFact) return 'entity_fact';
-    if (flags.profileIdentity || flags.stableBiography) return 'live_retrieval';
-    if (flags.currentInfo) return 'current_info';
-    if (flags.broadFactualWeb) return 'broad_factual_web';
+    if (flags.explicitWebSearch) return 'default_model';
+    if (flags.universalEntityFact) return 'default_model';
+    if (flags.profileIdentity || flags.stableBiography) return 'default_model';
+    if (flags.currentInfo) return 'default_model';
+    if (flags.broadFactualWeb) return 'default_model';
 
     if (flags.vagueAdvice) return 'vague_advice';
     if (flags.songMoodGame) return 'song_mood_game';
     if (flags.comparison) return 'comparison';
-    if (flags.news) return 'news';
-    if (flags.exchangeRate) return 'exchange_rate';
-    if (flags.marketPrice) return 'market_price';
-    if (flags.liveRetrieval) return 'live_retrieval';
+    if (flags.news) return 'default_model';
+    if (flags.exchangeRate) return 'default_model';
+    if (flags.marketPrice) return 'default_model';
+    if (flags.liveRetrieval) return 'default_model';
     if (flags.tamilJoke) return 'tamil_joke';
     if (flags.seriesRefJoke) return 'series_ref_joke';
     if (flags.generalJoke) return 'general_joke';
@@ -13200,15 +13128,15 @@ function decideHybridResponseMode(classification) {
 
     if (flags.inappropriate) return 'special_handler';
     if (flags.artistSong) return 'tolerant_entertainment';
-    if (flags.explicitWebSearch) return 'verify_first';
-    if (flags.broadFactualWeb) return 'verify_first';
-    if (flags.universalEntityFact) return 'verify_first';
-    if (flags.profileIdentity || flags.stableBiography) return 'verify_first';
-    if (flags.news || flags.exchangeRate || flags.marketPrice) return 'verify_first';
-    if (riskLevel !== 'low_risk') return 'verify_first';
-    if (flags.currentInfo && strictLiveRequired) return 'verify_first';
-    if (flags.universalEntityFact && strictLiveRequired) return 'verify_first';
-    if (flags.currentInfo || flags.liveRetrieval || flags.universalEntityFact) return 'verify_first';
+    if (flags.explicitWebSearch) return 'chat_first';
+    if (flags.broadFactualWeb) return 'chat_first';
+    if (flags.universalEntityFact) return 'chat_first';
+    if (flags.profileIdentity || flags.stableBiography) return 'chat_first';
+    if (flags.news || flags.exchangeRate || flags.marketPrice) return 'chat_first';
+    if (riskLevel !== 'low_risk') return 'chat_first';
+    if (flags.currentInfo && strictLiveRequired) return 'chat_first';
+    if (flags.universalEntityFact && strictLiveRequired) return 'chat_first';
+    if (flags.currentInfo || flags.liveRetrieval || flags.universalEntityFact) return 'chat_first';
     if (shouldUseAnswerThenCiteMode(raw, classification)) return 'answer_then_cite';
     return 'chat_first';
 }
@@ -16474,8 +16402,34 @@ function detectInputLanguageHint(text) {
     const raw = String(text || '');
     if (/[\u0B80-\u0BFF]/.test(raw)) return 'Tamil';
     if (/[\u0C00-\u0C7F]/.test(raw)) return 'Telugu';
+    if (/[\u0C80-\u0CFF]/.test(raw)) return 'Kannada';
+    if (/[\u0D00-\u0D7F]/.test(raw)) return 'Malayalam';
     if (/[\u0900-\u097F]/.test(raw)) return 'Hindi';
     return '';
+}
+
+function isRemovedLiveAccuracyFeatureRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    if (isWeatherIntentText(t) || isRecipeRequest(t) || isMathCalculationRequest(t) || isStepByStepMathRequest(t)) return false;
+    if (/\b(itinerary|trip plan|travel plan|day plan|things to do|places to visit)\b/.test(t)) return false;
+    if (/\b(news|headlines?|breaking|latest|current|today|right now|live|status|update|updates)\b/.test(t)) return true;
+    if (/\b(exchange rate|currency|convert|conversion|usd|inr|eur|gbp|aed|cad|aud|jpy|stock|share price|market price|crypto|bitcoin|ethereum|gold price|silver price|petrol price|diesel price)\b/.test(t)) return true;
+    if (/\b(who is|who's|what is)\b[\s\S]{0,80}\b(pm|prime minister|cm|chief minister|president|governor|mayor|minister|ceo|chairman|chairperson|captain|coach|head of|leader of|administrator|director general)\b/.test(t)) return true;
+    if (/\b(search web|web search|google|look up|browse|internet)\b/.test(t)) return true;
+    return false;
+}
+
+async function handleRemovedLiveAccuracyFeatureRequest(text) {
+    const msg = [
+        'I turned off live/current fact lookup because it was not reliable enough in this app.',
+        '',
+        'I can still help with learning explanations, recipes, itineraries, weather, math, writing, planning, and camera OCR/translation.'
+    ].join('\n');
+    addChatMessage(msg, false);
+    speak('I turned off live fact lookup because it was not reliable enough here.');
+    saveToHistory(text, msg);
+    return true;
 }
 
         async function processCommand(text) {
@@ -16555,6 +16509,11 @@ function detectInputLanguageHint(text) {
                 return;
             }
 
+            if (isRemovedLiveAccuracyFeatureRequest(compact)) {
+                await handleRemovedLiveAccuracyFeatureRequest(text);
+                return;
+            }
+
             if (isRoutingRegressionCommand(text)) {
                 const report = formatRoutingRegressionReport(runRoutingRegressionSuite());
                 addChatMessage(report, false);
@@ -16601,69 +16560,9 @@ function detectInputLanguageHint(text) {
                 return;
             }
 
-            const homeMatch = text.match(/\b(?:my\s+home\s+is|set\s+home\s+to)\s+(.+)$/i);
-            if (homeMatch) {
-                commuteProfile.home = homeMatch[1].replace(/[?.!,]$/g, '').trim();
-                saveCommuteProfile();
-                await deliverApiReply('commute_home_saved', {
-                    home: commuteProfile.home
-                }, { historyKey: text });
-                return;
-            }
-
-            const officeMatch = text.match(/\b(?:my\s+office\s+is|set\s+office\s+to|where\s+i\s+work\s+is)\s+(.+)$/i);
-            if (officeMatch) {
-                commuteProfile.office = officeMatch[1].replace(/[?.!,]$/g, '').trim();
-                saveCommuteProfile();
-                await deliverApiReply('commute_office_saved', {
-                    office: commuteProfile.office
-                }, { historyKey: text });
-                return;
-            }
-
-            const arrivalMatch = text.match(/\b(?:my\s+arrival\s+time\s+is|arrive\s+by|reach\s+(?:office|work)\s+by)\s+(.+)$/i);
-            if (arrivalMatch) {
-                const parsed = parseTimeInput(arrivalMatch[1]);
-                if (!parsed) {
-                    await deliverApiReply('commute_arrival_time_invalid', {
-                        rawValue: arrivalMatch[1]
-                    }, { historyKey: text });
-                    return;
-                }
-                commuteProfile.arrivalTime = parsed;
-                saveCommuteProfile();
-                await deliverApiReply('commute_arrival_time_saved', {
-                    arrivalTime: parsed
-                }, { historyKey: text });
-                return;
-            }
-
-            const commuteModeMatch = text.match(/\b(?:commute\s+mode|travel\s+mode)\s+(?:is\s+)?(drive|driving|transit|train|bus|walk|walking)\b/i);
-            if (commuteModeMatch) {
-                const rawMode = commuteModeMatch[1].toLowerCase();
-                commuteProfile.mode = rawMode.startsWith('walk') ? 'walk' : (rawMode === 'train' || rawMode === 'bus' ? 'transit' : rawMode.replace('driving', 'drive'));
-                saveCommuteProfile();
-                await deliverApiReply('commute_mode_saved', {
-                    commuteMode: commuteProfile.mode
-                }, { historyKey: text });
-                return;
-            }
-
-            if (/\b(commute\s+setup|setup\s+commute|set\s+up\s+commute)\b/i.test(lower)) {
-                promptCommuteSetup();
-                return;
-            }
-
-            
-
             const quickTripDestination = extractTripDestinationFromCommand(text);
             if (quickTripDestination) {
                 await startForegroundTrip(quickTripDestination);
-                return;
-            }
-
-            if (/\b(track\s+my\s+trip\s+to\s+office|start\s+trip\s+to\s+office)\b/i.test(lower)) {
-                await startForegroundTrip('office');
                 return;
             }
 
@@ -16681,11 +16580,6 @@ function detectInputLanguageHint(text) {
                     distanceKm: tripState.lastDistanceMiles != null ? Number(milesToKm(tripState.lastDistanceMiles).toFixed(2)) : null,
                     etaMinutes: tripState.etaMinutes != null ? Math.round(tripState.etaMinutes) : null
                 }, { historyKey: text });
-                return;
-            }
-
-            if (/\b(when should i leave|leave on time|leave for work|time to leave)\b/i.test(lower)) {
-                await estimateLeaveTime();
                 return;
             }
 
@@ -18810,51 +18704,11 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         }
         // Reminder feature disabled.
 
-        function loadCommuteProfile() {
-            try {
-                const raw = localStorage.getItem('jarvis_commute_profile');
-                if (!raw) return;
-                const parsed = JSON.parse(raw);
-                commuteProfile = {
-                    home: parsed.home || '',
-                    office: parsed.office || '',
-                    arrivalTime: parsed.arrivalTime || '09:00',
-                    mode: parsed.mode || 'drive'
-                };
-            } catch (e) { console.error('Error loading commute profile:', e); }
-        }
-
-        function saveCommuteProfile() {
-            try {
-                localStorage.setItem('jarvis_commute_profile', JSON.stringify(commuteProfile));
-            } catch (e) { console.error('Error saving commute profile:', e); }
-            renderCommuteCard();
-        }
-
-        function renderCommuteCard() {
-            const section = document.getElementById('commute-section');
-            const summary = document.getElementById('commute-summary');
-            if (!section || !summary) return;
-
-            const hasData = !!(commuteProfile.home || commuteProfile.office);
-            section.classList.toggle('hidden', !hasData);
-            updateUtilityPanelVisibility();
-            if (!hasData) return;
-
-            const rows = [];
-            rows.push(`<p><strong>Home:</strong> ${escapeHtml(commuteProfile.home || 'Not set')}</p>`);
-            rows.push(`<p><strong>Office:</strong> ${escapeHtml(commuteProfile.office || 'Not set')}</p>`);
-            rows.push(`<p><strong>Arrival:</strong> ${escapeHtml(commuteProfile.arrivalTime || '09:00')}</p>`);
-            rows.push(`<p><strong>Mode:</strong> ${escapeHtml((commuteProfile.mode || 'drive').replace(/^./, c => c.toUpperCase()))}</p>`);
-            summary.innerHTML = rows.join('');
-        }
-
         function updateUtilityPanelVisibility() {
             const panel = document.getElementById('utility-panel');
             if (!panel) return;
             const showTrip = Boolean(tripState.active || tripState.destinationText);
-            const showCommute = Boolean(commuteProfile.home || commuteProfile.office);
-            panel.classList.toggle('utility-panel-visible', showTrip || showCommute);
+            panel.classList.toggle('utility-panel-visible', showTrip);
         }
 
         function renderTripCard() {
@@ -18894,17 +18748,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             
             summary.innerHTML = rows.join('');
             renderTripLiveMap();
-        }
-
-        async function promptCommuteSetup() {
-            const missing = [];
-            if (!commuteProfile.home) missing.push('home');
-            if (!commuteProfile.office) missing.push('office');
-            if (!commuteProfile.arrivalTime) missing.push('arrival time');
-            await deliverApiReply('commute_setup_prompt', {
-                missingFields: missing,
-                commuteProfile
-            });
         }
 
         async function promptTripDestination() {
@@ -19066,32 +18909,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             safetyProfile.liveSmsUpdateSeconds = seconds;
             saveSafetyProfile();
             showTemporaryMessage('Safety settings saved.');
-        }
-
-        function parseTimeInput(text) {
-            const raw = String(text || '').trim().toLowerCase();
-            const m = raw.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
-            if (!m) return null;
-            let hours = parseInt(m[1], 10);
-            const minutes = parseInt(m[2] || '0', 10);
-            const meridiem = (m[3] || '').toLowerCase();
-            if (minutes > 59 || hours > 24) return null;
-            if (meridiem === 'pm' && hours < 12) hours += 12;
-            if (meridiem === 'am' && hours === 12) hours = 0;
-            if (!meridiem && hours === 24) hours = 0;
-            if (hours > 23) return null;
-            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-        }
-
-        function buildArrivalDate(timeString) {
-            const [hours, minutes] = String(timeString || '09:00').split(':').map(v => parseInt(v, 10));
-            const now = new Date();
-            const target = new Date(now);
-            target.setHours(hours || 9, minutes || 0, 0, 0);
-            if (target <= now) {
-                target.setDate(target.getDate() + 1);
-            }
-            return target;
         }
 
         async function geocodeLocationName(name) {
@@ -19302,7 +19119,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             tripMapInstance = true;
         }
 
-        function getCommuteSpeedMph(mode) {
+        function getTravelSpeedMph(mode) {
             if (mode === 'walk') return 3.1;
             if (mode === 'transit') return 16;
             return 26;
@@ -19311,8 +19128,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         function parseDestinationAlias(raw) {
             const value = String(raw || '').trim().toLowerCase();
             if (!value) return '';
-            if (value === 'office' || value === 'work') return commuteProfile.office || '';
-            if (value === 'home') return commuteProfile.home || '';
             return String(raw || '').trim();
         }
 
@@ -19433,84 +19248,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             }
         }
 
-        async function estimateLeaveTime() {
-            if (!commuteProfile.office) {
-                await deliverApiReply('commute_missing_office', {
-                    examples: ['my office is 123 Main Street', 'my office is downtown Seattle']
-                });
-                return;
-            }
-
-            const destination = await geocodeLocationName(commuteProfile.office);
-            if (!destination) {
-                await deliverApiReply('commute_office_unresolved', {
-                    office: commuteProfile.office
-                });
-                return;
-            }
-
-            let origin = null;
-            let originLabel = commuteProfile.home;
-
-            try {
-                if (commuteProfile.home) {
-                    origin = await geocodeLocationName(commuteProfile.home);
-                }
-            } catch (e) {}
-
-            if (!origin) {
-                try {
-                    const position = await getCurrentPositionAsync();
-                    origin = { lat: position.coords.latitude, lon: position.coords.longitude, label: 'your current location' };
-                    originLabel = 'your current location';
-                } catch (e) {}
-            }
-
-            if (!origin) {
-                await deliverApiReply('commute_missing_origin', {
-                    home: commuteProfile.home || null
-                });
-                return;
-            }
-
-            let routeMiles = estimateRoadMiles(haversineMiles(origin.lat, origin.lon, destination.lat, destination.lon));
-            let travelMinutes = Math.max(8, Math.round((routeMiles / getCommuteSpeedMph(commuteProfile.mode)) * 60));
-            let trafficLabel = 'estimated road speed';
-
-            try {
-                const response = await fetch('/api/markets', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        mode: 'route_traffic',
-                        origin: { lat: origin.lat, lon: origin.lon, label: originLabel },
-                        destination: { lat: destination.lat, lon: destination.lon, label: commuteProfile.office },
-                        travelMode: commuteProfile.mode
-                    })
-                });
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data?.success && typeof data.durationMinutes === 'number') {
-                        routeMiles = Number(data.distanceMiles || routeMiles);
-                        travelMinutes = Math.max(5, Math.round(data.durationMinutes));
-                        trafficLabel = data.liveTraffic ? 'live traffic' : 'routing estimate';
-                    }
-                }
-            } catch (e) {}
-
-            const prepBuffer = commuteProfile.mode === 'walk' ? 4 : 10;
-            const arrival = buildArrivalDate(commuteProfile.arrivalTime);
-            const leave = new Date(arrival.getTime() - ((travelMinutes + prepBuffer) * 60 * 1000));
-
-            await deliverApiReply('commute_leave_estimate', {
-                leaveTime: leave.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-                originLabel,
-                routeMiles: Number(routeMiles.toFixed(1)),
-                trafficLabel,
-                commuteMode: commuteProfile.mode
-            });
-        }
-
         async function startForegroundTrip(destinationInput) {
             const destinationText = parseDestinationAlias(destinationInput);
             if (!destinationText) {
@@ -19543,7 +19280,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const startLat = startPosition.coords.latitude;
             const startLon = startPosition.coords.longitude;
             const baselineDistance = estimateRoadMiles(haversineMiles(startLat, startLon, destination.lat, destination.lon));
-            const initialEta = Math.max(3, Math.round((baselineDistance / getCommuteSpeedMph(commuteProfile.mode || 'drive')) * 60));
+            const initialEta = Math.max(3, Math.round((baselineDistance / getTravelSpeedMph('drive')) * 60));
 
             tripState = {
                 active: true,
@@ -19602,7 +19339,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const lon = position.coords.longitude;
             const straightLine = haversineMiles(lat, lon, tripState.destinationCoords.lat, tripState.destinationCoords.lon);
             const roadMilesLeft = estimateRoadMiles(straightLine);
-            const etaMinutes = Math.max(1, Math.round((roadMilesLeft / getCommuteSpeedMph(commuteProfile.mode || 'drive')) * 60));
+            const etaMinutes = Math.max(1, Math.round((roadMilesLeft / getTravelSpeedMph('drive')) * 60));
             const distanceLabel = formatDistanceKmWithMiles(roadMilesLeft);
 
             // Calculate speed
@@ -19756,7 +19493,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
         function getNearbyEtaLabel(miles) {
             const roadMiles = Math.max(0.1, Number(miles || 0));
-            const speed = getCommuteSpeedMph(commuteProfile?.mode || 'drive');
+            const speed = getTravelSpeedMph('drive');
             return Math.max(2, Math.round((roadMiles / speed) * 60));
         }
 
