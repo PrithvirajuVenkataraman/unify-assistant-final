@@ -1316,6 +1316,35 @@ body.dark .response-action-btn {
     min-height: 300px;
 }
 
+.nearby-map-only-wrap {
+    width: 100%;
+}
+
+.nearby-map-stack {
+    display: grid;
+    gap: 14px;
+}
+
+.nearby-map-section {
+    display: grid;
+    gap: 8px;
+}
+
+.nearby-map-frame {
+    width: 100%;
+    height: min(56vh, 420px);
+    min-height: 320px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--ui-border);
+    background: var(--ui-surface-muted);
+}
+
+.nearby-map-frame iframe {
+    width: 100%;
+    height: 100%;
+}
+
 @media (min-width: 768px) {
     .map-message .map-container iframe {
         height: 400px !important;
