@@ -4594,7 +4594,8 @@ let showRoutingDebugBadge = false;
         }
 
         function getVoiceInteractionState() {
-            if (isVoiceTyping || isListening) return 'user-listening';
+            if (isVoiceTyping) return 'user-listening';
+            if (isListening && (converseMode || listeningRequested || activeWakeSession || commandMode || isPassiveListening)) return 'user-listening';
             if (isAssistantSpeaking) return 'assistant-speaking';
             if (converseMode) return 'converse-ready';
             return 'idle';
@@ -5365,6 +5366,8 @@ let showRoutingDebugBadge = false;
                 currentSpeechContext = 'none';
                 awaitingFollowUpResponse = false;
                 clearTimeout(followUpTimer);
+                forceVoiceCaptureIdle();
+                updateVoiceInteractionGraphics();
             }
         }
 
@@ -5488,6 +5491,17 @@ let showRoutingDebugBadge = false;
             }, 520);
         }
 
+        function forceVoiceCaptureIdle() {
+            voiceTypingAutoSendOnStop = false;
+            isVoiceTyping = false;
+            voiceTypingStopRequested = true;
+            voiceTypingCommitOnEnd = false;
+            groqVoiceTypingCommitOnStop = false;
+            setVttSpeechWaveState(false);
+            updateVoiceToTextButton();
+            updateVoiceInteractionGraphics();
+        }
+
         function initializeVoiceToTextRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) return false;
@@ -5538,6 +5552,7 @@ let showRoutingDebugBadge = false;
                     voiceTypingCommitOnEnd = false;
                     setVttSpeechWaveState(false);
                     updateVoiceToTextButton();
+                    updateVoiceInteractionGraphics();
                 }
             };
 
@@ -5554,6 +5569,7 @@ let showRoutingDebugBadge = false;
                 isVoiceTyping = false;
                 setVttSpeechWaveState(false);
                 updateVoiceToTextButton();
+                updateVoiceInteractionGraphics();
                 if (!voiceTypingCommitOnEnd) return;
 
                 const input = document.getElementById('text-input');
@@ -5637,6 +5653,7 @@ let showRoutingDebugBadge = false;
             groqVoiceTypingCommitOnStop = true;
             isVoiceTyping = true;
             updateVoiceToTextButton();
+            updateVoiceInteractionGraphics();
             setVttSpeechWaveState(true);
             showTemporaryMessage('Listening with Groq Whisper... tap the mic again to stop.');
             groqVoiceTypingRecorder.start();
@@ -5695,6 +5712,7 @@ let showRoutingDebugBadge = false;
                 groqVoiceTypingCommitOnStop = true;
                 setVttSpeechWaveState(false);
                 updateVoiceToTextButton();
+                updateVoiceInteractionGraphics();
             }
         }
 
@@ -5750,6 +5768,10 @@ let showRoutingDebugBadge = false;
         function stopVoiceToTextInput(commitToInput = true) {
             if (groqVoiceTypingRecorder) {
                 groqVoiceTypingCommitOnStop = !!commitToInput;
+                isVoiceTyping = false;
+                setVttSpeechWaveState(false);
+                updateVoiceToTextButton();
+                updateVoiceInteractionGraphics();
                 try {
                     groqVoiceTypingRecorder.stop();
                 } catch (_) {
@@ -5757,9 +5779,16 @@ let showRoutingDebugBadge = false;
                 }
                 return;
             }
-            if (!voiceTypingRecognition) return;
+            if (!voiceTypingRecognition) {
+                forceVoiceCaptureIdle();
+                return;
+            }
             voiceTypingStopRequested = true;
             voiceTypingCommitOnEnd = !!commitToInput;
+            isVoiceTyping = false;
+            setVttSpeechWaveState(false);
+            updateVoiceToTextButton();
+            updateVoiceInteractionGraphics();
             try {
                 voiceTypingRecognition.stop();
             } catch (e) {
