@@ -98,6 +98,7 @@ export default async function handler(req, res) {
 
         let finalParsed = enforceLiveAnswerStyle(selectedPass.parsedResponse, message, liveRag.sources);
         finalParsed = applyResponseLengthPostCheck(finalParsed, lengthPolicy, message, clientSystemPrompt);
+        finalParsed = normalizeAssistantResponseStyle(finalParsed);
         return res.status(200).json({
             ...finalParsed,
             requestId,
@@ -1079,6 +1080,7 @@ Style rules:
 - If the user asks a "do/can/could/would" question, do not answer with only yes or no unless they explicitly asked for yes/no only; explain the answer.
 - If the user asks to explain further, elaborate, or give more detail, expand the previous answer with meaningful detail instead of repeating the short version.
 - If the user specifies a word-count requirement (for example "in 300 words", "exactly 120 words", "under 200 words"), follow it closely.
+- Do not use em dashes or en dashes. Use commas, parentheses, colons, semicolons, or normal hyphens instead.
 - For OCR/uploaded-document text, do not reveal raw extracted contents by default; acknowledge you read it and give a one-line high-level description first. Share specific details only when the user asks a follow-up question.
 - For latest/news/update/current queries, provide concrete, date-aware answers:
   1) Start with "As of <Month Day, Year>" when timing matters.
@@ -1090,6 +1092,18 @@ Style rules:
 - If retrieved sources are insufficient or conflicting, say that clearly and provide the best verified status with sources.
 
 Respond conversationally and naturally.`;
+}
+
+function normalizeAssistantResponseStyle(payload) {
+    if (!payload || typeof payload !== 'object') return payload;
+    const out = { ...payload };
+    if (typeof out.response === 'string') out.response = replaceLongDashes(out.response);
+    if (typeof out.text === 'string') out.text = replaceLongDashes(out.text);
+    return out;
+}
+
+function replaceLongDashes(text) {
+    return String(text || '').replace(/[—–]/g, '-');
 }
 
 function clampInt(value, fallback, min, max) {
