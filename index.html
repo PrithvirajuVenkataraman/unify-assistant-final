@@ -6410,9 +6410,12 @@ let showRoutingDebugBadge = false;
                 
                 
                 const hasMarkdownFormatting = /\[[^\]]+\]\((https?:\/\/[^)]+)\)|\*\*([^*]+)\*\*/.test(displayText);
+                const isLongAssistantMessage = displayText.length > 1200;
+                const isStructuredProcedureMessage = /\n\s*(?:Ingredients|Steps|Instructions|Method)\s*:\s*\n/i.test(displayText) ||
+                    /^Recipe\s*:/im.test(displayText);
                 const shouldTypewriter = typewriter === null
-                    ? !hasHtmlContent && !hasMarkdownFormatting
-                    : (!!typewriter && !hasHtmlContent && !hasMarkdownFormatting);
+                    ? !hasHtmlContent && !hasMarkdownFormatting && !isLongAssistantMessage && !isStructuredProcedureMessage
+                    : (!!typewriter && !hasHtmlContent && !hasMarkdownFormatting && !isLongAssistantMessage && !isStructuredProcedureMessage);
                 if (shouldTypewriter) {
                     const textElement = messageDiv.querySelector('.typewriter-text');
                     textElement.classList.add('is-streaming');
