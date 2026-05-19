@@ -10,7 +10,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="light min-h-screen transition-all duration-500">
+<body class="dark min-h-screen transition-all duration-500 bg-black text-white">
 
     
     <div id="offline-banner" class="offline-banner hidden" role="status" aria-live="polite">
@@ -4243,7 +4243,7 @@ async function handleNameCorrection(text) {
         // Encapsulated Application State
         const AppState = {
             settings: {
-                darkMode: false,
+                darkMode: true,
                 autoSpeak: false,
                 noiseFilter: { enabled: false, level: 'medium' },
                 medicalMode: false
@@ -4285,7 +4285,7 @@ async function handleNameCorrection(text) {
 
         // Legacy global aliases for compatibility with existing functions
         // (Gradually refactor these out)
-        let darkMode = AppState.settings.darkMode;
+        let darkMode = true;
         let userName = AppState.user.name;
         let memoryStore = AppState.user.memory;
         let continuousRecognition = null;
@@ -4544,6 +4544,7 @@ let showRoutingDebugBadge = false;
             loadUserData();
             loadNoiseFilterSettings();
             loadAssistantModes();
+            enforceDarkMode();
             loadCagMemory();
             loadSafetyProfile();
             setupInputHistoryNavigation();
@@ -4632,79 +4633,43 @@ let showRoutingDebugBadge = false;
             }
         }
 
-        function toggleDarkMode() {
-            darkMode = !darkMode;
+        function enforceDarkMode() {
+            darkMode = true;
             const body = document.body;
             const card = document.getElementById('main-card');
             const title = document.getElementById('title');
             const subtitle = document.getElementById('subtitle');
             const chatContainer = document.getElementById('chat-container');
-            const lightSwitch = document.getElementById('light-switch');
-            const lightSwitchContainer = document.querySelector('.light-switch-container');
 
             const inputBarContainer = document.getElementById('input-bar-container');
             const inputBarInner = document.getElementById('input-bar-inner');
             const textInput = document.getElementById('text-input');
             const footerDisclaimer = document.getElementById('footer-disclaimer');
 
-            lightSwitchContainer?.setAttribute('aria-pressed', darkMode ? 'true' : 'false');
+            body.classList.remove('light', 'bg-white', 'text-black');
+            body.classList.add('dark', 'bg-black', 'text-white');
+            if (card) card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
+            if (title) title.className = 'jarvis-top-title';
+            if (subtitle) subtitle.className = 'hidden';
+            if (chatContainer) chatContainer.className = 'bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height';
 
-            if (darkMode) {
-                // Dark mode
-                if (lightSwitch) lightSwitch.classList.remove('on');
-
-                body.classList.remove('light');
-                body.classList.add('dark');
-                body.classList.add('bg-black', 'text-white');
-                body.classList.remove('bg-white', 'text-black');
-                card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
-                title.className = 'jarvis-top-title';
-                subtitle.className = 'hidden';
-                if (chatContainer) chatContainer.className = 'bg-slate-800/50 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height';
-
-                if (inputBarContainer) {
-                    inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
-                }
-                if (inputBarInner) {
-                    inputBarInner.className = 'flex items-center gap-1.5 modern-input px-2 py-1';
-                }
-                if (textInput) {
-                    textInput.className = 'flex-1 bg-transparent outline-none text-white placeholder-gray-500 text-sm font-medium';
-                }
-                if (footerDisclaimer) {
-                    footerDisclaimer.className = 'mt-2 text-xs text-gray-500 font-medium text-center';
-                }
-                syncVttUiState();
-            } else {
-                // Light mode
-                if (lightSwitch) lightSwitch.classList.add('on');
-
-                setTimeout(() => {
-                    body.classList.remove('dark');
-                    body.classList.add('light');
-                    body.classList.add('bg-white', 'text-black');
-                    body.classList.remove('bg-black', 'text-white');
-
-                    card.className = 'glass-card rounded-3xl p-8 mb-6 card-hover';
-                    title.className = 'jarvis-top-title';
-                    subtitle.className = 'hidden';
-                    if (chatContainer) chatContainer.className = 'bg-gray-50/80 rounded-2xl p-4 overflow-y-auto space-y-3 custom-scrollbar chat-panel-height';
-
-                    if (inputBarContainer) {
-                        inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
-                    }
-                    if (inputBarInner) {
-                        inputBarInner.className = 'flex items-center gap-1.5 modern-input px-2 py-1';
-                    }
-                    if (textInput) {
-                        textInput.className = 'flex-1 bg-transparent outline-none text-gray-900 placeholder-gray-400 text-sm font-medium';
-                    }
-                    if (footerDisclaimer) {
-                        footerDisclaimer.className = 'mt-2 text-xs text-gray-400 font-medium text-center';
-                    }
-                    syncVttUiState();
-                }, 800);
+            if (inputBarContainer) {
+                inputBarContainer.className = 'fixed bottom-0 left-0 right-0 floating-input-bar z-40';
             }
+            if (inputBarInner) {
+                inputBarInner.className = 'flex items-center gap-1.5 modern-input px-2 py-1';
+            }
+            if (textInput) {
+                textInput.className = 'flex-1 bg-transparent outline-none text-white placeholder-gray-500 text-sm font-medium';
+            }
+            if (footerDisclaimer) {
+                footerDisclaimer.className = 'mt-2 text-xs text-gray-500 font-medium text-center';
+            }
+            syncVttUiState();
+        }
+
+        function toggleDarkMode() {
+            enforceDarkMode();
         }
 
         
@@ -4777,18 +4742,6 @@ let showRoutingDebugBadge = false;
                         <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Settings</h3>
                             <div class="space-y-4">
-                                <div class="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                                    <div>
-                                        <p class="font-semibold text-gray-900 dark:text-white">Appearance</p>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400">Switch between light and dark mode</p>
-                                    </div>
-                                    <button
-                                        onclick="toggleDarkMode()"
-                                        class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-all"
-                                        title="Toggle dark mode">
-                                        ${darkMode ? 'Switch to Light' : 'Switch to Dark'}
-                                    </button>
-                                </div>
                                 <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                     <p class="font-semibold text-gray-900 dark:text-white">Safety Setup</p>
                                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Use "enable women's safety mode" and "trusted contact is ..." to personalize fast safety actions.</p>
@@ -6299,7 +6252,7 @@ let showRoutingDebugBadge = false;
                         para.push(String(lines[i]));
                         i += 1;
                     }
-                    out.push(`<p class="assistant-md-p">${escapeHtml(para.join(' '))}</p>`);
+                    out.push(`<p class="assistant-md-p">${escapeHtml(para.join('\n')).replace(/\n/g, '<br>')}</p>`);
                     continue;
                 }
 
@@ -6669,13 +6622,20 @@ function normalizeUiTokens(text) {
             const template = document.createElement('template');
             template.innerHTML = String(html || '');
 
-            const allowedTags = new Set(['A', 'BR', 'DIV', 'IFRAME', 'IMG', 'LI', 'OL', 'P', 'SPAN', 'STRONG', 'TABLE', 'TBODY', 'TD', 'TH', 'THEAD', 'TR', 'UL']);
+            const allowedTags = new Set(['A', 'BLOCKQUOTE', 'BR', 'CODE', 'DIV', 'H1', 'H2', 'H3', 'H4', 'IFRAME', 'IMG', 'LI', 'OL', 'P', 'PRE', 'SPAN', 'STRONG', 'TABLE', 'TBODY', 'TD', 'TH', 'THEAD', 'TR', 'UL']);
             const allowedAttrs = {
                 A: new Set(['href', 'target', 'rel', 'class', 'style']),
+                BLOCKQUOTE: new Set(['class']),
+                CODE: new Set(['class']),
                 DIV: new Set(['class', 'style', 'id']),
+                H1: new Set(['class']),
+                H2: new Set(['class']),
+                H3: new Set(['class']),
+                H4: new Set(['class']),
                 IFRAME: new Set(['src', 'width', 'height', 'loading', 'allowfullscreen', 'class', 'style', 'referrerpolicy', 'frameborder']),
                 IMG: new Set(['src', 'alt', 'class', 'style']),
                 P: new Set(['class']),
+                PRE: new Set(['class']),
                 SPAN: new Set(['class']),
                 TABLE: new Set(['class']),
                 TBODY: new Set(['class']),
@@ -17306,29 +17266,17 @@ Quick recap: ...
             }
 
             const modeCommand = extractDisplayModeCommand(cleanText);
-            if (modeCommand === 'dark' && !darkMode) {
-                toggleDarkMode();
-                await deliverApiReply('dark_mode_enabled', {}, {
-                    fallbackText: 'Dark mode activated.'
-                });
-                return;
-            }
-            if (modeCommand === 'light' && darkMode) {
-                toggleDarkMode();
-                await deliverApiReply('light_mode_enabled', {}, {
-                    fallbackText: 'Light mode activated.'
-                });
-                return;
-            }
-            if (modeCommand === 'dark' && darkMode) {
+            if (modeCommand === 'dark') {
+                enforceDarkMode();
                 await deliverApiReply('dark_mode_already_enabled', {}, {
                     fallbackText: 'Dark mode is already on.'
                 });
                 return;
             }
-            if (modeCommand === 'light' && !darkMode) {
-                await deliverApiReply('light_mode_already_enabled', {}, {
-                    fallbackText: 'Light mode is already on.'
+            if (modeCommand === 'light') {
+                enforceDarkMode();
+                await deliverApiReply('light_mode_unavailable', {}, {
+                    fallbackText: 'Light mode is unavailable. This app runs in dark mode only.'
                 });
                 return;
             }
@@ -17781,9 +17729,15 @@ ACCURACY RULES:
 
 FORMAT TO FOLLOW:
 - Start with a friendly 1-2 line intro about the destination vibe.
-- Then use:
-  Day 1 / Day 2 / etc.
-  Morning / Breakfast / Late Morning / Lunch / Afternoon / Evening blocks (as relevant).
+- Use markdown-friendly spacing: put a blank line between every day, time block, and major stop.
+- Write each day heading on its own line:
+  Day 1 - Title
+  Day 2 - Title
+- Write each time block on its own line:
+  Morning - ...
+  Lunch - ...
+  Afternoon - ...
+  Evening - ...
 - For each main stop include:
   - Why visit (short line)
   - What not to miss (2-4 bullets)
@@ -21236,6 +21190,7 @@ function formatAssistantTextForReadability(rawText) {
     if (typeof rawText !== 'string') return rawText;
     rawText = normalizeAssistantTextStyle(rawText);
     if (/<(iframe|div|img|table|svg|button|a)\b/i.test(rawText)) return rawText;
+    rawText = normalizeItineraryTextForReadability(rawText);
     if (/^\s*[-*]\s+/m.test(rawText) || /^\s*\d+\.\s+/m.test(rawText)) return rawText;
 
     const proceduralText = autoBulletizeProcedureText(rawText);
@@ -21258,6 +21213,49 @@ function formatAssistantTextForReadability(rawText) {
 
     const bullets = sentences.map(s => `- ${s}`).join('\n');
     return closingQuestion ? `${bullets}\n\n${closingQuestion}` : bullets;
+}
+
+function isLikelyItineraryText(text) {
+    const raw = String(text || '');
+    const dayMatches = raw.match(/\bDay\s*\d+\b/gi) || [];
+    if (dayMatches.length >= 2) return true;
+    return dayMatches.length >= 1 && /\b(itinerary|arrival|sightseeing|transit|quick tips|best season|getting around)\b/i.test(raw);
+}
+
+function normalizeItineraryTextForReadability(rawText) {
+    if (typeof rawText !== 'string') return rawText;
+    if (!isLikelyItineraryText(rawText)) return rawText;
+
+    let text = String(rawText || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/[\u00a0\u202f]/g, ' ')
+        .replace(/[ \t]+/g, ' ')
+        .trim();
+
+    text = text.replace(/\s+\b(Day\s*\d+\s*[-:])/gi, (match, label, offset) => {
+        return offset === 0 ? label : `\n\n${label}`;
+    });
+
+    text = text.replace(
+        /\s+\b(Early\s+Morning|Late\s+Morning|Morning|Breakfast|Brunch|Lunch|Afternoon|Evening|Dinner|Night|Quick\s+Tips|Travel\s+Tips|Optional\s+Alternatives|Option\s+\d+)\s*[-:]\s*/gi,
+        (match, label, offset, full) => {
+            const previous = full.slice(Math.max(0, offset - 2), offset);
+            const prefix = previous.includes('\n') ? '' : '\n\n';
+            return `${prefix}${label} - `;
+        }
+    );
+
+    text = text.replace(
+        /\s+(\*{0,2}(?:Why visit|What not to miss|Best time|Time needed|Transit|Food|Tip)\*{0,2}\s*:)/gi,
+        '\n- $1'
+    );
+
+    text = text
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/[ \t]+\n/g, '\n')
+        .trim();
+
+    return text;
 }
 
 function normalizeAssistantTextStyle(text) {
