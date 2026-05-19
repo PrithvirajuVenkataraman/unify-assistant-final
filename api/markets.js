@@ -1,5 +1,4 @@
 export const config = { maxDuration: 60 };
-import { extractSearchTopic, getDomainFromUrl, isTrustedLiveSource, runVerifiedWebSearch } from './live-search.js';
 import { applyApiSecurity } from './security.js';
 
 export default async function handler(req, res) {
@@ -13,19 +12,19 @@ export default async function handler(req, res) {
         if (guard.handled) return;
 
         const mode = resolveMode(req.body);
-        if (mode === 'news') {
-            return await handleNewsLookup(req, res);
-        }
-        if (mode === 'exchange') {
-            return await handleExchangeLookup(req, res);
+        if (mode === 'news' || mode === 'exchange' || mode === 'markets') {
+            return res.status(410).json({
+                success: false,
+                error: 'Live news, finance, and market lookup have been retired in this focused build.'
+            });
         }
         if (mode === 'budget_plan') {
             return await handleBudgetPlanLookup(req, res);
         }
-        if (mode === 'route_traffic') {
-            return await handleRouteTrafficLookup(req, res);
-        }
-        return await handleMarketLookup(req, res);
+        return res.status(410).json({
+            success: false,
+            error: 'Live market lookup has been retired in this focused build.'
+        });
     } catch (error) {
         return res.status(200).json({
             success: false,
@@ -41,7 +40,6 @@ function resolveMode(body) {
         mode === 'news' ||
         mode === 'exchange' ||
         mode === 'budget_plan' ||
-        mode === 'route_traffic' ||
         mode === 'markets' ||
         mode === 'market'
     ) {
@@ -54,14 +52,6 @@ function resolveMode(body) {
     const hasBudgetShape = typeof body?.query === 'string' &&
         /\b(budget|trip|travel|itinerary|under|within|days?)\b/i.test(String(body.query || ''));
     if (hasBudgetShape) return 'budget_plan';
-
-    const hasRouteShape = Boolean(
-        body?.origin?.lat !== undefined &&
-        body?.origin?.lon !== undefined &&
-        body?.destination?.lat !== undefined &&
-        body?.destination?.lon !== undefined
-    );
-    if (hasRouteShape) return 'route_traffic';
 
     const hasNewsShape = Boolean(body?.category || body?.city || body?.countryCode);
     if (hasNewsShape) return 'news';
@@ -141,137 +131,6 @@ function buildBudgetPlan({ budget, currency, days, destination }) {
 function roundMoney(value) {
     return Math.round(Number(value) || 0);
 }
-
-async function handleRouteTrafficLookup(req, res) {
-    const origin = normalizePoint(req.body?.origin);
-    const destination = normalizePoint(req.body?.destination);
-    const mode = normalizeCommuteMode(req.body?.travelMode ?? req.body?.mode);
-
-    if (!origin || !destination) {
-        return res.status(400).json({ success: false, error: 'origin and destination are required' });
-    }
-
-    const tomTomKey = process.env.TOMTOM_API_KEY || process.env.TOMTOM_KEY;
-    if (tomTomKey) {
-        const trafficResult = await fetchTomTomRoute({ origin, destination, mode, apiKey: tomTomKey });
-        if (trafficResult) {
-            return res.status(200).json({
-                success: true,
-                liveTraffic: true,
-                provider: 'tomtom',
-                ...trafficResult
-            });
-        }
-    }
-
-    const orsKey = process.env.ORS_API_KEY || process.env.OPENROUTESERVICE_API_KEY;
-    if (orsKey) {
-        const orsResult = await fetchOpenRouteServiceRoute({ origin, destination, mode, apiKey: orsKey });
-        if (orsResult) {
-            return res.status(200).json({
-                success: true,
-                liveTraffic: false,
-                provider: 'openrouteservice',
-                ...orsResult
-            });
-        }
-    }
-
-    const fallback = buildFallbackEstimate(origin, destination, mode);
-    return res.status(200).json({
-        success: true,
-        liveTraffic: false,
-        provider: 'fallback',
-        ...fallback
-    });
-}
-
-async function fetchOpenRouteServiceRoute({ origin, destination, mode, apiKey }) {
-    const profile = mode === 'walk' ? 'foot-walking' : 'driving-car';
-    const url = `https://api.openrouteservice.org/v2/directions/${profile}`;
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            Authorization: apiKey,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            coordinates: [
-                [origin.lon, origin.lat],
-                [destination.lon, destination.lat]
-            ]
-        })
-    });
-    if (!response.ok) return null;
-    const data = await response.json();
-    const route = Array.isArray(data?.routes) ? data.routes[0] : null;
-    const summary = route?.summary;
-    if (!summary) return null;
-    return {
-        durationMinutes: Number(summary.duration || 0) / 60,
-        trafficDelayMinutes: 0,
-        distanceMiles: Number(summary.distance || 0) / 1609.344
-    };
-}
-
-function normalizePoint(value) {
-    const lat = Number(value?.lat);
-    const lon = Number(value?.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
-    return {
-        lat,
-        lon,
-        label: String(value?.label || '').trim()
-    };
-}
-
-function normalizeCommuteMode(mode) {
-    const raw = String(mode || 'drive').toLowerCase();
-    if (raw === 'walk' || raw === 'walking') return 'walk';
-    if (raw === 'transit' || raw === 'bus' || raw === 'train') return 'transit';
-    return 'drive';
-}
-
-async function fetchTomTomRoute({ origin, destination, mode, apiKey }) {
-    const travelMode = mode === 'walk' ? 'pedestrian' : 'car';
-    const url = `https://api.tomtom.com/routing/1/calculateRoute/${origin.lat},${origin.lon}:${destination.lat},${destination.lon}/json?traffic=true&travelMode=${travelMode}&routeType=fastest&key=${encodeURIComponent(apiKey)}`;
-    const response = await fetch(url);
-    if (!response.ok) return null;
-
-    const data = await response.json();
-    const route = Array.isArray(data?.routes) ? data.routes[0] : null;
-    const summary = route?.summary;
-    if (!summary) return null;
-
-    return {
-        durationMinutes: Number(summary.travelTimeInSeconds || 0) / 60,
-        trafficDelayMinutes: Number(summary.trafficDelayInSeconds || 0) / 60,
-        distanceMiles: Number(summary.lengthInMeters || 0) / 1609.344
-    };
-}
-
-function buildFallbackEstimate(origin, destination, mode) {
-    const straightLineMiles = haversineMiles(origin.lat, origin.lon, destination.lat, destination.lon);
-    const roadMiles = Math.max(0.1, straightLineMiles * 1.22);
-    const mph = mode === 'walk' ? 3.1 : mode === 'transit' ? 16 : 26;
-    return {
-        durationMinutes: Math.max(3, (roadMiles / mph) * 60),
-        trafficDelayMinutes: 0,
-        distanceMiles: roadMiles
-    };
-}
-
-function haversineMiles(lat1, lon1, lat2, lon2) {
-    const toRad = (deg) => deg * Math.PI / 180;
-    const R = 3958.8;
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    const a = Math.sin(dLat / 2) ** 2 +
-        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-    return 2 * R * Math.asin(Math.sqrt(a));
-}
-
 
 async function handleMarketLookup(req, res) {
     const query = String(req.body?.query || '').trim();
