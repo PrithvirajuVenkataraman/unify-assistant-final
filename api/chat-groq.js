@@ -217,7 +217,7 @@ function safeParseJsonObject(text) {
 
 async function runModelWithFallback(finalPrompt, lengthPolicy = {}) {
     const temp = Number.isFinite(Number(lengthPolicy?.temperature)) ? Number(lengthPolicy.temperature) : 0.7;
-    const maxTokens = clampInt(lengthPolicy?.maxTokens, 2500, 256, 7000);
+    const maxTokens = clampInt(lengthPolicy?.maxTokens, 2500, 256, 12000);
     let groqFailureDetail = '';
     let groqTriedModels = [];
     const groqApiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
@@ -1190,15 +1190,23 @@ function buildLengthPolicy(message, clientSystemPrompt, options = {}) {
             wordSpec.mode === 'target' ? `Aim for about ${wordSpec.targetWords} words.` : '',
             'Do not add filler; keep content substantive.'
         ].filter(Boolean).join(' ');
-        const maxTokens = clampInt(Math.round(wordSpec.maxWords * 2.2 + 220), 2500, 400, 7000);
+        const maxTokens = clampInt(Math.round(wordSpec.maxWords * 2.2 + 220), 2500, 400, 12000);
         return { instruction, maxTokens, temperature: 0.7, wordSpec };
     }
 
     const detail = inferDetailLevel(message);
+    if (isLongTravelPlanningRequest(message)) {
+        return {
+            instruction: 'User asked for a substantial travel plan. Provide the full itinerary without truncating: use clear day-by-day sections, practical timing, transit, food guidance, and concise bullets for each stop.',
+            maxTokens: 9000,
+            temperature: 0.7,
+            wordSpec: null
+        };
+    }
     if (detail === 'detailed') {
         return {
             instruction: 'User asked for detail. Provide a structured, in-depth explanation with enough depth to fully answer.',
-            maxTokens: 4200,
+            maxTokens: 7000,
             temperature: 0.7,
             wordSpec: null
         };
@@ -1207,6 +1215,23 @@ function buildLengthPolicy(message, clientSystemPrompt, options = {}) {
         return { instruction: 'Keep the response brief and direct.', maxTokens: 900, temperature: 0.5, wordSpec: null };
     }
     return { instruction: 'Match response length to the user intent; concise for simple asks, fuller when needed.', maxTokens: 2500, temperature: 0.7, wordSpec: null };
+}
+
+function isLongTravelPlanningRequest(message) {
+    const text = String(message || '').toLowerCase();
+    if (!text.trim()) return false;
+    const travelPlan = /\b(itinerary|travel plan|trip plan|plan (?:a|an|my)?\s*trip|day plan)\b/.test(text);
+    if (!travelPlan) return false;
+    const detailed = /\b(detailed|comprehensive|full|complete|in depth|deep)\b/.test(text);
+    const dayMatch = text.match(/\b(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+days?\b/);
+    if (!dayMatch) return detailed;
+    const dayWordMap = {
+        one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+        seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12
+    };
+    const rawDay = dayMatch[1];
+    const days = Number.isFinite(Number(rawDay)) ? Number(rawDay) : (dayWordMap[rawDay] || 0);
+    return detailed || days >= 4;
 }
 
 function applyResponseLengthPostCheck(parsedResponse, lengthPolicy, message, clientSystemPrompt) {
