@@ -555,6 +555,50 @@ body.dark .composer-action-item:hover {
     color: var(--ui-primary) !important;
 }
 
+.assistant-message-text .assistant-md-p {
+    margin: 0 0 0.85rem !important;
+}
+
+.assistant-message-text .assistant-md-h1,
+.assistant-message-text .assistant-md-h2,
+.assistant-message-text .assistant-md-h3,
+.assistant-message-text .assistant-md-h4 {
+    display: block !important;
+    margin: 1rem 0 0.45rem !important;
+    color: var(--ui-text) !important;
+    font-weight: 800 !important;
+    line-height: 1.35 !important;
+}
+
+.assistant-message-text .assistant-md-h1,
+.assistant-message-text .assistant-md-h2 {
+    font-size: 1.05rem !important;
+}
+
+.assistant-message-text .assistant-md-h3,
+.assistant-message-text .assistant-md-h4 {
+    font-size: 1rem !important;
+}
+
+.assistant-message-text .assistant-md-list,
+.assistant-message-text .assistant-md-olist {
+    margin: 0.35rem 0 0.9rem 1.25rem !important;
+    padding-left: 0.25rem !important;
+}
+
+.assistant-message-text .assistant-md-list {
+    list-style: disc !important;
+}
+
+.assistant-message-text .assistant-md-olist {
+    list-style: decimal !important;
+}
+
+.assistant-message-text .assistant-md-list li,
+.assistant-message-text .assistant-md-olist li {
+    margin: 0.2rem 0 !important;
+}
+
 .assistant-message-text code,
 .assistant-message-text pre,
 .assistant-message-text .assistant-md-inline-code,
