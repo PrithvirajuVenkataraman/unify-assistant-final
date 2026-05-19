@@ -1103,7 +1103,12 @@ function normalizeAssistantResponseStyle(payload) {
 }
 
 function replaceLongDashes(text) {
-    return String(text || '').replace(/[—–]/g, '-');
+    return String(text || '')
+        .replace(/[—–]/g, '-')
+        .replace(/[\u00a0\u202f]/g, ' ')
+        .replace(/[\u2010-\u2015]/g, '-')
+        .replace(/[“”]/g, '"')
+        .replace(/[‘’]/g, "'");
 }
 
 function clampInt(value, fallback, min, max) {
@@ -1300,6 +1305,6 @@ function padToWordCount(text, target) {
             out = trimToWordCount(out, target);
             break;
         }
-    } 
+    }
     return out;
 }
