@@ -4,14 +4,10 @@
     "version":  "1.0.0",
     "type":  "module",
     "scripts": {
-        "lint": "node --check api/index.js && node --check api/chat-groq.js && node --check api/document-ingest.js && node --check api/markets.js && node --check api/search.js && node --check api/vision.js",
+        "lint": "node --check api/index.js && node --check api/chat-groq.js && node --check api/markets.js && node --check api/speech.js && node --check api/vision.js",
         "check": "npm run lint"
     },
-    "dependencies":  {
-                         "jszip":  "^3.10.1",
-                         "mammoth":  "^1.8.0",
-                         "pdf-parse":  "^1.1.1"
-                     },
+    "dependencies":  {},
     "vercel":  {
                    "functions":  {
                                      "api/**/*.js":  {
@@ -21,7 +17,7 @@
                    "rewrites":  [
                     {
                         "source":  "/",
-                        "destination":  "/index.full_with_map_preview.html"
+                        "destination":  "/index.html"
                     }
                 ]
                }
