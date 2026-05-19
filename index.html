@@ -3942,7 +3942,17 @@ function saveCagMemory() {
     } catch (_) {}
 }
 
+function clearCagMemory() {
+    cagMemoryEntries = [];
+    try {
+        for (const key of getCandidateCagStorageKeys()) {
+            localStorage.removeItem(key);
+        }
+    } catch (_) {}
+}
+
 function rememberCagTurn(userText, assistantText) {
+    if (!cagModeEnabled) return;
     const user = String(userText || '').trim();
     const assistant = String(assistantText || '').trim();
     if (!user || !assistant) return;
@@ -5820,6 +5830,7 @@ let showRoutingDebugBadge = false;
             const ok = window.confirm('Clear all saved memory items for this user?');
             if (!ok) return;
             memoryStore = {};
+            clearCagMemory();
             saveUserData();
             showTemporaryMessage('Saved memory cleared.');
         }
@@ -5839,6 +5850,7 @@ let showRoutingDebugBadge = false;
             memoryStore = {};
             conversationHistory = [];
             conversationContext = [];
+            clearCagMemory();
             activeConversationTopic = null;
             conversationTopicTimeline = [];
             initialConversationTopicKey = '';
@@ -16659,9 +16671,28 @@ async function handleRemovedLiveAccuracyFeatureRequest(text) {
                 return;
             }
 
-            if (/\b(nearest|nearby)\s+(hospital|police|police station|pharmacy|atm|hotel|hotels)\b/i.test(lower)) {
-                const placeMatch = lower.match(/\b(hospital|police station|police|pharmacy|atm|hotel|hotels)\b/);
-                await openNearbySearch(placeMatch?.[1] === 'police' ? 'police station' : (placeMatch?.[1] || 'hospital'));
+            if (/\b(hospital|hospitals|police station|police|pharmacy|pharmacies|atm|atms|hotel|hotels|restaurant|restaurants|food|cafe|cafes|coffee|gas station|petrol pump)s?\s+(?:near|around)\s+me\b/i.test(lower)) {
+                const placeMatch = lower.match(/\b(hospital|hospitals|police station|police|pharmacy|pharmacies|atm|atms|hotel|hotels|restaurant|restaurants|food|cafe|cafes|coffee|gas station|petrol pump)\b/);
+                let category = placeMatch?.[1] || 'hospital';
+                if (category === 'police') category = 'police station';
+                if (category === 'hospitals') category = 'hospital';
+                if (category === 'pharmacies') category = 'pharmacy';
+                if (category === 'atms') category = 'atm';
+                if (category === 'hotels') category = 'hotel';
+                if (category === 'restaurants') category = 'restaurant';
+                if (category === 'cafes' || category === 'coffee') category = 'cafe';
+                await openNearbySearch(category);
+                return;
+            }
+
+            if (/\b(nearest|nearby)\s+(hospital|police|police station|pharmacy|atm|hotel|hotels|restaurant|restaurants|food|cafe|cafes|coffee|gas station|petrol pump)\b/i.test(lower)) {
+                const placeMatch = lower.match(/\b(hospital|police station|police|pharmacy|atm|hotel|hotels|restaurant|restaurants|food|cafe|cafes|coffee|gas station|petrol pump)\b/);
+                let category = placeMatch?.[1] || 'hospital';
+                if (category === 'police') category = 'police station';
+                if (category === 'hotels') category = 'hotel';
+                if (category === 'restaurants') category = 'restaurant';
+                if (category === 'cafes' || category === 'coffee') category = 'cafe';
+                await openNearbySearch(category);
                 return;
             }
 
@@ -20004,6 +20035,30 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             `.trim();
         }
 
+        function buildNearbyMapEmbedHtml(label, mapsQuery, mapsUrl) {
+            const safeQuery = String(mapsQuery || '').trim() || 'nearby places';
+            const safeMapsUrl = String(mapsUrl || '').trim() || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(safeQuery)}`;
+            const embedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(safeQuery)}&z=15&output=embed`;
+            return `
+                <div class="nearby-map-only-wrap">
+                    <div class="nearby-map-frame map-container">
+                        <iframe
+                            src="${escapeHtml(embedUrl)}"
+                            width="100%"
+                            height="100%"
+                            style="border:0; display:block;"
+                            loading="lazy"
+                            referrerpolicy="no-referrer-when-downgrade"
+                            allowfullscreen>
+                        </iframe>
+                    </div>
+                    <div class="nearby-actions-row nearby-actions-footer">
+                        <a href="${escapeHtml(safeMapsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-primary">Open full map</a>
+                    </div>
+                </div>
+            `.trim();
+        }
+
         function buildNearbyEssentialsCardsHtml(sections = [], usedLocation = false, locationLabel = '') {
             const heading = `Nearby essentials${usedLocation ? ' (using your current location)' : ''}`;
             const locationLine = usedLocation && locationLabel
@@ -20068,6 +20123,38 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             `.trim();
         }
 
+        function buildNearbyEssentialsMapHtml(sections = []) {
+            const maps = (Array.isArray(sections) ? sections : [])
+                .map(section => {
+                    const label = String(section?.label || '').trim() || 'Nearby';
+                    const mapsQuery = String(section?.mapsQuery || '').trim() || label;
+                    const mapsUrl = String(section?.mapsUrl || '').trim() || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
+                    const embedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(mapsQuery)}&z=15&output=embed`;
+                    return `
+                        <div class="nearby-map-section">
+                            <p class="nearby-section-title">${escapeHtml(label)}</p>
+                            <div class="nearby-map-frame map-container">
+                                <iframe
+                                    src="${escapeHtml(embedUrl)}"
+                                    width="100%"
+                                    height="100%"
+                                    style="border:0; display:block;"
+                                    loading="lazy"
+                                    referrerpolicy="no-referrer-when-downgrade"
+                                    allowfullscreen>
+                                </iframe>
+                            </div>
+                            <div class="nearby-actions-row nearby-actions-footer">
+                                <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-primary">Open full map</a>
+                            </div>
+                        </div>
+                    `.trim();
+                })
+                .join('');
+
+            return `<div class="nearby-map-only-wrap nearby-map-stack">${maps}</div>`.trim();
+        }
+
         async function openNearbySearch(query) {
             const category = String(query || 'hospital').trim() || 'hospital';
             const label = formatNearbyCategoryLabel(category);
@@ -20115,6 +20202,13 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const searchQuery = `${category}${locationSuffix}`;
             const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
             const webUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+
+            const mapHtml = buildNearbyMapEmbedHtml(label, mapsQuery, mapsUrl);
+            addVerifiedAssistantMessage(mapHtml, 'Nearby map');
+            speak(`Opening nearby map for ${category}.`);
+            saveToHistory(`nearby ${category}`, `${label}\nMap query: ${mapsQuery}\n${mapsUrl}`);
+            hideThinkingIndicator();
+            return;
 
             try {
                 const response = await fetch('/api/search', {
@@ -20229,96 +20323,21 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 usedLocation = false;
             }
 
-            const heading = `Nearby essentials${usedLocation ? ' (using your current location)' : ''}`;
-            const locationLine = usedLocation && locationContext?.label ? `Location: ${locationContext.label}\n` : '';
-            const locationTokens = extractNearbyLocationTokens(locationContext);
-            const blocks = [];
-            const sectionCardsData = [];
-
-            for (const category of categories) {
-                const sectionLabel = formatNearbyCategoryLabel(category);
+            const sectionMaps = categories.map(category => {
                 const mapsQuery = usedLocation ? `${category} near ${lat},${lon}` : `${category} near me`;
-                const locationSuffix = usedLocation ? ` near ${locationContext?.label || `${lat},${lon}`}` : ' near me';
-                const searchQuery = `${category}${locationSuffix}`;
-                const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
-                const webUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
-                let sectionLines = [
-                    `${sectionLabel}:`,
-                    `Quick actions: [Map](${mapsUrl}) | [Web](${webUrl})`
-                ];
-                try {
-                    const response = await fetch('/api/search', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ query: searchQuery, maxResults: 8 })
-                    });
-                    if (response.ok) {
-                        const data = await response.json();
-                        const rawResults = Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
-                        const filtered = usedLocation
-                            ? (locationTokens.length
-                                ? rawResults.filter(item => isNearbyResultLocationMatch(item, locationTokens, locationContext))
-                                : [])
-                            : rawResults;
-                        const top = rankNearbyResultsForDisplay(filtered, category, 3);
-                        if (top.length) {
-                            const enrichedTop = await enrichNearbyResultsWithMeta(top, locationContext, lat, lon);
-                            sectionLines = [`${sectionLabel}:`];
-                            enrichedTop.forEach((item, idx) => {
-                                const title = (String(item?.title || '').trim() || `Result ${idx + 1}`).replace(/[\[\]]/g, '');
-                                const url = String(item?.url || '').trim() || webUrl;
-                                const snippet = summarizeNearbySnippet(item?.description || '', 120);
-                                sectionLines.push(`${idx + 1}. [${title}](${url})${snippet ? `\n   ${snippet}` : ''}`);
-                            });
-                            sectionLines.push(`Quick actions: [Map](${mapsUrl}) | [Web](${webUrl})`);
-                            sectionCardsData.push({
-                                category,
-                                label: sectionLabel,
-                                mapsUrl,
-                                webUrl,
-                                results: enrichedTop.map(item => ({
-                                    ...item,
-                                    directionsUrl: buildNearbyDirectionsUrl(item, mapsUrl, locationContext, lat, lon)
-                                }))
-                            });
-                        } else {
-                            sectionCardsData.push({
-                                category,
-                                label: sectionLabel,
-                                mapsUrl,
-                                webUrl,
-                                results: []
-                            });
-                        }
-                    } else {
-                        sectionCardsData.push({
-                            category,
-                            label: sectionLabel,
-                            mapsUrl,
-                            webUrl,
-                            results: []
-                        });
-                    }
-                } catch (_) {
-                    sectionCardsData.push({
-                        category,
-                        label: sectionLabel,
-                        mapsUrl,
-                        webUrl,
-                        results: []
-                    });
-                }
-                blocks.push(sectionLines.join('\n'));
-            }
-
-            const summary = `${heading}\n\n${locationLine}${blocks.join('\n\n')}`.trim();
-            const cardsHtml = buildNearbyEssentialsCardsHtml(
-                sectionCardsData,
-                usedLocation,
-                locationContext?.label || ''
-            );
-            addVerifiedAssistantMessage(cardsHtml, 'Nearby search');
-            speak('I fetched nearby police, pharmacy, and ATM options. Check the links in chat.');
+                return {
+                    category,
+                    label: formatNearbyCategoryLabel(category),
+                    mapsQuery,
+                    mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
+                };
+            });
+            const summary = sectionMaps
+                .map(section => `${section.label}\nMap query: ${section.mapsQuery}\n${section.mapsUrl}`)
+                .join('\n\n');
+            const cardsHtml = buildNearbyEssentialsMapHtml(sectionMaps);
+            addVerifiedAssistantMessage(cardsHtml, 'Nearby map');
+            speak('Opening nearby maps for police, pharmacy, and ATM.');
             saveToHistory('nearby essentials', summary);
             hideThinkingIndicator();
         }
