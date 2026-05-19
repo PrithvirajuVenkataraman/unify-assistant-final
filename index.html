@@ -15216,10 +15216,11 @@ async function handleChatFirstCurrentQuery(userText, classification) {
 }
 
 function extractRequestedDish(text) {
-    const raw = String(text || '').trim();
+    const raw = normalizeRecipeRequestText(text);
     if (!raw) return '';
     const patterns = [
         /\brecipe\s+for\s+(.+?)\s*$/i,
+        /\btell\s+me\s+how\s+to\s+make\s+(.+?)\s*$/i,
         /\bhow\s+to\s+make\s+(.+?)\s*$/i,
         /\bgive\s+me\s+a\s+recipe\s+for\s+(?:making\s+)?(.+?)\s*$/i,
         /\bmake\s+(.+?)\s*$/i
@@ -15227,14 +15228,26 @@ function extractRequestedDish(text) {
     for (const pattern of patterns) {
         const match = raw.match(pattern);
         if (match?.[1]) {
-            return match[1].replace(/[?.!,;]+$/g, '').trim();
+            return match[1]
+                .replace(/\b(?:good|nice|great|best|proper|perfect)\b/gi, '')
+                .replace(/\bin\s+Thalassery\s+style\b/gi, '')
+                .replace(/\s+/g, ' ')
+                .replace(/[?.!,;]+$/g, '')
+                .trim();
         }
     }
     return raw.replace(/[?.!,;]+$/g, '').trim();
 }
 
+function normalizeRecipeRequestText(text) {
+    return String(text || '')
+        .replace(/\b(?:tallessery|tallesery|talassery|tellicherry)\b/gi, 'Thalassery')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 function extractRecipeStylePreference(text) {
-    const raw = String(text || '').toLowerCase();
+    const raw = normalizeRecipeRequestText(text).toLowerCase();
     if (!raw.trim()) return '';
 
     const stylePatterns = [
@@ -17060,15 +17073,16 @@ async function handleRemovedLiveAccuracyFeatureRequest(text) {
             }
 
             if (answerPath === 'recipe') {
-                const requestedDish = extractRequestedDish(text);
+                const normalizedRecipeRequest = normalizeRecipeRequestText(text);
+                const requestedDish = extractRequestedDish(normalizedRecipeRequest);
                 if (!requestedDish || requestedDish.length < 3 || /^(a |the )?(recipe|dish|food|meal)$/i.test(requestedDish)) {
                     const promptMsg = "What dish would you like the recipe for?";
                     addChatMessage(promptMsg, false);
                     speak(promptMsg);
                     return;
                 }
-                const styleHint = extractRecipeStylePreference(text) || 'not specified';
-                const recipePrompt = `${userName ? `The user's name is ${userName}.` : ''} Answer this cooking request: "${text}"
+                const styleHint = extractRecipeStylePreference(normalizedRecipeRequest) || 'not specified';
+                const recipePrompt = `${userName ? `The user's name is ${userName}.` : ''} Answer this cooking request: "${normalizedRecipeRequest}"
 
 Dish request: ${requestedDish}
 Requested style hint: ${styleHint}
@@ -17119,19 +17133,19 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
                     : recipeText;
                 finalRecipe = normalizeRecipeOutputText(finalRecipe);
                 if (isLikelyIncompleteRecipe(finalRecipe)) {
-                    const repairedRecipe = await repairIncompleteRecipe(finalRecipe, text, requestedDish, styleHint);
+                    const repairedRecipe = await repairIncompleteRecipe(finalRecipe, normalizedRecipeRequest, requestedDish, styleHint);
                     if (repairedRecipe && !isLikelyIncompleteRecipe(repairedRecipe)) {
                         finalRecipe = normalizeRecipeOutputText(repairedRecipe);
                     }
                 }
                 if (isLikelyIncompleteRecipe(finalRecipe)) {
-                    const fallbackRecipe = normalizeRecipeOutputText(await buildOfflineRecipeFallback(text) || '');
+                    const fallbackRecipe = normalizeRecipeOutputText(await buildOfflineRecipeFallback(normalizedRecipeRequest) || '');
                     finalRecipe = fallbackRecipe && !isLikelyIncompleteRecipe(fallbackRecipe) ? fallbackRecipe : '';
                 }
                 if (!finalRecipe) {
                     await deliverApiReply('recipe_unavailable', {
-                        dish: extractRequestedDish(text) || '',
-                        userMessage: text
+                        dish: extractRequestedDish(normalizedRecipeRequest) || '',
+                        userMessage: normalizedRecipeRequest
                     }, {
                         historyKey: text,
                         fallbackText: 'I could not generate that recipe right now.'
