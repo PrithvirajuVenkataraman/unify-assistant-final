@@ -1231,10 +1231,12 @@ function buildLengthPolicy(message, clientSystemPrompt, options = {}) {
 }
 
 function isRecipeGenerationRequest(message) {
-    const text = String(message || '').toLowerCase();
+    const text = String(message || '')
+        .toLowerCase()
+        .replace(/\b(?:tallessery|tallesery|talassery|tellicherry)\b/g, 'thalassery');
     if (!text.trim()) return false;
     return /\b(recipe|ingredients|steps|how to make|how do i make|how can i make|cook|prepare)\b/.test(text) &&
-        /\b(biryani|chicken|mutton|rice|curry|masala|pasta|pizza|noodles|soup|cake|bread|dessert|dish|food|aloo|potato|fry|sabzi|poriyal|bhaji|stir fry|thalassery|tellicherry|malabar)\b/.test(text);
+        /\b(biryani|chicken|mutton|rice|curry|masala|pasta|pizza|noodles|soup|cake|bread|dessert|dish|food|aloo|potato|fry|sabzi|poriyal|bhaji|stir fry|thalassery|tellicherry|tallessery|tallesery|talassery|malabar)\b/.test(text);
 }
 
 function isLongTravelPlanningRequest(message) {
