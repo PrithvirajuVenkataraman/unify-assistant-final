@@ -2789,7 +2789,7 @@ function buildVerificationSnapshot(items, domain = 'general', riskLevel = 'mediu
 }
 
 function cleanLiveAnswerText(text) {
-    return String(text || '')
+    return normalizeAssistantTextStyle(String(text || ''))
         .replace(/^\s*(?:\*\*)?Direct answer:(?:\*\*)?\s*/i, '')
         .replace(/\n\s*Confidence:\s*[^\n]*/gi, '')
         .replace(/\n\s*Verified sources checked:\s*[^\n]*/gi, '')
@@ -3804,7 +3804,7 @@ function fixHistoricalReleaseWording(answerText, userMessage) {
 }
 
 function postProcessAssistantResponse(rawText, userMessage = '') {
-    let text = String(rawText || '').trim();
+    let text = normalizeAssistantTextStyle(String(rawText || '').trim());
     if (!text) return text;
 
     // Remove common filler/opening boilerplate.
@@ -4363,7 +4363,7 @@ let supportConversationMode = false;
 let cagModeEnabled = true;
 let converseAccuracyMode = 'strict';
 let converseUseDeviceLocale = true;
-let showRoutingDebugBadge = true;
+let showRoutingDebugBadge = false;
 
         // UI/settings state
         let noiseFilterEnabled = false;
@@ -6628,11 +6628,7 @@ function normalizeUiTokens(text) {
         }
 
         function buildRoutingDebugBadgeHtml(routing, sourceType = 'default') {
-            if (!showRoutingDebugBadge) return '';
-            if (String(sourceType || '').toLowerCase() !== 'model') return '';
-            const label = getRoutingDebugBadgeText(routing);
-            if (!label) return '';
-            return `<div class="mb-1"><span class="inline-flex items-center rounded-full border border-sky-200/70 bg-sky-50/90 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-700 dark:border-sky-700/70 dark:bg-sky-900/30 dark:text-sky-200">${escapeHtml(label)}</span></div>`;
+            return '';
         }
 
         function isSafeAssistantUrl(url) {
@@ -18270,6 +18266,9 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             if (/^\s*(?:what'?s|what is|how'?s|how is)?\s*(?:the\s+)?(?:weather|forecast|temperature|climate|conditions?)\b[\s?!.,]*$/i.test(text)) {
                 return null;
             }
+
+            const explicitLocation = extractExplicitWeatherLocation(text, currentLocationKeywords);
+            if (explicitLocation) return explicitLocation;
             
             let cleanText = text;
             const timeWords = ['right now', 'now', 'today', 'tomorrow', 'tonight', 'currently', 'at the moment'];
@@ -18308,6 +18307,32 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 }
             }
             return null;
+        }
+
+        function extractExplicitWeatherLocation(text, currentLocationKeywords = []) {
+            const raw = String(text || '').trim();
+            if (!raw) return '';
+
+            const patterns = [
+                /\b(?:in|at|for|around|near)\s+([A-Za-z][A-Za-z\s.'-]{1,80})(?=\s*(?:today|tomorrow|tonight|now|right now|currently|at the moment|this morning|this afternoon|this evening)?\s*[?.!,]*$)/i,
+                /\b(?:in|at|for|around|near)\s+([A-Za-z][A-Za-z\s.'-]{1,80})(?=\s*,\s*(?:today|tomorrow|tonight|now|right now|currently|at the moment)\b)/i
+            ];
+
+            for (const pattern of patterns) {
+                const match = raw.match(pattern);
+                if (!match?.[1]) continue;
+                let location = match[1]
+                    .replace(/\b(?:today|tomorrow|tonight|now|right now|currently|at the moment|this morning|this afternoon|this evening)\b/gi, '')
+                    .replace(/[?.!,;]$/g, '')
+                    .trim();
+                if (!location) continue;
+                const lowerLocation = location.toLowerCase();
+                if (currentLocationKeywords.some(keyword => lowerLocation.includes(keyword))) continue;
+                if (/^(?:the\s+)?(?:weather|forecast|temperature|climate|conditions?)$/i.test(location)) continue;
+                return location;
+            }
+
+            return '';
         }
 
         function isCurrentLocationWeatherQuery(text) {
@@ -21190,6 +21215,7 @@ function hideThinkingIndicator() {
 
 function formatAssistantTextForReadability(rawText) {
     if (typeof rawText !== 'string') return rawText;
+    rawText = normalizeAssistantTextStyle(rawText);
     if (/<(iframe|div|img|table|svg|button|a)\b/i.test(rawText)) return rawText;
     if (/^\s*[-*]\s+/m.test(rawText) || /^\s*\d+\.\s+/m.test(rawText)) return rawText;
 
@@ -21213,6 +21239,10 @@ function formatAssistantTextForReadability(rawText) {
 
     const bullets = sentences.map(s => `- ${s}`).join('\n');
     return closingQuestion ? `${bullets}\n\n${closingQuestion}` : bullets;
+}
+
+function normalizeAssistantTextStyle(text) {
+    return String(text || '').replace(/[—–]/g, '-');
 }
 
 function autoBulletizeProcedureText(rawText) {
