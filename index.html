@@ -15265,6 +15265,11 @@ function normalizeRecipeOutputText(text) {
         .replace(/\r\n/g, '\n')
         .replace(/[\u00a0\u202f]/g, ' ')
         .replace(/[\u2010-\u2015]/g, '-')
+        .replace(/[\u201c\u201d]/g, '"')
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/\u00bc/g, '1/4')
+        .replace(/\u00bd/g, '1/2')
+        .replace(/\u00be/g, '3/4')
         .replace(/[“”]/g, '"')
         .replace(/[‘’]/g, "'")
         .replace(/¼/g, '1/4')
@@ -15284,7 +15289,14 @@ function isLikelyIncompleteRecipe(text) {
     const hasRecipeShape = /^Recipe\s*:/im.test(raw) || /\nIngredients\s*:/i.test(raw) || /\nSteps\s*:/i.test(raw);
     if (!hasRecipeShape) return false;
     if (/[(\[,;:-]\s*$/.test(raw)) return true;
-    if (/\b(?:with|and|or|to|for|a|an|the|lid|cover|until|then|about|of|in)\s*$/i.test(raw)) return true;
+    if (/\b(?:with|and|or|to|for|a|an|the|lid|cover|until|then|about|of|in|on|at|very|low|medium|high)\s*$/i.test(raw)) return true;
+    if (/\b(?:for|about|around|approximately)\s+\d+\s*(?:-|to)?\s*\d*\s*$/i.test(raw)) return true;
+    if (/\b\d+\s*(?:-|to)\s*\d+\s*$/i.test(raw)) return true;
+    if (/\b\d+\s*$/i.test(raw) && /\b(?:cook|simmer|steam|bake|fry|boil|dum|rest|marinate)\b[\s\S]{0,180}$/i.test(raw)) return true;
+    const lastStep = (raw.match(/^\s*-\s+.+$/gm) || []).pop() || '';
+    if (lastStep && lastStep.length >= 80 && !/[.!?)]\s*$/.test(lastStep) && /\b(?:cook|simmer|steam|bake|fry|boil|dum|rest|marinate|cover|seal|place|add|sprinkle|drizzle)\b/i.test(lastStep)) {
+        return true;
+    }
     if (!/\nIngredients\s*:\s*\n\s*-/i.test(raw)) return true;
     if (!/\nSteps\s*:\s*\n\s*-/i.test(raw)) return true;
     return false;
@@ -17105,9 +17117,13 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
                 finalRecipe = normalizeRecipeOutputText(finalRecipe);
                 if (isLikelyIncompleteRecipe(finalRecipe)) {
                     const repairedRecipe = await repairIncompleteRecipe(finalRecipe, text, requestedDish, styleHint);
-                    if (repairedRecipe) {
+                    if (repairedRecipe && !isLikelyIncompleteRecipe(repairedRecipe)) {
                         finalRecipe = normalizeRecipeOutputText(repairedRecipe);
                     }
+                }
+                if (isLikelyIncompleteRecipe(finalRecipe)) {
+                    const fallbackRecipe = normalizeRecipeOutputText(await buildOfflineRecipeFallback(text) || '');
+                    finalRecipe = fallbackRecipe && !isLikelyIncompleteRecipe(fallbackRecipe) ? fallbackRecipe : '';
                 }
                 if (!finalRecipe) {
                     await deliverApiReply('recipe_unavailable', {
