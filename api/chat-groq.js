@@ -1303,7 +1303,7 @@ function padToWordCount(text, target) {
         out = `${out} ${filler}`.trim();
         if (countWords(out) > target) {
             out = trimToWordCount(out, target);
-            break;
+            break; 
         }
     }
     return out;
