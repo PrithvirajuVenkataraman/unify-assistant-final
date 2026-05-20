@@ -117,7 +117,6 @@
                         <button type="button" id="vision-toggle-btn" class="composer-action-item" onclick="handleComposerAction('vision')" role="menuitem">Vision analysis</button>
                         <button type="button" class="composer-action-item" onclick="handleComposerAction('ocr')" role="menuitem">OCR camera</button>
                         <button type="button" id="help-btn" class="composer-action-item" onclick="handleComposerAction('help')" role="menuitem">Help & options</button>
-                        <button type="button" id="safety-btn" class="composer-action-item" onclick="handleComposerAction('safety')" role="menuitem">Safety & others</button>
                     </div>
                 </div>
                 <textarea
@@ -255,61 +254,6 @@
         <p id="continuous-vision-hint" class="continuous-vision-hint">Camera is on. Ask: "What do you see?"</p>
     </div>
     <canvas id="continuous-vision-canvas" class="hidden"></canvas>
-
-    <div id="safety-panel-backdrop" class="side-panel-backdrop hidden" onclick="closeSafetyPanel()"></div>
-    <aside id="safety-panel" class="side-panel hidden" aria-hidden="true" aria-label="Safety & Others panel" tabindex="-1">
-        <div class="flex items-start justify-between gap-4 mb-6">
-            <div>
-                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-200 text-xs font-semibold mb-3">
-                    <span>Safety & Others</span>
-                </div>
-                <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Safety & Others Shortcuts</h2>
-                <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">Quick access to location sharing, nearby emergency places, and check-in tools.</p>
-            </div>
-            <button onclick="closeSafetyPanel()" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500 dark:text-gray-300 transition-all" aria-label="Close safety panel">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-            </button>
-        </div>
-
-        <div class="bg-gradient-to-br from-rose-50 to-orange-50 dark:from-slate-800 dark:to-slate-900 p-5 rounded-2xl border border-rose-100 dark:border-slate-700 mb-5">
-            <div id="safety-summary" class="space-y-2 text-sm text-gray-700 dark:text-gray-300"></div>
-        </div>
-
-        <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-rose-100 dark:border-slate-700 mb-5 space-y-3">
-            <p class="text-sm font-semibold text-gray-900 dark:text-white">Emergency setup</p>
-            <input id="safety-trusted-contact-input" type="text" placeholder="Trusted contact phone (example: +1 5551234567)" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-sm text-gray-800 dark:text-gray-200">
-            <textarea id="safety-sos-message-input" rows="3" placeholder="Custom SOS message. You can use {name}, {map}, {lat}, {lon}, {time}" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-sm text-gray-800 dark:text-gray-200"></textarea>
-            <div class="flex flex-wrap items-center gap-3">
-                <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <input id="safety-live-updates-toggle" type="checkbox">
-                    <span>Enable live SMS location updates</span>
-                </label>
-                <select id="safety-live-interval-select" class="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-sm text-gray-700 dark:text-gray-200">
-                    <option value="20">Every 20s</option>
-                    <option value="30" selected>Every 30s</option>
-                    <option value="45">Every 45s</option>
-                    <option value="60">Every 60s</option>
-                </select>
-                <button onclick="saveSafetySettingsFromPanel()" class="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all">Save safety settings</button>
-            </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">Note: browsers cannot auto-send SMS silently. JARVIS will keep preparing updated SMS drafts while you move.</p>
-        </div>
-
-        <div id="safety-status-live" class="sr-only" role="status" aria-live="assertive" aria-atomic="true"></div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button id="safety-sos-btn" onclick="triggerEmergencySmsNow()" class="safety-sos-btn px-4 py-3 rounded-xl bg-red-700 hover:bg-red-800 text-white text-sm font-semibold transition-all">SOS SMS</button>
-            <button onclick="stopSafetyLiveLocationSharing(); showTemporaryMessage('Live SOS updates stopped.')" class="px-4 py-3 rounded-xl bg-slate-700 hover:bg-slate-800 text-white text-sm font-semibold transition-all">Stop live SOS updates</button>
-            <button onclick="shareCurrentLocation()" class="px-4 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold transition-all">Share location</button>
-            <button onclick="closeSafetyPanel(); openNearbySearch('hotel');" class="px-4 py-3 rounded-xl bg-rose-100 dark:bg-rose-900/40 border border-rose-200 dark:border-rose-700 text-rose-700 dark:text-rose-200 text-sm font-semibold transition-all">Nearby Hotels</button>
-            <button onclick="closeSafetyPanel(); openNearbySearch('hospital');" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest hospital</button>
-            <button onclick="closeSafetyPanel(); openNearbySearch('police station');" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest police</button>
-            <button onclick="closeSafetyPanel(); openNearbySearch('pharmacy');" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest pharmacy</button>
-            <button onclick="closeSafetyPanel(); openNearbySearch('atm');" class="px-4 py-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-slate-600 text-rose-700 dark:text-rose-300 text-sm font-semibold transition-all">Nearest ATM</button>
-        </div>
-    </aside>
 
 <!-- Inline app logic lives below -->
 <script>
@@ -474,10 +418,10 @@ function isStepByStepMathRequest(text) {
 function normalizeMathExpression(rawText) {
     let s = String(rawText || '').trim();
     s = s
-        .replace(/[×x]/g, '*')
-        .replace(/÷/g, '/')
-        .replace(/−/g, '-')
-        .replace(/–/g, '-')
+        .replace(/[Ã—x]/g, '*')
+        .replace(/Ã·/g, '/')
+        .replace(/âˆ’/g, '-')
+        .replace(/â€“/g, '-')
         .replace(/,/g, '')
         .replace(/\s+/g, ' ');
 
@@ -1940,7 +1884,7 @@ async function activateTranslatorMode(language) {
         examples: [
             'How much does this cost?',
             'Take me to the railway station',
-            'Where is the nearest ATM?',
+            'Where is the restroom?',
             'I need help'
         ]
     }, {
@@ -4251,15 +4195,7 @@ async function handleNameCorrection(text) {
             user: {
                 name: null,
                 email: '',
-                memory: {},
-                safety: {
-                    womenSafetyMode: false,
-                    trustedContact: '',
-                    checkInMinutes: 30,
-                    sosMessageTemplate: 'Emergency: I need help right now. My live location: {map}',
-                    liveSmsUpdatesEnabled: true,
-                    liveSmsUpdateSeconds: 30
-                }
+                memory: {}
             },
             voice: {
                 recognition: null,
@@ -4318,29 +4254,6 @@ async function handleNameCorrection(text) {
         let translatorMode = false;
         let translatorLanguage = null;
         let lastBudgetPlan = null;
-        let safetyProfile = {
-            womenSafetyMode: false,
-            trustedContact: '',
-            checkInMinutes: 30,
-            sosMessageTemplate: 'Emergency: I need help right now. My live location: {map}',
-            liveSmsUpdatesEnabled: true,
-            liveSmsUpdateSeconds: 30
-        };
-        let safetyLiveShareState = {
-            active: false,
-            watchId: null,
-            lastSentAt: 0,
-            source: 'manual',
-            initialDraftDispatched: false,
-            latestMessage: ''
-        };
-        let safetySosCountdownState = {
-            active: false,
-            remainingSeconds: 0,
-            timerId: null
-        };
-        let safetyPanelLastFocusedElement = null;
-        let safetyPanelKeydownHandler = null;
         let tripState = {
             active: false,
             watchId: null,
@@ -4546,7 +4459,6 @@ let showRoutingDebugBadge = false;
             loadAssistantModes();
             enforceDarkMode();
             loadCagMemory();
-            loadSafetyProfile();
             setupInputHistoryNavigation();
             updateVoiceToTextButton();
             syncVttUiState();
@@ -4729,24 +4641,8 @@ let showRoutingDebugBadge = false;
                         </section>
 
                         <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Safety & Others Mode</h3>
-                            <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <p><strong>Open Safety & Others Panel:</strong> Tap the shield button near the input bar.</p>
-                                <p><strong>Quick actions:</strong> Share location, nearest hospital, nearest police, nearest pharmacy, nearest ATM.</p>
-                                <p><strong>Enable safety setup:</strong> Say "enable women's safety mode".</p>
-                                <p><strong>Set trusted contact:</strong> Say "trusted contact is +1..." to save a contact for fast sharing workflows.</p>
-                                <p><strong>Good voice examples:</strong> "share my location", "nearest hospital", "nearest police".</p>
-                            </div>
-                        </section>
-
-
-                        <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Settings</h3>
                             <div class="space-y-4">
-                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                                    <p class="font-semibold text-gray-900 dark:text-white">Safety Setup</p>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Use "enable women's safety mode" and "trusted contact is ..." to personalize fast safety actions.</p>
-                                </div>
                                 <div class="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                     <div>
                                         <p class="font-semibold text-gray-900 dark:text-white">Noise Filter</p>
@@ -6756,7 +6652,6 @@ function normalizeUiTokens(text) {
             if (key === 'vision') return toggleContinuousVision();
             if (key === 'ocr') return openCameraMode();
             if (key === 'help') return showHelpModal();
-            if (key === 'safety') return showSafetyPanel();
         }
 
         function initComposerActionsMenu() {
@@ -7889,13 +7784,13 @@ async function switchCameraLens() {
             const billCurrency = String(bill?.currency || '').trim();
             if (billCurrency) return billCurrency;
             const t = String(text || '');
-            const m = t.match(/(₹|rs\.?|inr|\$|usd|eur|€|£)/i);
+            const m = t.match(/(â‚¹|rs\.?|inr|\$|usd|eur|â‚¬|Â£)/i);
             if (!m) return '';
             const token = m[1].toLowerCase();
             if (token === 'rs' || token === 'rs.' || token === 'inr') return 'INR';
             if (token === '$' || token === 'usd') return 'USD';
-            if (token === '€' || token === 'eur') return 'EUR';
-            if (token === '£') return 'GBP';
+            if (token === 'â‚¬' || token === 'eur') return 'EUR';
+            if (token === 'Â£') return 'GBP';
             return m[1];
         }
 
@@ -7912,14 +7807,14 @@ async function switchCameraLens() {
             };
 
             // Pattern: "Alice paid 500", "I spent 300", "Bob contributed 200"
-            const verbPattern = /\b([a-z][a-z\s]{0,24}|i)\s+(?:paid|pay|spent|contributed|brought)\s*(?:rs\.?|inr|₹|\$|usd|eur|€|£)?\s*([0-9]+(?:\.[0-9]+)?)\b/gi;
+            const verbPattern = /\b([a-z][a-z\s]{0,24}|i)\s+(?:paid|pay|spent|contributed|brought)\s*(?:rs\.?|inr|â‚¹|\$|usd|eur|â‚¬|Â£)?\s*([0-9]+(?:\.[0-9]+)?)\b/gi;
             let match;
             while ((match = verbPattern.exec(raw)) !== null) {
                 addContribution(match[1], match[2]);
             }
 
             // Pattern: "Alice 500, Bob 200"
-            const simplePairPattern = /\b([a-z][a-z\s]{0,24}|i)\s*[:=-]?\s*(?:rs\.?|inr|₹|\$|usd|eur|€|£)?\s*([0-9]+(?:\.[0-9]+)?)\b/gi;
+            const simplePairPattern = /\b([a-z][a-z\s]{0,24}|i)\s*[:=-]?\s*(?:rs\.?|inr|â‚¹|\$|usd|eur|â‚¬|Â£)?\s*([0-9]+(?:\.[0-9]+)?)\b/gi;
             while ((match = simplePairPattern.exec(raw)) !== null) {
                 const nearby = raw.slice(Math.max(0, match.index - 14), Math.min(raw.length, match.index + match[0].length + 14));
                 if (/\b(phone|number|age|time|date)\b/i.test(nearby)) continue;
@@ -7928,7 +7823,7 @@ async function switchCameraLens() {
 
             // Total amount: explicit in text, else OCR bill total, else sum contributions.
             let total = null;
-            const totalMatch = raw.match(/\b(?:total|bill(?:\s+amount)?|grand total)\s*(?:is|=|:)?\s*(?:rs\.?|inr|₹|\$|usd|eur|€|£)?\s*([0-9]+(?:\.[0-9]+)?)\b/i);
+            const totalMatch = raw.match(/\b(?:total|bill(?:\s+amount)?|grand total)\s*(?:is|=|:)?\s*(?:rs\.?|inr|â‚¹|\$|usd|eur|â‚¬|Â£)?\s*([0-9]+(?:\.[0-9]+)?)\b/i);
             if (totalMatch) {
                 total = Number(totalMatch[1]);
             } else if (Number.isFinite(Number(bill?.total))) {
@@ -10294,8 +10189,8 @@ const GENERIC_INTENT_DOMAIN_WORDS = {
 
 function normalizeGenericIntentText(text) {
     return String(text || '')
-        .replace(/[“”]/g, '"')
-        .replace(/[’]/g, "'")
+        .replace(/[â€œâ€]/g, '"')
+        .replace(/[â€™]/g, "'")
         .replace(/[?!,;:()[\]{}]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -14508,7 +14403,7 @@ function extractFactCandidate(result, entityIntent) {
         const titleFirstPatterns = [
             /\b(?:latest|recent|new|upcoming|current|future)\s+(?:movie|film|release|song|album|single|show|series|project)\s+(?:is|was|:)\s*([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})/i,
             /\b(?:starring|stars in|release of|titled|title is)\s+([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})/i,
-            /["“]([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})["”][^.]{0,40}\b(?:film|movie|song|album|series|project|release)\b/i
+            /["â€œ]([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})["â€][^.]{0,40}\b(?:film|movie|song|album|series|project|release)\b/i
         ];
         for (const pattern of titleFirstPatterns) {
             const match = combined.match(pattern);
@@ -15286,11 +15181,11 @@ function normalizeRecipeOutputText(text) {
         .replace(/\u00bc/g, '1/4')
         .replace(/\u00bd/g, '1/2')
         .replace(/\u00be/g, '3/4')
-        .replace(/[“”]/g, '"')
-        .replace(/[‘’]/g, "'")
-        .replace(/¼/g, '1/4')
-        .replace(/½/g, '1/2')
-        .replace(/¾/g, '3/4')
+        .replace(/[â€œâ€]/g, '"')
+        .replace(/[â€˜â€™]/g, "'")
+        .replace(/Â¼/g, '1/4')
+        .replace(/Â½/g, '1/2')
+        .replace(/Â¾/g, '3/4')
         .replace(/\s+%/g, ' percent')
         .replace(/^(\s*)\d+\.\s+/gm, '$1- ')
         .replace(/[ \t]+/g, ' ')
@@ -16687,120 +16582,6 @@ async function handleRemovedLiveAccuracyFeatureRequest(text) {
                 return;
             }
 
-            if (/\b(enable|turn on|start)\s+(women'?s?\s+)?safety\s+mode\b/i.test(lower)) {
-                safetyProfile.womenSafetyMode = true;
-                saveSafetyProfile();
-                showSafetyPanel();
-                await deliverApiReply('safety_mode_enabled', {
-                    womenSafetyMode: true
-                }, { historyKey: text });
-                return;
-            }
-
-            if (/\b(disable|turn off|stop)\s+(women'?s?\s+)?safety\s+mode\b/i.test(lower)) {
-                safetyProfile.womenSafetyMode = false;
-                stopSafetyLiveLocationSharing();
-                saveSafetyProfile();
-                showSafetyPanel();
-                await deliverApiReply('safety_mode_disabled', {
-                    womenSafetyMode: false
-                }, { historyKey: text });
-                return;
-            }
-
-            const trustedContactMatch = text.match(/\b(?:trusted\s+contact\s+is|set\s+trusted\s+contact\s+to)\s+(.+)$/i);
-            if (trustedContactMatch) {
-                safetyProfile.trustedContact = trustedContactMatch[1].replace(/[?.!,]$/g, '').trim();
-                saveSafetyProfile();
-                showSafetyPanel();
-                await deliverApiReply('safety_trusted_contact_saved', {
-                    trustedContact: safetyProfile.trustedContact
-                }, { historyKey: text });
-                if (!sanitizePhoneForSms(safetyProfile.trustedContact)) {
-                    await deliverApiReply('safety_trusted_contact_phone_hint', {
-                        example: '+1 5551234567'
-                    }, {
-                        fallbackText: 'Tip: save trusted contact as a phone number (for example +1 5551234567) so SOS can open an SMS draft automatically.'
-                    });
-                }
-                return;
-            }
-
-            const sosMessageMatch = text.match(/\b(?:set\s+sos\s+message\s+to|sos\s+message\s+is)\s+(.+)$/i);
-            if (sosMessageMatch) {
-                safetyProfile.sosMessageTemplate = sosMessageMatch[1].replace(/[?.!,]$/g, '').trim() || 'Emergency: I need help right now. My live location: {map}';
-                saveSafetyProfile();
-                showSafetyPanel();
-                await deliverApiReply('safety_sos_message_saved', {
-                    sosMessageTemplate: safetyProfile.sosMessageTemplate
-                }, {
-                    historyKey: text,
-                    fallbackText: 'Saved your custom SOS message.'
-                });
-                return;
-            }
-
-            if (/\b(share my location|send my location)\b/i.test(lower)) {
-                await shareCurrentLocation();
-                return;
-            }
-
-            if (/\b(sos|emergency help|panic|i am in danger|unsafe|help me now|send emergency location)\b/i.test(lower)) {
-                await triggerEmergencySafetyFlow(text);
-                return;
-            }
-
-            if (/\b(stop|end|disable)\s+(live\s+)?(sos|safety)\s+(updates|tracking)\b/i.test(lower)) {
-                stopSafetyLiveLocationSharing();
-                await deliverApiReply('safety_live_updates_stopped', {}, {
-                    historyKey: text,
-                    fallbackText: 'Stopped live SOS location updates.'
-                });
-                return;
-            }
-
-            if (
-                (/\b(nearest|nearby)\b/i.test(lower) && /\b(police|police station)\b/i.test(lower) && /\b(pharmacy)\b/i.test(lower) && /\b(atm)\b/i.test(lower)) ||
-                (/\b(everything|all|essentials)\b/i.test(lower) && /\b(police|pharmacy|atm)\b/i.test(lower))
-            ) {
-                await openNearbyEssentialsSearch();
-                return;
-            }
-
-            if (/\b(hospital|hospitals|police station|police|pharmacy|pharmacies|atm|atms|hotel|hotels|restaurant|restaurants|food|cafe|cafes|coffee|gas station|petrol pump)s?\s+(?:near|around)\s+me\b/i.test(lower)) {
-                const placeMatch = lower.match(/\b(hospital|hospitals|police station|police|pharmacy|pharmacies|atm|atms|hotel|hotels|restaurant|restaurants|food|cafe|cafes|coffee|gas station|petrol pump)\b/);
-                let category = placeMatch?.[1] || 'hospital';
-                if (category === 'police') category = 'police station';
-                if (category === 'hospitals') category = 'hospital';
-                if (category === 'pharmacies') category = 'pharmacy';
-                if (category === 'atms') category = 'atm';
-                if (category === 'hotels') category = 'hotel';
-                if (category === 'restaurants') category = 'restaurant';
-                if (category === 'cafes' || category === 'coffee') category = 'cafe';
-                await openNearbySearch(category);
-                return;
-            }
-
-            if (/\b(nearest|nearby)\s+(hospital|police|police station|pharmacy|atm|hotel|hotels|restaurant|restaurants|food|cafe|cafes|coffee|gas station|petrol pump)\b/i.test(lower)) {
-                const placeMatch = lower.match(/\b(hospital|police station|police|pharmacy|atm|hotel|hotels|restaurant|restaurants|food|cafe|cafes|coffee|gas station|petrol pump)\b/);
-                let category = placeMatch?.[1] || 'hospital';
-                if (category === 'police') category = 'police station';
-                if (category === 'hotels') category = 'hotel';
-                if (category === 'restaurants') category = 'restaurant';
-                if (category === 'cafes' || category === 'coffee') category = 'cafe';
-                await openNearbySearch(category);
-                return;
-            }
-
-            if (/\b(emergency|help me stay safe|safety help)\b/i.test(lower)) {
-                showSafetyPanel();
-                await deliverApiReply('safety_shortcuts_ready', {
-                    supportedActions: ['share my location', 'nearby hotels', 'nearest hospital', 'nearest police', 'nearest pharmacy', 'nearest atm']
-                }, { historyKey: text });
-                return;
-            }
-            
-            
             if (!isWeatherQuery && !waitingForLocation) {
                 const weatherCard = document.getElementById('weather-card');
                 if (weatherCard && !weatherCard.classList.contains('hidden')) {
@@ -18617,7 +18398,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     ? `Air Quality Index (US AQI): ${aqi.usAqi} (${aqi.label || 'Unknown'})`
                     : 'Air Quality Index (US AQI): unavailable right now';
                 const weatherFallback = [
-                    `In ${displayLocation}, it's ${celsius}°C (${fahrenheit}°F) with ${advice}.`,
+                    `In ${displayLocation}, it's ${celsius}Â°C (${fahrenheit}Â°F) with ${advice}.`,
                     isCurrentLocationAsk ? aqiLine : ''
                 ].filter(Boolean).join('\n');
                 await deliverApiReply('weather_result', {
@@ -18820,7 +18601,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     <div class="flex items-center justify-between gap-3 text-white/90 text-sm py-1">
                         <span class="font-semibold">${day}</span>
                         <span class="text-white/80">${escapeHtml(label)}</span>
-                        <span class="font-semibold">${Number.isFinite(max) ? Math.round(max) : '--'}° / ${Number.isFinite(min) ? Math.round(min) : '--'}°C</span>
+                        <span class="font-semibold">${Number.isFinite(max) ? Math.round(max) : '--'}Â° / ${Number.isFinite(min) ? Math.round(min) : '--'}Â°C</span>
                     </div>
                 `);
             }
@@ -18913,161 +18694,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             await deliverApiReply('trip_destination_prompt', {
                 examples: ['start trip to Times Square', 'start trip to office']
             });
-        }
-
-        function loadSafetyProfile() {
-            try {
-                const raw = localStorage.getItem('jarvis_safety_profile');
-                if (!raw) return;
-                const parsed = JSON.parse(raw);
-                safetyProfile = {
-                    womenSafetyMode: !!parsed.womenSafetyMode,
-                    trustedContact: parsed.trustedContact || '',
-                    checkInMinutes: Math.max(5, parseInt(parsed.checkInMinutes || 30, 10)),
-                    sosMessageTemplate: String(parsed.sosMessageTemplate || 'Emergency: I need help right now. My live location: {map}').trim() || 'Emergency: I need help right now. My live location: {map}',
-                    liveSmsUpdatesEnabled: parsed.liveSmsUpdatesEnabled !== false,
-                    liveSmsUpdateSeconds: Math.min(120, Math.max(15, parseInt(parsed.liveSmsUpdateSeconds || 30, 10)))
-                };
-            } catch (e) { console.error('Error loading safety profile:', e); }
-        }
-
-        function saveSafetyProfile() {
-            try {
-                localStorage.setItem('jarvis_safety_profile', JSON.stringify(safetyProfile));
-            } catch (e) { console.error('Error saving safety profile:', e); }
-            renderSafetyCard();
-        }
-
-        function announceSafetyLiveMessage(message) {
-            const liveRegion = document.getElementById('safety-status-live');
-            if (!liveRegion) return;
-            liveRegion.textContent = '';
-            setTimeout(() => {
-                liveRegion.textContent = String(message || '').trim();
-            }, 40);
-        }
-
-        function getSafetyPanelFocusableElements(panel) {
-            if (!panel) return [];
-            const nodes = panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-            return Array.from(nodes).filter(node => {
-                if (!(node instanceof HTMLElement)) return false;
-                const style = window.getComputedStyle(node);
-                return style.display !== 'none' && style.visibility !== 'hidden' && !node.hasAttribute('disabled');
-            });
-        }
-
-        function bindSafetyPanelFocusTrap(panel) {
-            if (!panel || safetyPanelKeydownHandler) return;
-            safetyPanelKeydownHandler = (event) => {
-                if (event.key === 'Escape') {
-                    event.preventDefault();
-                    closeSafetyPanel();
-                    return;
-                }
-                if (event.key !== 'Tab') return;
-                const focusables = getSafetyPanelFocusableElements(panel);
-                if (!focusables.length) return;
-                const first = focusables[0];
-                const last = focusables[focusables.length - 1];
-                const active = document.activeElement;
-                if (event.shiftKey && active === first) {
-                    event.preventDefault();
-                    last.focus();
-                } else if (!event.shiftKey && active === last) {
-                    event.preventDefault();
-                    first.focus();
-                }
-            };
-            panel.addEventListener('keydown', safetyPanelKeydownHandler);
-        }
-
-        function unbindSafetyPanelFocusTrap(panel) {
-            if (!panel || !safetyPanelKeydownHandler) return;
-            panel.removeEventListener('keydown', safetyPanelKeydownHandler);
-            safetyPanelKeydownHandler = null;
-        }
-
-        function focusSafetyPanelPrimaryControl(panel) {
-            const focusables = getSafetyPanelFocusableElements(panel);
-            if (focusables.length) {
-                focusables[0].focus();
-            } else {
-                panel.focus();
-            }
-        }
-
-        function showSafetyPanel() {
-            const panel = document.getElementById('safety-panel');
-            const backdrop = document.getElementById('safety-panel-backdrop');
-            if (!panel || !backdrop) return;
-            safetyPanelLastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-            renderSafetyCard();
-            panel.classList.remove('hidden');
-            backdrop.classList.remove('hidden');
-            panel.setAttribute('aria-hidden', 'false');
-            document.querySelector('.page-shell')?.setAttribute('aria-hidden', 'true');
-            document.body.style.overflow = 'hidden';
-            bindSafetyPanelFocusTrap(panel);
-            setTimeout(() => focusSafetyPanelPrimaryControl(panel), 0);
-        }
-
-        function closeSafetyPanel() {
-            const panel = document.getElementById('safety-panel');
-            const backdrop = document.getElementById('safety-panel-backdrop');
-            if (!panel || !backdrop) return;
-            cancelEmergencySosCountdown({ announce: false });
-            panel.classList.add('hidden');
-            backdrop.classList.add('hidden');
-            panel.setAttribute('aria-hidden', 'true');
-            document.querySelector('.page-shell')?.removeAttribute('aria-hidden');
-            document.body.style.overflow = '';
-            unbindSafetyPanelFocusTrap(panel);
-            if (safetyPanelLastFocusedElement && document.contains(safetyPanelLastFocusedElement)) {
-                safetyPanelLastFocusedElement.focus();
-            }
-        }
-
-        function renderSafetyCard() {
-            const summary = document.getElementById('safety-summary');
-            if (!summary) return;
-            const rows = [];
-            rows.push(`<p><strong>Safety mode:</strong> ${safetyProfile.womenSafetyMode ? 'Women-focused safety shortcuts on' : 'Standard safety shortcuts'}</p>`);
-            rows.push(`<p><strong>Trusted contact:</strong> ${escapeHtml(safetyProfile.trustedContact || 'Not set')}</p>`);
-            rows.push(`<p><strong>Live SMS updates:</strong> ${safetyProfile.liveSmsUpdatesEnabled ? `On (every ${safetyProfile.liveSmsUpdateSeconds}s)` : 'Off'}</p>`);
-            rows.push(`<p><strong>SOS message:</strong> ${escapeHtml((safetyProfile.sosMessageTemplate || '').slice(0, 120) || 'Default message')}</p>`);
-            if (safetyProfile.womenSafetyMode) {
-                rows.push('<p><strong>Quick actions:</strong> Share live location faster and jump to nearby police, hospital, or pharmacy.</p>');
-            }
-            summary.innerHTML = rows.join('');
-
-            const trustedInput = document.getElementById('safety-trusted-contact-input');
-            const messageInput = document.getElementById('safety-sos-message-input');
-            const liveToggle = document.getElementById('safety-live-updates-toggle');
-            const intervalSelect = document.getElementById('safety-live-interval-select');
-            if (trustedInput) trustedInput.value = safetyProfile.trustedContact || '';
-            if (messageInput) messageInput.value = safetyProfile.sosMessageTemplate || '';
-            if (liveToggle) liveToggle.checked = !!safetyProfile.liveSmsUpdatesEnabled;
-            if (intervalSelect) intervalSelect.value = String(safetyProfile.liveSmsUpdateSeconds || 30);
-        }
-
-        function saveSafetySettingsFromPanel() {
-            const trustedInput = document.getElementById('safety-trusted-contact-input');
-            const messageInput = document.getElementById('safety-sos-message-input');
-            const liveToggle = document.getElementById('safety-live-updates-toggle');
-            const intervalSelect = document.getElementById('safety-live-interval-select');
-
-            const trustedContact = String(trustedInput?.value || '').trim();
-            const sosTemplate = String(messageInput?.value || '').trim();
-            const liveEnabled = !!liveToggle?.checked;
-            const seconds = Math.min(120, Math.max(15, parseInt(intervalSelect?.value || '30', 10)));
-
-            safetyProfile.trustedContact = trustedContact;
-            safetyProfile.sosMessageTemplate = sosTemplate || 'Emergency: I need help right now. My live location: {map}';
-            safetyProfile.liveSmsUpdatesEnabled = liveEnabled;
-            safetyProfile.liveSmsUpdateSeconds = seconds;
-            saveSafetyProfile();
-            showTemporaryMessage('Safety settings saved.');
         }
 
         async function geocodeLocationName(name) {
@@ -19596,853 +19222,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             if (announce && hadTrip) {
                 deliverApiReply('trip_stopped', {}, { speak: true });
             }
-        }
-
-        async function shareCurrentLocation() {
-            return shareCurrentLocationWithOptions({ emergency: false, source: 'manual' });
-        }
-
-        function sanitizePhoneForSms(raw) {
-            const value = String(raw || '').trim();
-            if (!value) return '';
-            const cleaned = value.replace(/[^\d+]/g, '');
-            if (!cleaned) return '';
-            if (/^\+?\d{8,15}$/.test(cleaned)) return cleaned;
-            return '';
-        }
-
-        function stopSafetyLiveLocationSharing() {
-            if (safetyLiveShareState.watchId != null && navigator.geolocation) {
-                navigator.geolocation.clearWatch(safetyLiveShareState.watchId);
-            }
-            safetyLiveShareState.active = false;
-            safetyLiveShareState.watchId = null;
-            safetyLiveShareState.lastSentAt = 0;
-            safetyLiveShareState.source = 'manual';
-            safetyLiveShareState.initialDraftDispatched = false;
-            safetyLiveShareState.latestMessage = '';
-        }
-
-        function getSafetySosButton() {
-            return document.getElementById('safety-sos-btn');
-        }
-
-        function setSafetySosButtonState(label, arming = false) {
-            const btn = getSafetySosButton();
-            if (!btn) return;
-            btn.textContent = String(label || 'SOS SMS');
-            btn.classList.toggle('is-arming', !!arming);
-            btn.setAttribute('aria-busy', arming ? 'true' : 'false');
-        }
-
-        function cancelEmergencySosCountdown(options = {}) {
-            if (safetySosCountdownState.timerId) {
-                clearInterval(safetySosCountdownState.timerId);
-            }
-            const hadActive = safetySosCountdownState.active;
-            safetySosCountdownState.active = false;
-            safetySosCountdownState.remainingSeconds = 0;
-            safetySosCountdownState.timerId = null;
-            setSafetySosButtonState('SOS SMS', false);
-            if (hadActive && options.announce) {
-                announceSafetyLiveMessage('SOS countdown cancelled.');
-                showTemporaryMessage('SOS countdown cancelled.');
-            }
-        }
-
-        function getNearbyEtaLabel(miles) {
-            const roadMiles = Math.max(0.1, Number(miles || 0));
-            const speed = getTravelSpeedMph('drive');
-            return Math.max(2, Math.round((roadMiles / speed) * 60));
-        }
-
-        function buildSafetySmsMessage({ lat, lon, mapUrl, emergency = false }) {
-            const template = String(safetyProfile?.sosMessageTemplate || '').trim() || 'Emergency: I need help right now. My live location: {map}';
-            const finalText = template
-                .replace(/\{name\}/gi, String(userName || 'I'))
-                .replace(/\{lat\}/gi, Number(lat).toFixed(6))
-                .replace(/\{lon\}/gi, Number(lon).toFixed(6))
-                .replace(/\{map\}/gi, mapUrl)
-                .replace(/\{time\}/gi, new Date().toLocaleString());
-            if (emergency) return finalText;
-            return `My live location update: ${mapUrl}`;
-        }
-
-        function openSmsDraft(phone, body) {
-            const smsBody = encodeURIComponent(body);
-            const smsLink = `sms:${phone}?body=${smsBody}`;
-            window.location.href = smsLink;
-        }
-
-        function formatPhoneForWhatsApp(raw) {
-            const digits = String(raw || '').replace(/\D/g, '');
-            if (!/^\d{8,15}$/.test(digits)) return '';
-            return digits;
-        }
-
-        function buildWhatsAppDraftUrl(phone, body) {
-            const waPhone = formatPhoneForWhatsApp(phone);
-            if (!waPhone) return '';
-            return `https://wa.me/${waPhone}?text=${encodeURIComponent(String(body || ''))}`;
-        }
-
-        function openWhatsAppDraft(phone, body) {
-            const waUrl = buildWhatsAppDraftUrl(phone, body);
-            if (!waUrl) return false;
-            window.open(waUrl, '_blank', 'noopener,noreferrer');
-            return true;
-        }
-
-        function showWhatsAppFallbackHint(phone, messageText) {
-            const waUrl = buildWhatsAppDraftUrl(phone, messageText);
-            if (!waUrl) return;
-            const chatContainer = document.getElementById('chat-container');
-            if (!chatContainer) return;
-            const card = document.createElement('div');
-            card.className = 'flex justify-start fade-in';
-            card.innerHTML = `
-                <div class="max-w-xl p-3 rounded-xl border border-green-300 bg-green-50 dark:bg-green-900/20 dark:border-green-700">
-                    <p class="text-sm font-semibold text-green-800 dark:text-green-200 mb-2">WhatsApp fallback ready</p>
-                    <div class="flex flex-wrap gap-2">
-                        <a href="${waUrl}" target="_blank" class="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-semibold">Open WhatsApp draft</a>
-                        <button onclick="copyToClipboard(decodeURIComponent('${encodeURIComponent(String(messageText || ''))}'))" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold">Copy message</button>
-                    </div>
-                </div>
-            `;
-            chatContainer.appendChild(card);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
-
-        function maybeSendLiveSafetySmsUpdate(lat, lon, source = 'live') {
-            const trustedPhone = sanitizePhoneForSms(safetyProfile?.trustedContact || '');
-            if (!trustedPhone) return;
-            const now = Date.now();
-            const intervalMs = Math.max(15000, Math.min(120000, Number(safetyProfile?.liveSmsUpdateSeconds || 30) * 1000));
-            if (now - safetyLiveShareState.lastSentAt < intervalMs) return;
-
-            const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`;
-            const shareText = buildSafetySmsMessage({ lat, lon, mapUrl, emergency: true });
-            safetyLiveShareState.latestMessage = shareText;
-            if (!safetyLiveShareState.initialDraftDispatched) {
-                openSmsDraft(trustedPhone, shareText);
-                openWhatsAppDraft(trustedPhone, shareText);
-                safetyLiveShareState.initialDraftDispatched = true;
-                showTemporaryMessage('Emergency draft prepared (SMS + WhatsApp fallback).');
-            } else {
-                showTemporaryMessage('Live SOS location refreshed. Tap SOS SMS to open a new draft.');
-            }
-            safetyLiveShareState.lastSentAt = now;
-        }
-
-        function startSafetyLiveLocationSharing(source = 'sos_button_sms') {
-            if (!navigator.geolocation || !safetyProfile?.liveSmsUpdatesEnabled) return;
-            stopSafetyLiveLocationSharing();
-            safetyLiveShareState.active = true;
-            safetyLiveShareState.source = source;
-            // Initial emergency draft is already prepared by the SOS action.
-            safetyLiveShareState.initialDraftDispatched = true;
-            safetyLiveShareState.lastSentAt = Date.now();
-            safetyLiveShareState.watchId = navigator.geolocation.watchPosition(
-                (position) => {
-                    const lat = position.coords.latitude;
-                    const lon = position.coords.longitude;
-                    maybeSendLiveSafetySmsUpdate(lat, lon, source);
-                },
-                () => {},
-                { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 }
-            );
-        }
-
-        async function triggerEmergencySafetyFlow(sourceText = '') {
-            const origin = String(sourceText || '').trim();
-            showSafetyPanel();
-            await shareCurrentLocationWithOptions({ emergency: true, source: origin || 'voice_command' });
-        }
-
-        async function executeEmergencySmsNow() {
-            const trustedPhone = sanitizePhoneForSms(safetyProfile?.trustedContact || '');
-            if (!trustedPhone) {
-                await deliverApiReply('safety_trusted_contact_phone_hint', {
-                    example: '+1 5551234567'
-                }, {
-                    fallbackText: 'Trusted contact phone is not set. Say: "trusted contact is +1 5551234567" and try SOS SMS again.'
-                });
-                return;
-            }
-            await shareCurrentLocationWithOptions({ emergency: true, source: 'sos_button_sms' });
-            if (safetyProfile?.liveSmsUpdatesEnabled) {
-                startSafetyLiveLocationSharing('sos_button_sms');
-            }
-        }
-
-        function startEmergencySosCountdown() {
-            cancelEmergencySosCountdown({ announce: false });
-            safetySosCountdownState.active = true;
-            safetySosCountdownState.remainingSeconds = 2;
-            setSafetySosButtonState('Cancel SOS (2)', true);
-            announceSafetyLiveMessage('SOS will trigger in 2 seconds. Tap SOS again to cancel.');
-            showTemporaryMessage('SOS will trigger in 2 seconds. Tap SOS again to cancel.');
-
-            safetySosCountdownState.timerId = setInterval(async () => {
-                safetySosCountdownState.remainingSeconds -= 1;
-                if (safetySosCountdownState.remainingSeconds > 0) {
-                    setSafetySosButtonState(`Cancel SOS (${safetySosCountdownState.remainingSeconds})`, true);
-                    announceSafetyLiveMessage(`SOS will trigger in ${safetySosCountdownState.remainingSeconds} second.`);
-                    return;
-                }
-                cancelEmergencySosCountdown({ announce: false });
-                await executeEmergencySmsNow();
-            }, 1000);
-        }
-
-        async function triggerEmergencySmsNow() {
-            showSafetyPanel();
-            if (safetySosCountdownState.active) {
-                cancelEmergencySosCountdown({ announce: true });
-                return;
-            }
-            startEmergencySosCountdown();
-        }
-
-        async function shareCurrentLocationWithOptions(options = {}) {
-            const isEmergency = !!options.emergency;
-            const trustedPhone = sanitizePhoneForSms(safetyProfile?.trustedContact || '');
-            try {
-                const position = await getCurrentPositionAsync();
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lon}`)}`;
-                const shareText = isEmergency
-                    ? buildSafetySmsMessage({ lat, lon, mapUrl: mapsUrl, emergency: true })
-                    : `My current location: ${mapsUrl}`;
-
-                window.open(mapsUrl, '_blank', 'noopener,noreferrer');
-
-                if (isEmergency && trustedPhone) {
-                    openSmsDraft(trustedPhone, shareText);
-                    const openedWhatsApp = openWhatsAppDraft(trustedPhone, shareText);
-                    if (!openedWhatsApp) {
-                        showWhatsAppFallbackHint(trustedPhone, shareText);
-                    }
-                    announceSafetyLiveMessage('SOS drafts prepared for SMS and WhatsApp.');
-                    showTemporaryMessage('Emergency draft prepared (SMS + WhatsApp fallback).');
-                } else if (navigator.share) {
-                    await navigator.share({
-                        title: isEmergency ? 'Emergency location' : 'My current location',
-                        text: shareText,
-                        url: mapsUrl
-                    });
-                    showTemporaryMessage(isEmergency ? 'Emergency location shared.' : 'Location shared successfully.');
-                } else {
-                    copyToClipboard(shareText);
-                    if (isEmergency && !trustedPhone) {
-                        showTemporaryMessage('Trusted contact phone not set. Location copied; paste into SMS/WhatsApp now.');
-                    }
-                }
-            } catch (error) {
-                if (isEmergency) {
-                    announceSafetyLiveMessage('SOS location share failed. Please try again.');
-                }
-                await deliverApiReply('gps_access_error', {
-                    feature: 'location_sharing'
-                });
-            }
-        }
-
-        function formatNearbyCategoryLabel(query) {
-            const q = String(query || '').trim().toLowerCase();
-            if (q === 'hospital') return 'Nearby Hospitals';
-            if (q === 'police station') return 'Nearby Police Stations';
-            if (q === 'pharmacy') return 'Nearby Pharmacies';
-            if (q === 'atm') return 'Nearby ATMs';
-            return `Nearby ${String(query || '').trim()}`;
-        }
-
-        function normalizeNearbySearchText(value) {
-            return String(value || '')
-                .toLowerCase()
-                .replace(/[^a-z0-9\s]/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim();
-        }
-
-        function extractNearbyLocationTokens(locationContext = null) {
-            if (!locationContext) return [];
-            const parts = [
-                locationContext.city || '',
-                locationContext.state || '',
-                locationContext.country || '',
-                locationContext.label || ''
-            ]
-                .map(normalizeNearbySearchText)
-                .filter(Boolean);
-            const blocked = new Set(['road', 'street', 'district', 'state', 'country', 'india']);
-            return Array.from(new Set(
-                parts
-                    .flatMap(part => part.split(' '))
-                    .map(token => token.trim())
-                    .filter(token => token.length >= 3 && !blocked.has(token))
-            )).slice(0, 8);
-        }
-
-        function isNearbyResultLocationMatch(result, locationTokens = [], locationContext = null) {
-            if (!locationTokens.length) return true;
-            const text = normalizeNearbySearchText([
-                String(result?.title || ''),
-                String(result?.description || ''),
-                String(result?.url || '')
-            ].join(' '));
-            const overlap = locationTokens.filter(token => text.includes(token)).length;
-            if (overlap >= 1) return true;
-
-            // Hard reject obvious foreign drift when user is in India.
-            const country = String(locationContext?.country || '').toLowerCase();
-            if (country.includes('india') && /\b(united states|usa|maryland|florida|baltimore|jacksonville)\b/.test(text)) {
-                return false;
-            }
-            return false;
-        }
-
-        function scoreNearbyResultQuality(result, category = '') {
-            const title = String(result?.title || '').trim();
-            const desc = String(result?.description || '').trim();
-            const url = String(result?.url || '').trim();
-            const text = normalizeNearbySearchText(`${title} ${desc} ${url}`);
-            const domain = getDomainFromUrl(url);
-
-            let score = 0;
-            if (title) score += 2;
-            if (desc) score += 1;
-
-            // Prefer place-like pages and known local discovery sources.
-            if (/google\.com/.test(domain) && /\/maps/.test(url)) score += 5;
-            if (/practo\.com|lybrate\.com|justdial\.com|sulekha\.com|zomato\.com/.test(domain)) score += 3;
-
-            // De-prioritize listicles/directories/noisy aggregations.
-            if (/\bthe best \d+\b|\btop \d+\b|\bnear [a-z]{2}\s+\d{3,6}\b/.test(text)) score -= 5;
-            if (/\byelp\b|\bhealthgrades\b|\btripadvisor\b/.test(text)) score -= 4;
-            if (/\bdistrict\b|\bgovernment\b|\bdirectory\b|\bofficial portal\b/.test(text)) score -= 3;
-
-            // Category alignment.
-            const q = String(category || '').toLowerCase();
-            if (q === 'hospital' && /\b(hospital|clinic|medical center|healthcare)\b/.test(text)) score += 3;
-            if (q === 'police station' && /\b(police|station|law enforcement)\b/.test(text)) score += 3;
-            if (q === 'pharmacy' && /\b(pharmacy|chemist|medical store|drugstore)\b/.test(text)) score += 3;
-            if (q === 'atm' && /\b(atm|cash|bank)\b/.test(text)) score += 3;
-
-            // Useful contact metadata in snippet.
-            if (/\+?\d[\d\s()-]{7,}/.test(`${title} ${desc}`)) score += 1;
-
-            return score;
-        }
-
-        function rankNearbyResultsForDisplay(results, category = '', limit = 4) {
-            const pool = Array.isArray(results) ? results.filter(Boolean) : [];
-            return pool
-                .map(item => ({ item, score: scoreNearbyResultQuality(item, category) }))
-                .sort((a, b) => b.score - a.score)
-                .slice(0, Math.max(1, limit))
-                .map(entry => entry.item);
-        }
-
-        function summarizeNearbySnippet(value, maxLen = 150) {
-            const raw = String(value || '').replace(/\s+/g, ' ').trim();
-            if (!raw) return '';
-            const cleaned = raw
-                .replace(/^the best \d+[^-]*-\s*/i, '')
-                .replace(/^\s*nearby\s+/i, '');
-            if (cleaned.length <= maxLen) return cleaned;
-            return `${cleaned.slice(0, maxLen - 1).trim()}...`;
-        }
-
-        function buildNearbyDirectionsUrl(result, fallbackMapsUrl, locationContext = null, lat = null, lon = null) {
-            const safeFallback = String(fallbackMapsUrl || '').trim() || 'https://www.google.com/maps';
-            const rawTitle = String(result?.title || '').replace(/[\[\]]/g, '').trim();
-            const destination = [
-                rawTitle,
-                String(locationContext?.city || '').trim(),
-                String(locationContext?.state || '').trim(),
-                String(locationContext?.country || '').trim()
-            ].filter(Boolean).join(', ');
-            if (!destination) return safeFallback;
-            const params = new URLSearchParams({ api: '1', destination });
-            if (Number.isFinite(lat) && Number.isFinite(lon)) {
-                params.set('origin', `${lat},${lon}`);
-            }
-            return `https://www.google.com/maps/dir/?${params.toString()}`;
-        }
-
-        function sanitizeNearbyPhone(value) {
-            const raw = String(value || '').trim();
-            if (!raw) return '';
-            const digitsOnly = raw.replace(/\D/g, '');
-            if (digitsOnly.length < 8 || digitsOnly.length > 15) return '';
-            return raw.startsWith('+') ? `+${digitsOnly}` : digitsOnly;
-        }
-
-        function extractNearbyPhoneNumber(result) {
-            const text = `${String(result?.title || '')} ${String(result?.description || '')}`;
-            const matches = text.match(/(?:\+?\d[\d\s().-]{7,}\d)/g) || [];
-            for (const candidate of matches) {
-                const normalized = sanitizeNearbyPhone(candidate);
-                if (normalized) return normalized;
-            }
-            return '';
-        }
-
-        function formatNearbyDistanceMeta(distanceMeta) {
-            if (!distanceMeta || !Number.isFinite(distanceMeta.distanceKm)) return '';
-            const km = Number(distanceMeta.distanceKm).toFixed(1);
-            const eta = Number.isFinite(distanceMeta.etaMinutes) ? ` - ~${Math.round(distanceMeta.etaMinutes)} min` : '';
-            return `${km} km away${eta}`;
-        }
-
-        async function enrichNearbyResultsWithMeta(results = [], locationContext = null, lat = null, lon = null) {
-            const source = Array.isArray(results) ? results.filter(Boolean) : [];
-            if (!source.length) return [];
-
-            const canMeasure = Number.isFinite(lat) && Number.isFinite(lon);
-            const locationLabel = [
-                String(locationContext?.city || '').trim(),
-                String(locationContext?.state || '').trim(),
-                String(locationContext?.country || '').trim()
-            ].filter(Boolean).join(', ');
-            const geocodeCache = new Map();
-
-            async function resolveCandidate(query) {
-                const key = String(query || '').toLowerCase().trim();
-                if (!key) return null;
-                if (geocodeCache.has(key)) return geocodeCache.get(key);
-                const candidates = await geocodeLocationCandidates(query, 1);
-                const best = Array.isArray(candidates) ? candidates[0] : null;
-                const resolved = (best && Number.isFinite(best.lat) && Number.isFinite(best.lon)) ? best : null;
-                geocodeCache.set(key, resolved);
-                return resolved;
-            }
-
-            return Promise.all(source.map(async (item) => {
-                const enriched = { ...item };
-                const phone = extractNearbyPhoneNumber(item);
-                if (phone) {
-                    enriched.phone = phone;
-                    enriched.callUrl = `tel:${phone}`;
-                }
-
-                if (!canMeasure) return enriched;
-
-                const title = String(item?.title || '').replace(/[\[\]]/g, '').trim();
-                const queryCandidates = [
-                    [title, locationLabel].filter(Boolean).join(', '),
-                    title
-                ].filter(Boolean);
-
-                let place = null;
-                for (const candidateQuery of queryCandidates) {
-                    place = await resolveCandidate(candidateQuery);
-                    if (place) break;
-                }
-                if (!place) return enriched;
-
-                const straightLineMiles = haversineMiles(lat, lon, Number(place.lat), Number(place.lon));
-                if (!Number.isFinite(straightLineMiles)) return enriched;
-                const roadMiles = estimateRoadMiles(straightLineMiles);
-                const distanceKm = milesToKm(roadMiles);
-                const etaMinutes = getNearbyEtaLabel(roadMiles);
-                enriched.distanceMeta = {
-                    distanceKm,
-                    distanceMiles: roadMiles,
-                    etaMinutes
-                };
-                return enriched;
-            }));
-        }
-
-        function buildNearbyResultsSummary(label, results, mapsUrl, webUrl, usedLocation = false, locationLabel = '', category = '') {
-            const top = rankNearbyResultsForDisplay(results, category, 4);
-            const heading = `${label}${usedLocation ? ' (using your current location)' : ''}`;
-            const locationLine = usedLocation && locationLabel ? `Location: ${locationLabel}\n` : '';
-            if (!top.length) {
-                return `${heading}\n\n${locationLine}\nI could not fetch reliable local listings right now.\n\nQuick actions:\n1. [Open nearby map](${mapsUrl})\n2. [Open nearby web results](${webUrl})`;
-            }
-            const lines = top.map((item, idx) => {
-                const title = (String(item?.title || '').trim() || `Result ${idx + 1}`).replace(/[\[\]]/g, '');
-                const url = String(item?.url || '').trim() || webUrl;
-                const snippet = summarizeNearbySnippet(item?.description || '');
-                return `${idx + 1}. [${title}](${url})${snippet ? `\n   ${snippet}` : ''}`;
-            });
-            lines.push('', 'Quick actions:', `1. [Open nearby map](${mapsUrl})`, `2. [Open nearby web results](${webUrl})`);
-            return `${heading}\n\n${locationLine}\nTop local matches:\n${lines.join('\n')}`.trim();
-        }
-
-        function buildNearbyResultsCardsHtml(label, results, mapsUrl, webUrl, usedLocation = false, locationLabel = '', category = '', locationContext = null, lat = null, lon = null) {
-            const top = rankNearbyResultsForDisplay(results, category, 4);
-            const heading = `${label}${usedLocation ? ' (using your current location)' : ''}`;
-            const locationLine = usedLocation && locationLabel
-                ? `<p class="nearby-results-location">Location: ${escapeHtml(locationLabel)}</p>`
-                : '';
-
-            if (!top.length) {
-                return `
-                    <div class="nearby-results-wrap">
-                        <div class="nearby-results-header">
-                            <p class="nearby-results-title">${escapeHtml(heading)}</p>
-                            ${locationLine}
-                        </div>
-                        <div class="nearby-results-empty">
-                            <p class="nearby-results-empty-text">I could not fetch reliable local listings right now.</p>
-                            <div class="nearby-actions-row">
-                                <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-primary">Open nearby map</a>
-                                <a href="${escapeHtml(webUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Open nearby web results</a>
-                            </div>
-                        </div>
-                    </div>
-                `.trim();
-            }
-
-            const cards = top.map((item, idx) => {
-                const title = (String(item?.title || '').trim() || `Result ${idx + 1}`).replace(/[\[\]]/g, '');
-                const detailsUrl = String(item?.url || '').trim() || webUrl;
-                const directionsUrl = buildNearbyDirectionsUrl(item, mapsUrl, locationContext, lat, lon);
-                const snippet = summarizeNearbySnippet(item?.description || '', 150);
-                const metaLine = formatNearbyDistanceMeta(item?.distanceMeta);
-                const phone = sanitizeNearbyPhone(item?.phone || '');
-                const callUrl = phone ? `tel:${phone}` : '';
-                return `
-                    <div class="nearby-result-card">
-                        <p class="nearby-result-title">${idx + 1}. ${escapeHtml(title)}</p>
-                        ${metaLine ? `<p class="nearby-result-meta">${escapeHtml(metaLine)}</p>` : ''}
-                        ${snippet ? `<p class="nearby-result-snippet">${escapeHtml(snippet)}</p>` : ''}
-                        <div class="nearby-actions-row">
-                            <a href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-primary">Directions</a>
-                            <a href="${escapeHtml(detailsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Details</a>
-                            ${callUrl ? `<a href="${escapeHtml(callUrl)}" class="nearby-action-btn nearby-action-btn-call">Call</a>` : ''}
-                        </div>
-                    </div>
-                `.trim();
-            }).join('');
-
-            return `
-                <div class="nearby-results-wrap">
-                    <div class="nearby-results-header">
-                        <p class="nearby-results-title">${escapeHtml(heading)}</p>
-                        ${locationLine}
-                    </div>
-                    <div class="nearby-result-grid">
-                        ${cards}
-                    </div>
-                    <div class="nearby-actions-row nearby-actions-footer">
-                        <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Open full nearby map</a>
-                        <a href="${escapeHtml(webUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Open nearby web results</a>
-                    </div>
-                </div>
-            `.trim();
-        }
-
-        function buildNearbyMapEmbedHtml(label, mapsQuery, mapsUrl) {
-            const safeQuery = String(mapsQuery || '').trim() || 'nearby places';
-            const safeMapsUrl = String(mapsUrl || '').trim() || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(safeQuery)}`;
-            const embedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(safeQuery)}&z=15&output=embed`;
-            return `
-                <div class="nearby-map-only-wrap">
-                    <div class="nearby-map-frame map-container">
-                        <iframe
-                            src="${escapeHtml(embedUrl)}"
-                            width="100%"
-                            height="100%"
-                            style="border:0; display:block;"
-                            loading="lazy"
-                            referrerpolicy="no-referrer-when-downgrade"
-                            allowfullscreen>
-                        </iframe>
-                    </div>
-                    <div class="nearby-actions-row nearby-actions-footer">
-                        <a href="${escapeHtml(safeMapsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-primary">Open full map</a>
-                    </div>
-                </div>
-            `.trim();
-        }
-
-        function buildNearbyEssentialsCardsHtml(sections = [], usedLocation = false, locationLabel = '') {
-            const heading = `Nearby essentials${usedLocation ? ' (using your current location)' : ''}`;
-            const locationLine = usedLocation && locationLabel
-                ? `<p class="nearby-results-location">Location: ${escapeHtml(locationLabel)}</p>`
-                : '';
-
-            const sectionCards = (Array.isArray(sections) ? sections : []).map(section => {
-                const sectionLabel = String(section?.label || '').trim() || 'Nearby';
-                const mapsUrl = String(section?.mapsUrl || '').trim();
-                const webUrl = String(section?.webUrl || '').trim();
-                const items = Array.isArray(section?.results) ? section.results : [];
-                const cards = items.length
-                    ? items.map((item, idx) => {
-                        const title = (String(item?.title || '').trim() || `Result ${idx + 1}`).replace(/[\[\]]/g, '');
-                        const snippet = summarizeNearbySnippet(item?.description || '', 120);
-                        const directionsUrl = String(item?.directionsUrl || mapsUrl).trim() || mapsUrl;
-                        const detailsUrl = String(item?.url || webUrl).trim() || webUrl;
-                        const metaLine = formatNearbyDistanceMeta(item?.distanceMeta);
-                        const phone = sanitizeNearbyPhone(item?.phone || '');
-                        const callUrl = phone ? `tel:${phone}` : '';
-                        return `
-                            <div class="nearby-result-card">
-                                <p class="nearby-result-title">${idx + 1}. ${escapeHtml(title)}</p>
-                                ${metaLine ? `<p class="nearby-result-meta">${escapeHtml(metaLine)}</p>` : ''}
-                                ${snippet ? `<p class="nearby-result-snippet">${escapeHtml(snippet)}</p>` : ''}
-                                <div class="nearby-actions-row">
-                                    <a href="${escapeHtml(directionsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-primary">Directions</a>
-                                    <a href="${escapeHtml(detailsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Details</a>
-                                    ${callUrl ? `<a href="${escapeHtml(callUrl)}" class="nearby-action-btn nearby-action-btn-call">Call</a>` : ''}
-                                </div>
-                            </div>
-                        `.trim();
-                    }).join('')
-                    : `
-                        <div class="nearby-results-empty">
-                            <p class="nearby-results-empty-text">No reliable local listing found right now.</p>
-                        </div>
-                    `.trim();
-
-                return `
-                    <div class="nearby-section-card">
-                        <p class="nearby-section-title">${escapeHtml(sectionLabel)}</p>
-                        <div class="nearby-result-grid">${cards}</div>
-                        <div class="nearby-actions-row nearby-actions-footer">
-                            <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Open map</a>
-                            <a href="${escapeHtml(webUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-secondary">Open web results</a>
-                        </div>
-                    </div>
-                `.trim();
-            }).join('');
-
-            return `
-                <div class="nearby-results-wrap">
-                    <div class="nearby-results-header">
-                        <p class="nearby-results-title">${escapeHtml(heading)}</p>
-                        ${locationLine}
-                    </div>
-                    <div class="nearby-section-grid">
-                        ${sectionCards}
-                    </div>
-                </div>
-            `.trim();
-        }
-
-        function buildNearbyEssentialsMapHtml(sections = []) {
-            const maps = (Array.isArray(sections) ? sections : [])
-                .map(section => {
-                    const label = String(section?.label || '').trim() || 'Nearby';
-                    const mapsQuery = String(section?.mapsQuery || '').trim() || label;
-                    const mapsUrl = String(section?.mapsUrl || '').trim() || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
-                    const embedUrl = `https://maps.google.com/maps?q=${encodeURIComponent(mapsQuery)}&z=15&output=embed`;
-                    return `
-                        <div class="nearby-map-section">
-                            <p class="nearby-section-title">${escapeHtml(label)}</p>
-                            <div class="nearby-map-frame map-container">
-                                <iframe
-                                    src="${escapeHtml(embedUrl)}"
-                                    width="100%"
-                                    height="100%"
-                                    style="border:0; display:block;"
-                                    loading="lazy"
-                                    referrerpolicy="no-referrer-when-downgrade"
-                                    allowfullscreen>
-                                </iframe>
-                            </div>
-                            <div class="nearby-actions-row nearby-actions-footer">
-                                <a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener noreferrer" class="nearby-action-btn nearby-action-btn-primary">Open full map</a>
-                            </div>
-                        </div>
-                    `.trim();
-                })
-                .join('');
-
-            return `<div class="nearby-map-only-wrap nearby-map-stack">${maps}</div>`.trim();
-        }
-
-        async function openNearbySearch(query) {
-            const category = String(query || 'hospital').trim() || 'hospital';
-            const label = formatNearbyCategoryLabel(category);
-            showThinkingIndicator(`Finding ${label.toLowerCase()}...`);
-
-            let lat = null;
-            let lon = null;
-            let usedLocation = false;
-            let locationContext = null;
-            try {
-                const position = await getCurrentPositionAsync();
-                lat = position.coords.latitude;
-                lon = position.coords.longitude;
-                usedLocation = Number.isFinite(lat) && Number.isFinite(lon);
-                if (usedLocation) {
-                    try {
-                        const reverseResponse = await fetch(
-                            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
-                            { headers: { 'User-Agent': 'JARVISVoiceAssistant/1.0' } }
-                        );
-                        if (reverseResponse.ok) {
-                            const reverseData = await reverseResponse.json();
-                            const addr = reverseData?.address || {};
-                            const city = addr.city || addr.town || addr.municipality || addr.county || addr.village || addr.hamlet || '';
-                            const state = addr.state || '';
-                            const country = addr.country || '';
-                            const labelParts = [city, state, country].filter(Boolean);
-                            locationContext = {
-                                city,
-                                state,
-                                country,
-                                label: labelParts.join(', ').trim() || String(reverseData?.display_name || '').trim()
-                            };
-                        }
-                    } catch (_) {}
-                }
-            } catch (_) {
-                usedLocation = false;
-            }
-
-            const mapsQuery = usedLocation ? `${category} near ${lat},${lon}` : `${category} near me`;
-            const locationSuffix = usedLocation
-                ? ` near ${locationContext?.label || `${lat},${lon}`}`
-                : ' near me';
-            const searchQuery = `${category}${locationSuffix}`;
-            const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
-            const webUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
-
-            const mapHtml = buildNearbyMapEmbedHtml(label, mapsQuery, mapsUrl);
-            addVerifiedAssistantMessage(mapHtml, 'Nearby map');
-            speak(`Opening nearby map for ${category}.`);
-            saveToHistory(`nearby ${category}`, `${label}\nMap query: ${mapsQuery}\n${mapsUrl}`);
-            hideThinkingIndicator();
-            return;
-
-            try {
-                const response = await fetch('/api/search', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: searchQuery, maxResults: 8 })
-                });
-                if (!response.ok) throw new Error('nearby_search_failed');
-                const data = await response.json();
-                const rawResults = Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
-                const locationTokens = extractNearbyLocationTokens(locationContext);
-                const results = usedLocation
-                    ? (locationTokens.length
-                        ? rawResults.filter(item => isNearbyResultLocationMatch(item, locationTokens, locationContext))
-                        : [])
-                    : rawResults;
-                const enrichedResults = await enrichNearbyResultsWithMeta(results, locationContext, lat, lon);
-                const message = buildNearbyResultsCardsHtml(
-                    label,
-                    enrichedResults,
-                    mapsUrl,
-                    webUrl,
-                    usedLocation,
-                    locationContext?.label || '',
-                    category,
-                    locationContext,
-                    lat,
-                    lon
-                );
-                const summary = buildNearbyResultsSummary(
-                    label,
-                    enrichedResults,
-                    mapsUrl,
-                    webUrl,
-                    usedLocation,
-                    locationContext?.label || '',
-                    category
-                );
-                addVerifiedAssistantMessage(message, 'Nearby search');
-                if (enrichedResults.length) {
-                    speak(`I found ${label.toLowerCase()}. Check the links in chat.`);
-                } else {
-                    speak(`I could not verify local listings, but I added location-anchored map links for ${category}.`);
-                }
-                saveToHistory(`nearby ${category}`, summary);
-            } catch (_) {
-                const fallback = buildNearbyResultsCardsHtml(
-                    label,
-                    [],
-                    mapsUrl,
-                    webUrl,
-                    usedLocation,
-                    locationContext?.label || '',
-                    category,
-                    locationContext,
-                    lat,
-                    lon
-                );
-                const summary = buildNearbyResultsSummary(
-                    label,
-                    [],
-                    mapsUrl,
-                    webUrl,
-                    usedLocation,
-                    locationContext?.label || '',
-                    category
-                );
-                addVerifiedAssistantMessage(fallback, 'Nearby search');
-                speak(`I could not fetch direct listings, but I added nearby search links for ${category}.`);
-                saveToHistory(`nearby ${category}`, summary);
-            } finally {
-                hideThinkingIndicator();
-            }
-        }
-
-        async function openNearbyEssentialsSearch() {
-            const categories = ['police station', 'pharmacy', 'atm'];
-            showThinkingIndicator('Finding nearby essentials...');
-
-            let lat = null;
-            let lon = null;
-            let usedLocation = false;
-            let locationContext = null;
-            try {
-                const position = await getCurrentPositionAsync();
-                lat = position.coords.latitude;
-                lon = position.coords.longitude;
-                usedLocation = Number.isFinite(lat) && Number.isFinite(lon);
-                if (usedLocation) {
-                    try {
-                        const reverseResponse = await fetch(
-                            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
-                            { headers: { 'User-Agent': 'JARVISVoiceAssistant/1.0' } }
-                        );
-                        if (reverseResponse.ok) {
-                            const reverseData = await reverseResponse.json();
-                            const addr = reverseData?.address || {};
-                            const city = addr.city || addr.town || addr.municipality || addr.county || addr.village || addr.hamlet || '';
-                            const state = addr.state || '';
-                            const country = addr.country || '';
-                            const labelParts = [city, state, country].filter(Boolean);
-                            locationContext = {
-                                city,
-                                state,
-                                country,
-                                label: labelParts.join(', ').trim() || String(reverseData?.display_name || '').trim()
-                            };
-                        }
-                    } catch (_) {}
-                }
-            } catch (_) {
-                usedLocation = false;
-            }
-
-            const sectionMaps = categories.map(category => {
-                const mapsQuery = usedLocation ? `${category} near ${lat},${lon}` : `${category} near me`;
-                return {
-                    category,
-                    label: formatNearbyCategoryLabel(category),
-                    mapsQuery,
-                    mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`
-                };
-            });
-            const summary = sectionMaps
-                .map(section => `${section.label}\nMap query: ${section.mapsQuery}\n${section.mapsUrl}`)
-                .join('\n\n');
-            const cardsHtml = buildNearbyEssentialsMapHtml(sectionMaps);
-            addVerifiedAssistantMessage(cardsHtml, 'Nearby map');
-            speak('Opening nearby maps for police, pharmacy, and ATM.');
-            saveToHistory('nearby essentials', summary);
-            hideThinkingIndicator();
         }
 
         function isLikelyPersonalName(value) {
@@ -21408,7 +20187,7 @@ function normalizeItineraryTextForReadability(rawText) {
 }
 
 function normalizeAssistantTextStyle(text) {
-    return String(text || '').replace(/[—–]/g, '-');
+    return String(text || '').replace(/[â€”â€“]/g, '-');
 }
 
 function autoBulletizeProcedureText(rawText) {
@@ -21901,7 +20680,7 @@ function startARFindSession(thing, location) {
             const overlay = document.getElementById('ar-overlay');
             overlay.innerHTML = `
                 <div style="position:absolute; top:10%; left:50%; transform:translateX(-50%); width:90%; background:rgba(0,0,0,0.8); color:#fff; padding:20px; border-radius:16px; border:2px solid #8b5cf6; text-align:center; font-family:sans-serif;">
-                    <div style="font-size:24px; margin-bottom:10px;">🔍 Locating Item</div>
+                    <div style="font-size:24px; margin-bottom:10px;">ðŸ” Locating Item</div>
                     <div style="font-size:18px; margin-bottom:20px;">Your <b>${thing}</b> is near <b>${location}</b></div>
                     <div style="font-size:14px; opacity:0.8; margin-bottom:20px;">Look around your physical space.</div>
                     <button onclick="endARSession()" style="padding:10px 24px; font-size:16px; background:#ef4444; color:white; border:none; border-radius:8px; font-weight:bold;">Close AR Lens</button>
@@ -22019,7 +20798,7 @@ function insertFoodStops(plan){
     return updated;
 }
 
-/* -------- Safety check to avoid hallucinated places -------- */
+/* -------- Place validation check to avoid hallucinated listings -------- */
 function validatePlaces(aiText, allowedPlaces){
     if(!aiText) return false;
 
