@@ -2,6 +2,7 @@
   import marketsHandler from './markets.js';
   import speechHandler from './speech.js';
   import visionHandler from './vision.js';
+  import searchHandler from './search.js';
 
   // Unified API Handler to bypass Vercel's Serverless Function limits
   export default async function handler(req, res) {
@@ -24,10 +25,7 @@
       } else if (path.includes('/markets')) {
         return await marketsHandler(req, res);
       } else if (path.includes('/search')) {
-        return res.status(410).json({
-          success: false,
-          error: 'Live web search has been retired in this focused build.'
-        });
+        return await searchHandler(req, res);
       } else if (path.includes('/speech')) {
         return await speechHandler(req, res);
       } else if (path.includes('/vision')) {
