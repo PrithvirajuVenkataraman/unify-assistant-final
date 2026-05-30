@@ -180,6 +180,41 @@ body.dark {
     -webkit-overflow-scrolling: touch;
 }
 
+.chat-scroll-jump {
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--input-bar-safe-height) + 18px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 8;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 13px;
+    border-radius: 999px;
+    border: 1px solid var(--ui-border);
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    font-size: 12px;
+    font-weight: 800;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+}
+
+.chat-scroll-jump.hidden {
+    display: none !important;
+}
+
+.chat-scroll-jump-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--ui-primary);
+    opacity: 0;
+}
+
+.chat-scroll-jump.has-unread .chat-scroll-jump-dot {
+    opacity: 1;
+}
+
 #input-bar-container {
     position: fixed !important;
     left: 0;
@@ -993,6 +1028,7 @@ body.dark .footer-action-btn-primary:hover {
 }
 
 .continuous-vision-preview.is-minimized .continuous-vision-video,
+.continuous-vision-preview.is-minimized .continuous-vision-zoom-controls,
 .continuous-vision-preview.is-minimized .continuous-vision-hint {
     display: none !important;
 }
@@ -1002,6 +1038,42 @@ body.dark .footer-action-btn-primary:hover {
     aspect-ratio: 4 / 3;
     object-fit: cover;
     background: #000;
+}
+
+.camera-zoom-controls,
+.continuous-vision-zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: rgba(15, 23, 42, 0.94);
+    border-top: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.camera-zoom-btn,
+.camera-zoom-reset,
+.continuous-vision-zoom-btn,
+.continuous-vision-zoom-reset {
+    min-width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.5);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.camera-zoom-reset,
+.continuous-vision-zoom-reset {
+    padding: 0 10px;
+}
+
+.camera-zoom-slider,
+.continuous-vision-zoom-slider {
+    flex: 1 1 auto;
+    min-width: 80px;
+    accent-color: var(--ui-primary);
 }
 
 .continuous-vision-hint {
