@@ -299,6 +299,7 @@ async function runModelWithFallback(finalPrompt, lengthPolicy = {}) {
     const geminiConfiguredModel = String(process.env.GEMINI_MODEL || '').trim();
     const geminiCandidates = [
         geminiConfiguredModel,
+        'gemini-3.5-flash',
         'gemini-2.5-flash',
         'gemini-2.5-flash-lite',
         'gemini-2.0-flash'
