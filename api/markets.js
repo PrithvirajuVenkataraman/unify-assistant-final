@@ -1,5 +1,11 @@
 export const config = { maxDuration: 60 };
 import { applyApiSecurity } from './security.js';
+import {
+    extractSearchTopic,
+    getDomainFromUrl,
+    isTrustedLiveSource,
+    runVerifiedWebSearch
+} from './search.js';
 
 export default async function handler(req, res) {
     try {
@@ -12,12 +18,9 @@ export default async function handler(req, res) {
         if (guard.handled) return;
 
         const mode = resolveMode(req.body);
-        if (mode === 'news' || mode === 'exchange' || mode === 'markets') {
-            return res.status(410).json({
-                success: false,
-                error: 'Live news, finance, and market lookup have been retired in this focused build.'
-            });
-        }
+        if (mode === 'news') return await handleNewsLookup(req, res);
+        if (mode === 'exchange') return await handleExchangeLookup(req, res);
+        if (mode === 'markets') return await handleMarketLookup(req, res);
         if (mode === 'budget_plan') {
             return await handleBudgetPlanLookup(req, res);
         }
