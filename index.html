@@ -8636,7 +8636,9 @@ async function fetchLiveSearchJson(query, options = {}) {
         body: JSON.stringify({
             query,
             maxResults: options.maxResults || 8,
-            answer: Boolean(options.answer)
+            answer: Boolean(options.answer),
+            domain: options.domain || '',
+            factType: options.factType || ''
         })
     });
     const data = await parseJsonResponseSafely(response);
@@ -8647,6 +8649,39 @@ async function fetchLiveSearchJson(query, options = {}) {
         throw error;
     }
     return data;
+}
+
+async function fetchCurrentFactJson(query, options = {}) {
+    const response = await fetch('/api/current-facts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: options.signal,
+        body: JSON.stringify({ query, debug: Boolean(options.debug) })
+    });
+    const data = await parseJsonResponseSafely(response);
+    if (!response.ok || data?.success === false) {
+        const error = new Error(String(data?.error || 'Current fact resolver failed.'));
+        error.status = response.status;
+        error.data = data;
+        throw error;
+    }
+    return data;
+}
+
+function formatCurrentFactAnswer(data = {}) {
+    const answer = String(data?.answer || '').trim();
+    if (!answer) return '';
+    const sources = Array.isArray(data?.sources) ? data.sources.filter(Boolean) : [];
+    const sourceLines = sources
+        .slice(0, 5)
+        .map((item, i) => `${i + 1}. [${item.title || getDomainFromUrl(item.url || '') || 'Source'}](${item.url})`)
+        .join('\n');
+    const meta = [
+        `As of: ${data?.asOf ? new Date(data.asOf).toLocaleString() : formatAsOfTimestamp()}`,
+        data?.provider ? `Provider: ${data.provider}` : '',
+        data?.confidence ? `Confidence: ${data.confidence}` : ''
+    ].filter(Boolean).join('\n');
+    return `${answer}\n\n${meta}${sourceLines ? `\n\nSources:\n${sourceLines}` : ''}`;
 }
 
 function isVerificationRefusalText(text) {
@@ -16152,10 +16187,52 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
         });
 
         try {
+            const currentFactData = await fetchCurrentFactJson(query, {
+                signal: controller.signal,
+                debug: true
+            });
+            if (currentFactData?.resolved && currentFactData?.answer) {
+                const finalMsg = formatCurrentFactAnswer(currentFactData);
+                if (finalMsg) {
+                    logRoutingDebug('handler decision: current_fact_resolver', query, {
+                        selectedHandler: 'api/current-facts',
+                        liveIntent: intent,
+                        entityIntent,
+                        riskLevel: liveRiskLevel,
+                        domain: currentFactData.domain,
+                        factType: currentFactData.factType,
+                        provider: currentFactData.provider,
+                        confidence: currentFactData.confidence,
+                        debug: currentFactData.debug || {}
+                    });
+                    addVerifiedAssistantMessage(finalMsg, 'Structured current fact');
+                    await speakApiReply('live_summary_ready', {}, 'I checked current sources and summarized what I found.');
+                    saveToHistory(userText, finalMsg);
+                    hideThinkingIndicator();
+                    return true;
+                }
+            }
+            logRoutingDebug('handler fallback: current_fact_unresolved', query, {
+                selectedHandler: 'handleLiveRetrievalQuery',
+                domain: currentFactData?.domain || '',
+                factType: currentFactData?.factType || '',
+                debug: currentFactData?.debug || {}
+            });
+        } catch (factError) {
+            if (isAbortError(factError)) throw factError;
+            logRoutingDebug('handler fallback: current_fact_error', query, {
+                selectedHandler: 'handleLiveRetrievalQuery',
+                error: String(factError?.message || factError || '')
+            });
+        }
+
+        try {
             const answerData = await fetchLiveSearchJson(query, {
                 signal: controller.signal,
                 maxResults: 8,
-                answer: true
+                answer: true,
+                domain: intent.domain || '',
+                factType: intent.factType || ''
             });
             const directAnswer = cleanLiveAnswerText(String(answerData?.answer || '').trim());
             const answerResults = Array.isArray(answerData?.results) ? answerData.results.filter(Boolean) : [];
@@ -16216,7 +16293,9 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
                 try {
                     const data = await fetchLiveSearchJson(q, {
                         signal: controller.signal,
-                        maxResults: 6
+                        maxResults: 6,
+                        domain: intent.domain || '',
+                        factType: intent.factType || ''
                     });
                     return Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
                 } catch (e) {
