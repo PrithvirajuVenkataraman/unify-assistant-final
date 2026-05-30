@@ -3592,10 +3592,15 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
         isProfileOrIdentityQuery(userMessage);
     const staleCutoffAnswer =
         /\b(knowledge cutoff|cutoff|cut-off)\b/.test(rawLower) ||
-        /\b(i do not have (?:information|data) (?:after|beyond|for)|i cannot access (?:current|latest) data)\b/.test(rawLower);
+        /\b(i do not have (?:information|data) (?:after|beyond|for)|i cannot access (?:current|latest|live) data)\b/.test(rawLower) ||
+        /\b(i (?:do not|don't) have (?:the )?(?:latest|current|recent|live)[\s\S]{0,80}(?:details|information|data|result|score|update))\b/.test(rawLower);
     const looksLikeResearchSteps =
         /\b(here(?:'s| are)?\s+(?:the\s+)?steps?\b|steps?\s+you\s+can\s+follow|check\s+online\b|search\s+engines\b|look\s+for\s+(?:his|her|their)\s+biography|you\s+can\s+search\b|to\s+find\s+information\s+about\b)\b/.test(rawLower) ||
         (/(\n|^)\s*\d+\s*[\).:-]\s+/.test(raw) && /\b(check|search|look|find)\b/.test(rawLower));
+    const currentFactEvasion =
+        /\b(?:recommend|suggest|try)\s+checking\b[\s\S]{0,120}\b(?:current|latest|sports|news|source|website|site|updates?)\b/.test(rawLower) ||
+        /\bcheck\b[\s\S]{0,120}\b(?:current|latest|sports|news|source|website|site|updates?)\b/.test(rawLower) ||
+        /\b(?:for|to get)\s+(?:the\s+)?(?:most recent|latest|current)\b[\s\S]{0,100}\b(?:check|visit|see|refer)\b/.test(rawLower);
     const asksForUserProvidedSources =
         /\b(?:provide|share|give)\b[\s\S]{0,40}\b(?:source|sources|link|links)\b/.test(rawLower) ||
         /\b(?:send|paste)\b[\s\S]{0,40}\b(?:url|source|link)\b/.test(rawLower);
@@ -3612,6 +3617,9 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
         return '';
     }
     if (liveOrEntityFactQuery && staleCutoffAnswer) {
+        return '';
+    }
+    if (liveOrEntityFactQuery && currentFactEvasion) {
         return '';
     }
     if (liveOrEntityFactQuery && asksForUserProvidedSources) {
@@ -3631,6 +3639,11 @@ function asksUserToProvideSources(text) {
 }
 
 async function resolveFinalAssistantAnswer(userMessage, answerText) {
+    if (requiresLiveSourceAnswer(userMessage)) {
+        const searchFallback = await buildSearchFallbackAnswer(userMessage);
+        if (searchFallback) return searchFallback;
+        return 'Live search is not configured or did not return enough current sources. Set SERPER_API_KEY and try again.';
+    }
     if (asksUserToProvideSources(answerText)) {
         const searchFallback = await buildSearchFallbackAnswer(userMessage);
         if (searchFallback) return searchFallback;
@@ -12861,7 +12874,7 @@ function isCurrentInfoQuery(text) {
 
     const freshnessTerms = /\b(latest|recent|current|today|right now|as of now|live|just now|this year|upcoming|future|next)\b/;
     const resultTerms = /\b(who won|winner|won|result|results|score|scores|what happened|what's happening|status|update|updates|headline|headlines|breaking|next match|upcoming fixture|upcoming holiday|next holiday|upcoming project)\b/;
-    const unstableEntityTerms = /\b(president|prime minister|pm|chief minister|cm|ceo|chairman|captain|coach|champion|title holder|world cup|tournament|final|match|fixture|schedule|holiday|festival|war|conflict|ceasefire|attack|election|release|project|album|film|movie|song)\b/;
+    const unstableEntityTerms = /\b(president|prime minister|pm|chief minister|cm|ceo|chairman|captain|coach|champion|title holder|world cup|tournament|league|ipl|bcci|icc|cricket|football|nba|nfl|mlb|nhl|final|match|game|fixture|schedule|holiday|festival|war|conflict|ceasefire|attack|election|release|project|album|film|movie|song)\b/;
     const businessEventTerms = /\b(layoff|layoffs|firing|firings|job cuts|cuts|restructuring|reorganization|earnings|results|merger|acquisition|recall|bankruptcy|probe|investigation|antitrust|strike|walkout)\b/;
     const hasYearReference = hasExplicitYearReference(t);
 
@@ -12869,6 +12882,24 @@ function isCurrentInfoQuery(text) {
     if (resultTerms.test(t) && unstableEntityTerms.test(t)) return true;
     if (businessEventTerms.test(t) && (freshnessTerms.test(t) || hasYearReference)) return true;
 
+    return false;
+}
+
+function requiresLiveSourceAnswer(text, liveIntent = null, entityIntent = null) {
+    const raw = String(text || '').trim();
+    const t = raw.toLowerCase();
+    if (!t) return false;
+    const technicalConceptSignals = /\b(hld|lld|system design|design pattern|architecture|api design|database design|algorithm|data structure|time complexity|space complexity|java|javascript|python|react|node|sql|backend|frontend|microservices?)\b/;
+    const currentSignals = /\b(latest|current|today|now|right now|live|recent|as of|status|update|updates|what happened|what's happening|who won|winner|score|scores|result|results|standings|fixture|fixtures|schedule|price|rate|market|news|headlines?|breaking)\b/;
+    const changingDomains = /\b(ipl|cricket|match|game|league|tournament|world cup|icc|bcci|team|club|score|winner|result|news|election|war|conflict|launch|mission|isro|nasa|ceo|president|prime minister|pm|chief minister|cm|captain|coach|stock|crypto|bitcoin|ethereum|gold|silver|currency|exchange|movie|film|song|album|release)\b/;
+    if (technicalConceptSignals.test(t) && !currentSignals.test(t)) return false;
+    if (isWeatherIntentText(raw) || isRecipeRequest(raw) || isMathCalculationRequest(raw) || isStepByStepMathRequest(raw)) return false;
+    if (isExchangeRateQuery(raw) || isMarketPriceQuery(raw) || isSportsLiveResultQuery(raw)) return true;
+    const intent = liveIntent || extractLiveQueryIntent(raw);
+    const entity = entityIntent || extractUniversalEntityIntent(raw, intent);
+    if (shouldRequireVerifiedSources(raw, intent, entity)) return true;
+    if (currentSignals.test(t) && changingDomains.test(t)) return true;
+    if (isCurrentInfoQuery(raw) || isLiveRetrievalQuery(raw) || isNewsworthyLiveTopic(raw)) return true;
     return false;
 }
 
@@ -16737,6 +16768,7 @@ function detectInputLanguageHint(text) {
                 entityIntent: fallbackEntityIntent,
                 riskLevel: getRiskTierForQuery(cleanText, classification.liveIntent, fallbackEntityIntent)
             });
+            const liveSourceRequired = requiresLiveSourceAnswer(cleanText, classification.liveIntent, fallbackEntityIntent);
 
             if (answerPath === 'moderation') {
                 logRoutingDebug('processCommand -> moderation', cleanText, {
@@ -16838,7 +16870,8 @@ function detectInputLanguageHint(text) {
                     selectedHandler: 'current_info_router',
                     answerPath,
                     hybridMode,
-                    classification
+                    classification,
+                    liveSourceRequired
                 });
                 const liveIntent = classification.liveIntent;
 
@@ -16860,17 +16893,17 @@ function detectInputLanguageHint(text) {
                     if (handled) return;
                 }
 
-                if (hybridMode === 'answer_then_cite') {
+                if (!liveSourceRequired && hybridMode === 'answer_then_cite') {
                     const handled = await handleAnswerThenCiteQuery(cleanText, classification);
                     if (handled) return;
                 }
 
-                if (hybridMode === 'chat_first') {
+                if (!liveSourceRequired && hybridMode === 'chat_first') {
                     const handled = await handleChatFirstCurrentQuery(cleanText, classification);
                     if (handled) return;
                 }
 
-                if (liveIntent.directFact) {
+                if (!liveSourceRequired && liveIntent.directFact) {
                     const handled = await handleUniversalEntityFactQuery(cleanText, liveIntent);
                     if (handled) return;
                 }
@@ -16938,11 +16971,11 @@ function detectInputLanguageHint(text) {
             }
 
             if (answerPath === 'live_retrieval') {
-                if (hybridMode === 'answer_then_cite') {
+                if (!liveSourceRequired && hybridMode === 'answer_then_cite') {
                     const handled = await handleAnswerThenCiteQuery(cleanText, classification);
                     if (handled) return;
                 }
-                if (hybridMode === 'chat_first') {
+                if (!liveSourceRequired && hybridMode === 'chat_first') {
                     const handled = await handleChatFirstCurrentQuery(cleanText, classification);
                     if (handled) return;
                 }
