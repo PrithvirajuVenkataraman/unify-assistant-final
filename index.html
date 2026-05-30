@@ -8537,17 +8537,10 @@ async function buildVerifiedSearchSummary(query, options = {}) {
     if (!userQuery) return null;
 
     try {
-        const searchResponse = await fetch('/api/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: userQuery,
-                maxResults: 8,
-                answer: true
-            })
+        const searchData = await fetchLiveSearchJson(userQuery, {
+            maxResults: 8,
+            answer: true
         });
-        if (!searchResponse.ok) return null;
-        const searchData = await searchResponse.json();
         const results = Array.isArray(searchData?.results) ? searchData.results.filter(Boolean) : [];
         if (!results.length) return null;
 
@@ -8599,8 +8592,58 @@ ${snippets}`
             badge: options.badge || 'Verified live sources'
         };
     } catch (error) {
-        return null;
+        return {
+            text: String(error?.message || 'Live search failed before usable results were returned.'),
+            speech: 'Live search is not available right now.',
+            badge: 'Live search unavailable',
+            error: true
+        };
     }
+}
+
+async function parseJsonResponseSafely(response) {
+    try {
+        return await response.json();
+    } catch (_) {
+        return {};
+    }
+}
+
+function formatLiveSearchFailureMessage(data = {}, status = 0) {
+    const error = String(data?.error || '').trim();
+    const providerError = Array.isArray(data?.providerErrors) && data.providerErrors.length
+        ? String(data.providerErrors[0]?.error || '').trim()
+        : '';
+    if (data?.serperConfigured === false || /SERPER_API_KEY|not configured/i.test(error || providerError)) {
+        return 'Live search is not configured. Set SERPER_API_KEY in the server environment and redeploy.';
+    }
+    if (status === 404) return 'Live search failed because /api/search was not found in this deployment.';
+    if (status === 401 || status === 403) return 'Live search failed because the search provider rejected the request. Check the Serper API key.';
+    if (status === 429) return 'Live search is temporarily rate limited. Please retry shortly.';
+    if (status >= 500) return `Live search provider failed${providerError || error ? `: ${providerError || error}` : '.'}`;
+    if (error || providerError) return `Live search failed: ${providerError || error}`;
+    return 'Live search failed before usable results were returned.';
+}
+
+async function fetchLiveSearchJson(query, options = {}) {
+    const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: options.signal,
+        body: JSON.stringify({
+            query,
+            maxResults: options.maxResults || 8,
+            answer: Boolean(options.answer)
+        })
+    });
+    const data = await parseJsonResponseSafely(response);
+    if (!response.ok || data?.success === false) {
+        const error = new Error(formatLiveSearchFailureMessage(data, response.status));
+        error.status = response.status;
+        error.data = data;
+        throw error;
+    }
+    return data;
 }
 
 function isVerificationRefusalText(text) {
@@ -13855,6 +13898,7 @@ function buildLiveSearchQueries(userText, intent = null) {
 
     if (liveIntent.domain === 'sports' && liveIntent.directFact) {
         const sportSources = 'ESPN Cricbuzz ESPNcricinfo ICC FIFA UEFA NBA NFL ATP WTA Formula 1 Olympics';
+        const isIplQuery = /\b(ipl|indian premier league)\b/i.test(raw);
         const explicitRoleMatch = raw.match(/\b(ceo|founder|president|prime minister|captain|coach|chairman|chairperson|governor|mayor)\b/i);
         const explicitRole = explicitRoleMatch?.[1] ? explicitRoleMatch[1].toLowerCase() : '';
         const factHintMap = {
@@ -13867,7 +13911,7 @@ function buildLiveSearchQueries(userText, intent = null) {
         };
         const factHints = factHintMap[liveIntent.factType] || (explicitRole ? `current ${explicitRole} official team` : 'result latest');
         const seasonHint = liveIntent.year || '';
-        return Array.from(new Set([
+        const baseQueries = [
             raw,
             `${topic} ${seasonHint} ${factHints}`.replace(/\s+/g, ' ').trim(),
             `${topic} ${factHints}`.replace(/\s+/g, ' ').trim(),
@@ -13877,7 +13921,18 @@ function buildLiveSearchQueries(userText, intent = null) {
             explicitRole ? `${topic} ${seasonHint} ${explicitRole} site:espncricinfo.com`.replace(/\s+/g, ' ').trim() : '',
             expandedTopic && expandedTopic.toLowerCase() !== topic.toLowerCase() ? `${expandedTopic} ${seasonHint} ${factHints}`.replace(/\s+/g, ' ').trim() : '',
             expandedTopic && expandedTopic.toLowerCase() !== topic.toLowerCase() ? `${expandedTopic} official ${factHints}`.replace(/\s+/g, ' ').trim() : ''
-        ].filter(Boolean)));
+        ];
+        if (isIplQuery) {
+            baseQueries.unshift(
+                'latest IPL match result score Cricbuzz ESPNcricinfo',
+                'IPL latest match score result today iplt20',
+                'Indian Premier League latest match result score',
+                'site:iplt20.com IPL latest match result',
+                'site:espncricinfo.com IPL latest match result',
+                'site:cricbuzz.com IPL latest match result'
+            );
+        }
+        return Array.from(new Set(baseQueries.filter(Boolean)));
     }
 
     if (liveIntent.domain === 'entertainment' && liveIntent.factType === 'latest_work') {
@@ -15503,7 +15558,7 @@ function buildStrictVerificationClarificationMessage(userText, intent, entityInt
     const subject = String(entityIntent?.subject || '').trim();
     const noSources = !(Array.isArray(sources) && sources.length);
     if (noSources && shouldRequireVerifiedSources(query, intent, entityIntent)) {
-        return `I could not reach usable live sources for this current fact, so I will not present a stale model-only answer.\n\nAs of: ${formatAsOfTimestamp()}\n\nSearch/source status: unavailable or no usable results.`;
+        return `Live search did not return usable results for this current fact.\n\nAs of: ${formatAsOfTimestamp()}\n\nCheck the Network tab for /api/search. If it is missing, the deployed frontend is not calling the search route. If it returns 503 or 401, fix SERPER_API_KEY in the server environment.`;
     }
     const hasEntity = Boolean(subject || entityIntent?.targetEntity);
     const canRefine = hasEntity || relation !== 'general';
@@ -16094,78 +16149,78 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
         });
 
         try {
-            const answerResponse = await fetch('/api/search', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+            const answerData = await fetchLiveSearchJson(query, {
                 signal: controller.signal,
-                body: JSON.stringify({
-                    query,
-                    maxResults: 8,
-                    answer: true
-                })
+                maxResults: 8,
+                answer: true
             });
-            if (answerResponse.ok) {
-                const answerData = await answerResponse.json();
-                const directAnswer = cleanLiveAnswerText(String(answerData?.answer || '').trim());
-                const answerResults = Array.isArray(answerData?.results) ? answerData.results.filter(Boolean) : [];
-                if (directAnswer && answerResults.length) {
-                    const sourceLines = answerResults
-                        .slice(0, 5)
-                        .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
-                        .join('\n');
-                    const conciseAnswer = conciseFactQuery
-                        ? directAnswer
-                            .split(/\n\s*Key points:\s*/i)[0]
-                            .split(/\n\s*Confidence:\s*/i)[0]
-                            .trim()
-                        : directAnswer;
-                    const finalMsg = `${conciseAnswer}\n\n${buildSourceMetaBlock(answerResults)}\n\nSources:\n${sourceLines}`;
-                    logRoutingDebug('handler decision: live_retrieval search_answer', query, {
-                        selectedHandler: 'api/search answer=true',
-                        liveIntent: intent,
-                        entityIntent,
-                        riskLevel: liveRiskLevel,
-                        answerProvider: answerData?.answerProvider || '',
-                        answerModel: answerData?.answerModel || '',
-                        serperConfigured: Boolean(answerData?.serperConfigured),
-                        providerBreakdown: answerData?.providerBreakdown || {},
-                        resultCount: answerResults.length
-                    });
-                    addVerifiedAssistantMessage(finalMsg, 'Search + Groq live answer');
-                    await speakApiReply('live_summary_ready', {}, 'I checked current sources and summarized what I found.');
-                    saveToHistory(userText, finalMsg);
-                    hideThinkingIndicator();
-                    return true;
-                }
-                logRoutingDebug('handler fallback: live_retrieval search_answer_empty', query, {
-                    selectedHandler: 'handleLiveRetrievalQuery',
+            const directAnswer = cleanLiveAnswerText(String(answerData?.answer || '').trim());
+            const answerResults = Array.isArray(answerData?.results) ? answerData.results.filter(Boolean) : [];
+            if (directAnswer && answerResults.length) {
+                const sourceLines = answerResults
+                    .slice(0, 5)
+                    .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
+                    .join('\n');
+                const conciseAnswer = conciseFactQuery
+                    ? directAnswer
+                        .split(/\n\s*Key points:\s*/i)[0]
+                        .split(/\n\s*Confidence:\s*/i)[0]
+                        .trim()
+                    : directAnswer;
+                const finalMsg = `${conciseAnswer}\n\n${buildSourceMetaBlock(answerResults)}\n\nSources:\n${sourceLines}`;
+                logRoutingDebug('handler decision: live_retrieval search_answer', query, {
+                    selectedHandler: 'api/search answer=true',
+                    liveIntent: intent,
+                    entityIntent,
+                    riskLevel: liveRiskLevel,
                     answerProvider: answerData?.answerProvider || '',
-                    answerError: answerData?.answerError || '',
+                    answerModel: answerData?.answerModel || '',
                     serperConfigured: Boolean(answerData?.serperConfigured),
-                    providerBreakdown: answerData?.providerBreakdown || {}
+                    providerBreakdown: answerData?.providerBreakdown || {},
+                    resultCount: answerResults.length
                 });
+                addVerifiedAssistantMessage(finalMsg, 'Search + Groq live answer');
+                await speakApiReply('live_summary_ready', {}, 'I checked current sources and summarized what I found.');
+                saveToHistory(userText, finalMsg);
+                hideThinkingIndicator();
+                return true;
             }
+            logRoutingDebug('handler fallback: live_retrieval search_answer_empty', query, {
+                selectedHandler: 'handleLiveRetrievalQuery',
+                answerProvider: answerData?.answerProvider || '',
+                answerError: answerData?.answerError || '',
+                serperConfigured: Boolean(answerData?.serperConfigured),
+                providerBreakdown: answerData?.providerBreakdown || {}
+            });
         } catch (answerError) {
             if (isAbortError(answerError)) throw answerError;
             logRoutingDebug('handler fallback: live_retrieval search_answer_error', query, {
                 selectedHandler: 'handleLiveRetrievalQuery',
                 error: String(answerError?.message || answerError || '')
             });
+            if (answerError?.status === 404 || answerError?.status === 401 || answerError?.status === 403 || /SERPER_API_KEY|not configured/i.test(String(answerError?.message || ''))) {
+                const msg = String(answerError.message || 'Live search is unavailable.');
+                addVerifiedAssistantMessage(msg, 'Live search unavailable');
+                speak(msg);
+                saveToHistory(userText, msg);
+                hideThinkingIndicator();
+                return true;
+            }
         }
 
         const resultSets = await Promise.all(
             queries.map(async (q) => {
                 try {
-                    const response = await fetch('/api/search', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                    const data = await fetchLiveSearchJson(q, {
                         signal: controller.signal,
-                        body: JSON.stringify({ query: q, maxResults: 6 })
+                        maxResults: 6
                     });
-                    if (!response.ok) return [];
-                    const data = await response.json();
                     return Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
                 } catch (e) {
+                    logRoutingDebug('handler fallback: live_retrieval variant_search_error', q, {
+                        selectedHandler: 'handleLiveRetrievalQuery',
+                        error: String(e?.message || e || '')
+                    });
                     return [];
                 }
             })
@@ -16814,7 +16869,6 @@ function detectInputLanguageHint(text) {
                     entityIntent: fallbackEntityIntent
                 });
                 const handled = await handleLiveRetrievalQuery(cleanText, {
-                    forceFailClosed: true,
                     strictLatest: isStrictLatestQuery(cleanText)
                 });
                 if (handled) return;
@@ -19996,17 +20050,7 @@ function toggleMemoryPersistence(enabled) {
                 speakWithWebSpeech(cleanText, speechProfile);
                 return;
             }
-            speakWithGroqTts(cleanText, speechSessionId)
-                .then(usedGroq => {
-                    if (!usedGroq && speechSessionId === currentSpeechSessionId) {
-                        speakWithWebSpeech(cleanText, speechProfile);
-                    }
-                })
-                .catch(() => {
-                    if (speechSessionId === currentSpeechSessionId) {
-                        speakWithWebSpeech(cleanText, speechProfile);
-                    }
-                });
+            speakWithWebSpeech(cleanText, speechProfile);
         }
         
         
