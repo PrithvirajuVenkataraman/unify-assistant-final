@@ -5565,7 +5565,7 @@ let showRoutingDebugBadge = false;
             updateVoiceToTextButton();
             updateVoiceInteractionGraphics();
             setVttSpeechWaveState(true);
-            showTemporaryMessage('Listening with Groq Whisper... tap the mic again to stop.');
+            showTemporaryMessage('Listening securely... tap the mic again when you are done.');
             groqVoiceTypingRecorder.start();
             return true;
         }
@@ -5613,7 +5613,7 @@ let showRoutingDebugBadge = false;
                     sendTextInput();
                 }
             } catch (_) {
-                showTemporaryMessage('Groq transcription failed. Browser speech fallback is still available.');
+                showTemporaryMessage('Voice transcription could not finish. Please try again or use keyboard input.');
             } finally {
                 isVoiceTyping = false;
                 voiceTypingBaseText = '';
