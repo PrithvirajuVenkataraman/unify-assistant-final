@@ -3,8 +3,8 @@ export const config = { maxDuration: 60 };
 import { applyApiSecurity } from './security.js';
 import { searchSerper, searchGoogleNewsRss, getDomainFromUrl } from './search.js';
 
-const RESULT_SOURCE_RE = /\b(result|scorecard|highlights?|match report|post[- ]match|beat|defeat(?:ed)?|won by|lost to|crush(?:ed)?|storm(?:ed)?|chase(?:d)?|advanced?|qualified?)\b/i;
-const WEAK_SOURCE_RE = /\b(preview|prediction|predict|pitch report|weather|rain|washed out|washout|what happens if|schedule|fixture|probable xi|playing 11|fantasy|dream11|odds)\b/i;
+const RESULT_SOURCE_RE = /\b(result|scorecard|highlights?|match report|post[- ]match|who won|yesterday'?s?|beat|defeat(?:ed)?|won by|lost to|crush(?:ed)?|storm(?:ed)?|chase(?:d)?|advanced?|qualified?)\b/i;
+const WEAK_SOURCE_RE = /\b(preview|prediction|predict|pitch report|weather|rain|washed out|washout|what happens if|schedule|fixtures?|live scores?|points table|standings|probable xi|playing 11|fantasy|dream11|odds)\b/i;
 
 export default async function handler(req, res) {
     const guard = applyApiSecurity(req, res, {
@@ -42,7 +42,7 @@ async function resolveCurrentFact(query) {
 
     let resolved = null;
     if (intent.domain === 'sports') {
-        resolved = resolveSportsFact(query, ranked, intent);
+        resolved = await resolveSportsFact(query, ranked, intent);
     } else if (intent.factType === 'role') {
         resolved = resolveRoleFact(query, ranked, intent);
     } else {
@@ -120,12 +120,17 @@ function buildResolverQueries(query, intent) {
     const year = new Date().getFullYear();
     if (intent.domain === 'sports' && /\b(ipl|indian premier league)\b/i.test(raw)) {
         return [
+            `who won yesterday IPL match ${year} result score`,
+            `yesterday IPL ${year} match result who won scorecard`,
+            `latest IPL ${year} match result who won`,
+            `IPL ${year} last match result who won score`,
             `IPL ${year} latest match result scorecard`,
             `latest IPL match result score Cricbuzz ESPNcricinfo`,
-            `IPL latest match result today official scorecard`,
+            `IPL latest match result today yesterday scorecard`,
             `site:iplt20.com IPL ${year} latest match result`,
             `site:espncricinfo.com IPL ${year} latest match result`,
             `site:cricbuzz.com IPL ${year} latest match result`,
+            `site:rajasthanroyals.com IPL ${year} match report result`,
             raw
         ];
     }
@@ -207,12 +212,24 @@ function classifySourceCategory(source) {
     return 'general_report';
 }
 
-function resolveSportsFact(query, sources, intent) {
+async function resolveSportsFact(query, sources, intent) {
     const candidates = sources
         .filter(item => classifySourceCategory(item) !== 'weak_preview_or_context')
         .map(item => ({ item, extracted: extractSportsResult(`${item.title}. ${item.description}`) }))
         .filter(row => row.extracted?.answer);
-    if (!candidates.length) return null;
+    if (!candidates.length) {
+        const hydrated = await hydrateSportsResultFromPages(sources);
+        if (hydrated?.extracted?.answer) {
+            return {
+                answer: hydrated.extracted.answer,
+                confidence: 'medium',
+                provider: 'sports_page_result_extractor',
+                sources: [hydrated.item, ...sources.filter(item => item.url !== hydrated.item.url)].slice(0, 5),
+                reason: hydrated.extracted.reason || 'sports result extracted from fetched page text'
+            };
+        }
+        return null;
+    }
 
     const best = candidates[0];
     return {
@@ -222,6 +239,55 @@ function resolveSportsFact(query, sources, intent) {
         sources: [best.item, ...sources.filter(item => item.url !== best.item.url)].slice(0, 5),
         reason: best.extracted.reason || 'sports result extracted from post-event source'
     };
+}
+
+async function hydrateSportsResultFromPages(sources) {
+    const candidates = (Array.isArray(sources) ? sources : [])
+        .filter(item => classifySourceCategory(item) !== 'weak_preview_or_context' || RESULT_SOURCE_RE.test(`${item.title} ${item.description}`))
+        .slice(0, 5);
+    for (const item of candidates) {
+        const pageText = await fetchReadablePageText(item.url).catch(() => '');
+        if (!pageText) continue;
+        const extracted = extractSportsResult(`${item.title}. ${item.description}. ${pageText}`);
+        if (extracted?.answer) return { item, extracted };
+    }
+    return null;
+}
+
+async function fetchReadablePageText(url) {
+    const value = String(url || '').trim();
+    if (!/^https?:\/\//i.test(value)) return '';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5500);
+    try {
+        const response = await fetch(value, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 UnifyAssistant/1.0',
+                Accept: 'text/html,application/xhtml+xml'
+            },
+            signal: controller.signal
+        });
+        if (!response.ok) return '';
+        const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+        if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml')) return '';
+        const html = await response.text();
+        return htmlToSearchableText(html).slice(0, 9000);
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+function htmlToSearchableText(html) {
+    return cleanText(String(html || '')
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+        .replace(/<meta[^>]+(?:name|property)=["'](?:description|og:description|twitter:description)["'][^>]+content=["']([^"']+)["'][^>]*>/gi, ' $1 ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;|&apos;/g, "'"));
 }
 
 function extractSportsResult(text) {
@@ -237,6 +303,42 @@ function extractSportsResult(text) {
         return {
             answer: `${winner} beat ${loser} by ${margin}.${scores ? ` ${scores}` : ''}`,
             reason: 'beat/defeated pattern'
+        };
+    }
+
+    const victoryOver = clean.match(/\b([A-Z][A-Za-z .&'-]{2,40}?)\s+(?:[^.;]{0,80}?\s)?(?:win|wins|victory|defeat|defeated)\s+(?:by\s+([^.;]{2,60}?)\s+)?(?:over|against)\s+([A-Z][A-Za-z .&'-]{2,40}?)(?:[.;,]|$)/i);
+    if (victoryOver) {
+        const winner = tidyEntity(victoryOver[1]);
+        const loser = tidyEntity(victoryOver[3]);
+        const margin = victoryOver[2] ? cleanText(victoryOver[2]).replace(/\s+with\s+.*$/i, '') : '';
+        const scores = extractCricketScores(clean);
+        return {
+            answer: `${winner} beat ${loser}${margin ? ` by ${margin}` : ''}.${scores ? ` ${scores}` : ''}`,
+            reason: 'victory-over pattern'
+        };
+    }
+
+    const defeatWithVictory = clean.match(/\b([A-Z][A-Za-z .&'-]{2,40}?)\s+[^.;]{0,100}?\bdefeat(?:ed)?\s+([A-Z][A-Za-z .&'-]{2,40}?)\s+[^.;]{0,100}?\b((?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)[-\s]wicket|(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)[-\s]run)[-\s]victory\b/i);
+    if (defeatWithVictory) {
+        const winner = tidyEntity(defeatWithVictory[1]);
+        const loser = tidyEntity(defeatWithVictory[2]);
+        const margin = cleanText(defeatWithVictory[3]).replace(/-/g, ' ');
+        const scores = extractCricketScores(clean);
+        return {
+            answer: `${winner} beat ${loser} by ${margin}s.${scores ? ` ${scores}` : ''}`,
+            reason: 'defeat-with-victory-margin pattern'
+        };
+    }
+
+    const aliasWonBy = clean.match(/\b([A-Z]{2,4})\s+won\s+by\s+([^.;]+)/);
+    if (aliasWonBy) {
+        const winner = expandTeamAlias(aliasWonBy[1], clean);
+        const loser = inferOpponentAlias(aliasWonBy[1], clean);
+        const margin = cleanText(aliasWonBy[2]).replace(/\s+with\s+.*$/i, '');
+        const scores = extractCricketScores(clean);
+        return {
+            answer: `${winner}${loser ? ` beat ${loser}` : ' won'} by ${margin}.${scores ? ` ${scores}` : ''}`,
+            reason: 'team-code won-by pattern'
         };
     }
 
@@ -262,6 +364,31 @@ function extractSportsResult(text) {
     }
 
     return null;
+}
+
+function expandTeamAlias(alias, context = '') {
+    const code = String(alias || '').toUpperCase();
+    const map = {
+        GT: 'Gujarat Titans',
+        RR: 'Rajasthan Royals',
+        RCB: 'Royal Challengers Bengaluru',
+        MI: 'Mumbai Indians',
+        CSK: 'Chennai Super Kings',
+        KKR: 'Kolkata Knight Riders',
+        SRH: 'Sunrisers Hyderabad',
+        DC: 'Delhi Capitals',
+        PBKS: 'Punjab Kings',
+        LSG: 'Lucknow Super Giants'
+    };
+    if (map[code]) return map[code];
+    return code;
+}
+
+function inferOpponentAlias(winnerAlias, context = '') {
+    const winner = String(winnerAlias || '').toUpperCase();
+    const aliases = ['GT', 'RR', 'RCB', 'MI', 'CSK', 'KKR', 'SRH', 'DC', 'PBKS', 'LSG'];
+    const found = aliases.filter(alias => alias !== winner && new RegExp(`\\b${alias}\\b`).test(context));
+    return found[0] ? expandTeamAlias(found[0], context) : '';
 }
 
 function extractCricketScores(text) {
