@@ -414,6 +414,12 @@ function shouldEscalateToWeb(message, firstAnswer) {
     return getWebEscalationDecision(message, firstAnswer).escalate;
 }
 
+function asksUserToProvideSources(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(?:provide|share|give|send|paste)\b[\s\S]{0,60}\b(?:source|sources|link|links|url|urls)\b/.test(t) ||
+        /\b(?:upload|attach)\b[\s\S]{0,60}\b(?:source|sources|document|link|links|url|urls)\b/.test(t);
+}
+
 function isStrictSinglePassRouter() {
     return CHAT_ROUTER_MODE !== 'legacy_two_pass';
 }
@@ -536,7 +542,7 @@ function getWebEscalationDecision(message, firstAnswer) {
 
     const uncertain = /\b(i (?:don'?t|do not) have (?:live|real[- ]?time)|not sure|cannot verify|might be outdated)\b/i.test(answer);
     if (uncertain) return { escalate: true, reason: 'uncertain_or_stale_answer' };
-    const asksUserForSources = /\b(?:provide|share|give)\b[\s\S]{0,40}\b(?:source|sources|links?)\b/i.test(answer);
+    const asksUserForSources = asksUserToProvideSources(answer);
     if (asksUserForSources) return { escalate: true, reason: 'model_requested_sources_from_user' };
 
     const asksWhenOrDate = /\b(when|date|first match|opening match|schedule|fixture)\b/i.test(query);
@@ -747,6 +753,22 @@ function isWebCheckCandidateQuery(text) {
 }
 
 function enforceLiveAnswerStyle(parsedResponse, message, liveSources) {
+    if (asksUserToProvideSources(parsedResponse?.response || '')) {
+        if (Array.isArray(liveSources) && liveSources.length) {
+            return {
+                ...parsedResponse,
+                intent: 'live_update',
+                response: buildLiveUpdateResponse(message, liveSources),
+                action: parsedResponse?.action ?? null
+            };
+        }
+        return {
+            ...parsedResponse,
+            intent: 'verification_unavailable',
+            response: 'I could not verify this from live sources right now.',
+            action: parsedResponse?.action ?? null
+        };
+    }
     if (!isTimeSensitiveInfoRequest(message)) return parsedResponse;
     if (!Array.isArray(liveSources) || !liveSources.length) return parsedResponse;
 
@@ -1128,6 +1150,7 @@ Style rules:
  - For direct fact questions across any domain, answer with the fact immediately and stay concise by default.
 - For person/celebrity queries ("Who is X?"), give a concise factual bio first, then notable works.
 - For "Who is X?" or "Tell me about X" requests, never reply with research steps like "search online/check databases". Give the direct factual answer.
+- Never ask the user to provide, share, paste, or send sources or links. If sources are needed, use the available live web context/search path and answer from retrieved sources. If retrieval is unavailable or insufficient, say that you could not verify it right now.
 - If the user asks a "do/can/could/would" question, do not answer with only yes or no unless they explicitly asked for yes/no only; explain the answer.
 - If the user asks to explain further, elaborate, or give more detail, expand the previous answer with meaningful detail instead of repeating the short version.
 - If the user specifies a word-count requirement (for example "in 300 words", "exactly 120 words", "under 200 words"), follow it closely.
