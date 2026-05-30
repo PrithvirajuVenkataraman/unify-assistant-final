@@ -8617,6 +8617,9 @@ function formatLiveSearchFailureMessage(data = {}, status = 0) {
     if (data?.serperConfigured === false || /SERPER_API_KEY|not configured/i.test(error || providerError)) {
         return 'Live search is not configured. Set SERPER_API_KEY in the server environment and redeploy.';
     }
+    if (status === 402 || /not enough credits|quota|billing|payment/i.test(error || providerError)) {
+        return 'Live search provider has no remaining Serper credits. Add Serper credits or configure another live-search provider.';
+    }
     if (status === 404) return 'Live search failed because /api/search was not found in this deployment.';
     if (status === 401 || status === 403) return 'Live search failed because the search provider rejected the request. Check the Serper API key.';
     if (status === 429) return 'Live search is temporarily rate limited. Please retry shortly.';
@@ -16198,7 +16201,7 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
                 selectedHandler: 'handleLiveRetrievalQuery',
                 error: String(answerError?.message || answerError || '')
             });
-            if (answerError?.status === 404 || answerError?.status === 401 || answerError?.status === 403 || /SERPER_API_KEY|not configured/i.test(String(answerError?.message || ''))) {
+            if (answerError?.status === 404 || answerError?.status === 401 || answerError?.status === 402 || answerError?.status === 403 || answerError?.status === 502 || /SERPER_API_KEY|not configured|not enough credits|quota|billing|payment/i.test(String(answerError?.message || ''))) {
                 const msg = String(answerError.message || 'Live search is unavailable.');
                 addVerifiedAssistantMessage(msg, 'Live search unavailable');
                 speak(msg);
