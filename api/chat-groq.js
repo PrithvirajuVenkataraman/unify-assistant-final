@@ -1,5 +1,6 @@
 export const config = { maxDuration: 60 };
 import { applyApiSecurity } from './security.js';
+import { runVerifiedWebSearch } from './search.js';
 
 const LIVE_CAG_TTL_MS = 20 * 60 * 1000;
 const LIVE_CAG_MAX_ENTRIES = 120;
@@ -552,7 +553,56 @@ function getWebEscalationDecision(message, firstAnswer) {
 }
 
 async function buildLiveRagContext(message, req, contextTurns = []) {
-    return { ragText: '', sources: [] };
+    const query = String(message || '').trim();
+    if (!query || !hasSerperConfiguredForChat()) return { ragText: '', sources: [] };
+
+    const cached = getLiveCagContext(query);
+    if (cached?.ragText) return cached;
+
+    const searchQueries = buildChatLiveSearchQueries(query, contextTurns);
+    const verified = await runVerifiedWebSearch(searchQueries, {
+        maxResultsPerQuery: 5,
+        limit: 8,
+        timeoutMs: INTERNAL_FETCH_TIMEOUT_MS
+    });
+    const sources = Array.isArray(verified?.results) ? verified.results.slice(0, 8) : [];
+    if (!sources.length) return { ragText: '', sources: [] };
+
+    const ragText = [
+        'Live web context. Use only these snippets for current facts; cite no facts that are absent or contradicted here.',
+        ...sources.map((item, index) => [
+            `Source ${index + 1}: ${String(item.title || '').trim()}`,
+            `URL: ${String(item.url || '').trim()}`,
+            `Snippet: ${String(item.description || '').trim()}`
+        ].join('\n'))
+    ].join('\n\n');
+    const payload = { ragText, sources };
+    rememberLiveCagContext(query, payload);
+    return payload;
+}
+
+function hasSerperConfiguredForChat() {
+    return Boolean(process.env.SERPER_API_KEY || process.env.SERPER_KEY);
+}
+
+function buildChatLiveSearchQueries(query, contextTurns = []) {
+    const base = String(query || '').trim();
+    const recentContext = Array.isArray(contextTurns)
+        ? contextTurns
+            .slice(-3)
+            .map(item => String(item?.text || '').trim())
+            .filter(Boolean)
+            .join(' ')
+        : '';
+    const queries = [
+        base,
+        `latest ${base}`,
+        `${base} official source Reuters AP BBC`
+    ];
+    if (recentContext && recentContext.length < 220) {
+        queries.push(`${base} ${recentContext}`);
+    }
+    return Array.from(new Set(queries.map(q => q.replace(/\s+/g, ' ').trim()).filter(Boolean))).slice(0, 4);
 }
 
 function getLiveCagStore() {
