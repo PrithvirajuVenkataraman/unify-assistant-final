@@ -2,6 +2,7 @@ export const config = { maxDuration: 60 };
 import { applyApiSecurity } from './security.js';
 
 const SERPER_ENDPOINT = 'https://google.serper.dev/search';
+const SERPER_NEWS_ENDPOINT = 'https://google.serper.dev/news';
 const DEFAULT_SEARCH_TIMEOUT_MS = 6500;
 const TRUSTED_DOMAINS = [
     'reuters.com', 'apnews.com', 'bbc.com', 'aljazeera.com', 'thehindu.com',
@@ -39,13 +40,38 @@ export default async function handler(req, res) {
     }
 
     try {
-        const results = await searchSerper(query, { maxResults });
+        const webSearch = await searchSerperDetailed(query, { maxResults, type: 'search' });
+        const newsSearch = wantsAnswer ? await searchSerperDetailed(query, { maxResults: Math.min(maxResults, 6), type: 'news' }) : { results: [] };
+        const results = dedupeResults([...(webSearch.results || []), ...(newsSearch.results || [])]).slice(0, maxResults);
+        const providerErrors = [webSearch, newsSearch]
+            .filter(item => item?.error)
+            .map(item => ({
+                provider: item.provider,
+                status: item.status || 0,
+                error: item.error
+            }));
+
+        if (!results.length && providerErrors.length) {
+            return res.status(502).json({
+                success: false,
+                error: providerErrors[0].error || 'live search provider failed',
+                serperConfigured: true,
+                providerErrors,
+                results: []
+            });
+        }
+
         const response = {
             success: true,
             serperConfigured: true,
             query,
             results,
-            providerBreakdown: { serper: results.length }
+            providerBreakdown: {
+                serperSearch: webSearch.results?.length || 0,
+                serperNews: newsSearch.results?.length || 0,
+                serper: results.length
+            },
+            providerErrors
         };
 
         if (wantsAnswer && results.length) {
@@ -73,14 +99,23 @@ export function hasSerperKey() {
 }
 
 export async function searchSerper(query, options = {}) {
+    const detailed = await searchSerperDetailed(query, options);
+    return detailed.results || [];
+}
+
+async function searchSerperDetailed(query, options = {}) {
     const apiKey = process.env.SERPER_API_KEY || process.env.SERPER_KEY;
-    if (!apiKey) return [];
+    const provider = options.type === 'news' ? 'serper_news' : 'serper_search';
+    if (!apiKey) {
+        return { provider, ok: false, status: 503, error: 'SERPER_API_KEY is not configured', results: [] };
+    }
     const maxResults = clampInt(options.maxResults, 8, 1, 20);
     const timeoutMs = clampInt(options.timeoutMs, DEFAULT_SEARCH_TIMEOUT_MS, 1000, 15000);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        const response = await fetch(SERPER_ENDPOINT, {
+        const endpoint = options.type === 'news' ? SERPER_NEWS_ENDPOINT : SERPER_ENDPOINT;
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -94,9 +129,32 @@ export async function searchSerper(query, options = {}) {
                 hl: options.hl || 'en'
             })
         });
-        if (!response.ok) return [];
+        if (!response.ok) {
+            const detail = await response.text().catch(() => '');
+            return {
+                provider,
+                ok: false,
+                status: response.status,
+                error: `Serper ${options.type === 'news' ? 'news' : 'search'} failed: ${String(detail || response.statusText).slice(0, 300)}`,
+                results: []
+            };
+        }
         const data = await response.json();
-        return normalizeSerperResults(data, maxResults);
+        return {
+            provider,
+            ok: true,
+            status: 200,
+            error: '',
+            results: normalizeSerperResults(data, maxResults)
+        };
+    } catch (error) {
+        return {
+            provider,
+            ok: false,
+            status: 0,
+            error: error?.name === 'AbortError' ? 'Serper request timed out' : String(error?.message || error || 'Serper request failed'),
+            results: []
+        };
     } finally {
         clearTimeout(timeoutId);
     }
@@ -148,6 +206,18 @@ function normalizeSerperResults(data, maxResults) {
         }))
         .filter(item => item.title && item.url)
         .slice(0, maxResults);
+}
+
+function dedupeResults(results) {
+    const seen = new Set();
+    const out = [];
+    for (const item of Array.isArray(results) ? results : []) {
+        const url = String(item?.url || '').trim();
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        out.push(item);
+    }
+    return out;
 }
 
 async function buildGroundedSearchAnswer(query, results) {
