@@ -95,6 +95,7 @@ export default async function handler(req, res) {
 
 const GEMINI_API_VERSIONS = ['v1beta', 'v1'];
 const GEMINI_MODEL_FALLBACKS = [
+    'gemini-3.5-flash',
     'gemini-2.5-flash',
     'gemini-2.5-flash-lite',
     'gemini-2.0-flash',
@@ -531,8 +532,12 @@ async function runMathOcrSolvePipeline({ providers, mimeType, imageBase64, userP
 }
 
 async function runTranslateToEnglishPipeline({ providers, mimeType, imageBase64, userPrompt }) {
+    const expectedLanguage = inferExpectedTranslationLanguage(userPrompt);
     const extractionPrompt = [
         'Extract text from this image with high fidelity.',
+        expectedLanguage
+            ? `Expected source language/script: ${expectedLanguage}. Pay special attention to that script.`
+            : 'The source language may be Hindi, Kannada, Malayalam, Telugu, Tamil, or another language.',
         'Return strict JSON only:',
         '{',
         '  "summary": "short useful summary",',
@@ -561,6 +566,7 @@ async function runTranslateToEnglishPipeline({ providers, mimeType, imageBase64,
     const translatorSystemPrompt = [
         'You are a precise translation engine.',
         'Translate all provided text to natural English.',
+        expectedLanguage ? `The expected source language is ${expectedLanguage}.` : 'The source may be Hindi, Kannada, Malayalam, Telugu, Tamil, or mixed text.',
         'Keep numbers, units, names, and technical terms intact unless translation is obvious.',
         'Return strict JSON only:',
         '{',
@@ -590,13 +596,25 @@ async function runTranslateToEnglishPipeline({ providers, mimeType, imageBase64,
     const languageLine = detectedLanguage ? `Language: ${detectedLanguage}` : 'Language: Unknown';
 
     return {
-        response: `${englishText}\n\n${languageLine}`,
+        response: `Original text:\n${sourceText}\n\nEnglish translation:\n${englishText}\n\n${languageLine}`,
         details: {
             pipeline: 'ocr-translate',
+            fullText: sourceText,
+            textDetected: Array.isArray(ocrJson?.textDetected) ? ocrJson.textDetected : [sourceText],
             ocr: ocrJson,
             translation: translationJson
         }
     };
+}
+
+function inferExpectedTranslationLanguage(userPrompt = '') {
+    const t = String(userPrompt || '').toLowerCase();
+    if (/\bhindi\b/.test(t)) return 'Hindi';
+    if (/\bkannada\b/.test(t)) return 'Kannada';
+    if (/\bmalayalam\b/.test(t)) return 'Malayalam';
+    if (/\btelugu\b/.test(t)) return 'Telugu';
+    if (/\btamil\b/.test(t)) return 'Tamil';
+    return '';
 }
 
 function buildVisionPrompt(userPrompt, task) {
