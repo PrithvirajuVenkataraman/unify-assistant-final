@@ -3624,7 +3624,17 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
     return raw;
 }
 
+function asksUserToProvideSources(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(?:provide|share|give|send|paste)\b[\s\S]{0,60}\b(?:source|sources|link|links|url|urls)\b/.test(t) ||
+        /\b(?:upload|attach)\b[\s\S]{0,60}\b(?:source|sources|document|link|links|url|urls)\b/.test(t);
+}
+
 async function resolveFinalAssistantAnswer(userMessage, answerText) {
+    if (asksUserToProvideSources(answerText)) {
+        const searchFallback = await buildSearchFallbackAnswer(userMessage);
+        if (searchFallback) return searchFallback;
+    }
     const safeAnswer = sanitizeWeakModelAnswer(answerText, userMessage);
     if (safeAnswer) return safeAnswer;
 
@@ -4012,6 +4022,7 @@ CRITICAL RULES:
 7. For small/unknown towns, admit you don't have specific info rather than guessing
 8. Do NOT suggest hills/treks/mountain hikes for flat towns (example: Chidambaram)
 9. If a prompt is vague, ambiguous, or lacks context, DO NOT hallucinate an answer. Politely ask the user to clarify.
+10. Never ask the user to provide, share, paste, or send sources or links. If sources are needed, use the app's live search/retrieval flow. If retrieval is unavailable or insufficient, say you could not verify it right now.
 
 RULES:
 - ${userName ? `The user's name is ${userName} - use it!` : 'You do NOT know the user\'s name. NEVER say "User" or "Hi User!" - just say "Hi!" or be friendly without using a name.'}
@@ -4026,6 +4037,7 @@ RULES:
 - For direct fact questions across any domain, answer with the fact immediately in 1-2 sentences. Do not pad with extra commentary, suggestions, or follow-up offers unless the user asked for detail.
 - For "Who is X?" person/celebrity questions, provide a concise factual bio first, then notable works/achievements.
 - For "Who is X?" or "Tell me about X" style queries, NEVER give steps like "check online/search". Give the direct answer immediately.
+- Never ask the user for sources. The app is responsible for finding and checking sources.
 - If the user asks a "do/can/could/would" question, do not reply with only yes or no unless they explicitly demand a yes/no-only answer; explain the answer.
 - If the user asks to explain more, explain further, elaborate, or give more detail, expand the previous answer instead of repeating the short version.
 
@@ -4102,6 +4114,23 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         if (!data.response && typeof data.text === 'string') {
             data.text = postProcessAssistantResponse(data.text, normalizedUserMessage);
             data.text = sanitizeWeakModelAnswer(data.text, normalizedUserMessage);
+        }
+
+        if (!String(data.response || data.text || '').trim()) {
+            const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || userMessage);
+            if (searchFallback) {
+                return {
+                    response: searchFallback,
+                    intent: 'search_fallback'
+                };
+            }
+            const strictApiFallback = await buildStrictApiKnowledgeFallback(normalizedUserMessage || userMessage);
+            if (strictApiFallback) {
+                return {
+                    response: strictApiFallback,
+                    intent: 'strict_api_fallback'
+                };
+            }
         }
 
         if (isLowSignalModelAnswer(data.response || data.text) &&
