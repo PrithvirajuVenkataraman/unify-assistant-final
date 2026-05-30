@@ -3,6 +3,7 @@
   import speechHandler from './speech.js';
   import visionHandler from './vision.js';
   import searchHandler from './search.js';
+  import currentFactsHandler from './current-facts.js';
 
   // Unified API Handler to bypass Vercel's Serverless Function limits
   export default async function handler(req, res) {
@@ -24,6 +25,8 @@
         });
       } else if (path.includes('/markets')) {
         return await marketsHandler(req, res);
+      } else if (path.includes('/current-facts')) {
+        return await currentFactsHandler(req, res);
       } else if (path.includes('/search')) {
         return await searchHandler(req, res);
       } else if (path.includes('/speech')) {
