@@ -16553,30 +16553,6 @@ function detectInputLanguageHint(text) {
     return '';
 }
 
-function isRemovedLiveAccuracyFeatureRequest(text) {
-    const t = String(text || '').toLowerCase().trim();
-    if (!t) return false;
-    if (isWeatherIntentText(t) || isRecipeRequest(t) || isMathCalculationRequest(t) || isStepByStepMathRequest(t)) return false;
-    if (/\b(itinerary|trip plan|travel plan|day plan|things to do|places to visit)\b/.test(t)) return false;
-    if (/\b(news|headlines?|breaking|latest|current|today|right now|live|status|update|updates)\b/.test(t)) return true;
-    if (/\b(exchange rate|currency|convert|conversion|usd|inr|eur|gbp|aed|cad|aud|jpy|stock|share price|market price|crypto|bitcoin|ethereum|gold price|silver price|petrol price|diesel price)\b/.test(t)) return true;
-    if (/\b(who is|who's|what is)\b[\s\S]{0,80}\b(pm|prime minister|cm|chief minister|president|governor|mayor|minister|ceo|chairman|chairperson|captain|coach|head of|leader of|administrator|director general)\b/.test(t)) return true;
-    if (/\b(search web|web search|google|look up|browse|internet)\b/.test(t)) return true;
-    return false;
-}
-
-async function handleRemovedLiveAccuracyFeatureRequest(text) {
-    const msg = [
-        'I turned off live/current fact lookup because it was not reliable enough in this app.',
-        '',
-        'I can still help with learning explanations, recipes, itineraries, weather, math, writing, planning, and camera OCR/translation.'
-    ].join('\n');
-    addChatMessage(msg, false);
-    speak('I turned off live fact lookup because it was not reliable enough here.');
-    saveToHistory(text, msg);
-    return true;
-}
-
         async function processCommand(text) {
             const lower = text.toLowerCase();
             const compact = String(text || '').trim();
@@ -16651,11 +16627,6 @@ async function handleRemovedLiveAccuracyFeatureRequest(text) {
                     return;
                 }
                 await handleContinuousVisionQuery(text);
-                return;
-            }
-
-            if (isRemovedLiveAccuracyFeatureRequest(compact)) {
-                await handleRemovedLiveAccuracyFeatureRequest(text);
                 return;
             }
 
