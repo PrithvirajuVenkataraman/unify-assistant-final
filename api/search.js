@@ -22,6 +22,8 @@ export default async function handler(req, res) {
     const query = String(req.body?.query || '').trim();
     const maxResults = clampInt(req.body?.maxResults, 8, 1, 12);
     const wantsAnswer = Boolean(req.body?.answer);
+    const domain = String(req.body?.domain || '').trim().toLowerCase();
+    const factType = String(req.body?.factType || '').trim().toLowerCase();
     if (!query) {
         return res.status(400).json({ success: false, error: 'query is required', results: [] });
     }
@@ -40,8 +42,9 @@ export default async function handler(req, res) {
     }
 
     try {
-        const webSearch = await searchSerperDetailed(query, { maxResults, type: 'search' });
-        const newsSearch = wantsAnswer ? await searchSerperDetailed(query, { maxResults: Math.min(maxResults, 6), type: 'news' }) : { results: [] };
+        const effectiveQuery = biasSearchQuery(query, { domain, factType });
+        const webSearch = await searchSerperDetailed(effectiveQuery, { maxResults, type: 'search' });
+        const newsSearch = wantsAnswer ? await searchSerperDetailed(effectiveQuery, { maxResults: Math.min(maxResults, 6), type: 'news' }) : { results: [] };
         const results = dedupeResults([...(webSearch.results || []), ...(newsSearch.results || [])]).slice(0, maxResults);
         const providerErrors = [webSearch, newsSearch]
             .filter(item => item?.error)
@@ -52,7 +55,7 @@ export default async function handler(req, res) {
             }));
 
         if (!results.length && providerErrors.length) {
-            const rssResults = await searchGoogleNewsRss(query, { maxResults }).catch(() => []);
+            const rssResults = await searchGoogleNewsRss(effectiveQuery, { maxResults }).catch(() => []);
             if (rssResults.length) {
                 const answer = wantsAnswer ? await buildGroundedSearchAnswer(query, rssResults) : { text: '', provider: '', model: '', error: '' };
                 return res.status(200).json({
@@ -89,6 +92,9 @@ export default async function handler(req, res) {
             success: true,
             serperConfigured: true,
             query,
+            effectiveQuery,
+            domain,
+            factType,
             results,
             providerBreakdown: {
                 serperSearch: webSearch.results?.length || 0,
@@ -116,6 +122,21 @@ export default async function handler(req, res) {
             results: []
         });
     }
+}
+
+function biasSearchQuery(query, options = {}) {
+    const raw = String(query || '').trim();
+    const domain = String(options.domain || '').toLowerCase();
+    const factType = String(options.factType || '').toLowerCase();
+    if (domain === 'sports' && (factType === 'result' || factType === 'score' || /\b(ipl|cricket|match|score|result|won|winner)\b/i.test(raw))) {
+        if (/\b(ipl|indian premier league)\b/i.test(raw)) {
+            return `${raw} result scorecard Cricbuzz ESPNcricinfo IPLT20`;
+        }
+        return `${raw} result scorecard official`;
+    }
+    if (factType === 'role') return `${raw} official current`;
+    if (domain === 'space_science') return `${raw} official latest update`;
+    return raw;
 }
 
 export function hasSerperKey() {
@@ -244,7 +265,7 @@ function dedupeResults(results) {
     return out;
 }
 
-async function searchGoogleNewsRss(query, options = {}) {
+export async function searchGoogleNewsRss(query, options = {}) {
     const maxResults = clampInt(options.maxResults, 8, 1, 12);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), clampInt(options.timeoutMs, 6500, 1000, 15000));
