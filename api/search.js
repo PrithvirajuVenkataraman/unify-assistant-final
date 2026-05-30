@@ -52,9 +52,33 @@ export default async function handler(req, res) {
             }));
 
         if (!results.length && providerErrors.length) {
-            return res.status(502).json({
+            const rssResults = await searchGoogleNewsRss(query, { maxResults }).catch(() => []);
+            if (rssResults.length) {
+                const answer = wantsAnswer ? await buildGroundedSearchAnswer(query, rssResults) : { text: '', provider: '', model: '', error: '' };
+                return res.status(200).json({
+                    success: true,
+                    serperConfigured: true,
+                    query,
+                    results: rssResults,
+                    providerBreakdown: {
+                        serperSearch: 0,
+                        serperNews: 0,
+                        googleNewsRss: rssResults.length,
+                        serper: 0
+                    },
+                    providerErrors,
+                    answer: answer.text,
+                    answerProvider: answer.provider || 'google_news_rss_fallback',
+                    answerModel: answer.model || '',
+                    answerError: answer.error || ''
+                });
+            }
+            const creditError = providerErrors.find(item => /not enough credits|quota|billing|payment/i.test(String(item?.error || '')));
+            return res.status(creditError ? 402 : 502).json({
                 success: false,
-                error: providerErrors[0].error || 'live search provider failed',
+                error: creditError
+                    ? 'Live search provider has no remaining Serper credits. Add Serper credits or configure another provider.'
+                    : (providerErrors[0].error || 'live search provider failed'),
                 serperConfigured: true,
                 providerErrors,
                 results: []
@@ -218,6 +242,69 @@ function dedupeResults(results) {
         out.push(item);
     }
     return out;
+}
+
+async function searchGoogleNewsRss(query, options = {}) {
+    const maxResults = clampInt(options.maxResults, 8, 1, 12);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), clampInt(options.timeoutMs, 6500, 1000, 15000));
+    try {
+        const rssUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-IN&gl=IN&ceid=IN:en`;
+        const response = await fetch(rssUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 UnifyAssistant/1.0'
+            },
+            signal: options.signal || controller.signal
+        });
+        if (!response.ok) return [];
+        const xml = await response.text();
+        const itemBlocks = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
+        return itemBlocks
+            .map(block => ({
+                title: decodeXml(stripTags(extractXmlTag(block, 'title'))),
+                url: normalizeGoogleNewsUrl(decodeXml(extractXmlTag(block, 'link'))),
+                description: decodeXml(stripTags(extractXmlTag(block, 'description'))),
+                date: decodeXml(extractXmlTag(block, 'pubDate')),
+                provider: 'google_news_rss'
+            }))
+            .filter(item => item.title && item.url)
+            .slice(0, maxResults);
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+function extractXmlTag(xml, tagName) {
+    const match = String(xml || '').match(new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i'));
+    return match?.[1] || '';
+}
+
+function stripTags(value) {
+    return String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function decodeXml(value) {
+    return String(value || '')
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;|&apos;/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeGoogleNewsUrl(url) {
+    const value = normalizeUrl(url);
+    if (!value) return '';
+    try {
+        const parsed = new URL(value);
+        const direct = parsed.searchParams.get('url');
+        return direct && /^https?:\/\//i.test(direct) ? direct : value;
+    } catch (_) {
+        return value;
+    }
 }
 
 async function buildGroundedSearchAnswer(query, results) {
