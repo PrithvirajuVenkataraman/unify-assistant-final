@@ -203,7 +203,11 @@ ${snippets}`;
 
 function fallbackSnippetAnswer(results) {
     const top = Array.isArray(results) ? results[0] : null;
-    return cleanText(top?.description || top?.title || '');
+    if (!top) return '';
+    const lead = cleanText(top.description || top.title || '');
+    const title = cleanText(top.title || '');
+    if (lead && title && lead !== title) return `${title}: ${lead}`;
+    return lead || title;
 }
 
 export function extractSearchTopic(text) {
