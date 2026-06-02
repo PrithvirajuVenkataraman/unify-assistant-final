@@ -24,6 +24,9 @@ export default async function handler(req, res) {
     const wantsAnswer = Boolean(req.body?.answer);
     const domain = String(req.body?.domain || '').trim().toLowerCase();
     const factType = String(req.body?.factType || '').trim().toLowerCase();
+    const mustContain = Array.isArray(req.body?.mustContain)
+        ? req.body.mustContain.map(item => String(item || '').trim()).filter(Boolean).slice(0, 8)
+        : [];
     if (!query) {
         return res.status(400).json({ success: false, error: 'query is required', results: [] });
     }
@@ -45,7 +48,9 @@ export default async function handler(req, res) {
         const effectiveQuery = biasSearchQuery(query, { domain, factType });
         const webSearch = await searchSerperDetailed(effectiveQuery, { maxResults, type: 'search' });
         const newsSearch = wantsAnswer ? await searchSerperDetailed(effectiveQuery, { maxResults: Math.min(maxResults, 6), type: 'news' }) : { results: [] };
-        const results = dedupeResults([...(webSearch.results || []), ...(newsSearch.results || [])]).slice(0, maxResults);
+        const rawResults = dedupeResults([...(webSearch.results || []), ...(newsSearch.results || [])]);
+        const filteredResults = filterResultsByMustContain(rawResults, mustContain);
+        const results = filteredResults.slice(0, maxResults);
         const providerErrors = [webSearch, newsSearch]
             .filter(item => item?.error)
             .map(item => ({
@@ -55,7 +60,8 @@ export default async function handler(req, res) {
             }));
 
         if (!results.length && providerErrors.length) {
-            const rssResults = await searchGoogleNewsRss(effectiveQuery, { maxResults }).catch(() => []);
+            const rssRaw = await searchGoogleNewsRss(effectiveQuery, { maxResults }).catch(() => []);
+            const rssResults = filterResultsByMustContain(rssRaw, mustContain);
             if (rssResults.length) {
                 const answer = wantsAnswer ? await buildGroundedSearchAnswer(query, rssResults) : { text: '', provider: '', model: '', error: '' };
                 return res.status(200).json({
@@ -95,7 +101,17 @@ export default async function handler(req, res) {
             effectiveQuery,
             domain,
             factType,
+            mustContain,
             results,
+            sourceCategories: results.map(item => ({
+                title: item.title,
+                url: item.url,
+                category: classifySearchSourceCategory(item, { domain, factType })
+            })),
+            discardedWeakSources: rawResults
+                .filter(item => classifySearchSourceCategory(item, { domain, factType }) === 'weak_context')
+                .slice(0, 5)
+                .map(item => ({ title: item.title, url: item.url })),
             providerBreakdown: {
                 serperSearch: webSearch.results?.length || 0,
                 serperNews: newsSearch.results?.length || 0,
@@ -137,6 +153,19 @@ function biasSearchQuery(query, options = {}) {
     if (factType === 'role') return `${raw} official current`;
     if (domain === 'space_science') return `${raw} official latest update`;
     return raw;
+}
+
+function filterResultsByMustContain(results, mustContain) {
+    const list = Array.isArray(results) ? results : [];
+    const required = Array.isArray(mustContain)
+        ? mustContain.map(item => String(item || '').trim().toLowerCase()).filter(Boolean)
+        : [];
+    if (!required.length) return list;
+    const filtered = list.filter(item => {
+        const combined = `${item?.title || ''} ${item?.description || ''} ${item?.url || ''}`.toLowerCase();
+        return required.some(token => combined.includes(token));
+    });
+    return filtered.length ? filtered : list;
 }
 
 export function hasSerperKey() {
@@ -341,6 +370,8 @@ Rules:
 - Start with the direct answer in 1-3 sentences.
 - Add up to 3 short key points only if useful.
 - Do not invent facts not present in the snippets.
+- Do not infer a winner, score, role holder, price, or event outcome unless it is explicitly present in the snippets.
+- If snippets are only fixtures, schedules, previews, predictions, or landing pages, say no confirmed result was found.
 - If snippets disagree or are weak, say that clearly.
 
 Snippets:
@@ -377,6 +408,22 @@ ${snippets}`;
     }
 
     return { text: fallbackSnippetAnswer(results), provider: 'fallback', model: '', error: groqKey ? 'empty_model_answer' : 'GROQ_API_KEY is not configured' };
+}
+
+function classifySearchSourceCategory(item, options = {}) {
+    const combined = `${item?.title || ''} ${item?.description || ''}`.toLowerCase();
+    const domain = String(options.domain || '').toLowerCase();
+    const factType = String(options.factType || '').toLowerCase();
+    if (domain === 'sports' && (factType === 'result' || factType === 'score')) {
+        if (/\b(preview|prediction|pitch report|weather|rain|washed out|schedule|fixtures?|live scores?|points table|standings|probable xi|fantasy|dream11)\b/.test(combined)) {
+            return 'weak_context';
+        }
+        if (/\b(result|scorecard|who won|beat|defeated|won by|lost to|match report|highlights?)\b/.test(combined)) {
+            return 'post_event_result';
+        }
+    }
+    if (/\bofficial\b/.test(combined)) return 'official';
+    return 'general';
 }
 
 function fallbackSnippetAnswer(results) {
