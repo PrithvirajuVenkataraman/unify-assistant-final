@@ -9,6 +9,7 @@
     <title>AI Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="styles.css">
+    <script src="science-format.js"></script>
 </head>
 <body class="dark min-h-screen transition-all duration-500 bg-black text-white">
 
@@ -1114,8 +1115,10 @@ Rules:
 - If chemistry/physics/math formula is involved, use this strict structure:
 Definition: ...
 Formula: ...
+Substitution: ...
+Result: ...
 Units: ...
-Example: ...
+Notes: ...
 Quick recap: ...
 - If user asked for formula/equation, include it explicitly.
 - If term is misspelled, infer the most likely intended term and answer that directly.
@@ -6281,6 +6284,9 @@ let showRoutingDebugBadge = false;
                 return `<pre class="assistant-md-code-block">${lang}<code>${escapeHtml(block.code)}</code></pre>`;
             });
 
+            if (window.JarvisScienceFormat?.enhanceHtml) {
+                html = window.JarvisScienceFormat.enhanceHtml(html);
+            }
             return html;
         }
 
@@ -8638,7 +8644,8 @@ async function fetchLiveSearchJson(query, options = {}) {
             maxResults: options.maxResults || 8,
             answer: Boolean(options.answer),
             domain: options.domain || '',
-            factType: options.factType || ''
+            factType: options.factType || '',
+            mustContain: Array.isArray(options.mustContain) ? options.mustContain : []
         })
     });
     const data = await parseJsonResponseSafely(response);
@@ -8679,9 +8686,30 @@ function formatCurrentFactAnswer(data = {}) {
     const meta = [
         `As of: ${data?.asOf ? new Date(data.asOf).toLocaleString() : formatAsOfTimestamp()}`,
         data?.provider ? `Provider: ${data.provider}` : '',
-        data?.confidence ? `Confidence: ${data.confidence}` : ''
+        data?.confidence ? `Confidence: ${data.confidence}` : '',
+        formatCurrentFactProviderStatus(data)
     ].filter(Boolean).join('\n');
     return `${answer}\n\n${meta}${sourceLines ? `\n\nSources:\n${sourceLines}` : ''}`;
+}
+
+function formatCurrentFactProviderStatus(data = {}) {
+    const statuses = Array.isArray(data?.debug?.providerStatuses) ? data.debug.providerStatuses : [];
+    const notable = statuses
+        .filter(item => item && item.status && item.status !== 'ok')
+        .slice(0, 3)
+        .map(item => `${item.provider}: ${String(item.status).replace(/_/g, ' ')}`);
+    return notable.length ? `Provider status: ${notable.join('; ')}` : '';
+}
+
+function getLiveSearchMustContainHints(intent = {}, query = '') {
+    const domain = String(intent?.domain || '').toLowerCase();
+    const factType = String(intent?.factType || '').toLowerCase();
+    const raw = String(query || '').toLowerCase();
+    if (domain === 'sports' && (factType === 'result' || /\b(score|result|winner|who won|what happened|latest)\b/.test(raw))) {
+        return ['result', 'score', 'won', 'beat', 'defeated', 'scorecard'];
+    }
+    if (factType === 'role') return ['official', 'current'];
+    return [];
 }
 
 function isVerificationRefusalText(text) {
@@ -16232,7 +16260,8 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
                 maxResults: 8,
                 answer: true,
                 domain: intent.domain || '',
-                factType: intent.factType || ''
+                factType: intent.factType || '',
+                mustContain: getLiveSearchMustContainHints(intent, query)
             });
             const directAnswer = cleanLiveAnswerText(String(answerData?.answer || '').trim());
             const answerResults = Array.isArray(answerData?.results) ? answerData.results.filter(Boolean) : [];
@@ -16295,7 +16324,8 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
                         signal: controller.signal,
                         maxResults: 6,
                         domain: intent.domain || '',
-                        factType: intent.factType || ''
+                        factType: intent.factType || '',
+                        mustContain: getLiveSearchMustContainHints(intent, query)
                     });
                     return Array.isArray(data?.results) ? data.results.filter(Boolean) : [];
                 } catch (e) {
@@ -17426,8 +17456,10 @@ Rules:
 - For chemistry/physics/math formula questions, use this strict structure:
 Definition: ...
 Formula: ...
+Substitution: ...
+Result: ...
 Units: ...
-Example: ...
+Notes: ...
 Quick recap: ...
 - End with a short "quick recap".
 - If useful, add "next thing to learn" in one line.
@@ -20097,7 +20129,7 @@ function toggleMemoryPersistence(enabled) {
         }
 
         function sanitizeTextForSpeech(text) {
-            return String(text || '')
+            let speechText = String(text || '')
                 .replace(/```[\s\S]*?```/g, ' ')
                 .replace(/`([^`]+)`/g, '$1')
                 .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '$1')
@@ -20110,6 +20142,10 @@ function toggleMemoryPersistence(enabled) {
                 .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, ' ')
                 .replace(/\s+/g, ' ')
                 .trim();
+            if (window.JarvisScienceFormat?.normalizeScienceSpeech) {
+                speechText = window.JarvisScienceFormat.normalizeScienceSpeech(speechText);
+            }
+            return speechText;
         }
         
         function speak(text, force = false) { 
