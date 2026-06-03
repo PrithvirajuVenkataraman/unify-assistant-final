@@ -286,6 +286,8 @@
 })();
 
 const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'};
+const LIVE_RETRIEVAL_ENABLED = false;
+const LIVE_DISABLED_MESSAGE = 'Live search and current updates are temporarily disabled. I can answer from general knowledge, but I cannot verify real-time facts right now.';
 const SUPPORT_MODE_HINTS = {
     balanced: 'Be clear, practical, and warm. Keep a neutral supportive tone.',
     supportive: 'Use an empathetic and motivating tone while staying concrete and direct.',
@@ -2511,6 +2513,15 @@ async function processUserQuery(text) {
     return await askGeminiAI(t);
 }
 
+async function publishLiveDisabledMessage(userText, options = {}) {
+    const message = options?.message || LIVE_DISABLED_MESSAGE;
+    hideThinkingIndicator();
+    addChatMessage(message, false);
+    speak(options?.speechText || message);
+    saveToHistory(userText || '', message);
+    return true;
+}
+
 function isCurrentInfoQueryLegacy(text) {
     const t = String(text || '').toLowerCase();
     return /\b(current|latest|today|now|live|status|update)\b/.test(t);
@@ -2823,6 +2834,8 @@ ${snippets}`
 }
 
 async function buildNewsSearchFallback(query, signal) {
+    if (!LIVE_RETRIEVAL_ENABLED) return null;
+
     showThinkingIndicator('Web search in progress...');
     const response = await fetch('/api/search', {
         method: 'POST',
@@ -2858,6 +2871,10 @@ async function buildNewsSearchFallback(query, signal) {
 
 // ========== NEWS FETCHING FUNCTION ==========
 async function fetchAndDisplayNews(query) {
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        return publishLiveDisabledMessage(query);
+    }
+
     showThinkingIndicator('Web search in progress...');
     const controller = beginAbortableRequest();
     const budgetTimer = setTimeout(() => {
@@ -2979,6 +2996,8 @@ async function fetchAndDisplayNews(query) {
 // ========== END NEWS FETCHING FUNCTION ==========
 
 async function handleTamilJokeSearch(queryText) {
+    if (!LIVE_RETRIEVAL_ENABLED) return false;
+
     showThinkingIndicator('Searching web for a Tamil joke...');
     try {
         const response = await fetch('/api/search', {
@@ -3425,6 +3444,8 @@ function maybeCaptureKnowledgeEntity(text) {
 }
  
 async function buildSearchFallbackAnswer(userMessage) {
+    if (!LIVE_RETRIEVAL_ENABLED) return null;
+
     const resolvedMessage = resolveKnowledgeFollowupQuery(userMessage);
     const lowSignal = String(resolvedMessage || '').trim();
     if (!lowSignal) return null;
@@ -3643,19 +3664,18 @@ function asksUserToProvideSources(text) {
 
 async function resolveFinalAssistantAnswer(userMessage, answerText) {
     if (requiresLiveSourceAnswer(userMessage)) {
-        const searchFallback = await buildSearchFallbackAnswer(userMessage);
-        if (searchFallback) return searchFallback;
-        return 'Live search is not configured or did not return enough current sources. Set SERPER_API_KEY and try again.';
+        return LIVE_DISABLED_MESSAGE;
     }
     if (asksUserToProvideSources(answerText)) {
-        const searchFallback = await buildSearchFallbackAnswer(userMessage);
-        if (searchFallback) return searchFallback;
+        if (!LIVE_RETRIEVAL_ENABLED) return LIVE_DISABLED_MESSAGE;
     }
     const safeAnswer = sanitizeWeakModelAnswer(answerText, userMessage);
     if (safeAnswer) return safeAnswer;
 
-    const searchFallback = await buildSearchFallbackAnswer(userMessage);
-    if (searchFallback) return searchFallback;
+    if (LIVE_RETRIEVAL_ENABLED) {
+        const searchFallback = await buildSearchFallbackAnswer(userMessage);
+        if (searchFallback) return searchFallback;
+    }
 
     const strictApiFallback = await buildStrictApiKnowledgeFallback(userMessage);
     if (strictApiFallback) return strictApiFallback;
@@ -8539,6 +8559,15 @@ function formatVerifiedSourcesList(sources) {
 }
 
 async function buildVerifiedSearchSummary(query, options = {}) {
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        return {
+            text: LIVE_DISABLED_MESSAGE,
+            speech: LIVE_DISABLED_MESSAGE,
+            badge: 'Live search disabled',
+            error: true
+        };
+    }
+
     const userQuery = String(query || '').trim();
     if (!userQuery) return null;
 
@@ -8616,18 +8645,22 @@ async function parseJsonResponseSafely(response) {
 }
 
 function formatLiveSearchFailureMessage(data = {}, status = 0) {
+    if (!LIVE_RETRIEVAL_ENABLED || data?.disabled) {
+        return 'Live search is temporarily disabled.';
+    }
+
     const error = String(data?.error || '').trim();
     const providerError = Array.isArray(data?.providerErrors) && data.providerErrors.length
         ? String(data.providerErrors[0]?.error || '').trim()
         : '';
-    if (data?.serperConfigured === false || /SERPER_API_KEY|not configured/i.test(error || providerError)) {
-        return 'Live search is not configured. Set SERPER_API_KEY in the server environment and redeploy.';
+    if (/not configured/i.test(error || providerError)) {
+        return 'Live search is temporarily disabled.';
     }
     if (status === 402 || /not enough credits|quota|billing|payment/i.test(error || providerError)) {
-        return 'Live search provider has no remaining Serper credits. Add Serper credits or configure another live-search provider.';
+        return 'Live search is temporarily disabled.';
     }
     if (status === 404) return 'Live search failed because /api/search was not found in this deployment.';
-    if (status === 401 || status === 403) return 'Live search failed because the search provider rejected the request. Check the Serper API key.';
+    if (status === 401 || status === 403) return 'Live search failed because the search provider rejected the request.';
     if (status === 429) return 'Live search is temporarily rate limited. Please retry shortly.';
     if (status >= 500) return `Live search provider failed${providerError || error ? `: ${providerError || error}` : '.'}`;
     if (error || providerError) return `Live search failed: ${providerError || error}`;
@@ -8635,6 +8668,13 @@ function formatLiveSearchFailureMessage(data = {}, status = 0) {
 }
 
 async function fetchLiveSearchJson(query, options = {}) {
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        const error = new Error('Live search is temporarily disabled.');
+        error.status = 503;
+        error.data = { success: false, disabled: true, error: 'Live search is temporarily disabled.', results: [] };
+        throw error;
+    }
+
     const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -8659,6 +8699,13 @@ async function fetchLiveSearchJson(query, options = {}) {
 }
 
 async function fetchCurrentFactJson(query, options = {}) {
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        const error = new Error('Live search is temporarily disabled.');
+        error.status = 503;
+        error.data = { success: false, disabled: true, resolved: false, error: 'Live search is temporarily disabled.', answer: '', sources: [] };
+        throw error;
+    }
+
     const response = await fetch('/api/current-facts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -8717,6 +8764,10 @@ function isVerificationRefusalText(text) {
 }
 
 async function handleExchangeRateLookup(text) {
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        return publishLiveDisabledMessage(text);
+    }
+
     const parsed = parseExchangeQuery(text);
     if (!parsed.from || !parsed.to) return false;
 
@@ -8785,6 +8836,10 @@ async function handleExchangeRateLookup(text) {
 }
 
 async function handleMarketLookup(text) {
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        return publishLiveDisabledMessage(text);
+    }
+
     showThinkingIndicator('Checking verified market sources...');
     try {
         const effectiveQuery = await enrichFuelQueryWithLocation(text);
@@ -9594,6 +9649,8 @@ function extractTravelLocationOrFallback(text) {
 }
 
 async function buildTopPlaceSuggestions(type, location, userText = '') {
+    if (!LIVE_RETRIEVAL_ENABLED) return null;
+
     const kind = String(type || '').toLowerCase();
     const loc = String(location || '').trim();
     if (!loc) return null;
@@ -10257,6 +10314,8 @@ function extractMotivationStoryProfile(text) {
 }
 
 async function buildMotivationStoryFromWeb(userText) {
+    if (!LIVE_RETRIEVAL_ENABLED) return '';
+
     const profile = extractMotivationStoryProfile(userText);
     const queryByCategory = {
         scientist: 'real life motivational scientist story invention impact',
@@ -11664,6 +11723,8 @@ Rules:
 }
 
 async function fetchSongsFromVerifiedSources(artist, requestedCount) {
+    if (!LIVE_RETRIEVAL_ENABLED) return { items: [], sources: [] };
+
     const safeArtist = String(artist || '').trim();
     if (!safeArtist) return { items: [], sources: [] };
 
@@ -11886,6 +11947,19 @@ async function handleArtistSongRequest(text) {
         }
     } catch (catalogError) {
         // Fall through to web-search and AI fallbacks.
+    }
+
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        try {
+            const aiFallbackItems = await buildSongListFromAIFallback(artist, requestedCount, wantsLatest ? 'latest/recent songs' : 'top/best songs');
+            const fallbackReply = formatMusicSongReply(artist, requestedCount, aiFallbackItems, true, wantsLatest ? 'latest' : 'top');
+            addChatMessage(fallbackReply, false);
+            speak(fallbackReply);
+            saveToHistory(text, fallbackReply);
+        } catch (_) {
+            await publishLiveDisabledMessage(text);
+        }
+        return;
     }
 
     showThinkingIndicator(`[Music] Finding songs for ${artist}...`);
@@ -12143,6 +12217,8 @@ async function answerYesNoOnly(questionText) {
 }
 
 async function handleComparisonWithReliableSources(userText) {
+    if (!LIVE_RETRIEVAL_ENABLED) return false;
+
     const entities = extractComparisonEntities(userText);
     if (!entities) return false;
 
@@ -12608,6 +12684,10 @@ async function publishStrictLatestFailure(userText, intent, options = {}) {
 }
 
 async function handleStrictLatestQuery(userText) {
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        return publishLiveDisabledMessage(userText);
+    }
+
     showThinkingIndicator('Checking latest trusted sources...');
     const controller = beginAbortableRequest();
     const budgetMs = TRUST_FIRST_RELIABILITY_POLICY.verificationBudgetMs;
@@ -15302,6 +15382,8 @@ async function publishUniversalModelFallback(pipeline, label = 'Model fallback')
 }
 
 async function fetchHybridCitationSources(userText, intent, controller) {
+    if (!LIVE_RETRIEVAL_ENABLED) return [];
+
     const query = String(userText || '').trim();
     if (!query) return [];
 
@@ -15360,6 +15442,11 @@ async function handleAnswerThenCiteQuery(userText, classification) {
         return false;
     }
 
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        await publishResolvedModelMessage(query, answer, { label: 'Model answer', routing: ai?.routing || null });
+        return true;
+    }
+
     const controller = beginAbortableRequest();
     try {
         const sources = await fetchHybridCitationSources(query, classification?.liveIntent, controller);
@@ -15396,6 +15483,10 @@ async function handleChatFirstCurrentQuery(userText, classification) {
     if (answer && ai?.intent !== 'soft_fallback') {
         await publishResolvedModelMessage(query, answer, { label: 'Model answer', routing: ai?.routing || null });
         return true;
+    }
+
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        return publishLiveDisabledMessage(query);
     }
 
     const flags = classification?.flags || {};
@@ -15559,6 +15650,8 @@ Steps:
 }
 
 async function retrieveUniversalEntitySources(pipeline, controller) {
+    if (!LIVE_RETRIEVAL_ENABLED) return [];
+
     const queries = buildUniversalEntityQueries(pipeline.userText, pipeline.intent);
     const resultSets = await Promise.all(
         queries.map(async (q) => {
@@ -15624,7 +15717,7 @@ function buildStrictVerificationClarificationMessage(userText, intent, entityInt
     const subject = String(entityIntent?.subject || '').trim();
     const noSources = !(Array.isArray(sources) && sources.length);
     if (noSources && shouldRequireVerifiedSources(query, intent, entityIntent)) {
-        return `Live search did not return usable results for this current fact.\n\nAs of: ${formatAsOfTimestamp()}\n\nCheck the Network tab for /api/search. If it is missing, the deployed frontend is not calling the search route. If it returns 503 or 401, fix SERPER_API_KEY in the server environment.`;
+        return `${LIVE_DISABLED_MESSAGE}\n\nAs of: ${formatAsOfTimestamp()}`;
     }
     const hasEntity = Boolean(subject || entityIntent?.targetEntity);
     const canRefine = hasEntity || relation !== 'general';
@@ -15974,6 +16067,10 @@ ${snippets}`
 }
 
 async function handleUniversalEntityFactQuery(userText, liveIntent = null) { 
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        return publishLiveDisabledMessage(userText);
+    }
+
     const pipeline = buildUniversalFactPipelineContext(userText, liveIntent);
     const riskLevel = getRiskTierForQuery(pipeline.userText, pipeline.intent, pipeline.entityIntent);
     logRoutingDebug('handler enter: universal_entity_fact', userText, {
@@ -16172,6 +16269,10 @@ async function handleSportsFactQuery(userText, intent) {
 }
 
 async function handleLiveRetrievalQuery(userText, options = {}) {
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        return publishLiveDisabledMessage(userText);
+    }
+
     logRoutingDebug('handler enter: live_retrieval', userText, {
         selectedHandler: 'handleLiveRetrievalQuery',
         options
@@ -16307,7 +16408,7 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
                 selectedHandler: 'handleLiveRetrievalQuery',
                 error: String(answerError?.message || answerError || '')
             });
-            if (answerError?.status === 404 || answerError?.status === 401 || answerError?.status === 402 || answerError?.status === 403 || answerError?.status === 502 || /SERPER_API_KEY|not configured|not enough credits|quota|billing|payment/i.test(String(answerError?.message || ''))) {
+            if (answerError?.status === 404 || answerError?.status === 401 || answerError?.status === 402 || answerError?.status === 403 || answerError?.status === 502 || /not configured|not enough credits|quota|billing|payment/i.test(String(answerError?.message || ''))) {
                 const msg = String(answerError.message || 'Live search is unavailable.');
                 addVerifiedAssistantMessage(msg, 'Live search unavailable');
                 speak(msg);
@@ -17941,7 +18042,7 @@ Quick recap: ...
                 
                 // Do web search first to get real places
                 let placeSearchResults = '';
-                if (itineraryLocation) {
+                if (itineraryLocation && LIVE_RETRIEVAL_ENABLED) {
                     try {
                         const searchQueries = [
                             `top tourist places in ${itineraryLocation}`,
