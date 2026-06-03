@@ -1,6 +1,5 @@
 export const config = { maxDuration: 60 };
 import { applyApiSecurity } from './security.js';
-import { runVerifiedWebSearch } from './search.js';
 
 const LIVE_CAG_TTL_MS = 20 * 60 * 1000;
 const LIVE_CAG_MAX_ENTRIES = 120;
@@ -8,6 +7,7 @@ const MODEL_FETCH_TIMEOUT_MS = 18_000;
 const INTERNAL_FETCH_TIMEOUT_MS = 8_000;
 const FETCH_RETRIES = 1;
 const CHAT_ROUTER_MODE = String(process.env.CHAT_ROUTER_MODE || 'strict_single_pass').trim().toLowerCase();
+const LIVE_RETRIEVAL_ENABLED = false;
 
 export default async function handler(req, res) {
     const guard = applyApiSecurity(req, res, {
@@ -442,6 +442,14 @@ function classifyRoutingDecision(message, clientSystemPrompt, options = {}) {
         };
     }
 
+    if (!LIVE_RETRIEVAL_ENABLED) {
+        return {
+            strategy: 'direct',
+            reason: 'live_retrieval_disabled',
+            webEligible: false
+        };
+    }
+
     const asksSources = /\b(with sources?|source links?)\b/i.test(query);
     if (asksSources) {
         return {
@@ -560,36 +568,11 @@ function getWebEscalationDecision(message, firstAnswer) {
 }
 
 async function buildLiveRagContext(message, req, contextTurns = []) {
-    const query = String(message || '').trim();
-    if (!query || !hasSerperConfiguredForChat()) return { ragText: '', sources: [] };
-
-    const cached = getLiveCagContext(query);
-    if (cached?.ragText) return cached;
-
-    const searchQueries = buildChatLiveSearchQueries(query, contextTurns);
-    const verified = await runVerifiedWebSearch(searchQueries, {
-        maxResultsPerQuery: 5,
-        limit: 8,
-        timeoutMs: INTERNAL_FETCH_TIMEOUT_MS
-    });
-    const sources = Array.isArray(verified?.results) ? verified.results.slice(0, 8) : [];
-    if (!sources.length) return { ragText: '', sources: [] };
-
-    const ragText = [
-        'Live web context. Use only these snippets for current facts; cite no facts that are absent or contradicted here.',
-        ...sources.map((item, index) => [
-            `Source ${index + 1}: ${String(item.title || '').trim()}`,
-            `URL: ${String(item.url || '').trim()}`,
-            `Snippet: ${String(item.description || '').trim()}`
-        ].join('\n'))
-    ].join('\n\n');
-    const payload = { ragText, sources };
-    rememberLiveCagContext(query, payload);
-    return payload;
+    return { ragText: '', sources: [] };
 }
 
 function hasSerperConfiguredForChat() {
-    return Boolean(process.env.SERPER_API_KEY || process.env.SERPER_KEY);
+    return false;
 }
 
 function buildChatLiveSearchQueries(query, contextTurns = []) {
@@ -807,16 +790,6 @@ function buildLiveQueries(query) {
             'ISRO launch mission statement site:isro.gov.in',
             'ISRO mission update PSLV GSLV NVS site:isro.gov.in',
             `${q} Reuters OR The Hindu OR Indian Express`
-        ];
-    }
-    if (/\bipl\b/.test(lower) || (/\b(match|schedule|fixture|opening|first)\b/.test(lower) && /\bcricket\b/.test(lower))) {
-        return [
-            'IPL first match date official schedule iplt20.com',
-            'IPL first match teams official schedule iplt20.com',
-            'IPL opening match date ESPNcricinfo Cricbuzz',
-            'IPL opening match teams ESPNcricinfo Cricbuzz',
-            'IPL fixtures first game date',
-            q
         ];
     }
     return [
@@ -1150,18 +1123,14 @@ Style rules:
  - For direct fact questions across any domain, answer with the fact immediately and stay concise by default.
 - For person/celebrity queries ("Who is X?"), give a concise factual bio first, then notable works.
 - For "Who is X?" or "Tell me about X" requests, never reply with research steps like "search online/check databases". Give the direct factual answer.
-- Never ask the user to provide, share, paste, or send sources or links. If sources are needed, use the available live web context/search path and answer from retrieved sources. If retrieval is unavailable or insufficient, say that you could not verify it right now.
+- Never ask the user to provide, share, paste, or send sources or links. Live web search and current updates are temporarily disabled, so if live verification is needed, say that you cannot verify from live sources right now.
 - If the user asks a "do/can/could/would" question, do not answer with only yes or no unless they explicitly asked for yes/no only; explain the answer.
 - If the user asks to explain further, elaborate, or give more detail, expand the previous answer with meaningful detail instead of repeating the short version.
 - If the user specifies a word-count requirement (for example "in 300 words", "exactly 120 words", "under 200 words"), follow it closely.
 - Do not use em dashes or en dashes. Use commas, parentheses, colons, semicolons, or normal hyphens instead.
 - For OCR/uploaded-document text, do not reveal raw extracted contents by default; acknowledge you read it and give a one-line high-level description first. Share specific details only when the user asks a follow-up question.
-- For latest/news/update/current queries, provide concrete, date-aware answers:
-  1) Start with "As of <Month Day, Year>" when timing matters.
-  2) Give the latest verified update first.
-  3) Include 1-3 source links.
-  4) Prefer official/primary sources from Retrieved context (RAG) when available.
-- Never answer a latest/update query with only generic advice like "check the official website" unless the user explicitly asked where to check.
+- For latest/news/update/current queries, do not pretend to have live access. Answer from general knowledge only when clearly safe, otherwise say: "Live search and current updates are temporarily disabled, so I cannot verify real-time facts right now."
+- Never answer a latest/update query with generic instructions like "check the official website" unless the user explicitly asked where to check.
 - If the user's request is too vague, ambiguous, or lacks context, DO NOT guess or hallucinate. Politely ask the user to clarify.
 - If retrieved sources are insufficient or conflicting, say that clearly and provide the best verified status with sources.
 
