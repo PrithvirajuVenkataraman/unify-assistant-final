@@ -4715,8 +4715,8 @@ let showRoutingDebugBadge = false;
             };
 
             modal.innerHTML = `
-                <div class="help-modal-enhanced max-w-2xl w-full max-h-[80vh] overflow-y-auto custom-scrollbar">
-                    <div class="sticky top-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm p-6 border-b border-gray-200/50 dark:border-gray-700/50 flex justify-between items-center">
+                <div class="help-modal-enhanced max-w-2xl w-full">
+                    <div class="help-modal-header bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm p-6 border-b border-gray-200/50 dark:border-gray-700/50 flex justify-between items-center">
                         <div class="flex items-center gap-3">
                             <div class="p-2 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-xl">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
@@ -4735,7 +4735,7 @@ let showRoutingDebugBadge = false;
                         </button>
                     </div>
                     
-                    <div class="p-6 space-y-6">
+                    <div class="help-modal-body p-6 space-y-6 custom-scrollbar">
                         <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Settings</h3>
                             <div class="space-y-4">
@@ -4751,10 +4751,10 @@ let showRoutingDebugBadge = false;
                                 </div>
                                 <div id="noise-level-selector" class="${noiseFilterEnabled ? '' : 'hidden'} pl-4">
                                     <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">Filter Level:</p>
-                                    <div class="flex gap-2">
-                                        <button onclick="setNoiseFilterLevel('low')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${noiseFilterLevel === 'low' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}" id="noise-level-low">Low</button>
-                                        <button onclick="setNoiseFilterLevel('medium')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${noiseFilterLevel === 'medium' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}" id="noise-level-medium">Medium</button>
-                                        <button onclick="setNoiseFilterLevel('high')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${noiseFilterLevel === 'high' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}" id="noise-level-high">High</button>
+                                    <div class="noise-level-control flex gap-2" role="group" aria-label="Noise filter level">
+                                        <button onclick="setNoiseFilterLevel('low')" aria-pressed="${noiseFilterLevel === 'low' ? 'true' : 'false'}" class="noise-level-btn ${noiseFilterLevel === 'low' ? 'is-selected' : ''}" id="noise-level-low">Low</button>
+                                        <button onclick="setNoiseFilterLevel('medium')" aria-pressed="${noiseFilterLevel === 'medium' ? 'true' : 'false'}" class="noise-level-btn ${noiseFilterLevel === 'medium' ? 'is-selected' : ''}" id="noise-level-medium">Medium</button>
+                                        <button onclick="setNoiseFilterLevel('high')" aria-pressed="${noiseFilterLevel === 'high' ? 'true' : 'false'}" class="noise-level-btn ${noiseFilterLevel === 'high' ? 'is-selected' : ''}" id="noise-level-high">High</button>
                                     </div>
                                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Higher = stricter filtering (may miss some commands)</p>
                                 </div>
@@ -4845,11 +4845,9 @@ let showRoutingDebugBadge = false;
             ['low', 'medium', 'high'].forEach(l => {
                 const btn = document.getElementById(`noise-level-${l}`);
                 if (btn) {
-                    if (l === level) {
-                        btn.className = 'px-3 py-1 rounded-full text-xs font-medium transition-all bg-purple-600 text-white';
-                    } else {
-                        btn.className = 'px-3 py-1 rounded-full text-xs font-medium transition-all bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300';
-                    }
+                    const selected = l === level;
+                    btn.className = `noise-level-btn${selected ? ' is-selected' : ''}`;
+                    btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
                 }
             });
 
