@@ -4265,6 +4265,8 @@ const CAG_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 const CAG_LIVE_QUERY_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 const CAG_MIN_SIMILARITY = 0.16;
 const CAG_MIN_TOKEN_OVERLAP = 1;
+const USER_PROFILE_STORAGE_KEY = 'jarvis_user_profile';
+const LEGACY_DEFAULT_USER_STORAGE_KEY = 'unify_user_data_default_user';
 let cagMemoryEntries = [];
 
 function getCagStorageKey() {
@@ -4273,6 +4275,14 @@ function getCagStorageKey() {
 
 function getCandidateCagStorageKeys() {
     const keys = [getCagStorageKey(), 'unify_user_data_default_user_cag'];
+    try {
+        for (let i = 0; i < localStorage.length; i += 1) {
+            const key = localStorage.key(i);
+            if (key && /^unify_user_data_.+_cag$/.test(key)) {
+                keys.push(key);
+            }
+        }
+    } catch (e) {}
     return Array.from(new Set(keys.filter(Boolean)));
 }
 
@@ -4474,7 +4484,7 @@ async function askGeminiAI(userMessage) {
             `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`
         ).join('\n');
         
-        const systemPrompt = `You are JARVIS, a helpful voice assistant.${userName ? ` The user's name is ${userName}. Use their name naturally and occasionally.` : ' Be friendly and conversational.'}
+        const systemPrompt = `You are JARVIS, a helpful voice assistant.${userName ? ` The user's name is ${userName}. Use their name sparingly and only when it sounds natural.` : ' Be friendly and conversational.'}
 
 CRITICAL RULES:
 - If the user explicitly asked for a specific number of items (e.g., "10 facts", "5 tips"), provide exactly that many items. Do not give more or less.
@@ -4491,7 +4501,7 @@ CRITICAL RULES:
 10. Never ask the user to provide, share, paste, or send sources or links. If sources are needed, use the app's live search/retrieval flow. If retrieval is unavailable or insufficient, say you could not verify it right now.
 
 RULES:
-- ${userName ? `The user's name is ${userName} - use it!` : 'You do NOT know the user\'s name. NEVER say "User" or "Hi User!" - just say "Hi!" or be friendly without using a name.'}
+- ${userName ? `The user's name is ${userName}. Do not overuse it; use it only for greetings, confirmations, or when it adds clarity.` : 'You do NOT know the user\'s name. NEVER say "User" or "Hi User!" - just say "Hi!" or be friendly without using a name.'}
 - Be natural and conversational
 - If asked about specific places/hotels/restaurants you're unsure about, recommend checking Google Maps, MakeMyTrip, or TripAdvisor
 - Be concrete and on-point; avoid vague answers
@@ -4661,30 +4671,24 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
 } 
 
 async function handleNameCorrection(text) {
-    const patterns = [
-        /(?:no|nah|nope|actually|wrong),?\s*(?:my name is|i'm|i am|it's|call me)\s+([^,.!?]+)/i,
-        /(?:my name is|i'm|i am|it's|call me)\s+([^,.!?]+)/i
-    ];
-    
-    let newName = '';
-    for (const pattern of patterns) {
-        const match = text.match(pattern);
-        if (match && match[1]) {
-            newName = match[1].trim();
-            break;
-        }
-    }
-    
+    let newName = extractNameFromText(text);
     if (!newName) {
         const aiResponse = await askGeminiAI(`Extract just the name from: "${text}"`);
-        newName = aiResponse.response;
+        newName = normalizePersonalName(aiResponse.response);
     }
     
-    newName = newName.replace(/[?.!,]$/g, '').trim();
-    newName = newName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    if (!isLikelyPersonalName(newName)) {
+        await deliverApiReply('name_input_retry', {}, {
+            fallbackText: 'Please share only your name. Example: "Arun" or "Arun Kumar".'
+        });
+        waitingForName = true;
+        return;
+    }
     
     const isHarsh = /idiot|stupid|dumb|moron|fool/i.test(text);
     userName = newName;
+    AppState.user.name = userName;
+    if (memoryStore?.name) delete memoryStore.name;
     saveUserData();
 
     await deliverApiReply('name_corrected', {
@@ -18896,7 +18900,7 @@ Quick recap: ...
             
             
             if (userName && /^(no|nah|nope|actually|wrong)/i.test(cleanText)) {
-                handleNameCorrection(cleanText);
+                await handleNameCorrection(cleanText);
                 return;
             }
 
@@ -20621,10 +20625,42 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             return true;
         }
 
+        function normalizePersonalName(value) {
+            let name = String(value || '')
+                .replace(/^["'`]+|["'`]+$/g, '')
+                .replace(/[?.!,;:]+$/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            name = name.replace(/\b(?:please|thanks|thank you|bro|sir|madam)$/i, '').trim();
+            if (!name) return '';
+            return name
+                .split(/\s+/)
+                .map(part => part
+                    .split(/([-'])/)
+                    .map(piece => piece === '-' || piece === '\'' ? piece : (piece.charAt(0).toUpperCase() + piece.slice(1).toLowerCase()))
+                    .join(''))
+                .join(' ');
+        }
+
+        function extractNameFromText(text) {
+            const raw = String(text || '').trim();
+            const patterns = [
+                /(?:no|nah|nope|actually|wrong),?\s*(?:my name is|i'm|i am|it's|it is|call me|you can call me)\s+([^,.!?;]+)/i,
+                /(?:my name is|i'm|i am|it's|it is|call me|you can call me)\s+([^,.!?;]+)/i,
+                /^([A-Za-z][A-Za-z\s'-]{1,70})$/i
+            ];
+            for (const pattern of patterns) {
+                const match = raw.match(pattern);
+                if (match && match[1]) {
+                    const candidate = normalizePersonalName(match[1]);
+                    if (candidate) return candidate;
+                }
+            }
+            return '';
+        }
+
         async function handleNameInput(text) {
-            let name = String(text || '').trim();
-            name = name.replace(/^(my name is|i'm|i am|it's|call me)\s+/i, '');
-            name = name.replace(/[?.!,]$/g, '').trim();
+            let name = extractNameFromText(text);
 
             if (!isLikelyPersonalName(name)) {
                 waitingForName = true;
@@ -20635,12 +20671,9 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             }
 
             waitingForName = false;
-            name = name
-                .split(/\s+/)
-                .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-                .join(' ');
-
             userName = name;
+            AppState.user.name = userName;
+            if (memoryStore?.name) delete memoryStore.name;
             saveUserData();
 
             await deliverApiReply('name_input_saved', {
@@ -20862,9 +20895,20 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         }
 
         function getUserStorageKey() {
-            
-            const safeUserName = (userName || 'default_user').replace(/[^a-zA-Z0-9]/g, '_');
-            return `unify_user_data_${safeUserName}`;
+            return USER_PROFILE_STORAGE_KEY;
+        }
+
+        function getLegacyUserStorageKeys() {
+            const keys = [LEGACY_DEFAULT_USER_STORAGE_KEY];
+            try {
+                for (let i = 0; i < localStorage.length; i += 1) {
+                    const key = localStorage.key(i);
+                    if (key && /^unify_user_data_[^_].*/.test(key) && !key.endsWith('_cag')) {
+                        keys.push(key);
+                    }
+                }
+            } catch (e) {}
+            return Array.from(new Set(keys.filter(Boolean)));
         }
 
         function loadMemoryPersistencePreference() {
@@ -20910,11 +20954,19 @@ function toggleMemoryPersistence(enabled) {
             if (!persistMemoryToDevice) return;
             try {
                 const storageKey = getUserStorageKey();
-                const stored = localStorage.getItem(storageKey);
+                let stored = localStorage.getItem(storageKey);
+                if (!stored) {
+                    for (const legacyKey of getLegacyUserStorageKeys()) {
+                        stored = localStorage.getItem(legacyKey);
+                        if (stored) break;
+                    }
+                }
                 if (stored) {
                     const data = JSON.parse(stored);
                     userName = data.userName || null;
+                    AppState.user.name = userName;
                     memoryStore = data.memoryStore || {};
+                    localStorage.setItem(storageKey, JSON.stringify({ userName, memoryStore }));
                 }
             } catch (e) { console.error('Failed to load user data:', e); }
         }
