@@ -2060,6 +2060,28 @@ function saveLearnedPreferences(prefs) {
     }
 }
 
+function buildLearnedPreferenceHint() {
+    const prefs = loadLearnedPreferences();
+    const positiveCount = Number(prefs?.feedbackCount?.positive || 0);
+    const negativeCount = Number(prefs?.feedbackCount?.negative || 0);
+    const preferredTopics = Object.entries(prefs?.preferredTopics || {})
+        .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))
+        .slice(0, 5)
+        .map(([topic, count]) => `${topic} (${count})`)
+        .join(', ');
+    const positiveExamples = Array.isArray(prefs?.positivePatterns)
+        ? prefs.positivePatterns.slice(-3).map(item => String(item?.query || '').trim()).filter(Boolean)
+        : [];
+    if (!positiveCount && !negativeCount && !preferredTopics && !positiveExamples.length) return '';
+    return [
+        'Local feedback memory:',
+        `- Helpful votes: ${positiveCount}; not-helpful votes: ${negativeCount}.`,
+        preferredTopics ? `- Preferred recurring topics: ${preferredTopics}.` : '',
+        positiveExamples.length ? `- Recent positively rated query patterns: ${positiveExamples.join(' | ')}.` : '',
+        '- Use this only as a local style/topic preference signal. Do not claim the model was trained, and do not override the user\'s current request.'
+    ].filter(Boolean).join('\n');
+}
+
 // Extract topic keywords from a query
 function extractTopics(text) {
     const topics = [];
@@ -2087,14 +2109,16 @@ function extractTopics(text) {
 // Handle positive feedback (thumbs up)
 function handlePositiveFeedback(buttonElement) {
     const prefs = loadLearnedPreferences();
+    const container = buttonElement.closest('.feedback-container');
+    const feedbackQuery = container?.dataset?.query ? decodeURIComponent(container.dataset.query) : lastQueryResponse.query;
 
     // Record the successful interaction
-    if (lastQueryResponse.query) {
-        const topics = extractTopics(lastQueryResponse.query);
+    if (feedbackQuery) {
+        const topics = extractTopics(feedbackQuery);
 
         // Store successful query pattern (limit to 50 patterns)
         prefs.positivePatterns.push({
-            query: lastQueryResponse.query.substring(0, 100),
+            query: feedbackQuery.substring(0, 100),
             topics: topics,
             timestamp: new Date().toISOString()
         });
@@ -2114,7 +2138,7 @@ function handlePositiveFeedback(buttonElement) {
     saveLearnedPreferences(prefs);
 
     // Update UI
-    const container = buttonElement.closest('.feedback-container');
+    if (!container) return;
     container.innerHTML = `
         <div class="flex items-center gap-2 text-green-500">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1">
@@ -2139,6 +2163,7 @@ function handleNegativeFeedback(buttonElement) {
 
     // Update UI
     const container = buttonElement.closest('.feedback-container');
+    if (!container) return;
     container.innerHTML = `
         <div class="flex items-center gap-2 text-orange-500">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1">
@@ -2163,6 +2188,8 @@ function addFeedbackButtons(query, response) {
     const chatContainer = document.getElementById('chat-container');
     const feedbackDiv = document.createElement('div');
     feedbackDiv.className = 'flex justify-start my-2 fade-in feedback-container';
+    feedbackDiv.dataset.query = encodeURIComponent(String(query || ''));
+    feedbackDiv.dataset.response = encodeURIComponent(String(response || ''));
 
     const bgClass = darkMode ? 'bg-gray-800' : 'bg-gray-100';
     const textClass = darkMode ? 'text-gray-400' : 'text-gray-600';
@@ -4059,6 +4086,9 @@ async function publishResolvedModelMessage(userMessage, answerText, options = {}
         speak(safeText);
     }
     saveToHistory(userMessage, historyText || safeText);
+    if (options?.feedback !== false) {
+        addFeedbackButtons(userMessage, historyText || safeText);
+    }
     return true;
 }
 
@@ -4493,6 +4523,10 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             .filter(Boolean)
             .join('\n\n');
         const systemPromptWithTopic = extraHints ? `${systemPrompt}\n\n${extraHints}` : systemPrompt;
+        const learnedPreferenceHint = buildLearnedPreferenceHint();
+        const systemPromptWithAdaptiveFeedback = learnedPreferenceHint
+            ? `${systemPromptWithTopic}\n\n${learnedPreferenceHint}`
+            : systemPromptWithTopic;
         const quantityHint = requestedQuantity ? `\n\nUser explicitly requested ${requestedQuantity} items. Provide exactly ${requestedQuantity} items.` : '';
         const intent = getUserIntent(normalizedUserMessage); 
         window.__intentContext = { 
@@ -4532,7 +4566,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
             signal: controller.signal,
             body: JSON.stringify({ 
                 message: effectiveMessage, 
-                systemPrompt: systemPromptWithTopic,
+                systemPrompt: systemPromptWithAdaptiveFeedback,
                 userName: userName,
                 ragContext: cagContext,
                 context: conversationContext
