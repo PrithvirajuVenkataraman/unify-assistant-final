@@ -457,7 +457,8 @@ function normalizeReferenceText(text) {
 function hasReferenceContext(normalizedText) {
     if (!normalizedText) return false;
     return /\b(reference|ref|classic|quote|meme|joke|inside joke|vibe|energy|moment|scene|character|sitcom|show|series|movie|film)\b/.test(normalizedText) ||
-        /\b(that'?s|that is|this is|this feels|reminds me of|pulling a|doing a|giving)\b/.test(normalizedText);
+        /\b(that'?s|that is|this is|this feels|reminds me of|pulling a|doing a|giving)\b/.test(normalizedText) ||
+        /\b(do you know|you know|know who|heard of|ever heard of|recognize|who is|who's)\b/.test(normalizedText);
 }
 
 function detectSitcomMovieReference(text) {
@@ -478,7 +479,10 @@ function detectSitcomMovieReference(text) {
 function buildSitcomMovieReferenceResponse(reference) {
     const sourceType = reference.medium === 'movie' ? 'movie' : 'sitcom';
     const referenceLabel = reference.referenceLabel || reference.character;
-    return `Ah, classic '${referenceLabel}' reference.\n\n${reference.character}, from the ${sourceType} "${reference.work}."`;
+    if (reference.referenceLabel && reference.referenceLabel !== reference.character) {
+        return `Yes. "${referenceLabel}" is a ${sourceType} reference to ${reference.character} from "${reference.work}."\n\nIt is the kind of nickname/fan-reference people use when joking about that character.`;
+    }
+    return `Yes. ${reference.character} is from the ${sourceType} "${reference.work}."\n\nThat sounds like a pop-culture reference, not a current-facts lookup.`;
 }
 
 async function handleSitcomMovieReference(text) {
@@ -2871,6 +2875,7 @@ async function processUserQuery(text) {
 }
 
 async function publishLiveDisabledMessage(userText, options = {}) {
+    if (await handleSitcomMovieReference(userText)) return true;
     const message = options?.message || LIVE_DISABLED_MESSAGE;
     hideThinkingIndicator();
     addChatMessage(message, false);
