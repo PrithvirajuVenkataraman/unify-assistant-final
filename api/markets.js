@@ -18,15 +18,13 @@ export default async function handler(req, res) {
         if (guard.handled) return;
 
         const mode = resolveMode(req.body);
-        if (mode === 'news') return await handleNewsLookup(req, res);
-        if (mode === 'exchange') return await handleExchangeLookup(req, res);
-        if (mode === 'markets') return await handleMarketLookup(req, res);
         if (mode === 'budget_plan') {
             return await handleBudgetPlanLookup(req, res);
         }
-        return res.status(410).json({
+        return res.status(503).json({
             success: false,
-            error: 'Live market lookup has been retired in this focused build.'
+            disabled: true,
+            error: 'Live search is temporarily disabled.'
         });
     } catch (error) {
         return res.status(200).json({
@@ -76,15 +74,19 @@ async function handleBudgetPlanLookup(req, res) {
 function parseBudgetQuery(text) {
     const query = String(text || '');
 
-    const budgetMatch = query.match(/(?:under|within|budget\s*(?:of)?|for)\s*\$?\s*(\d+[\d,]*)\s*(usd|inr|eur|gbp)?/i)
-        || query.match(/\$\s*(\d+[\d,]*)/i)
-        || query.match(/(\d+[\d,]*)\s*(usd|inr|eur|gbp)\b/i);
+    const budgetPhraseMatch = query.match(/\b(?:under|within|budget\s*(?:of)?|up to|max(?:imum)?(?: of)?)\s*(rs\.?|inr|usd|eur|gbp|\$)?\s*(\d+[\d,]*)\s*(usd|inr|eur|gbp)?\b/i);
+    const dollarMatch = budgetPhraseMatch ? null : query.match(/\$\s*(\d+[\d,]*)/i);
+    const trailingCurrencyMatch = budgetPhraseMatch || dollarMatch ? null : query.match(/\b(\d+[\d,]*)\s*(usd|inr|eur|gbp)\b/i);
 
     const daysMatch = query.match(/(\d+)\s*(?:day|days|night|nights)/i);
-    const destinationMatch = query.match(/\b(?:to|in)\s+([a-zA-Z][a-zA-Z\s,.-]{1,60})\b/i);
+    const destinationMatch = query.match(/\b(?:to|in)\s+([a-zA-Z][a-zA-Z\s,.-]{1,60}?)(?=\s+(?:for|under|within|budget|up to|max(?:imum)?|\d+\s*(?:day|days|night|nights))\b|$)/i);
 
-    const budget = budgetMatch ? Number(String(budgetMatch[1]).replace(/,/g, '')) : 1200;
-    const currency = normalizeBudgetCurrency((budgetMatch && budgetMatch[2]) || 'USD');
+    const amountToken = budgetPhraseMatch?.[2] || dollarMatch?.[1] || trailingCurrencyMatch?.[1] || '';
+    const currencyToken = budgetPhraseMatch
+        ? (budgetPhraseMatch[1] === '$' ? 'USD' : (budgetPhraseMatch[1] || budgetPhraseMatch[3] || ''))
+        : (dollarMatch ? 'USD' : trailingCurrencyMatch?.[2]);
+    const budget = amountToken ? Number(String(amountToken).replace(/,/g, '')) : 1200;
+    const currency = normalizeBudgetCurrency(currencyToken || 'USD');
     const days = daysMatch ? Math.max(1, Number(daysMatch[1])) : 3;
     const destination = destinationMatch ? destinationMatch[1].trim() : 'your destination';
 
