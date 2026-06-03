@@ -782,6 +782,100 @@ body.dark .composer-action-item:hover {
     justify-content: center !important;
 }
 
+.assistant-action-row {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 2px 0 0 2px;
+    flex: 0 0 auto;
+}
+
+.assistant-action-icon {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #f8fafc;
+    background: transparent;
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.assistant-action-icon:hover {
+    background: rgba(148, 163, 184, 0.18);
+}
+
+.assistant-action-icon:disabled,
+.assistant-action-menu button:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+}
+
+.assistant-action-icon svg {
+    width: 19px;
+    height: 19px;
+    display: block;
+}
+
+.assistant-action-menu-wrap {
+    position: relative;
+}
+
+.assistant-action-menu {
+    position: absolute;
+    right: 0;
+    top: 34px;
+    z-index: 80;
+    min-width: 170px;
+    padding: 6px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    background: #05070d;
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+}
+
+.assistant-action-menu button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 0;
+    border-radius: 7px;
+    padding: 8px 9px;
+    color: #f8fafc;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+}
+
+.assistant-action-menu button:hover {
+    background: rgba(148, 163, 184, 0.16);
+}
+
+.assistant-action-menu svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+    .assistant-action-row {
+        align-self: flex-start;
+        padding-left: 0;
+    }
+
+    .assistant-action-menu {
+        right: auto;
+        left: 0;
+    }
+}
+
 .footer-action-btn:hover,
 .input-utility-btn:hover,
 .response-action-btn:hover,
@@ -1461,6 +1555,195 @@ body.dark .response-action-btn {
     min-height: 300px;
 }
 
+/* Travel toolkit */
+.travel-toolkit-card {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    color: #e5edf8;
+    background: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.travel-toolkit-head,
+.travel-toolkit-section-head,
+.travel-toolkit-day-head,
+.travel-toolkit-row,
+.travel-toolkit-inline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.travel-toolkit-head,
+.travel-toolkit-section-head {
+    justify-content: space-between;
+}
+
+.travel-toolkit-head h3,
+.travel-toolkit-card h4 {
+    margin: 0;
+    font-weight: 800;
+    color: #f8fafc;
+}
+
+.travel-toolkit-head p,
+.travel-toolkit-muted {
+    margin: 4px 0 0;
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+.travel-toolkit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.travel-toolkit-card section {
+    min-width: 0;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 8px;
+    padding: 12px;
+    background: rgba(15, 23, 42, 0.78);
+}
+
+.travel-toolkit-card label {
+    display: block;
+    margin: 10px 0 4px;
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.travel-toolkit-card input,
+.travel-toolkit-card textarea {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 8px;
+    background: #020617;
+    color: #f8fafc;
+    padding: 9px 10px;
+    font-size: 13px;
+    outline: none;
+}
+
+.travel-toolkit-card textarea {
+    resize: vertical;
+}
+
+.travel-toolkit-card button,
+.travel-toolkit-links a {
+    border: 0;
+    border-radius: 8px;
+    background: #2563eb;
+    color: #fff;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.travel-toolkit-card button:hover,
+.travel-toolkit-links a:hover {
+    background: #1d4ed8;
+}
+
+.travel-toolkit-icon-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0 !important;
+    background: #334155 !important;
+}
+
+.travel-toolkit-links,
+.travel-toolkit-budget-grid,
+.travel-toolkit-days {
+    display: grid;
+    gap: 8px;
+}
+
+.travel-toolkit-links,
+.travel-toolkit-budget-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 10px;
+}
+
+.travel-toolkit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.travel-toolkit-row {
+    justify-content: space-between;
+    padding: 8px;
+    border-radius: 8px;
+    background: rgba(30, 41, 59, 0.65);
+}
+
+.travel-toolkit-check {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    margin: 0 !important;
+    flex: 1;
+}
+
+.travel-toolkit-check input {
+    width: 16px;
+    height: 16px;
+}
+
+.travel-toolkit-done {
+    color: #94a3b8;
+    text-decoration: line-through;
+}
+
+.travel-toolkit-inline {
+    margin-top: 10px;
+}
+
+.travel-toolkit-day {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(30, 41, 59, 0.65);
+}
+
+.travel-toolkit-itinerary {
+    display: grid;
+    gap: 10px;
+}
+
+@media (max-width: 720px) {
+    .travel-toolkit-grid,
+    .travel-toolkit-links,
+    .travel-toolkit-budget-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .travel-toolkit-head,
+    .travel-toolkit-section-head,
+    .travel-toolkit-inline {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .travel-toolkit-head button,
+    .travel-toolkit-section-head button,
+    .travel-toolkit-inline button {
+        width: 100%;
+    }
+}
+
 @media (min-width: 768px) {
     .map-message .map-container iframe {
         height: 400px !important;
@@ -1723,4 +2006,67 @@ button:hover {
     background: #000000 !important;
     color: #ffffff !important;
     border: 1px solid rgba(255, 255, 255, 0.34) !important;
+}
+
+/* Help modal controls must stay readable after the global black/white override. */
+.help-modal-header {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 20 !important;
+}
+
+.help-modal-close-btn {
+    position: relative !important;
+    z-index: 25 !important;
+    flex: 0 0 auto !important;
+    width: 40px !important;
+    height: 40px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 1px solid rgba(255, 255, 255, 0.45) !important;
+}
+
+.settings-toggle-row {
+    gap: 14px !important;
+    flex-wrap: wrap !important;
+}
+
+.settings-toggle-copy {
+    min-width: 0 !important;
+    flex: 1 1 220px !important;
+}
+
+.noise-level-control {
+    display: flex !important;
+    gap: 8px !important;
+    flex-wrap: wrap !important;
+    padding-right: 4px !important;
+}
+
+.noise-level-btn {
+    min-width: 82px !important;
+    min-height: 38px !important;
+    border-radius: 999px !important;
+    border: 1px solid rgba(255, 255, 255, 0.5) !important;
+    background: #000000 !important;
+    color: #ffffff !important;
+}
+
+.noise-level-btn.is-selected,
+.noise-level-btn[aria-pressed="true"] {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border-color: #ffffff !important;
+    box-shadow: inset 0 0 0 2px #000000, 0 0 0 2px #ffffff !important;
+}
+
+.noise-level-btn.is-selected::after,
+.noise-level-btn[aria-pressed="true"]::after {
+    content: " selected";
+    color: #000000 !important;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    margin-left: 4px;
 }
