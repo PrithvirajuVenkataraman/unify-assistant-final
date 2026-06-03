@@ -1121,6 +1121,7 @@ Style rules:
 - Start directly with the answer. No greeting preambles.
 - Avoid generic closing prompts (for example, "Would you like to know more...") unless user asked.
  - For direct fact questions across any domain, answer with the fact immediately and stay concise by default.
+- Always end with a complete sentence, complete list item, or closed code block. Never stop mid-sentence or leave the answer hanging.
 - For person/celebrity queries ("Who is X?"), give a concise factual bio first, then notable works.
 - For "Who is X?" or "Tell me about X" requests, never reply with research steps like "search online/check databases". Give the direct factual answer.
 - Never ask the user to provide, share, paste, or send sources or links. Live web search and current updates are temporarily disabled, so if live verification is needed, say that you cannot verify from live sources right now.
@@ -1140,9 +1141,47 @@ Respond conversationally and naturally.`;
 function normalizeAssistantResponseStyle(payload) {
     if (!payload || typeof payload !== 'object') return payload;
     const out = { ...payload };
-    if (typeof out.response === 'string') out.response = replaceLongDashes(out.response);
-    if (typeof out.text === 'string') out.text = replaceLongDashes(out.text);
+    if (typeof out.response === 'string') out.response = ensureCompleteAssistantResponse(replaceLongDashes(out.response));
+    if (typeof out.text === 'string') out.text = ensureCompleteAssistantResponse(replaceLongDashes(out.text));
     return out;
+}
+
+function ensureCompleteAssistantResponse(text) {
+    let out = String(text || '').trim();
+    if (!out) return out;
+
+    const fenceCount = (out.match(/```/g) || []).length;
+    if (fenceCount % 2 === 1) {
+        out = `${out}\n\`\`\``.trim();
+    }
+
+    const visible = out
+        .replace(/```[\s\S]*?```/g, ' ')
+        .replace(/\[[^\]]+\]\([^)]+\)/g, 'link')
+        .trim();
+    if (!visible) return out;
+
+    const lastRawLine = out.split('\n').map(line => line.trim()).filter(Boolean).pop() || '';
+    if (/^https?:\/\//i.test(lastRawLine) || /\[[^\]]+\]\(https?:\/\/[^)]+\)$/i.test(lastRawLine)) return out;
+    if (/(?:^|\n)\s*Sources:\s*/i.test(out) && /(https?:\/\/|\[[^\]]+\]\(https?:\/\/)/i.test(lastRawLine)) return out;
+
+    if (/[.!?。！？)"'\]}]$/.test(visible)) return out;
+
+    const lower = visible.toLowerCase();
+    const lastLine = lower.split('\n').map(line => line.trim()).filter(Boolean).pop() || lower;
+    const hangingClause = /(?:[,;:]|\.\.\.|[\-–—(])$/.test(lastLine) ||
+        /\b(and|or|but|because|so|with|to|for|from|the|a|an|in|on|at|as|by|of|if|then|while|where|when|which|who|that|this|is|are|was|were|will|would|could|should|can|do|does|did|not)$/i.test(lastLine);
+
+    if (hangingClause || countResponseWords(visible) >= 12) {
+        return `${out}\n\nI'll stop here because the response appears to have been cut off.`;
+    }
+
+    return `${out}.`;
+}
+
+function countResponseWords(text) {
+    const words = String(text || '').match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g);
+    return Array.isArray(words) ? words.length : 0;
 }
 
 function replaceLongDashes(text) {
