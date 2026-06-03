@@ -3826,7 +3826,45 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
     // Keep tense accurate for historical "When did ... release?" questions.
     text = fixHistoricalReleaseWording(text, userMessage);
 
-    return text;
+    return ensureCompleteAssistantResponse(text);
+}
+
+function ensureCompleteAssistantResponse(text) {
+    let out = String(text || '').trim();
+    if (!out) return out;
+
+    const fenceCount = (out.match(/```/g) || []).length;
+    if (fenceCount % 2 === 1) {
+        out = `${out}\n\`\`\``.trim();
+    }
+
+    const visible = out
+        .replace(/```[\s\S]*?```/g, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\[[^\]]+\]\([^)]+\)/g, 'link')
+        .trim();
+    if (!visible) return out;
+
+    const lastRawLine = out.split('\n').map(line => line.trim()).filter(Boolean).pop() || '';
+    if (/^https?:\/\//i.test(lastRawLine) || /\[[^\]]+\]\(https?:\/\/[^)]+\)$/i.test(lastRawLine)) return out;
+    if (/(?:^|\n)\s*Sources:\s*/i.test(out) && /(https?:\/\/|\[[^\]]+\]\(https?:\/\/)/i.test(lastRawLine)) return out;
+
+    if (/[.!?。！？)"'\]}]$/.test(visible)) return out;
+
+    const lastLine = visible.toLowerCase().split('\n').map(line => line.trim()).filter(Boolean).pop() || '';
+    const hangingClause = /(?:[,;:]|\.\.\.|[\-–—(])$/.test(lastLine) ||
+        /\b(and|or|but|because|so|with|to|for|from|the|a|an|in|on|at|as|by|of|if|then|while|where|when|which|who|that|this|is|are|was|were|will|would|could|should|can|do|does|did|not)$/i.test(lastLine);
+
+    if (hangingClause || countAssistantWords(visible) >= 12) {
+        return `${out}\n\nI'll stop here because the response appears to have been cut off.`;
+    }
+
+    return `${out}.`;
+}
+
+function countAssistantWords(text) {
+    const words = String(text || '').match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g);
+    return Array.isArray(words) ? words.length : 0;
 }
 
 const CAG_MAX_ENTRIES = 80;
@@ -6300,7 +6338,10 @@ let showRoutingDebugBadge = false;
             const chatContainer = document.getElementById('chat-container');
             if (!chatContainer) return;
             if (!isUser) hideThinkingIndicator();
-            const displayText = normalizeUiTokens(String(text ?? ''));
+            const rawDisplayText = normalizeUiTokens(String(text ?? ''));
+            const displayText = isUser || /<(iframe|div|img|table)\s/i.test(rawDisplayText)
+                ? rawDisplayText
+                : ensureCompleteAssistantResponse(rawDisplayText);
             const messageDiv = document.createElement('div');
             messageDiv.className = `chat-row flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-3`;
             messageDiv.dataset.role = isUser ? 'user' : 'assistant';
