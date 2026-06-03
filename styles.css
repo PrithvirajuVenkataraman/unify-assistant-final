@@ -640,6 +640,30 @@ body.dark .composer-action-item:hover {
     overflow-wrap: anywhere !important;
 }
 
+.assistant-message-text .science-value {
+    display: inline-block;
+    max-width: 100%;
+    padding: 0 0.18rem;
+    border-radius: 0.25rem;
+    background: rgba(14, 165, 233, 0.12);
+    color: #bae6fd;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.96em;
+    overflow-wrap: anywhere;
+    vertical-align: baseline;
+}
+
+.assistant-message-text .science-value-chem,
+.assistant-message-text .science-value-isotope {
+    background: rgba(16, 185, 129, 0.13);
+    color: #bbf7d0;
+}
+
+.assistant-message-text .science-value-hex {
+    background: rgba(168, 85, 247, 0.14);
+    color: #e9d5ff;
+}
+
 .assistant-avatar {
     width: 26px !important;
     height: 26px !important;
@@ -1525,4 +1549,126 @@ body.dark .response-action-btn {
 .lightning,
 .heat-wave {
     display: none !important;
+}
+
+/* Global black and white theme override */
+:root,
+body.dark {
+    --ui-bg: #000000;
+    --ui-surface: #000000;
+    --ui-surface-muted: #000000;
+    --ui-border: rgba(255, 255, 255, 0.34);
+    --ui-text: #ffffff;
+    --ui-text-muted: #ffffff;
+    --ui-primary: #ffffff;
+    --ui-primary-hover: #ffffff;
+    --ui-shadow-sm: none;
+}
+
+html,
+body,
+.page-shell,
+.app-shell,
+#main-card,
+#chat-container,
+#input-bar-container,
+#input-bar-inner,
+.floating-input-bar,
+.modern-input,
+.composer-actions-menu,
+.composer-action-item,
+.chat-bubble-assistant,
+.chat-bubble-user,
+.assistant-thinking-bubble,
+.help-modal-enhanced,
+.help-modal-enhanced > div:first-child,
+.selection-helper-popover,
+.suggestions-container,
+.suggestion-chip,
+.voice-state-indicator,
+.continuous-vision-preview,
+.continuous-vision-preview-header,
+.continuous-vision-hint,
+.converse-toast,
+.response-action-btn,
+.message-action-btn,
+.input-utility-btn,
+.footer-action-btn,
+.composer-plus-btn,
+button,
+input,
+textarea,
+select {
+    background: #000000 !important;
+    background-color: #000000 !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+}
+
+*,
+*::before,
+*::after {
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.34) !important;
+}
+
+svg,
+svg *,
+.footer-action-btn svg,
+.input-utility-btn svg,
+.composer-plus-btn svg {
+    color: #ffffff !important;
+    stroke: currentColor !important;
+}
+
+svg [fill]:not([fill="none"]) {
+    fill: currentColor !important;
+}
+
+a,
+.assistant-message-text a {
+    color: #ffffff !important;
+    text-decoration-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+::placeholder {
+    color: rgba(255, 255, 255, 0.72) !important;
+    opacity: 1 !important;
+}
+
+.footer-action-btn.is-active,
+.footer-action-btn.is-send-ready,
+.footer-action-btn-primary,
+.composer-plus-btn.is-open,
+.selection-helper-btn,
+.memory-action-btn,
+body.dark .footer-action-btn-primary,
+#voice-to-text-btn.is-listening,
+#converse-mode-btn.is-assistant-speaking {
+    background: #000000 !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.footer-action-btn:hover,
+.input-utility-btn:hover,
+.response-action-btn:hover,
+.message-action-btn:hover,
+.composer-action-item:hover,
+.composer-plus-btn:hover,
+.selection-helper-btn:hover,
+button:hover {
+    background: #000000 !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.assistant-message-text .science-value,
+.assistant-message-text .science-value-chem,
+.assistant-message-text .science-value-isotope,
+.assistant-message-text .science-value-hex {
+    background: #000000 !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.34) !important;
 }
