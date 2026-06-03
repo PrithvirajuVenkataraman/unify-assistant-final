@@ -944,11 +944,63 @@ body.dark .footer-action-btn-primary:hover {
 
 .help-modal-enhanced {
     border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    max-height: min(80vh, 720px);
+    overflow: hidden !important;
 }
 
-.help-modal-enhanced > div:first-child {
+.help-modal-enhanced > div:first-child,
+.help-modal-header {
     background: var(--ui-surface-muted) !important;
     border-bottom: 1px solid var(--ui-border) !important;
+    flex: 0 0 auto;
+    position: relative;
+    z-index: 3;
+}
+
+.help-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.noise-level-control {
+    flex-wrap: wrap;
+}
+
+.noise-level-btn {
+    min-width: 74px;
+    min-height: 34px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.34) !important;
+    background: #000000 !important;
+    color: #ffffff !important;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 8px 12px;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.noise-level-btn.is-selected,
+.noise-level-btn[aria-pressed="true"] {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border-color: #ffffff !important;
+    box-shadow: 0 0 0 2px #000000, 0 0 0 4px #ffffff !important;
+}
+
+.noise-level-btn.is-selected *,
+.noise-level-btn[aria-pressed="true"] * {
+    color: #000000 !important;
+}
+
+.noise-level-btn:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: 2px;
 }
 
 .help-modal-enhanced h2,
