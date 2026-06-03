@@ -397,6 +397,93 @@ function isSeriesReferenceJokeRequest(text) {
     return (jokeSignal && screenSignal) || (jokeSignal && referenceSignal);
 }
 
+const SITCOM_MOVIE_REFERENCE_CATALOG = [
+    { aliases: ['michael scott'], character: 'Michael Scott', work: 'The Office', medium: 'sitcom' },
+    { aliases: ['dwight schrute', 'dwight'], character: 'Dwight Schrute', work: 'The Office', medium: 'sitcom' },
+    { aliases: ['jim halpert'], character: 'Jim Halpert', work: 'The Office', medium: 'sitcom' },
+    { aliases: ['pam beesly'], character: 'Pam Beesly', work: 'The Office', medium: 'sitcom' },
+    { aliases: ['chandler bing', 'chandler'], character: 'Chandler Bing', work: 'Friends', medium: 'sitcom' },
+    { aliases: ['joey tribbiani', 'joey'], character: 'Joey Tribbiani', work: 'Friends', medium: 'sitcom' },
+    { aliases: ['phoebe buffay', 'phoebe'], character: 'Phoebe Buffay', work: 'Friends', medium: 'sitcom' },
+    { aliases: ['monica geller', 'monica'], character: 'Monica Geller', work: 'Friends', medium: 'sitcom' },
+    { aliases: ['ross geller', 'ross'], character: 'Ross Geller', work: 'Friends', medium: 'sitcom' },
+    { aliases: ['rachel green', 'rachel'], character: 'Rachel Green', work: 'Friends', medium: 'sitcom' },
+    { aliases: ['sheldon cooper', 'sheldon'], character: 'Sheldon Cooper', work: 'The Big Bang Theory', medium: 'sitcom' },
+    { aliases: ['leonard hofstadter'], character: 'Leonard Hofstadter', work: 'The Big Bang Theory', medium: 'sitcom' },
+    { aliases: ['howard wolowitz'], character: 'Howard Wolowitz', work: 'The Big Bang Theory', medium: 'sitcom' },
+    { aliases: ['raj koothrappali', 'raj'], character: 'Raj Koothrappali', work: 'The Big Bang Theory', medium: 'sitcom' },
+    { aliases: ['barney stinson', 'barney'], character: 'Barney Stinson', work: 'How I Met Your Mother', medium: 'sitcom' },
+    { aliases: ['ted mosby', 'schmosby'], character: 'Ted Mosby', referenceLabel: 'Schmosby', work: 'How I Met Your Mother', medium: 'sitcom' },
+    { aliases: ['robin scherbatsky'], character: 'Robin Scherbatsky', work: 'How I Met Your Mother', medium: 'sitcom' },
+    { aliases: ['leslie knope'], character: 'Leslie Knope', work: 'Parks and Recreation', medium: 'sitcom' },
+    { aliases: ['ron swanson'], character: 'Ron Swanson', work: 'Parks and Recreation', medium: 'sitcom' },
+    { aliases: ['jake peralta'], character: 'Jake Peralta', work: 'Brooklyn Nine-Nine', medium: 'sitcom' },
+    { aliases: ['raymond holt', 'captain holt'], character: 'Raymond Holt', work: 'Brooklyn Nine-Nine', medium: 'sitcom' },
+    { aliases: ['rosa diaz'], character: 'Rosa Diaz', work: 'Brooklyn Nine-Nine', medium: 'sitcom' },
+    { aliases: ['george costanza'], character: 'George Costanza', work: 'Seinfeld', medium: 'sitcom' },
+    { aliases: ['jerry seinfeld'], character: 'Jerry Seinfeld', work: 'Seinfeld', medium: 'sitcom' },
+    { aliases: ['cosmo kramer', 'kramer'], character: 'Cosmo Kramer', work: 'Seinfeld', medium: 'sitcom' },
+    { aliases: ['elaine benes'], character: 'Elaine Benes', work: 'Seinfeld', medium: 'sitcom' },
+    { aliases: ['phil dunphy'], character: 'Phil Dunphy', work: 'Modern Family', medium: 'sitcom' },
+    { aliases: ['gloria pritchett'], character: 'Gloria Pritchett', work: 'Modern Family', medium: 'sitcom' },
+    { aliases: ['cam tucker', 'cameron tucker'], character: 'Cameron Tucker', work: 'Modern Family', medium: 'sitcom' },
+    { aliases: ['abed nadir'], character: 'Abed Nadir', work: 'Community', medium: 'sitcom' },
+    { aliases: ['troy barnes'], character: 'Troy Barnes', work: 'Community', medium: 'sitcom' },
+    { aliases: ['david rose'], character: 'David Rose', work: "Schitt's Creek", medium: 'sitcom' },
+    { aliases: ['moira rose'], character: 'Moira Rose', work: "Schitt's Creek", medium: 'sitcom' },
+    { aliases: ['lucille bluth'], character: 'Lucille Bluth', work: 'Arrested Development', medium: 'sitcom' },
+    { aliases: ['gob bluth'], character: 'Gob Bluth', work: 'Arrested Development', medium: 'sitcom' },
+    { aliases: ['tony stark', 'iron man'], character: 'Tony Stark', work: 'Iron Man', medium: 'movie' },
+    { aliases: ['jack sparrow', 'captain jack sparrow'], character: 'Jack Sparrow', work: 'Pirates of the Caribbean', medium: 'movie' },
+    { aliases: ['darth vader'], character: 'Darth Vader', work: 'Star Wars', medium: 'movie' },
+    { aliases: ['luke skywalker'], character: 'Luke Skywalker', work: 'Star Wars', medium: 'movie' },
+    { aliases: ['harry potter'], character: 'Harry Potter', work: 'Harry Potter', medium: 'movie' },
+    { aliases: ['hermione granger'], character: 'Hermione Granger', work: 'Harry Potter', medium: 'movie' },
+    { aliases: ['forrest gump'], character: 'Forrest Gump', work: 'Forrest Gump', medium: 'movie' },
+    { aliases: ['joker'], character: 'Joker', work: 'The Dark Knight', medium: 'movie' }
+];
+
+function normalizeReferenceText(text) {
+    return String(text || '').toLowerCase().replace(/['"`]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function hasReferenceContext(normalizedText) {
+    if (!normalizedText) return false;
+    return /\b(reference|ref|classic|quote|meme|joke|inside joke|vibe|energy|moment|scene|character|sitcom|show|series|movie|film)\b/.test(normalizedText) ||
+        /\b(that'?s|that is|this is|this feels|reminds me of|pulling a|doing a|giving)\b/.test(normalizedText);
+}
+
+function detectSitcomMovieReference(text) {
+    const normalized = normalizeReferenceText(text);
+    if (!normalized) return null;
+    for (const entry of SITCOM_MOVIE_REFERENCE_CATALOG) {
+        const alias = entry.aliases.find((name) => {
+            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return new RegExp(`(^|\\b)${escaped}(\\b|$)`, 'i').test(normalized);
+        });
+        if (!alias) continue;
+        const compactNameOnly = normalized === alias || normalized === `${alias} reference`;
+        if (compactNameOnly || hasReferenceContext(normalized)) return entry;
+    }
+    return null;
+}
+
+function buildSitcomMovieReferenceResponse(reference) {
+    const sourceType = reference.medium === 'movie' ? 'movie' : 'sitcom';
+    const referenceLabel = reference.referenceLabel || reference.character;
+    return `Ah, classic '${referenceLabel}' reference.\n\n${reference.character}, from the ${sourceType} "${reference.work}."`;
+}
+
+async function handleSitcomMovieReference(text) {
+    const reference = detectSitcomMovieReference(text);
+    if (!reference) return false;
+    const msg = buildSitcomMovieReferenceResponse(reference);
+    addChatMessage(msg, false);
+    speak(msg);
+    saveToHistory(text, msg);
+    return true;
+}
+
 function isGeneralJokeRequest(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -2388,6 +2475,10 @@ async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking
 async function processUserQuery(text) {
     const t = String(text || '').trim();
     if (!t) return;
+    if (await handleSitcomMovieReference(t)) {
+        logRoutingDebug('processUserQuery -> sitcom_movie_reference', t, { selectedHandler: 'handleSitcomMovieReference' });
+        return { intent: 'sitcom_movie_reference' };
+    }
     if (isArtistSongRequest(t)) {
         logRoutingDebug('processUserQuery -> artist_song', t, { selectedHandler: 'handleArtistSongRequest' });
         await handleArtistSongRequest(t);
@@ -4716,8 +4807,8 @@ let showRoutingDebugBadge = false;
 
             modal.innerHTML = `
                 <div class="help-modal-enhanced max-w-2xl w-full">
-                    <div class="help-modal-header bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm p-6 border-b border-gray-200/50 dark:border-gray-700/50 flex justify-between items-center">
-                        <div class="flex items-center gap-3">
+                    <div class="help-modal-header bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm p-6 border-b border-gray-200/50 dark:border-gray-700/50 flex justify-between items-center gap-4">
+                        <div class="flex min-w-0 items-center gap-3">
                             <div class="p-2 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-xl">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
                                     <circle cx="12" cy="12" r="10"></circle>
@@ -4727,7 +4818,7 @@ let showRoutingDebugBadge = false;
                             </div>
                             <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Help & Options</h2>
                         </div>
-                        <button onclick="closeHelpModal()" class="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-all">
+                        <button onclick="closeHelpModal()" class="help-modal-close-btn p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-all" aria-label="Close Help & Options">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="18" y1="6" x2="6" y2="18"></line>
                                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -4739,8 +4830,8 @@ let showRoutingDebugBadge = false;
                         <section>
                             <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Settings</h3>
                             <div class="space-y-4">
-                                <div class="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                                    <div>
+                                <div class="settings-toggle-row flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                    <div class="settings-toggle-copy">
                                         <p class="font-semibold text-gray-900 dark:text-white">Noise Filter</p>
                                         <p class="text-xs text-gray-500 dark:text-gray-400">Filter background noise in public places</p>
                                     </div>
@@ -16872,6 +16963,11 @@ function detectInputLanguageHint(text) {
                 addChatMessage(greet, false);
                 speak(greet);
                 saveToHistory(text, greet);
+                return;
+            }
+
+            if (await handleSitcomMovieReference(compact)) {
+                logRoutingDebug('processCommand -> sitcom_movie_reference', compact, { selectedHandler: 'handleSitcomMovieReference' });
                 return;
             }
 
