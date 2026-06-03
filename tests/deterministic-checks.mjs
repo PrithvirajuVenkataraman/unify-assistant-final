@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { __test as currentFacts } from '../api/current-facts.js';
+import currentFactsHandler, { __test as currentFacts } from '../api/current-facts.js';
 
 const scienceCode = fs.readFileSync(new URL('../science-format.js', import.meta.url), 'utf8');
 const sandbox = { globalThis: {} };
@@ -28,25 +28,39 @@ const chemSpeech = science.normalizeScienceSpeech('C2H6 + O2 -> CO2 + H2O');
 assert.match(chemSpeech, /C 2 H 6/);
 assert.match(chemSpeech, /yields/);
 
-const result = currentFacts.extractSportsResult('GT won by 7 wickets after RR 214/6 and GT 219/3.');
-assert.ok(result?.answer);
-assert.match(result.answer, /Gujarat Titans/);
-assert.match(result.answer, /Rajasthan Royals/);
+assert.equal(currentFacts.liveDisabledResponse.disabled, true);
+assert.equal(currentFacts.liveDisabledResponse.success, false);
 
-const weak = currentFacts.classifySourceCategory({
-    title: 'IPL 2026 Fixtures, Live Score, Schedule, Points Table',
-    description: 'All fixtures and standings'
+const disabledApi = await callJsonHandler(currentFactsHandler, {
+    method: 'POST',
+    url: '/api/current-facts',
+    headers: { 'content-type': 'application/json' },
+    body: { query: 'What happened in the latest IPL match?' }
 });
-assert.equal(weak, 'weak_preview_or_context');
-
-const strong = currentFacts.classifySourceCategory({
-    title: 'GT won by 7 wickets in IPL Qualifier 2',
-    description: 'Gujarat Titans beat Rajasthan Royals'
-});
-assert.equal(strong, 'post_event_result');
-
-const intent = currentFacts.classifyCurrentFact('What happened in the latest IPL match?');
-assert.equal(intent.domain, 'sports');
-assert.equal(intent.factType, 'result');
+assert.equal(disabledApi.statusCode, 503);
+assert.equal(disabledApi.body.disabled, true);
+assert.equal(disabledApi.body.resolved, false);
 
 console.log('deterministic-checks-ok');
+
+async function callJsonHandler(handler, req) {
+    const res = {
+        statusCode: 200,
+        body: null,
+        headers: {},
+        setHeader(name, value) {
+            this.headers[name] = value;
+            return this;
+        },
+        status(code) {
+            this.statusCode = code;
+            return this;
+        },
+        json(payload) {
+            this.body = payload;
+            return this;
+        }
+    };
+    await handler(req, res);
+    return res;
+}
