@@ -1148,10 +1148,11 @@ body.dark .footer-action-btn-primary:hover {
 /* Continuous vision preview */
 .continuous-vision-preview {
     position: fixed;
-    right: 12px;
-    bottom: calc(86px + env(safe-area-inset-bottom));
+    left: 50%;
+    top: calc(96px + env(safe-area-inset-top));
+    transform: translateX(-50%);
     z-index: var(--z-live-vision);
-    width: min(320px, 46vw);
+    width: min(420px, calc(100vw - 24px));
     border-radius: 14px;
     overflow: hidden;
     border: 1px solid var(--ui-border);
@@ -1794,10 +1795,11 @@ body.dark .response-action-btn {
     }
 
     .continuous-vision-preview {
-        right: 7px;
+        left: 50%;
+        top: calc(92px + env(safe-area-inset-top));
+        transform: translateX(-50%);
         width: min(360px, calc(100vw - 14px));
         max-width: calc(100vw - 14px);
-        bottom: calc(var(--input-bar-safe-height) + 28px + env(safe-area-inset-bottom));
         border-radius: 12px;
     }
 
@@ -2100,14 +2102,4 @@ button:hover {
     color: #000000 !important;
     border-color: #ffffff !important;
     box-shadow: inset 0 0 0 2px #000000, 0 0 0 2px #ffffff !important;
-}
-
-.noise-level-btn.is-selected::after,
-.noise-level-btn[aria-pressed="true"]::after {
-    content: " selected";
-    color: #000000 !important;
-    font-size: 10px;
-    font-weight: 800;
-    text-transform: uppercase;
-    margin-left: 4px;
 }
