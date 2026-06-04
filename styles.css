@@ -1570,195 +1570,6 @@ body.dark .response-action-btn {
     min-height: 300px;
 }
 
-/* Travel toolkit */
-.travel-toolkit-card {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    width: 100%;
-    color: #e5edf8;
-    background: #0f172a;
-    border: 1px solid rgba(148, 163, 184, 0.28);
-    border-radius: 8px;
-    padding: 16px;
-}
-
-.travel-toolkit-head,
-.travel-toolkit-section-head,
-.travel-toolkit-day-head,
-.travel-toolkit-row,
-.travel-toolkit-inline {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.travel-toolkit-head,
-.travel-toolkit-section-head {
-    justify-content: space-between;
-}
-
-.travel-toolkit-head h3,
-.travel-toolkit-card h4 {
-    margin: 0;
-    font-weight: 800;
-    color: #f8fafc;
-}
-
-.travel-toolkit-head p,
-.travel-toolkit-muted {
-    margin: 4px 0 0;
-    color: #94a3b8;
-    font-size: 12px;
-}
-
-.travel-toolkit-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
-}
-
-.travel-toolkit-card section {
-    min-width: 0;
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    border-radius: 8px;
-    padding: 12px;
-    background: rgba(15, 23, 42, 0.78);
-}
-
-.travel-toolkit-card label {
-    display: block;
-    margin: 10px 0 4px;
-    color: #cbd5e1;
-    font-size: 12px;
-    font-weight: 700;
-}
-
-.travel-toolkit-card input,
-.travel-toolkit-card textarea {
-    width: 100%;
-    min-width: 0;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 8px;
-    background: #020617;
-    color: #f8fafc;
-    padding: 9px 10px;
-    font-size: 13px;
-    outline: none;
-}
-
-.travel-toolkit-card textarea {
-    resize: vertical;
-}
-
-.travel-toolkit-card button,
-.travel-toolkit-links a {
-    border: 0;
-    border-radius: 8px;
-    background: #2563eb;
-    color: #fff;
-    padding: 8px 10px;
-    font-size: 12px;
-    font-weight: 800;
-    white-space: nowrap;
-    text-decoration: none;
-}
-
-.travel-toolkit-card button:hover,
-.travel-toolkit-links a:hover {
-    background: #1d4ed8;
-}
-
-.travel-toolkit-icon-btn {
-    width: 28px;
-    height: 28px;
-    padding: 0 !important;
-    background: #334155 !important;
-}
-
-.travel-toolkit-links,
-.travel-toolkit-budget-grid,
-.travel-toolkit-days {
-    display: grid;
-    gap: 8px;
-}
-
-.travel-toolkit-links,
-.travel-toolkit-budget-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: 10px;
-}
-
-.travel-toolkit-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 10px;
-}
-
-.travel-toolkit-row {
-    justify-content: space-between;
-    padding: 8px;
-    border-radius: 8px;
-    background: rgba(30, 41, 59, 0.65);
-}
-
-.travel-toolkit-check {
-    display: flex !important;
-    align-items: center;
-    gap: 8px;
-    margin: 0 !important;
-    flex: 1;
-}
-
-.travel-toolkit-check input {
-    width: 16px;
-    height: 16px;
-}
-
-.travel-toolkit-done {
-    color: #94a3b8;
-    text-decoration: line-through;
-}
-
-.travel-toolkit-inline {
-    margin-top: 10px;
-}
-
-.travel-toolkit-day {
-    display: grid;
-    gap: 8px;
-    padding: 10px;
-    border-radius: 8px;
-    background: rgba(30, 41, 59, 0.65);
-}
-
-.travel-toolkit-itinerary {
-    display: grid;
-    gap: 10px;
-}
-
-@media (max-width: 720px) {
-    .travel-toolkit-grid,
-    .travel-toolkit-links,
-    .travel-toolkit-budget-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .travel-toolkit-head,
-    .travel-toolkit-section-head,
-    .travel-toolkit-inline {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .travel-toolkit-head button,
-    .travel-toolkit-section-head button,
-    .travel-toolkit-inline button {
-        width: 100%;
-    }
-}
-
 @media (min-width: 768px) {
     .map-message .map-container iframe {
         height: 400px !important;
@@ -1970,17 +1781,14 @@ select,
 .assistant-message-text,
 .assistant-action-menu,
 .help-modal-enhanced,
-.selection-helper-popover,
-.travel-toolkit-card {
+.selection-helper-popover {
     font-family: var(--app-font-family) !important;
 }
 
 .jarvis-title,
 .jarvis-top-title,
 .help-modal-enhanced h2,
-.help-modal-enhanced h3,
-.travel-toolkit-head h3,
-.travel-toolkit-card h4 {
+.help-modal-enhanced h3 {
     font-family: var(--app-display-font-family) !important;
 }
 
