@@ -4556,7 +4556,6 @@ async function handleNameCorrection(text) {
         let converseMode = false;
 let supportConversationMode = false;
 let cagModeEnabled = true;
-let converseAccuracyMode = 'strict';
 let converseUseDeviceLocale = true;
 let showRoutingDebugBadge = false;
 
@@ -4954,12 +4953,8 @@ let showRoutingDebugBadge = false;
                                     </label>
                                 </div>
                                 <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg space-y-2">
-                                    <p class="font-semibold text-gray-900 dark:text-white">Converse Accuracy</p>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">Strict mode filters uncertain transcripts more aggressively.</p>
-                                    <div class="flex gap-2">
-                                        <button data-mode-group="converse-accuracy-mode" data-mode-value="balanced" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" onclick="setConverseAccuracyMode('balanced')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${converseAccuracyMode === 'balanced' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Balanced</button>
-                                        <button data-mode-group="converse-accuracy-mode" data-mode-value="strict" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" onclick="setConverseAccuracyMode('strict')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${converseAccuracyMode === 'strict' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Strict</button>
-                                    </div>
+                                    <p class="font-semibold text-gray-900 dark:text-white">Speech Locale</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">Use your device language setting for speech recognition.</p>
                                     <label class="flex items-center justify-between gap-2 mt-1">
                                         <span class="text-xs text-gray-600 dark:text-gray-300">Use device locale for speech recognition</span>
                                         <input type="checkbox" class="h-4 w-4 accent-purple-600" ${converseUseDeviceLocale ? 'checked' : ''} onchange="setConverseUseDeviceLocale(this.checked)">
@@ -5108,7 +5103,6 @@ let showRoutingDebugBadge = false;
                     medicalMode,
                     converseMode,
                     cagModeEnabled,
-                    converseAccuracyMode,
                     converseUseDeviceLocale
                 }));
             } catch (e) { console.error('Error saving assistant modes:', e); }
@@ -5317,7 +5311,6 @@ let showRoutingDebugBadge = false;
             updateModeButtonGroup('response-length', responseLength);
             updateModeButtonGroup('response-format', responseFormat);
             updateModeButtonGroup('medical-mode', medicalMode ? 'on' : 'off');
-            updateModeButtonGroup('converse-accuracy-mode', converseAccuracyMode);
         }
 
         function loadAssistantModes() {
@@ -5329,7 +5322,6 @@ let showRoutingDebugBadge = false;
             converseMode = false;
             supportConversationMode = false;
             cagModeEnabled = true;
-            converseAccuracyMode = 'strict';
             converseUseDeviceLocale = true;
             try {
                 const saved = localStorage.getItem('jarvis_assistant_modes');
@@ -5341,7 +5333,6 @@ let showRoutingDebugBadge = false;
                     newsVerificationMode = ['normal', 'strict'].includes(parsed.newsVerificationMode) ? parsed.newsVerificationMode : 'normal';
                     medicalMode = !!parsed.medicalMode;
                     cagModeEnabled = parsed.cagModeEnabled !== false;
-                    converseAccuracyMode = parsed.converseAccuracyMode === 'balanced' ? 'balanced' : 'strict';
                     converseUseDeviceLocale = parsed.converseUseDeviceLocale !== false;
                     // Always start with Converse mode OFF unless user explicitly presses it.
                     converseMode = false;
@@ -5354,7 +5345,6 @@ let showRoutingDebugBadge = false;
             window.newsVerificationMode = newsVerificationMode;
             window.medicalMode = medicalMode;
             window.cagModeEnabled = cagModeEnabled;
-            window.converseAccuracyMode = converseAccuracyMode;
             window.converseUseDeviceLocale = converseUseDeviceLocale;
             updateAssistantModeUI();
             // Do not auto-start listening on load.
@@ -5458,18 +5448,6 @@ let showRoutingDebugBadge = false;
             applySpeechRecognitionLanguage();
             saveAssistantModes();
             showTemporaryMessage(converseUseDeviceLocale ? 'Converse now uses your device speech locale.' : 'Converse now uses English (US).');
-        }
-
-        async function setConverseAccuracyMode(mode) {
-            converseAccuracyMode = mode === 'balanced' ? 'balanced' : 'strict';
-            window.converseAccuracyMode = converseAccuracyMode;
-            saveAssistantModes();
-            syncHelpModalModeButtons();
-            showTemporaryMessage(
-                converseAccuracyMode === 'strict'
-                    ? 'Converse accuracy set to Strict.'
-                    : 'Converse accuracy set to Balanced.'
-            );
         }
 
         function toggleConverseMode() {
@@ -9674,9 +9652,8 @@ async function handleMarketLookup(text) {
 
             const words = t.split(/\s+/).filter(Boolean);
             if (/^(uh|um|ah|eh|hmm|hm|mm+|noise|background)$/.test(t)) return true;
-            const strict = converseAccuracyMode === 'strict';
-            const minConfidence = strict ? 0.7 : 0.55;
-            const minWords = strict ? 3 : 2;
+            const minConfidence = 0.55;
+            const minWords = 2;
 
             if (/(.)\1{5,}/.test(t.replace(/\s+/g, ''))) return true;
             if (/^(?:[a-z]\s*){1,3}$/.test(t)) return true;
@@ -18273,12 +18250,6 @@ Quick recap: ...
             if (/\bcag\s+mode\s+(on|off|enable|disable)\b/i.test(cleanText)) {
                 const enabled = /\b(on|enable)\b/i.test(cleanText);
                 await setCagMode(enabled);
-                return;
-            }
-
-            if (/\bconverse\s+accuracy\s+(strict|balanced)\b/i.test(cleanText)) {
-                const mode = /\bstrict\b/i.test(cleanText) ? 'strict' : 'balanced';
-                await setConverseAccuracyMode(mode);
                 return;
             }
 
