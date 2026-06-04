@@ -310,6 +310,20 @@ const LEARNING_MODE_HINTS = {
     exam: 'Answer like an exam response: definition, key points, concise explanation, example if useful, and a final takeaway.',
     bullet: 'Summarize in crisp bullet points with the most important facts first.'
 };
+
+function detectPromptLearningMode(text) {
+    const lower = String(text || '').toLowerCase();
+    if (/\b(explain like i'?m 10|explain like i am 10|explain like a 10 year old|eli10|like i'?m ten|like i am ten)\b/.test(lower)) {
+        return 'eli10';
+    }
+    if (/\b(exam answer|answer like an exam|exam style|for exam|marks answer|write an exam response)\b/.test(lower)) {
+        return 'exam';
+    }
+    if (/\b(bullet summary|bullet points|in bullets|summarize in bullets|point wise|point-wise)\b/.test(lower)) {
+        return 'bullet';
+    }
+    return 'standard';
+}
 const CONVERSE_WELCOME_LINES = [
     'Hey there, what do you want to talk about?',
     'Hey, I am here. What should we talk about?',
@@ -4554,7 +4568,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         const responseHint = RESPONSE_LENGTH_HINTS[responseMode] || RESPONSE_LENGTH_HINTS.normal; 
         const formatMode = window.responseFormat || responseFormat || 'paragraph'; 
         const formatHint = RESPONSE_FORMAT_HINTS[formatMode] || RESPONSE_FORMAT_HINTS.paragraph; 
-        const activeLearningMode = window.learningMode || learningMode || 'standard';
+        const activeLearningMode = detectPromptLearningMode(normalizedUserMessage);
         const learningHint = LEARNING_MODE_HINTS[activeLearningMode] || LEARNING_MODE_HINTS.standard;
         const inputLanguageHint = detectInputLanguageHint(normalizedUserMessage);
         const languageReplyHint = inputLanguageHint
@@ -4566,7 +4580,7 @@ Respond conversationally. DO NOT MAKE UP PLACE NAMES.`;
         const directExplainerHint = isDirectExplainerQuery(normalizedUserMessage)
             ? 'This is a direct explainer/identity query. Do not give research steps or suggestions to search online. Answer directly with concise factual content.'
             : '';
-        const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\nAnswer mode: ${activeLearningMode}. ${learningHint}${quantityHint}${languageReplyHint}\n${conciseFactHint}\n${directExplainerHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
+        const effectiveMessage = `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\nPrompt-requested explanation style: ${activeLearningMode}. ${learningHint}${quantityHint}${languageReplyHint}\n${conciseFactHint}\n${directExplainerHint}\n\nStyle requirements: Be specific, avoid repetition, and stay supportive.`; 
         const cagContext = buildCagContextForQuery(normalizedUserMessage);
 
          
@@ -4796,7 +4810,6 @@ async function handleNameCorrection(text) {
         let supportModeLock = 'balanced';
         let responseLength = 'normal';
         let responseFormat = 'paragraph';
-        let learningMode = 'standard';
         let newsVerificationMode = 'normal';
         let persistMemoryToDevice = true;
         let medicalMode = false;
@@ -5210,16 +5223,6 @@ let showRoutingDebugBadge = false;
                                         <input type="checkbox" class="h-4 w-4 accent-purple-600" ${converseUseDeviceLocale ? 'checked' : ''} onchange="setConverseUseDeviceLocale(this.checked)">
                                     </label>
                                 </div>
-                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg space-y-2">
-                                    <p class="font-semibold text-gray-900 dark:text-white">Answer Mode</p>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">Changes how explanations are shaped.</p>
-                                    <div class="flex flex-wrap gap-2">
-                                        <button data-mode-group="learning-mode" data-mode-value="standard" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" onclick="setLearningMode('standard')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${learningMode === 'standard' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Normal</button>
-                                        <button data-mode-group="learning-mode" data-mode-value="eli10" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" onclick="setLearningMode('eli10')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${learningMode === 'eli10' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Explain Like 10</button>
-                                        <button data-mode-group="learning-mode" data-mode-value="exam" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" onclick="setLearningMode('exam')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${learningMode === 'exam' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Exam Answer</button>
-                                        <button data-mode-group="learning-mode" data-mode-value="bullet" data-base-class="px-3 py-1 rounded-full text-xs font-medium transition-all" onclick="setLearningMode('bullet')" class="px-3 py-1 rounded-full text-xs font-medium transition-all ${learningMode === 'bullet' ? 'bg-purple-600 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'}">Bullet Summary</button>
-                                    </div>
-                                </div>
                                 <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                     <p class="font-semibold text-gray-900 dark:text-white mb-2">Memory</p>
                                     <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Manage saved memory and this account's chat history.</p>
@@ -5359,7 +5362,6 @@ let showRoutingDebugBadge = false;
                     supportModeLock,
                     responseLength,
                     responseFormat,
-                    learningMode,
                     newsVerificationMode,
                     medicalMode,
                     converseMode,
@@ -5572,7 +5574,6 @@ let showRoutingDebugBadge = false;
             updateModeButtonGroup('support-mode', supportModeLock);
             updateModeButtonGroup('response-length', responseLength);
             updateModeButtonGroup('response-format', responseFormat);
-            updateModeButtonGroup('learning-mode', learningMode);
             updateModeButtonGroup('medical-mode', medicalMode ? 'on' : 'off');
             updateModeButtonGroup('converse-accuracy-mode', converseAccuracyMode);
         }
@@ -5581,7 +5582,6 @@ let showRoutingDebugBadge = false;
             supportModeLock = 'balanced';
             responseLength = 'normal';
             responseFormat = 'paragraph';
-            learningMode = 'standard';
             newsVerificationMode = 'normal';
             medicalMode = false;
             converseMode = false;
@@ -5596,7 +5596,6 @@ let showRoutingDebugBadge = false;
                     supportModeLock = parsed.supportModeLock || 'balanced';
                     responseLength = parsed.responseLength || 'normal';
                     responseFormat = ['paragraph', 'bullet', 'steps'].includes(parsed.responseFormat) ? parsed.responseFormat : 'paragraph';
-                    learningMode = ['standard', 'eli10', 'exam', 'bullet'].includes(parsed.learningMode) ? parsed.learningMode : 'standard';
                     newsVerificationMode = ['normal', 'strict'].includes(parsed.newsVerificationMode) ? parsed.newsVerificationMode : 'normal';
                     medicalMode = !!parsed.medicalMode;
                     cagModeEnabled = parsed.cagModeEnabled !== false;
@@ -5609,7 +5608,7 @@ let showRoutingDebugBadge = false;
             window.supportModeLock = supportModeLock;
             window.responseLength = responseLength;
             window.responseFormat = responseFormat;
-            window.learningMode = learningMode;
+            window.learningMode = 'standard';
             window.newsVerificationMode = newsVerificationMode;
             window.medicalMode = medicalMode;
             window.cagModeEnabled = cagModeEnabled;
@@ -5657,25 +5656,6 @@ let showRoutingDebugBadge = false;
                 label: labelMap[responseFormat] || 'Paragraph'
             }, {
                 fallbackText: `Response format set to ${labelMap[responseFormat] || 'Paragraph'}.`
-            });
-        }
-
-        async function setLearningMode(mode) {
-            learningMode = ['standard', 'eli10', 'exam', 'bullet'].includes(mode) ? mode : 'standard';
-            window.learningMode = learningMode;
-            saveAssistantModes();
-            updateAssistantModeUI();
-            const labelMap = {
-                standard: 'Normal',
-                eli10: 'Explain Like 10',
-                exam: 'Exam Answer',
-                bullet: 'Bullet Summary'
-            };
-            await deliverApiReply('learning_mode_changed', {
-                mode: learningMode,
-                label: labelMap[learningMode] || 'Normal'
-            }, {
-                fallbackText: `Answer mode set to ${labelMap[learningMode] || 'Normal'}.`
             });
         }
 
@@ -18604,16 +18584,6 @@ Quick recap: ...
                 return;
             }
 
-            const learningModeMatch = cleanText.match(/\b(?:set|change|switch)\s+(?:answer|learning|explain)\s+mode\s+(normal|standard|eli10|explain\s+like\s+(?:i'?m\s+)?10|explain\s+like\s+(?:a\s+)?10\s*year\s*old|exam(?:\s+answer)?|bullet(?:\s+summary|\s+points?)?)\b/i);
-            if (learningModeMatch) {
-                const rawMode = learningModeMatch[1].toLowerCase();
-                const mode = rawMode.includes('exam')
-                    ? 'exam'
-                    : (rawMode.includes('bullet') ? 'bullet' : ((rawMode.includes('10') || rawMode.includes('eli10')) ? 'eli10' : 'standard'));
-                await setLearningMode(mode);
-                return;
-            }
-
             const newsModeMatch = cleanText.match(/\b(?:set|change|switch)\s+(?:news\s+)?(?:verification\s+)?mode\s+(strict|normal)\b/i);
             if (newsModeMatch) {
                 await setNewsVerificationMode(newsModeMatch[1].toLowerCase());
@@ -22071,12 +22041,12 @@ function isContinuousVisionQuestion(text) {
     // Normalize common shorthand so "what do u see" routes to vision correctly.
     const t = raw.replace(/\bu\b/g, 'you');
 
-    if (/\b(what (?:do|can) you see|what are you seeing|what am i looking at|what am i seeing|describe (?:what you see|this|this image)|read (?:this image|this|the text|this text)|analy[sz]e (?:this image|this)|what(?:'s| is) (?:in front of me|this|that))\b/.test(t)) {
+    if (/\b(what (?:do|can) you see|what are you seeing|what am i looking at|what am i seeing|describe (?:what you see|the camera|the image|this image|the screen)|read (?:this image|the image|the text|this text|the screen)|analy[sz]e (?:this image|the image|the camera|the screen)|what(?:'s| is) (?:in front of me|on camera|in the camera|in this image|on the screen))\b/.test(t)) {
         return true;
     }
 
-    // Fallback for short camera-context prompts when continuous vision is active.
-    if (/\b(what|can you|do you)\b/.test(t) && /\b(see|looking|look|this|that|front)\b/.test(t)) {
+    // Fallback for short camera-context prompts only while continuous vision is active.
+    if (isContinuousVisionActive && /\b(what|can you|please|tell me)\b/.test(t) && /\b(see|read|look(?:ing)? at|describe|analy[sz]e|front|camera|image|screen|text)\b/.test(t)) {
         return true;
     }
 
