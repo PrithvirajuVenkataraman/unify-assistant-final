@@ -4610,6 +4610,22 @@ let showRoutingDebugBadge = false;
         let converseFallbackActive = false;
         let converseBrowserStartFailures = 0;
         let conversePausedByUser = false;
+        let converseVadTimer = null;
+        let converseVadSpeechStartedAt = 0;
+        let converseVadSilenceStartedAt = 0;
+        let converseVadMaxTimer = null;
+        let converseSession = {
+            state: 'idle',
+            startedAt: 0,
+            lastInterimText: '',
+            finalBuffer: '',
+            lastSpeechAt: 0,
+            silenceTimer: null,
+            activeRecorder: null,
+            audioAnalyser: null,
+            stream: null,
+            turnId: 0
+        };
         let lastWakeAckTime = 0;
         let waitingForLocation = false;
         let waitingForName = false;
@@ -5273,11 +5289,7 @@ let showRoutingDebugBadge = false;
                 clearActiveRequest(controller);
             }
             stopActiveTypewriterAnimations();
-            if (converseFinalizeTimer) {
-                clearTimeout(converseFinalizeTimer);
-                converseFinalizeTimer = null;
-                converseTranscriptBuffer = '';
-            }
+            resetConverseTurnCapture();
             hideThinkingIndicator();
             assistantProcessingDepth = 0;
             toggleSendButton();
@@ -5450,7 +5462,51 @@ let showRoutingDebugBadge = false;
             showTemporaryMessage(converseUseDeviceLocale ? 'Converse now uses your device speech locale.' : 'Converse now uses English (US).');
         }
 
-        function toggleConverseMode() {
+        function setConverseSessionState(state) {
+            const previousState = converseSession.state;
+            converseSession.state = state;
+            if (state === 'listening' || state === 'user_speaking') {
+                converseSession.lastSpeechAt = Date.now();
+            }
+            const statusMap = {
+                starting: 'Converse starting',
+                greeting: 'JARVIS speaking',
+                listening: 'Listening',
+                user_speaking: 'Listening',
+                finalizing: 'Heard you',
+                processing: 'Thinking',
+                assistant_speaking: 'JARVIS speaking',
+                paused: 'Paused',
+                permission_denied: 'Mic blocked',
+                unsupported: 'Converse unavailable',
+                off: 'Converse mode OFF'
+            };
+            const label = statusMap[state];
+            if (label && previousState !== state) showTemporaryMessage(label);
+            updateVoiceInteractionGraphics();
+        }
+
+        function resetConverseTurnCapture() {
+            converseSession.lastInterimText = '';
+            converseSession.finalBuffer = '';
+            if (converseSession.silenceTimer) {
+                clearTimeout(converseSession.silenceTimer);
+                converseSession.silenceTimer = null;
+            }
+        }
+
+        function stopConverseRecognitionOnly() {
+            isListening = false;
+            try { continuousRecognition?.stop?.(); } catch (e) {}
+            const voiceBtn = document.getElementById('voice-to-text-btn');
+            const visualizer = document.getElementById('tts-visualizer');
+            voiceBtn?.classList.remove('is-active');
+            visualizer?.classList.remove('speaking');
+            visualizer?.classList.add('not-speaking', 'hidden-wave');
+            updateVoiceInteractionGraphics();
+        }
+
+        function startConverseSession() {
             unlockMobileSpeechPlayback();
             if (activeWakeSession) {
                 clearTimeout(followUpTimer);
@@ -5461,86 +5517,99 @@ let showRoutingDebugBadge = false;
             if (isVoiceTyping) {
                 stopVoiceToTextInput(false);
             }
-            converseMode = !converseMode;
+            stopSpeaking();
+            stopConverseRecognitionOnly();
+            stopConverseFallbackCapture(false);
+            resetConverseTurnCapture();
+            converseMode = true;
+            listeningRequested = true;
             saveAssistantModes();
             updateAssistantModeUI();
-            showConverseToast(converseMode, false);
-            if (converseMode) {
-                stopSpeaking();
-                conversePausedByUser = false;
-                converseBrowserStartFailures = 0;
-                converseFallbackActive = false;
-                wakeWordMode = false;
-                commandMode = false;
-                isPassiveListening = false;
-                if (isListening) {
-                    stopListening();
-                }
-                listeningRequested = true;
-                if (!continuousRecognition) {
-                    initializeSpeechRecognition();
-                }
-                if (!continuousRecognition) {
-                    converseFallbackActive = true;
-                    void startConverseFallbackCapture().then(started => {
-                        if (!started) {
-                            converseMode = false;
-                            listeningRequested = false;
-                            converseFallbackActive = false;
-                            saveAssistantModes();
-                            updateAssistantModeUI();
-                            void deliverApiReply('speech_recognition_unavailable', {}, {
-                                fallbackText: 'Converse mode needs microphone access, browser speech recognition, or server transcription support.'
-                            });
-                        }
-                    });
-                    return;
-                }
+            showConverseToast(true, false);
+            setConverseSessionState('starting');
+            conversePausedByUser = false;
+            converseBrowserStartFailures = 0;
+            converseFallbackActive = false;
+            wakeWordMode = false;
+            commandMode = false;
+            isPassiveListening = false;
+            passiveWakeWordEnabled = false;
+            awaitingFollowUpResponse = false;
+            currentSpeechContext = 'none';
+            clearTimeout(followUpTimer);
+            converseSession.startedAt = Date.now();
+            converseSession.turnId += 1;
+            speakConverseGreeting();
+        }
+
+        function speakConverseGreeting() {
+            setConverseSessionState('greeting');
+            speak('Hey.', true);
+        }
+
+        function startConverseListeningLoop() {
+            if (!converseMode || !listeningRequested || conversePausedByUser || isProcessing || isAssistantSpeaking || isListening) return;
+            resetConverseTurnCapture();
+            setConverseSessionState('listening');
+            if (!continuousRecognition) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (SpeechRecognition) initializeSpeechRecognition();
+            }
+            if (continuousRecognition) {
                 applySpeechRecognitionLanguage();
-                // Try immediate start first (important on mobile browsers requiring user gesture).
                 startListening();
-                // Keep a retry loop for transient startup issues.
-                let attempts = 0;
-                const ensureConverseListening = () => {
-                    attempts += 1;
-                    if (!converseMode || !listeningRequested || isListening) return;
-                    if (isAssistantSpeaking && attempts < 8) {
-                        stopSpeaking();
-                        setTimeout(ensureConverseListening, 320);
-                        return;
-                    }
-                    startListening();
-                };
-                setTimeout(ensureConverseListening, 180);
-                // Reliability fallback: if continuous recognition cannot stay active, fallback to voice typing capture.
                 setTimeout(() => {
-                    if (!converseMode || isListening) return;
-                    if (isAssistantSpeaking) stopSpeaking();
-                    try {
-                        startListening();
-                    } catch (_) {}
-                    setTimeout(() => {
-                        if (converseMode && listeningRequested && !isListening && !isAssistantSpeaking && !isProcessing) {
+                    if (converseMode && listeningRequested && !isListening && !isAssistantSpeaking && !isProcessing) {
+                        converseBrowserStartFailures += 1;
+                        if (converseBrowserStartFailures >= 2) {
                             converseFallbackActive = true;
                             void startConverseFallbackCapture();
+                        } else {
+                            startListening();
                         }
-                    }, 350);
-                }, 850);
-            } else {
-                stopConverseFallbackCapture(false);
-                converseFallbackActive = false;
-                conversePausedByUser = false;
-                stopListening();
-                stopSpeaking();
-                passiveWakeWordEnabled = false;
-                isPassiveListening = false;
-                listeningRequested = false;
-                currentSpeechContext = 'none';
-                awaitingFollowUpResponse = false;
-                clearTimeout(followUpTimer);
-                forceVoiceCaptureIdle();
-                updateVoiceInteractionGraphics();
+                    }
+                }, 650);
+                return;
             }
+            converseFallbackActive = true;
+            void startConverseFallbackCapture().then(started => {
+                if (!started && converseMode) {
+                    setConverseSessionState('unsupported');
+                    stopConverseSession('unsupported');
+                    void deliverApiReply('speech_recognition_unavailable', {}, {
+                        fallbackText: 'Converse mode needs microphone access, browser speech recognition, or server transcription support.'
+                    });
+                }
+            });
+        }
+
+        function stopConverseSession(reason = 'off') {
+            converseMode = false;
+            listeningRequested = false;
+            converseFallbackActive = false;
+            conversePausedByUser = false;
+            resetConverseTurnCapture();
+            stopConverseFallbackCapture(false);
+            stopConverseRecognitionOnly();
+            stopSpeaking();
+            passiveWakeWordEnabled = false;
+            isPassiveListening = false;
+            currentSpeechContext = 'none';
+            awaitingFollowUpResponse = false;
+            clearTimeout(followUpTimer);
+            forceVoiceCaptureIdle();
+            setConverseSessionState(['unsupported', 'permission_denied', 'paused'].includes(reason) ? reason : 'off');
+            saveAssistantModes();
+            updateAssistantModeUI();
+            showConverseToast(false, false);
+        }
+
+        function toggleConverseMode() {
+            if (converseMode) {
+                stopConverseSession('off');
+                return;
+            }
+            startConverseSession();
         }
 
         function updateConverseIndicator() {
@@ -5890,38 +5959,106 @@ let showRoutingDebugBadge = false;
 
         async function startConverseFallbackCapture() {
             if (!converseMode || !listeningRequested || isAssistantSpeaking || isProcessing || conversePausedByUser) return false;
-            if (converseFallbackRecorder || typeof MediaRecorder === 'undefined') return false;
+            if (converseFallbackRecorder || converseVadTimer || typeof MediaRecorder === 'undefined') return false;
             const mimeType = getGroqVoiceTypingMimeType();
             if (!mimeType) return false;
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 converseFallbackStream = stream;
+                converseSession.stream = stream;
                 converseFallbackChunks = [];
                 converseFallbackMimeType = mimeType;
-                converseFallbackRecorder = new MediaRecorder(stream, { mimeType });
-                converseFallbackRecorder.ondataavailable = event => {
-                    if (event.data && event.data.size > 0) {
-                        converseFallbackChunks.push(event.data);
-                    }
-                };
-                converseFallbackRecorder.onstop = () => {
-                    void finishConverseFallbackCapture();
-                };
+                const ctx = getJarvisAudioContext();
+                if (ctx && ctx.state === 'suspended') {
+                    await ctx.resume().catch(() => {});
+                }
+                const analyser = ctx ? ctx.createAnalyser() : null;
+                let dataArray = null;
+                if (ctx && analyser) {
+                    const source = ctx.createMediaStreamSource(stream);
+                    analyser.fftSize = 1024;
+                    analyser.smoothingTimeConstant = 0.2;
+                    source.connect(analyser);
+                    converseSession.audioSource = source;
+                    converseSession.audioAnalyser = analyser;
+                    dataArray = new Uint8Array(analyser.fftSize);
+                }
                 converseFallbackActive = true;
                 isListening = true;
+                setConverseSessionState('listening');
                 updateVoiceInteractionGraphics();
                 showTemporaryMessage('Converse fallback listening... speak naturally.');
-                converseFallbackRecorder.start();
-                if (converseFallbackTimer) clearTimeout(converseFallbackTimer);
-                converseFallbackTimer = setTimeout(() => {
-                    stopConverseFallbackCapture(true);
-                }, 2600);
+                const speechThreshold = 0.018;
+                const silenceThreshold = 0.012;
+                const minSpeechMs = 450;
+                const silenceMs = 650;
+                const maxTurnMs = 18000;
+
+                const startRecorder = () => {
+                    if (converseFallbackRecorder || !converseMode || !listeningRequested) return;
+                    converseFallbackRecorder = new MediaRecorder(stream, { mimeType });
+                    converseSession.activeRecorder = converseFallbackRecorder;
+                    converseVadSpeechStartedAt = Date.now();
+                    converseVadSilenceStartedAt = 0;
+                    converseFallbackRecorder.ondataavailable = event => {
+                        if (event.data && event.data.size > 0) {
+                            converseFallbackChunks.push(event.data);
+                        }
+                    };
+                    converseFallbackRecorder.onstop = () => {
+                        void finishConverseFallbackCapture();
+                    };
+                    setConverseSessionState('user_speaking');
+                    converseFallbackRecorder.start(250);
+                    if (converseVadMaxTimer) clearTimeout(converseVadMaxTimer);
+                    converseVadMaxTimer = setTimeout(() => {
+                        stopConverseFallbackCapture(true);
+                    }, maxTurnMs);
+                };
+
+                const getRms = () => {
+                    if (!analyser || !dataArray) return 0;
+                    analyser.getByteTimeDomainData(dataArray);
+                    let sum = 0;
+                    for (let i = 0; i < dataArray.length; i += 1) {
+                        const centered = (dataArray[i] - 128) / 128;
+                        sum += centered * centered;
+                    }
+                    return Math.sqrt(sum / dataArray.length);
+                };
+
+                const pollVad = () => {
+                    if (!converseMode || !listeningRequested || isAssistantSpeaking || isProcessing || conversePausedByUser) {
+                        stopConverseFallbackCapture(false);
+                        return;
+                    }
+                    const rms = getRms();
+                    const now = Date.now();
+                    if (!converseFallbackRecorder) {
+                        if (!analyser || rms >= speechThreshold) {
+                            startRecorder();
+                        }
+                    } else if (rms < silenceThreshold) {
+                        if (!converseVadSilenceStartedAt) converseVadSilenceStartedAt = now;
+                        const spokeLongEnough = (now - converseVadSpeechStartedAt) >= minSpeechMs;
+                        if (spokeLongEnough && (now - converseVadSilenceStartedAt) >= silenceMs) {
+                            stopConverseFallbackCapture(true);
+                            return;
+                        }
+                    } else {
+                        converseVadSilenceStartedAt = 0;
+                        converseSession.lastSpeechAt = now;
+                    }
+                    converseVadTimer = setTimeout(pollVad, 80);
+                };
+                pollVad();
                 return true;
             } catch (error) {
                 converseFallbackActive = false;
                 isListening = false;
                 updateVoiceInteractionGraphics();
+                setConverseSessionState('permission_denied');
                 void deliverApiReply('microphone_permission_denied', {
                     reason: String(error?.name || error?.message || 'microphone_unavailable')
                 }, {
@@ -5935,6 +6072,14 @@ let showRoutingDebugBadge = false;
             if (converseFallbackTimer) {
                 clearTimeout(converseFallbackTimer);
                 converseFallbackTimer = null;
+            }
+            if (converseVadTimer) {
+                clearTimeout(converseVadTimer);
+                converseVadTimer = null;
+            }
+            if (converseVadMaxTimer) {
+                clearTimeout(converseVadMaxTimer);
+                converseVadMaxTimer = null;
             }
             if (!commit) {
                 converseFallbackChunks = [];
@@ -5953,6 +6098,13 @@ let showRoutingDebugBadge = false;
                 converseFallbackStream.getTracks().forEach(track => track.stop());
                 converseFallbackStream = null;
             }
+            try { converseSession.audioSource?.disconnect?.(); } catch (e) {}
+            converseSession.activeRecorder = null;
+            converseSession.audioAnalyser = null;
+            converseSession.audioSource = null;
+            converseSession.stream = null;
+            converseVadSpeechStartedAt = 0;
+            converseVadSilenceStartedAt = 0;
             isListening = false;
             updateVoiceInteractionGraphics();
         }
@@ -5962,6 +6114,7 @@ let showRoutingDebugBadge = false;
             const mimeType = converseFallbackMimeType || 'audio/webm';
             converseFallbackChunks = [];
             converseFallbackRecorder = null;
+            converseSession.activeRecorder = null;
             converseFallbackMimeType = '';
             if (converseFallbackTimer) {
                 clearTimeout(converseFallbackTimer);
@@ -5971,6 +6124,12 @@ let showRoutingDebugBadge = false;
                 converseFallbackStream.getTracks().forEach(track => track.stop());
                 converseFallbackStream = null;
             }
+            try { converseSession.audioSource?.disconnect?.(); } catch (e) {}
+            converseSession.audioAnalyser = null;
+            converseSession.audioSource = null;
+            converseSession.stream = null;
+            converseVadSpeechStartedAt = 0;
+            converseVadSilenceStartedAt = 0;
             isListening = false;
             updateVoiceInteractionGraphics();
 
@@ -6001,7 +6160,7 @@ let showRoutingDebugBadge = false;
             } catch (error) {
                 showTemporaryMessage('Converse transcription failed. I will keep listening.');
             } finally {
-                if (converseMode && listeningRequested && !isAssistantSpeaking && !isProcessing && converseFallbackActive && !conversePausedByUser) {
+                if (converseMode && listeningRequested && !isAssistantSpeaking && !isProcessing && converseFallbackActive && !conversePausedByUser && ['listening', 'user_speaking'].includes(converseSession.state)) {
                     scheduleConverseFallbackRestart(220);
                 }
             }
@@ -6010,7 +6169,7 @@ let showRoutingDebugBadge = false;
         function scheduleConverseFallbackRestart(delayMs = 220) {
             if (!converseMode || !listeningRequested || !converseFallbackActive || conversePausedByUser) return;
             setTimeout(() => {
-                if (converseMode && listeningRequested && !isListening && !isAssistantSpeaking && !isProcessing && converseFallbackActive && !conversePausedByUser) {
+                if (converseMode && listeningRequested && !isListening && !isAssistantSpeaking && !isProcessing && converseFallbackActive && !conversePausedByUser && ['listening', 'user_speaking'].includes(converseSession.state)) {
                     void startConverseFallbackCapture();
                 }
             }, delayMs);
@@ -9567,8 +9726,6 @@ async function handleMarketLookup(text) {
 
         let isProcessing = false; 
         let speechTimeout = null; 
-        let converseTranscriptBuffer = '';
-        let converseFinalizeTimer = null;
         let currentSpeechTextLower = '';
 
         function isHardStopSpeechCommand(text) {
@@ -9715,12 +9872,55 @@ async function handleMarketLookup(text) {
         function handleConversePause(text) {
             converseTurnState.pausedOrInterrupted = true;
             conversePausedByUser = false;
+            setConverseSessionState('paused');
             if (currentSpeechTextLower) {
                 converseTurnState.interruptedAnswerText = currentSpeechTextLower;
             }
             stopSpeaking();
             addChatMessage('Paused. Say "continue" when you want me to resume.', false, false);
             saveToHistory(text, 'Paused. Say "continue" when you want me to resume.');
+            setTimeout(() => startConverseListeningLoop(), 120);
+        }
+
+        function getConverseCapturedText() {
+            const finalText = String(converseSession.finalBuffer || '').trim();
+            const interimText = String(converseSession.lastInterimText || '').trim();
+            const combined = [finalText, interimText].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+            if (!combined) return '';
+            const words = combined.split(/\s+/);
+            const deduped = [];
+            for (const word of words) {
+                if (deduped.length && deduped[deduped.length - 1].toLowerCase() === word.toLowerCase()) continue;
+                deduped.push(word);
+            }
+            return deduped.join(' ').trim();
+        }
+
+        function scheduleConverseSilenceFinalize(delayMs = 650) {
+            if (converseSession.silenceTimer) clearTimeout(converseSession.silenceTimer);
+            converseSession.silenceTimer = setTimeout(() => {
+                void finalizeConverseTurn('silence');
+            }, delayMs);
+        }
+
+        async function finalizeConverseTurn(reason = 'final') {
+            if (!converseMode || !listeningRequested) return;
+            const text = getConverseCapturedText();
+            resetConverseTurnCapture();
+            if (!text || shouldIgnoreConverseNoise(text, 1, true)) {
+                if (converseMode && listeningRequested && !isAssistantSpeaking && !isProcessing) {
+                    setConverseSessionState('listening');
+                }
+                return;
+            }
+            setConverseSessionState('finalizing');
+            stopConverseRecognitionOnly();
+            stopConverseFallbackCapture(false);
+            setConverseSessionState('processing');
+            await handleFinalTranscript(text);
+            if (converseMode && listeningRequested && !isAssistantSpeaking && !isProcessing) {
+                startConverseListeningLoop();
+            }
         }
 
         async function handleFinalTranscript(finalTranscript) {
@@ -9766,13 +9966,7 @@ async function handleMarketLookup(text) {
             if (converseMode) {
                 const utteranceKind = classifyConverseUtterance(finalText);
                 if (utteranceKind === 'end') {
-                    converseMode = false;
-                    listeningRequested = false;
-                    stopConverseFallbackCapture(false);
-                    stopListening();
-                    stopSpeaking();
-                    saveAssistantModes();
-                    updateAssistantModeUI();
+                    stopConverseSession('off');
                     addChatMessage('Converse mode off. Say "converse mode on" anytime.', false);
                     return;
                 }
@@ -9788,21 +9982,27 @@ async function handleMarketLookup(text) {
                     addChatMessage(finalText, true);
                     if (isProcessing) return;
                     isProcessing = true;
+                    setConverseSessionState('processing');
                     try {
                         await processCommand(continuationPrompt);
                     } finally {
                         isProcessing = false;
+                        if (converseMode && listeningRequested && !isAssistantSpeaking) {
+                            startConverseListeningLoop();
+                        }
                     }
                     return;
                 }
                 if (utteranceKind === 'ack') {
                     // Avoid noisy assistant turns for short acknowledgements in hands-free mode.
+                    startConverseListeningLoop();
                     return;
                 }
             }
 
             if (isProcessing) return;
             isProcessing = true;
+            if (converseMode) setConverseSessionState('processing');
             addChatMessage(finalText, true);
             if (converseMode) {
                 converseTurnState.lastUserPrompt = finalText;
@@ -9842,30 +10042,17 @@ async function handleMarketLookup(text) {
                 await processCommand(finalText);
             } finally {
                 isProcessing = false;
+                if (converseMode && listeningRequested && !isAssistantSpeaking) {
+                    startConverseListeningLoop();
+                }
             }
         }
 
         function queueConverseFinalTranscript(segment) {
             const s = String(segment || '').trim();
             if (!s) return;
-
-            if (converseTranscriptBuffer) {
-                converseTranscriptBuffer += ' ';
-            }
-            converseTranscriptBuffer += s;
-
-            if (converseFinalizeTimer) {
-                clearTimeout(converseFinalizeTimer);
-            }
-
-            // Wait briefly for additional final chunks to capture full sentence.
-            converseFinalizeTimer = setTimeout(async () => {
-                const text = converseTranscriptBuffer.trim();
-                converseTranscriptBuffer = '';
-                converseFinalizeTimer = null;
-                if (!text) return;
-                await handleFinalTranscript(text);
-            }, 320);
+            converseSession.finalBuffer = [converseSession.finalBuffer, s].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+            scheduleConverseSilenceFinalize(180);
         }
 
         function normalizeSpeechCommandText(value) {
@@ -9911,9 +10098,23 @@ async function handleMarketLookup(text) {
             continuousRecognition.onstart = () => {
                 converseBrowserStartFailures = 0;
                 converseFallbackActive = false;
+                if (converseMode) {
+                    setConverseSessionState('listening');
+                }
                 if (!converseMode && !activeWakeSession && !isPassiveListening) {
                     stopSpeaking();
                 }
+            };
+
+            continuousRecognition.onspeechstart = () => {
+                if (!converseMode) return;
+                converseSession.lastSpeechAt = Date.now();
+                setConverseSessionState('user_speaking');
+            };
+
+            continuousRecognition.onspeechend = () => {
+                if (!converseMode) return;
+                scheduleConverseSilenceFinalize(520);
             };
 
             continuousRecognition.onresult = async (event) => {
@@ -10022,6 +10223,12 @@ async function handleMarketLookup(text) {
                         if (currentSpeechTextLower) converseTurnState.interruptedAnswerText = currentSpeechTextLower;
                         stopSpeaking();
                     }
+                    if (converseMode && transcript && !result.isFinal && isMeaningfulInterruption(transcript, false, confidence)) {
+                        converseSession.lastInterimText = transcript;
+                        converseSession.lastSpeechAt = Date.now();
+                        setConverseSessionState('user_speaking');
+                        scheduleConverseSilenceFinalize(900);
+                    }
                     if (result.isFinal) {
                         if (converseMode && shouldIgnoreConverseNoise(transcript, confidence, result.isFinal)) {
                             return;
@@ -10040,12 +10247,8 @@ async function handleMarketLookup(text) {
                 isListening = false;
                 const err = String(event?.error || '').toLowerCase();
                 if (err === 'not-allowed' || err === 'service-not-allowed') {
-                    converseMode = false;
-                    listeningRequested = false;
-                    isListening = false;
-                    saveAssistantModes();
-                    updateAssistantModeUI();
-                    stopListening();
+                    setConverseSessionState('permission_denied');
+                    stopConverseSession('permission_denied');
                     void deliverApiReply('microphone_permission_denied', {
                         reason: err
                     }, {
@@ -10073,13 +10276,17 @@ async function handleMarketLookup(text) {
             continuousRecognition.onend = () => { 
                 isListening = false;
                 if (converseMode && listeningRequested) {
+                    if (!['listening', 'user_speaking'].includes(converseSession.state)) {
+                        updateVoiceInteractionGraphics();
+                        return;
+                    }
                     if (converseFallbackActive) {
                         scheduleConverseFallbackRestart(300);
                         return;
                     }
                     setTimeout(() => {
-                        if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking) {
-                            startListening();
+                        if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking && ['listening', 'user_speaking'].includes(converseSession.state)) {
+                            startConverseListeningLoop();
                         }
                     }, 300);
                     return;
@@ -20786,11 +20993,7 @@ function toggleMemoryPersistence(enabled) {
                     startListening();
                 }
             } else if (converseMode && listeningRequested && !isListening && !isProcessing) {
-                if (converseFallbackActive) {
-                    scheduleConverseFallbackRestart(180);
-                } else {
-                    setTimeout(() => startListening(), 180);
-                }
+                setTimeout(() => startConverseListeningLoop(), 140);
             }
         }
 
@@ -21039,6 +21242,7 @@ function toggleMemoryPersistence(enabled) {
             const speechProfile = getSpeechProfile(cleanText, converseMode);
             currentSpeechTextLower = cleanText.toLowerCase();
             isAssistantSpeaking = true;
+            if (converseMode) setConverseSessionState('assistant_speaking');
             updateTTSVisualizer(true);
 
             const speechSessionId = ++currentSpeechSessionId;
