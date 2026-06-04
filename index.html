@@ -118,7 +118,6 @@
                     <div id="composer-actions-menu" class="composer-actions-menu hidden" role="menu" aria-label="Composer actions">
                         <button type="button" id="vision-toggle-btn" class="composer-action-item" onclick="handleComposerAction('vision')" role="menuitem">Vision analysis</button>
                         <button type="button" class="composer-action-item" onclick="handleComposerAction('ocr')" role="menuitem">OCR camera</button>
-                        <button type="button" class="composer-action-item" onclick="handleComposerAction('travel-toolkit')" role="menuitem">Travel toolkit</button>
                         <button type="button" id="help-btn" class="composer-action-item" onclick="handleComposerAction('help')" role="menuitem">Help & options</button>
                     </div>
                 </div>
@@ -1366,265 +1365,6 @@ async function handleBudgetTripPlanner(text) {
     } finally {
         hideLoading();
     }
-}
-
-function getDefaultTravelToolkitState() {
-    return {
-        destination: '',
-        days: [
-            { title: 'Day 1', notes: '' },
-            { title: 'Day 2', notes: '' },
-            { title: 'Day 3', notes: '' }
-        ],
-        checklist: [
-            { text: 'ID / passport', done: false },
-            { text: 'Phone charger and power bank', done: false },
-            { text: 'Medicines and basic first aid', done: false },
-            { text: 'Weather-appropriate clothes', done: false },
-            { text: 'Tickets / booking confirmations', done: false }
-        ],
-        expenses: [],
-        budget: {
-            currency: 'INR',
-            total: '',
-            lodging: '',
-            food: '',
-            transport: '',
-            activities: '',
-            buffer: ''
-        }
-    };
-}
-
-function loadTravelToolkitState() {
-    try {
-        const saved = localStorage.getItem('jarvis_travel_toolkit');
-        if (!saved) return getDefaultTravelToolkitState();
-        const parsed = JSON.parse(saved);
-        const defaults = getDefaultTravelToolkitState();
-        return {
-            ...defaults,
-            ...parsed,
-            days: Array.isArray(parsed.days) && parsed.days.length ? parsed.days : defaults.days,
-            checklist: Array.isArray(parsed.checklist) && parsed.checklist.length ? parsed.checklist : defaults.checklist,
-            expenses: Array.isArray(parsed.expenses) ? parsed.expenses : [],
-            budget: { ...defaults.budget, ...(parsed.budget || {}) }
-        };
-    } catch (e) {
-        return getDefaultTravelToolkitState();
-    }
-}
-
-function saveTravelToolkitState(state) {
-    try {
-        localStorage.setItem('jarvis_travel_toolkit', JSON.stringify(state || getDefaultTravelToolkitState()));
-    } catch (e) {}
-}
-
-function getTravelToolkitState() {
-    if (!window.__travelToolkitState) {
-        window.__travelToolkitState = loadTravelToolkitState();
-    }
-    return window.__travelToolkitState;
-}
-
-function refreshTravelToolkitCard() {
-    const host = document.getElementById('travel-toolkit-card');
-    if (!host) return;
-    host.outerHTML = buildTravelToolkitHtml();
-}
-
-function updateTravelToolkitField(path, value) {
-    const state = getTravelToolkitState();
-    const parts = String(path || '').split('.');
-    let ref = state;
-    for (let i = 0; i < parts.length - 1; i += 1) {
-        if (!ref[parts[i]]) ref[parts[i]] = {};
-        ref = ref[parts[i]];
-    }
-    ref[parts[parts.length - 1]] = String(value || '');
-    saveTravelToolkitState(state);
-    refreshTravelToolkitCard();
-}
-
-function toggleTravelChecklistItem(index) {
-    const state = getTravelToolkitState();
-    const item = state.checklist[Number(index)];
-    if (!item) return;
-    item.done = !item.done;
-    saveTravelToolkitState(state);
-    refreshTravelToolkitCard();
-}
-
-function addTravelChecklistItem() {
-    const input = document.getElementById('travel-new-check-item');
-    const text = String(input?.value || '').trim();
-    if (!text) return;
-    const state = getTravelToolkitState();
-    state.checklist.push({ text, done: false });
-    saveTravelToolkitState(state);
-    refreshTravelToolkitCard();
-}
-
-function removeTravelChecklistItem(index) {
-    const state = getTravelToolkitState();
-    state.checklist.splice(Number(index), 1);
-    saveTravelToolkitState(state);
-    refreshTravelToolkitCard();
-}
-
-function addTravelDay() {
-    const state = getTravelToolkitState();
-    state.days.push({ title: `Day ${state.days.length + 1}`, notes: '' });
-    saveTravelToolkitState(state);
-    refreshTravelToolkitCard();
-}
-
-function removeTravelDay(index) {
-    const state = getTravelToolkitState();
-    if (state.days.length <= 1) return;
-    state.days.splice(Number(index), 1);
-    saveTravelToolkitState(state);
-    refreshTravelToolkitCard();
-}
-
-function addTravelExpense() {
-    const labelEl = document.getElementById('travel-expense-label');
-    const amountEl = document.getElementById('travel-expense-amount');
-    const label = String(labelEl?.value || '').trim();
-    const amount = Number(String(amountEl?.value || '').replace(/,/g, ''));
-    if (!label || !Number.isFinite(amount) || amount <= 0) return;
-    const state = getTravelToolkitState();
-    state.expenses.push({ label, amount });
-    saveTravelToolkitState(state);
-    refreshTravelToolkitCard();
-}
-
-function removeTravelExpense(index) {
-    const state = getTravelToolkitState();
-    state.expenses.splice(Number(index), 1);
-    saveTravelToolkitState(state);
-    refreshTravelToolkitCard();
-}
-
-function resetTravelToolkit() {
-    if (!window.confirm('Reset the travel toolkit data on this device?')) return;
-    window.__travelToolkitState = getDefaultTravelToolkitState();
-    saveTravelToolkitState(window.__travelToolkitState);
-    refreshTravelToolkitCard();
-}
-
-function buildTravelMapLinks(destination) {
-    const q = encodeURIComponent(String(destination || 'near me').trim() || 'near me');
-    return {
-        google: `https://www.google.com/maps/search/${q}`,
-        osm: `https://www.openstreetmap.org/search?query=${q}`,
-        directions: `https://www.google.com/maps/dir/?api=1&destination=${q}`,
-        hotels: `https://www.google.com/maps/search/${encodeURIComponent(`hotels in ${destination || 'near me'}`)}`,
-        food: `https://www.google.com/maps/search/${encodeURIComponent(`restaurants in ${destination || 'near me'}`)}`
-    };
-}
-
-function buildTravelToolkitHtml() {
-    const state = getTravelToolkitState();
-    const budget = state.budget || {};
-    const expensesTotal = (state.expenses || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-    const budgetTotal = Number(String(budget.total || '').replace(/,/g, '')) || 0;
-    const remaining = budgetTotal ? budgetTotal - expensesTotal : null;
-    const currency = escapeHtml(budget.currency || 'INR');
-    const links = buildTravelMapLinks(state.destination);
-    const checklistHtml = (state.checklist || []).map((item, index) => `
-        <div class="travel-toolkit-row">
-            <label class="travel-toolkit-check">
-                <input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleTravelChecklistItem(${index})">
-                <span class="${item.done ? 'travel-toolkit-done' : ''}">${escapeHtml(item.text)}</span>
-            </label>
-            <button type="button" class="travel-toolkit-icon-btn" onclick="removeTravelChecklistItem(${index})" aria-label="Remove checklist item">x</button>
-        </div>
-    `).join('');
-    const daysHtml = (state.days || []).map((day, index) => `
-        <div class="travel-toolkit-day">
-            <div class="travel-toolkit-day-head">
-                <input value="${escapeHtml(day.title || `Day ${index + 1}`)}" onchange="updateTravelToolkitField('days.${index}.title', this.value)" aria-label="Day title">
-                <button type="button" class="travel-toolkit-icon-btn" onclick="removeTravelDay(${index})" aria-label="Remove day">x</button>
-            </div>
-            <textarea rows="3" onchange="updateTravelToolkitField('days.${index}.notes', this.value)" placeholder="Morning, afternoon, evening plan...">${escapeHtml(day.notes || '')}</textarea>
-        </div>
-    `).join('');
-    const expensesHtml = (state.expenses || []).map((item, index) => `
-        <div class="travel-toolkit-row">
-            <span>${escapeHtml(item.label)}</span>
-            <strong>${currency} ${Number(item.amount || 0).toLocaleString()}</strong>
-            <button type="button" class="travel-toolkit-icon-btn" onclick="removeTravelExpense(${index})" aria-label="Remove expense">x</button>
-        </div>
-    `).join('') || '<p class="travel-toolkit-muted">No expenses added yet.</p>';
-    return `
-        <div id="travel-toolkit-card" class="travel-toolkit-card">
-            <div class="travel-toolkit-head">
-                <div>
-                    <h3>Travel Toolkit</h3>
-                    <p>Packing, expenses, itinerary, budget, and map links saved on this device.</p>
-                </div>
-                <button type="button" onclick="resetTravelToolkit()">Reset</button>
-            </div>
-            <div class="travel-toolkit-grid">
-                <section>
-                    <h4>Trip</h4>
-                    <label>Destination</label>
-                    <input value="${escapeHtml(state.destination || '')}" onchange="updateTravelToolkitField('destination', this.value)" placeholder="Example: Kyoto">
-                    <div class="travel-toolkit-links">
-                        <a href="${links.google}" target="_blank">Google Maps</a>
-                        <a href="${links.osm}" target="_blank">OpenStreetMap</a>
-                        <a href="${links.directions}" target="_blank">Directions</a>
-                        <a href="${links.hotels}" target="_blank">Hotels</a>
-                        <a href="${links.food}" target="_blank">Food</a>
-                    </div>
-                </section>
-                <section>
-                    <h4>Budget</h4>
-                    <div class="travel-toolkit-budget-grid">
-                        <input value="${escapeHtml(budget.currency || 'INR')}" onchange="updateTravelToolkitField('budget.currency', this.value)" aria-label="Currency">
-                        <input value="${escapeHtml(budget.total || '')}" onchange="updateTravelToolkitField('budget.total', this.value)" placeholder="Total">
-                        <input value="${escapeHtml(budget.lodging || '')}" onchange="updateTravelToolkitField('budget.lodging', this.value)" placeholder="Lodging">
-                        <input value="${escapeHtml(budget.food || '')}" onchange="updateTravelToolkitField('budget.food', this.value)" placeholder="Food">
-                        <input value="${escapeHtml(budget.transport || '')}" onchange="updateTravelToolkitField('budget.transport', this.value)" placeholder="Transport">
-                        <input value="${escapeHtml(budget.activities || '')}" onchange="updateTravelToolkitField('budget.activities', this.value)" placeholder="Activities">
-                    </div>
-                    <p class="travel-toolkit-muted">Spent: ${currency} ${expensesTotal.toLocaleString()}${remaining == null ? '' : ` | Left: ${currency} ${remaining.toLocaleString()}`}</p>
-                </section>
-                <section>
-                    <h4>Packing Checklist</h4>
-                    <div class="travel-toolkit-list">${checklistHtml}</div>
-                    <div class="travel-toolkit-inline">
-                        <input id="travel-new-check-item" placeholder="Add item">
-                        <button type="button" onclick="addTravelChecklistItem()">Add</button>
-                    </div>
-                </section>
-                <section>
-                    <h4>Expenses</h4>
-                    <div class="travel-toolkit-list">${expensesHtml}</div>
-                    <div class="travel-toolkit-inline">
-                        <input id="travel-expense-label" placeholder="Expense">
-                        <input id="travel-expense-amount" inputmode="decimal" placeholder="Amount">
-                        <button type="button" onclick="addTravelExpense()">Add</button>
-                    </div>
-                </section>
-            </div>
-            <section class="travel-toolkit-itinerary">
-                <div class="travel-toolkit-section-head">
-                    <h4>Day-wise Itinerary</h4>
-                    <button type="button" onclick="addTravelDay()">Add Day</button>
-                </div>
-                <div class="travel-toolkit-days">${daysHtml}</div>
-            </section>
-        </div>
-    `;
-}
-
-async function showTravelToolkit() {
-    getTravelToolkitState();
-    addChatMessage(buildTravelToolkitHtml(), false, false, { sourceType: 'tool' });
-    speak('Travel toolkit is ready.');
 }
 
 async function handleCalendarSync(text) {
@@ -4876,6 +4616,8 @@ let showRoutingDebugBadge = false;
         let waitingForName = false;
         let isAssistantSpeaking = false;
         const synth = window.speechSynthesis || null;
+        let jarvisAudioContext = null;
+        let currentAudioBufferSource = null;
 
         // Optimized Levenshtein for performance
         function levenshteinDistance(a, b) {
@@ -5731,6 +5473,7 @@ let showRoutingDebugBadge = false;
         }
 
         function toggleConverseMode() {
+            unlockMobileSpeechPlayback();
             if (activeWakeSession) {
                 clearTimeout(followUpTimer);
                 activeWakeSession = false;
@@ -6195,7 +5938,7 @@ let showRoutingDebugBadge = false;
                 if (converseFallbackTimer) clearTimeout(converseFallbackTimer);
                 converseFallbackTimer = setTimeout(() => {
                     stopConverseFallbackCapture(true);
-                }, 5200);
+                }, 2600);
                 return true;
             } catch (error) {
                 converseFallbackActive = false;
@@ -6257,7 +6000,7 @@ let showRoutingDebugBadge = false;
                 if (!converseMode || !listeningRequested || !chunks.length) return;
                 const audioBlob = new Blob(chunks, { type: mimeType });
                 if (audioBlob.size < 700) {
-                    scheduleConverseFallbackRestart(350);
+                    scheduleConverseFallbackRestart(180);
                     return;
                 }
                 const audioBase64 = await blobToBase64(audioBlob);
@@ -6281,12 +6024,12 @@ let showRoutingDebugBadge = false;
                 showTemporaryMessage('Converse transcription failed. I will keep listening.');
             } finally {
                 if (converseMode && listeningRequested && !isAssistantSpeaking && !isProcessing && converseFallbackActive && !conversePausedByUser) {
-                    scheduleConverseFallbackRestart(450);
+                    scheduleConverseFallbackRestart(220);
                 }
             }
         }
 
-        function scheduleConverseFallbackRestart(delayMs = 500) {
+        function scheduleConverseFallbackRestart(delayMs = 220) {
             if (!converseMode || !listeningRequested || !converseFallbackActive || conversePausedByUser) return;
             setTimeout(() => {
                 if (converseMode && listeningRequested && !isListening && !isAssistantSpeaking && !isProcessing && converseFallbackActive && !conversePausedByUser) {
@@ -7054,6 +6797,7 @@ let showRoutingDebugBadge = false;
         }
 
         function readAloudAssistantMessage(messageId, speechId, button) {
+            unlockMobileSpeechPlayback();
             const meta = getAssistantMessageMeta(messageId);
             const text = meta?.speechText || window[speechId] || meta?.text || '';
             if (!text) return;
@@ -7573,7 +7317,6 @@ function normalizeUiTokens(text) {
             }
             if (key === 'vision') return toggleContinuousVision();
             if (key === 'ocr') return openCameraMode();
-            if (key === 'travel-toolkit') return showTravelToolkit();
             if (key === 'help') return showHelpModal();
         }
 
@@ -9136,6 +8879,7 @@ ${code}
         }
 
         function handlePrimaryMicAction() {
+            unlockMobileSpeechPlayback();
             if (activeRequestController || isAssistantProcessing()) {
                 stopActiveGeneration();
                 return;
@@ -9176,6 +8920,7 @@ ${code}
         }
 
 async function sendTextInput() {
+            unlockMobileSpeechPlayback();
             closeComposerActionsMenu();
             if (activeRequestController || isAssistantProcessing()) {
                 stopActiveGeneration();
@@ -10143,7 +9888,7 @@ async function handleMarketLookup(text) {
                 converseFinalizeTimer = null;
                 if (!text) return;
                 await handleFinalTranscript(text);
-            }, 750);
+            }, 320);
         }
 
         function normalizeSpeechCommandText(value) {
@@ -18543,11 +18288,6 @@ Quick recap: ...
                 return;
             }
 
-            if (/\b(?:open|show|start)\s+(?:the\s+)?travel\s+toolkit\b/i.test(cleanText) || /\bpacking\s+checklist\b/i.test(cleanText) || /\btrip\s+expense\s+tracker\b/i.test(cleanText)) {
-                await showTravelToolkit();
-                return;
-            }
-
             const modeCommand = extractDisplayModeCommand(cleanText);
             if (modeCommand === 'dark') {
                 enforceDarkMode();
@@ -20956,7 +20696,7 @@ function toggleMemoryPersistence(enabled) {
 
         function toggleSpeak(text, button) {
             // Check if currently speaking
-            const isSpeaking = !!(synth && synth.speaking) || !!(currentExternalAudio && !currentExternalAudio.paused);
+            const isSpeaking = !!(synth && synth.speaking) || !!(currentExternalAudio && !currentExternalAudio.paused) || !!currentAudioBufferSource;
 
             if (isSpeaking) {
                 stopSpeaking();
@@ -21043,6 +20783,7 @@ function toggleMemoryPersistence(enabled) {
             currentSpeechTextLower = '';
             currentUtterance = null;
             currentExternalAudio = null;
+            currentAudioBufferSource = null;
             updateTTSVisualizer(false);
             if (currentSpeakerButton) {
                 currentSpeakerButton.querySelector('.play-icon')?.classList.remove('hidden');
@@ -21082,9 +20823,47 @@ function toggleMemoryPersistence(enabled) {
             }
         }
 
-        function speakWithWebSpeech(cleanText, speechProfile) {
+        function getJarvisAudioContext() {
+            const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextCtor) return null;
+            if (!jarvisAudioContext) {
+                jarvisAudioContext = new AudioContextCtor();
+            }
+            return jarvisAudioContext;
+        }
+
+        function unlockMobileSpeechPlayback() {
+            try {
+                const ctx = getJarvisAudioContext();
+                if (ctx && ctx.state === 'suspended') {
+                    void ctx.resume().catch(() => {});
+                }
+                if (ctx && ctx.state === 'running') {
+                    const buffer = ctx.createBuffer(1, 1, 22050);
+                    const source = ctx.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(ctx.destination);
+                    source.start(0);
+                }
+            } catch (e) {}
+            try {
+                if (synth) synth.resume();
+            } catch (e) {}
+        }
+
+        function fallbackToServerSpeech(cleanText, speechSessionId) {
+            void speakWithGroqTts(cleanText, speechSessionId)
+                .then(ok => {
+                    if (!ok && speechSessionId === currentSpeechSessionId) onSpeechPlaybackEnded();
+                })
+                .catch(() => {
+                    if (speechSessionId === currentSpeechSessionId) onSpeechPlaybackEnded();
+                });
+        }
+
+        function speakWithWebSpeech(cleanText, speechProfile, speechSessionId) {
             if (!synth) {
-                onSpeechPlaybackEnded();
+                fallbackToServerSpeech(cleanText, speechSessionId);
                 return;
             }
             synth.cancel();
@@ -21100,7 +20879,15 @@ function toggleMemoryPersistence(enabled) {
             const voices = synth.getVoices();
             const preferredVoice = chooseBestEnglishVoice(voices);
             let index = 0;
+            let hasFallenBack = false;
+            const failOver = () => {
+                if (hasFallenBack || speechSessionId !== currentSpeechSessionId) return;
+                hasFallenBack = true;
+                try { synth.cancel(); } catch (e) {}
+                fallbackToServerSpeech(cleanText, speechSessionId);
+            };
             const speakNext = () => {
+                if (hasFallenBack || speechSessionId !== currentSpeechSessionId) return;
                 if (index >= chunks.length) {
                     onSpeechPlaybackEnded();
                     return;
@@ -21116,8 +20903,22 @@ function toggleMemoryPersistence(enabled) {
                 utterance.pitch = speechProfile.pitch;
                 utterance.volume = 1.0;
                 currentUtterance = utterance;
-                utterance.onend = speakNext;
-                utterance.onerror = () => onSpeechPlaybackEnded();
+                let started = false;
+                let startTimer = setTimeout(() => {
+                    if (!started && speechSessionId === currentSpeechSessionId) failOver();
+                }, 1800);
+                utterance.onstart = () => {
+                    started = true;
+                    clearTimeout(startTimer);
+                };
+                utterance.onend = () => {
+                    clearTimeout(startTimer);
+                    speakNext();
+                };
+                utterance.onerror = () => {
+                    clearTimeout(startTimer);
+                    failOver();
+                };
                 synth.speak(utterance);
             };
             setTimeout(speakNext, 30);
@@ -21155,6 +20956,47 @@ function toggleMemoryPersistence(enabled) {
             return chunks.slice(0, 8);
         }
 
+        function base64ToArrayBuffer(base64) {
+            const binary = atob(String(base64 || ''));
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i += 1) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        async function playGeneratedSpeechAudio(audioBase64, mimeType, speechSessionId) {
+            const ctx = getJarvisAudioContext();
+            if (ctx) {
+                if (ctx.state === 'suspended') {
+                    await ctx.resume().catch(() => {});
+                }
+                const audioBuffer = await ctx.decodeAudioData(base64ToArrayBuffer(audioBase64).slice(0));
+                if (speechSessionId !== currentSpeechSessionId) return;
+                await new Promise((resolve, reject) => {
+                    const source = ctx.createBufferSource();
+                    currentAudioBufferSource = source;
+                    source.buffer = audioBuffer;
+                    source.connect(ctx.destination);
+                    source.onended = resolve;
+                    try {
+                        source.start(0);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+                return;
+            }
+
+            const audio = new Audio(`data:${mimeType || 'audio/wav'};base64,${audioBase64}`);
+            currentExternalAudio = audio;
+            await new Promise((resolve, reject) => {
+                audio.onended = resolve;
+                audio.onerror = reject;
+                audio.play().catch(reject);
+            });
+        }
+
         async function speakWithGroqTts(cleanText, speechSessionId) {
             const chunks = splitTextForGroqTts(cleanText);
             if (!chunks.length) return false;
@@ -21184,13 +21026,7 @@ function toggleMemoryPersistence(enabled) {
                 if (speechSessionId !== currentSpeechSessionId) return true;
                 if (!data?.success || !data?.audioBase64) return false;
 
-                const audio = new Audio(`data:${data.mimeType || 'audio/wav'};base64,${data.audioBase64}`);
-                currentExternalAudio = audio;
-                await new Promise((resolve, reject) => {
-                    audio.onended = resolve;
-                    audio.onerror = reject;
-                    audio.play().catch(reject);
-                });
+                await playGeneratedSpeechAudio(data.audioBase64, data.mimeType || 'audio/wav', speechSessionId);
             }
 
             if (speechSessionId === currentSpeechSessionId) {
@@ -21246,10 +21082,10 @@ function toggleMemoryPersistence(enabled) {
                 return;
             }
             if (converseMode) {
-                speakWithWebSpeech(cleanText, speechProfile);
+                speakWithWebSpeech(cleanText, speechProfile, speechSessionId);
                 return;
             }
-            speakWithWebSpeech(cleanText, speechProfile);
+            speakWithWebSpeech(cleanText, speechProfile, speechSessionId);
         }
         
         
@@ -21262,6 +21098,11 @@ function toggleMemoryPersistence(enabled) {
                 try { currentExternalAudio.pause(); } catch (e) {}
                 try { currentExternalAudio.currentTime = 0; } catch (e) {}
                 currentExternalAudio = null;
+            }
+            if (currentAudioBufferSource) {
+                try { currentAudioBufferSource.stop(0); } catch (e) {}
+                try { currentAudioBufferSource.disconnect(); } catch (e) {}
+                currentAudioBufferSource = null;
             }
             if (synth) synth.cancel();
             document.querySelectorAll('.speaker-btn').forEach(btn => {
