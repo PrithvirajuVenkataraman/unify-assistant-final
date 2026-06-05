@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import currentFactsHandler, { __test as currentFacts } from '../api/current-facts.js';
 
 const scienceCode = fs.readFileSync(new URL('../science-format.js', import.meta.url), 'utf8');
+const appHtml = fs.readFileSync(new URL('../index.full_with_map_preview.html', import.meta.url), 'utf8');
 const sandbox = { globalThis: {} };
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
@@ -40,6 +41,26 @@ const disabledApi = await callJsonHandler(currentFactsHandler, {
 assert.equal(disabledApi.statusCode, 503);
 assert.equal(disabledApi.body.disabled, true);
 assert.equal(disabledApi.body.resolved, false);
+
+const converseStateSetter = appHtml.match(
+    /function setConverseSessionState\(state\)\s*\{([\s\S]*?)\n\s*\}/
+)?.[1] || '';
+assert.ok(converseStateSetter, 'Converse state setter exists');
+assert.doesNotMatch(
+    converseStateSetter,
+    /showTemporaryMessage/,
+    'routine Converse states must not create chat messages'
+);
+
+assert.match(appHtml, /const conversationTurns = new Map\(\)/);
+assert.match(appHtml, /function createConversationTurn\(/);
+assert.match(appHtml, /replaceMessageId:\s*messageId/);
+assert.match(appHtml, /window\.__lastUserMessage = previousLastUserMessage/);
+assert.match(appHtml, /if \(isConverse\) rate \*= 0\.95/);
+assert.match(appHtml, /playbackRate(?:\.value)? = converseMode \? 0\.95 : 1/);
+assert.match(appHtml, /async function startBargeInMonitor\(/);
+assert.match(appHtml, /echoCancellation:\s*true/);
+assert.match(appHtml, /converseSession\.micOwner = 'barge_in'/);
 
 console.log('deterministic-checks-ok');
 
