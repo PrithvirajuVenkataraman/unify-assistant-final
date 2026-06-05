@@ -62,6 +62,37 @@ assert.match(appHtml, /async function startBargeInMonitor\(/);
 assert.match(appHtml, /echoCancellation:\s*true/);
 assert.match(appHtml, /converseSession\.micOwner = 'barge_in'/);
 
+const pauseHandler = appHtml.match(
+    /function handleConversePause\(text\)\s*\{([\s\S]*?)\n\s*function getConverseCapturedText/
+)?.[1] || '';
+assert.match(pauseHandler, /conversePausedByUser = true/);
+assert.doesNotMatch(pauseHandler, /addChatMessage/);
+
+assert.match(appHtml, /speak\('Hey\.', true, \{ allowBargeIn: false \}\)/);
+assert.match(appHtml, /function speak\(text, force = false, options = \{\}\)/);
+assert.match(appHtml, /converseSession\.bargeInRun === run/);
+assert.match(appHtml, /stopBargeInMonitor\(commitInterruption = false, run = converseSession\.bargeInRun\)/);
+assert.doesNotMatch(appHtml, /converseSession\.bargeInStream/);
+
+assert.match(appHtml, /\? 'permission_denied'\s*:\s*'unsupported'/);
+assert.match(appHtml, /converseSession\.failureReported === failure/);
+assert.match(appHtml, /detached: true\s*\}\);\s*maybeNotifyTripEvent/);
+
+assert.match(appHtml, /let regenerationInProgress = false/);
+assert.match(appHtml, /function commitRegenerationCandidate\(/);
+assert.match(appHtml, /function discardRegenerationCandidate\(/);
+assert.match(appHtml, /activeResponseRenderContext\.replacementCandidate = \{/);
+assert.doesNotMatch(
+    appHtml,
+    /priorUserPrompt:\s*String\(meta\?\.priorUserPrompt \|\| window\.__lastUserMessage/
+);
+
+assert.match(appHtml, /function addFeedbackButtons\(query, response, assistantMessageId = ''\)/);
+assert.match(appHtml, /targetMessage\.insertAdjacentElement\('afterend', feedbackDiv\)/);
+assert.match(appHtml, /return messageId;/);
+assert.match(appHtml, /controlKind: utteranceKind/);
+assert.match(appHtml, /topicLabel: converseTurnState\.activeTopicLabel/);
+
 console.log('deterministic-checks-ok');
 
 async function callJsonHandler(handler, req) {
