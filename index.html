@@ -4573,6 +4573,9 @@ let showRoutingDebugBadge = false;
         };
         let assistantMessageCounter = 0;
         const assistantMessageMeta = new Map();
+        let conversationTurnCounter = 0;
+        const conversationTurns = new Map();
+        let activeResponseRenderContext = null;
         let openAssistantActionMenuId = '';
         let lastAssistantMessageId = '';
 
@@ -4624,6 +4627,20 @@ let showRoutingDebugBadge = false;
             activeRecorder: null,
             audioAnalyser: null,
             stream: null,
+            audioSource: null,
+            micOwner: 'none',
+            bargeInStream: null,
+            bargeInAnalyser: null,
+            bargeInSource: null,
+            bargeInRecorder: null,
+            bargeInMimeType: '',
+            bargeInChunks: [],
+            bargeInTimer: null,
+            bargeInMaxTimer: null,
+            bargeInBaseline: 0,
+            bargeInSilenceAt: 0,
+            bargeInStartedAt: 0,
+            interruptionActive: false,
             turnId: 0
         };
         let lastWakeAckTime = 0;
@@ -4824,9 +4841,17 @@ let showRoutingDebugBadge = false;
 
         function getVoiceInteractionState() {
             if (isVoiceTyping) return 'user-listening';
+            if (converseMode) {
+                if (['greeting', 'assistant_speaking'].includes(converseSession.state) || isAssistantSpeaking) {
+                    return 'assistant-speaking';
+                }
+                if (['listening', 'user_speaking'].includes(converseSession.state) || isListening) {
+                    return 'user-listening';
+                }
+                return 'converse-ready';
+            }
             if (isListening && (converseMode || listeningRequested || activeWakeSession || commandMode || isPassiveListening)) return 'user-listening';
             if (isAssistantSpeaking) return 'assistant-speaking';
-            if (converseMode) return 'converse-ready';
             return 'idle';
         }
 
@@ -4842,7 +4867,15 @@ let showRoutingDebugBadge = false;
             if (!indicator || !label) return;
 
             indicator.dataset.state = state;
-            if (state === 'assistant-speaking') {
+            if (converseMode && converseSession.state === 'processing') {
+                label.textContent = 'Thinking';
+            } else if (converseMode && converseSession.state === 'finalizing') {
+                label.textContent = 'Heard';
+            } else if (converseMode && converseSession.state === 'starting') {
+                label.textContent = 'Starting';
+            } else if (converseMode && converseSession.state === 'paused') {
+                label.textContent = 'Paused';
+            } else if (state === 'assistant-speaking') {
                 label.textContent = 'Speaking';
             } else if (state === 'user-listening') {
                 label.textContent = 'Listening';
@@ -5463,26 +5496,10 @@ let showRoutingDebugBadge = false;
         }
 
         function setConverseSessionState(state) {
-            const previousState = converseSession.state;
             converseSession.state = state;
             if (state === 'listening' || state === 'user_speaking') {
                 converseSession.lastSpeechAt = Date.now();
             }
-            const statusMap = {
-                starting: 'Converse starting',
-                greeting: 'JARVIS speaking',
-                listening: 'Listening',
-                user_speaking: 'Listening',
-                finalizing: 'Heard you',
-                processing: 'Thinking',
-                assistant_speaking: 'JARVIS speaking',
-                paused: 'Paused',
-                permission_denied: 'Mic blocked',
-                unsupported: 'Converse unavailable',
-                off: 'Converse mode OFF'
-            };
-            const label = statusMap[state];
-            if (label && previousState !== state) showTemporaryMessage(label);
             updateVoiceInteractionGraphics();
         }
 
@@ -5498,6 +5515,7 @@ let showRoutingDebugBadge = false;
         function stopConverseRecognitionOnly() {
             isListening = false;
             try { continuousRecognition?.stop?.(); } catch (e) {}
+            if (converseSession.micOwner === 'recognition') converseSession.micOwner = 'none';
             const voiceBtn = document.getElementById('voice-to-text-btn');
             const visualizer = document.getElementById('tts-visualizer');
             voiceBtn?.classList.remove('is-active');
@@ -5549,6 +5567,10 @@ let showRoutingDebugBadge = false;
 
         function startConverseListeningLoop() {
             if (!converseMode || !listeningRequested || conversePausedByUser || isProcessing || isAssistantSpeaking || isListening) return;
+            if (converseSession.micOwner !== 'none') {
+                setTimeout(() => startConverseListeningLoop(), 160);
+                return;
+            }
             resetConverseTurnCapture();
             setConverseSessionState('listening');
             if (!continuousRecognition) {
@@ -5957,6 +5979,222 @@ let showRoutingDebugBadge = false;
             }
         }
 
+        function calculateAudioRms(analyser, dataArray) {
+            if (!analyser || !dataArray) return 0;
+            analyser.getByteTimeDomainData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i += 1) {
+                const centered = (dataArray[i] - 128) / 128;
+                sum += centered * centered;
+            }
+            return Math.sqrt(sum / dataArray.length);
+        }
+
+        function cleanupBargeInResources() {
+            if (converseSession.bargeInTimer) {
+                clearTimeout(converseSession.bargeInTimer);
+                converseSession.bargeInTimer = null;
+            }
+            if (converseSession.bargeInMaxTimer) {
+                clearTimeout(converseSession.bargeInMaxTimer);
+                converseSession.bargeInMaxTimer = null;
+            }
+            try { converseSession.bargeInSource?.disconnect?.(); } catch (e) {}
+            if (converseSession.bargeInStream) {
+                converseSession.bargeInStream.getTracks().forEach(track => track.stop());
+            }
+            converseSession.bargeInStream = null;
+            converseSession.bargeInAnalyser = null;
+            converseSession.bargeInSource = null;
+            converseSession.bargeInRecorder = null;
+            converseSession.bargeInMimeType = '';
+            converseSession.bargeInSilenceAt = 0;
+            converseSession.bargeInStartedAt = 0;
+            converseSession.bargeInBaseline = 0;
+            converseSession.micOwner = 'none';
+        }
+
+        function stopBargeInMonitor(commitInterruption = false) {
+            const recorder = converseSession.bargeInRecorder;
+            if (!commitInterruption) {
+                converseSession.interruptionActive = false;
+                converseSession.bargeInChunks = [];
+            }
+            if (recorder && recorder.state !== 'inactive') {
+                try {
+                    recorder.stop();
+                    return;
+                } catch (e) {}
+            }
+            cleanupBargeInResources();
+        }
+
+        function isCapturedTtsEcho(text, spokenText) {
+            const captured = normalizeSpeechCommandText(text);
+            const spoken = normalizeSpeechCommandText(spokenText);
+            if (!captured || !spoken || captured.length < 5) return false;
+            if (spoken.includes(captured)) return true;
+            const capturedWords = captured.split(/\s+/).filter(Boolean);
+            const spokenWords = new Set(spoken.split(/\s+/).filter(Boolean));
+            const overlap = capturedWords.filter(word => spokenWords.has(word)).length;
+            return capturedWords.length >= 3 && overlap / capturedWords.length >= 0.8;
+        }
+
+        async function finishBargeInCapture(spokenText) {
+            const chunks = converseSession.bargeInChunks.slice();
+            const mimeType = converseSession.bargeInMimeType || getGroqVoiceTypingMimeType() || 'audio/webm';
+            converseSession.bargeInChunks = [];
+            converseSession.interruptionActive = false;
+            cleanupBargeInResources();
+
+            if (!converseMode || !listeningRequested || !chunks.length) {
+                if (converseMode && listeningRequested && !isAssistantSpeaking) startConverseListeningLoop();
+                return;
+            }
+
+            try {
+                const audioBlob = new Blob(chunks, { type: mimeType });
+                if (audioBlob.size < 500) {
+                    startConverseListeningLoop();
+                    return;
+                }
+                setConverseSessionState('finalizing');
+                const audioBase64 = await blobToBase64(audioBlob);
+                const response = await fetch('/api/speech', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        mode: 'transcribe',
+                        audioBase64,
+                        mimeType
+                    })
+                });
+                const data = await response.json().catch(() => ({}));
+                const captured = String(data?.text || '').replace(/\s+/g, ' ').trim();
+                if (!captured || isCapturedTtsEcho(captured, spokenText)) {
+                    startConverseListeningLoop();
+                    return;
+                }
+                await handleFinalTranscript(captured);
+            } catch (error) {
+                showTemporaryMessage('I could not hear the interruption clearly. Please try again.');
+                if (converseMode && listeningRequested) startConverseListeningLoop();
+            }
+        }
+
+        async function startBargeInMonitor(speechSessionId) {
+            if (!converseMode || !listeningRequested || !isAssistantSpeaking) return false;
+            stopBargeInMonitor(false);
+            stopConverseRecognitionOnly();
+            stopConverseFallbackCapture(false);
+            if (typeof MediaRecorder === 'undefined') return false;
+            const mimeType = getGroqVoiceTypingMimeType();
+            if (!mimeType) return false;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                if (!converseMode || !isAssistantSpeaking || speechSessionId !== currentSpeechSessionId) {
+                    stream.getTracks().forEach(track => track.stop());
+                    return false;
+                }
+
+                const ctx = getJarvisAudioContext();
+                if (ctx?.state === 'suspended') await ctx.resume().catch(() => {});
+                const analyser = ctx?.createAnalyser?.() || null;
+                const source = analyser ? ctx.createMediaStreamSource(stream) : null;
+                if (analyser && source) {
+                    analyser.fftSize = 1024;
+                    analyser.smoothingTimeConstant = 0.18;
+                    source.connect(analyser);
+                }
+                const dataArray = analyser ? new Uint8Array(analyser.fftSize) : null;
+                const recorder = new MediaRecorder(stream, { mimeType });
+                const spokenText = currentSpeechTextLower;
+
+                converseSession.bargeInStream = stream;
+                converseSession.bargeInAnalyser = analyser;
+                converseSession.bargeInSource = source;
+                converseSession.bargeInRecorder = recorder;
+                converseSession.bargeInMimeType = mimeType;
+                converseSession.bargeInChunks = [];
+                converseSession.bargeInBaseline = 0;
+                converseSession.bargeInStartedAt = Date.now();
+                converseSession.interruptionActive = false;
+                converseSession.micOwner = 'barge_in';
+
+                recorder.ondataavailable = event => {
+                    if (!event.data || event.data.size <= 0) return;
+                    converseSession.bargeInChunks.push(event.data);
+                    if (!converseSession.interruptionActive && converseSession.bargeInChunks.length > 3) {
+                        converseSession.bargeInChunks.splice(0, converseSession.bargeInChunks.length - 3);
+                    }
+                };
+                recorder.onstop = () => {
+                    if (converseSession.interruptionActive) {
+                        void finishBargeInCapture(spokenText);
+                    } else {
+                        cleanupBargeInResources();
+                    }
+                };
+                recorder.start(150);
+
+                const poll = () => {
+                    if (!converseMode || (!converseSession.interruptionActive && speechSessionId !== currentSpeechSessionId)) {
+                        stopBargeInMonitor(false);
+                        return;
+                    }
+                    const now = Date.now();
+                    const rms = calculateAudioRms(analyser, dataArray);
+                    const elapsed = now - converseSession.bargeInStartedAt;
+
+                    if (!converseSession.interruptionActive) {
+                        if (elapsed < 350) {
+                            converseSession.bargeInBaseline = Math.max(converseSession.bargeInBaseline, rms);
+                        } else {
+                            const baseline = converseSession.bargeInBaseline || 0.006;
+                            const trigger = Math.max(0.018, baseline * 1.75 + 0.004);
+                            if (rms >= trigger) {
+                                converseSession.interruptionActive = true;
+                                converseSession.bargeInSilenceAt = 0;
+                                converseTurnState.pausedOrInterrupted = true;
+                                converseTurnState.interruptedAnswerText = spokenText;
+                                setConverseSessionState('user_speaking');
+                                stopSpeaking({ resumeConverse: false, preserveBargeIn: true });
+                                converseSession.bargeInMaxTimer = setTimeout(() => {
+                                    stopBargeInMonitor(true);
+                                }, 12000);
+                            } else {
+                                converseSession.bargeInBaseline = baseline * 0.96 + rms * 0.04;
+                            }
+                        }
+                    } else {
+                        const speechFloor = Math.max(0.012, converseSession.bargeInBaseline * 1.2 + 0.002);
+                        if (rms >= speechFloor) {
+                            converseSession.bargeInSilenceAt = 0;
+                        } else {
+                            if (!converseSession.bargeInSilenceAt) converseSession.bargeInSilenceAt = now;
+                            if (now - converseSession.bargeInSilenceAt >= 650) {
+                                stopBargeInMonitor(true);
+                                return;
+                            }
+                        }
+                    }
+                    converseSession.bargeInTimer = setTimeout(poll, 55);
+                };
+                poll();
+                return true;
+            } catch (error) {
+                cleanupBargeInResources();
+                return false;
+            }
+        }
+
         async function startConverseFallbackCapture() {
             if (!converseMode || !listeningRequested || isAssistantSpeaking || isProcessing || conversePausedByUser) return false;
             if (converseFallbackRecorder || converseVadTimer || typeof MediaRecorder === 'undefined') return false;
@@ -5967,6 +6205,7 @@ let showRoutingDebugBadge = false;
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 converseFallbackStream = stream;
                 converseSession.stream = stream;
+                converseSession.micOwner = 'fallback';
                 converseFallbackChunks = [];
                 converseFallbackMimeType = mimeType;
                 const ctx = getJarvisAudioContext();
@@ -5988,7 +6227,6 @@ let showRoutingDebugBadge = false;
                 isListening = true;
                 setConverseSessionState('listening');
                 updateVoiceInteractionGraphics();
-                showTemporaryMessage('Converse fallback listening... speak naturally.');
                 const speechThreshold = 0.018;
                 const silenceThreshold = 0.012;
                 const minSpeechMs = 450;
@@ -6103,6 +6341,7 @@ let showRoutingDebugBadge = false;
             converseSession.audioAnalyser = null;
             converseSession.audioSource = null;
             converseSession.stream = null;
+            if (converseSession.micOwner === 'fallback') converseSession.micOwner = 'none';
             converseVadSpeechStartedAt = 0;
             converseVadSilenceStartedAt = 0;
             isListening = false;
@@ -6128,6 +6367,7 @@ let showRoutingDebugBadge = false;
             converseSession.audioAnalyser = null;
             converseSession.audioSource = null;
             converseSession.stream = null;
+            if (converseSession.micOwner === 'fallback') converseSession.micOwner = 'none';
             converseVadSpeechStartedAt = 0;
             converseVadSilenceStartedAt = 0;
             isListening = false;
@@ -6154,8 +6394,6 @@ let showRoutingDebugBadge = false;
                 const captured = String(data?.text || '').replace(/\s+/g, ' ').trim();
                 if (captured) {
                     await handleFinalTranscript(captured);
-                } else if (converseMode && listeningRequested) {
-                    showTemporaryMessage('No speech captured. Converse is still listening.');
                 }
             } catch (error) {
                 showTemporaryMessage('Converse transcription failed. I will keep listening.');
@@ -6819,6 +7057,43 @@ let showRoutingDebugBadge = false;
             return `assistant_msg_${Date.now()}_${assistantMessageCounter}`;
         }
 
+        function createConversationTurn(rawPrompt, processingPrompt = rawPrompt, source = 'text') {
+            conversationTurnCounter += 1;
+            const turnId = `turn_${Date.now()}_${conversationTurnCounter}`;
+            const record = {
+                id: turnId,
+                rawPrompt: String(rawPrompt || '').trim(),
+                processingPrompt: String(processingPrompt || rawPrompt || '').trim(),
+                source: String(source || 'text'),
+                contextSnapshot: Array.isArray(conversationContext)
+                    ? conversationContext.map(item => ({ ...item }))
+                    : [],
+                assistantMessageIds: [],
+                createdAt: Date.now()
+            };
+            conversationTurns.set(turnId, record);
+            return record;
+        }
+
+        function getConversationTurn(turnId) {
+            return conversationTurns.get(String(turnId || '')) || null;
+        }
+
+        function beginResponseRenderContext(turn, options = {}) {
+            const previous = activeResponseRenderContext;
+            activeResponseRenderContext = {
+                turnId: String(turn?.id || options?.turnId || ''),
+                replaceMessageId: String(options?.replaceMessageId || ''),
+                isRegeneration: !!options?.isRegeneration,
+                replacementConsumed: false
+            };
+            return previous;
+        }
+
+        function restoreResponseRenderContext(previous) {
+            activeResponseRenderContext = previous || null;
+        }
+
         function getAssistantMessageMeta(messageId) {
             return assistantMessageMeta.get(String(messageId || '')) || null;
         }
@@ -6836,12 +7111,17 @@ let showRoutingDebugBadge = false;
                 text: String(meta?.text || '').trim(),
                 speechText: String(meta?.speechText || meta?.text || '').trim(),
                 priorUserPrompt: String(meta?.priorUserPrompt || window.__lastUserMessage || '').trim(),
+                turnId: String(meta?.turnId || activeResponseRenderContext?.turnId || '').trim(),
                 sourceType: String(meta?.sourceType || 'default').trim(),
                 sourceLabel: String(meta?.sourceLabel || meta?.sourceType || 'Assistant answer').trim(),
                 routing: meta?.routing || null,
                 createdAt: Date.now()
             };
             assistantMessageMeta.set(messageId, clean);
+            const turn = getConversationTurn(clean.turnId);
+            if (turn && !turn.assistantMessageIds.includes(messageId)) {
+                turn.assistantMessageIds.push(messageId);
+            }
             lastAssistantMessageId = messageId;
             if (converseMode && clean.text) {
                 converseTurnState.lastAssistantAnswer = clean.text;
@@ -6942,16 +7222,65 @@ let showRoutingDebugBadge = false;
             toggleSpeak(text, button);
         }
 
-        function regenerateAssistantMessage(messageId) {
+        async function regenerateAssistantMessage(messageId) {
             const meta = getAssistantMessageMeta(messageId);
-            const prompt = String(meta?.priorUserPrompt || '').trim();
-            if (!prompt) return;
+            const turn = getConversationTurn(meta?.turnId);
+            const rawPrompt = String(turn?.rawPrompt || meta?.priorUserPrompt || '').trim();
+            const processingPrompt = String(turn?.processingPrompt || rawPrompt).trim();
+            if (!rawPrompt || !processingPrompt) {
+                showTemporaryMessage('This answer cannot be regenerated because its source turn is unavailable.');
+                return;
+            }
             closeAssistantActionMenus();
-            const input = document.getElementById('text-input');
-            if (!input) return;
-            input.value = prompt;
-            toggleSendButton();
-            sendTextInput();
+            const actionButton = Array.from(document.querySelectorAll('.assistant-action-row'))
+                .find(row => row.dataset.messageId === String(messageId || ''))
+                ?.querySelector('[aria-label="Regenerate"]');
+            if (actionButton) actionButton.disabled = true;
+
+            const resumeConverse = converseMode && listeningRequested;
+            const previousListeningRequested = listeningRequested;
+            listeningRequested = false;
+            stopConverseRecognitionOnly();
+            stopConverseFallbackCapture(false);
+            stopSpeaking();
+
+            const previousContext = Array.isArray(conversationContext)
+                ? conversationContext.map(item => ({ ...item }))
+                : [];
+            const previousLastUserMessage = window.__lastUserMessage;
+            const previousRenderContext = beginResponseRenderContext(turn || {
+                id: meta?.turnId || '',
+                rawPrompt,
+                processingPrompt
+            }, {
+                replaceMessageId: messageId,
+                isRegeneration: true
+            });
+            window.__lastUserMessage = rawPrompt;
+            beginAssistantProcessing();
+            try {
+                conversationContext = Array.isArray(turn?.contextSnapshot)
+                    ? turn.contextSnapshot.map(item => ({ ...item }))
+                    : previousContext;
+                await processCommand(processingPrompt);
+                if (!activeResponseRenderContext?.replacementConsumed) {
+                    showTemporaryMessage('I could not regenerate that answer. The original response was kept.');
+                }
+            } catch (error) {
+                console.error('regenerate failed:', error);
+                showTemporaryMessage('I could not regenerate that answer. The original response was kept.');
+            } finally {
+                conversationContext = previousContext;
+                window.__lastUserMessage = previousLastUserMessage;
+                restoreResponseRenderContext(previousRenderContext);
+                endAssistantProcessing();
+                if (actionButton?.isConnected) actionButton.disabled = false;
+                listeningRequested = previousListeningRequested;
+                if (resumeConverse && converseMode && !isAssistantSpeaking) {
+                    startConverseListeningLoop();
+                }
+                resetPrimaryActionButtonWhenIdle();
+            }
         }
 
         function buildGroundedAskPrompt({ selectedText = '', fullMessageText = '', priorUserPrompt = '', sourceLabel = '' } = {}) {
@@ -6975,7 +7304,9 @@ let showRoutingDebugBadge = false;
             closeAssistantActionMenus();
             hideSelectionHelperPopover();
             window.__lastUserMessage = actual;
-            addChatMessage(visible || actual, true);
+            const turn = createConversationTurn(visible || actual, actual, 'programmatic');
+            const previousRenderContext = beginResponseRenderContext(turn);
+            addChatMessage(visible || actual, true, null, { turnId: turn.id });
             beginAssistantProcessing();
             try {
                 await processCommand(actual);
@@ -6985,6 +7316,7 @@ let showRoutingDebugBadge = false;
                 addChatMessage(fallback, false);
                 speak('I hit a temporary issue. Please try again.');
             } finally {
+                restoreResponseRenderContext(previousRenderContext);
                 endAssistantProcessing();
                 resetPrimaryActionButtonWhenIdle();
             }
@@ -7025,6 +7357,8 @@ let showRoutingDebugBadge = false;
             const messageDiv = document.createElement('div');
             messageDiv.className = `chat-row flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-3`;
             messageDiv.dataset.role = isUser ? 'user' : 'assistant';
+            const messageTurnId = String(meta?.turnId || activeResponseRenderContext?.turnId || '').trim();
+            if (messageTurnId) messageDiv.dataset.turnId = messageTurnId;
 
             if (isUser) {
                 const formattedText = escapeHtml(displayText).replace(/\n/g, '<br>');
@@ -7075,7 +7409,8 @@ let showRoutingDebugBadge = false;
                 const speechId = 'speech_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 window[speechId] = textForSpeech;
                 const messageId = createAssistantMessageId();
-                const priorUserPrompt = String(meta?.userMessage || window.__lastUserMessage || '').trim();
+                const sourceTurn = getConversationTurn(messageTurnId);
+                const priorUserPrompt = String(meta?.userMessage || sourceTurn?.rawPrompt || window.__lastUserMessage || '').trim();
                 const plainMessageText = hasHtmlContent ? stripAssistantHtmlForText(displayText) : String(displayText || '').trim();
                 const sourceLabel = sourceType === 'verified'
                     ? 'Verified source reply'
@@ -7084,6 +7419,7 @@ let showRoutingDebugBadge = false;
                     text: plainMessageText,
                     speechText: textForSpeech,
                     priorUserPrompt,
+                    turnId: messageTurnId,
                     sourceType,
                     sourceLabel,
                     routing: meta?.routing || null
@@ -7105,7 +7441,31 @@ let showRoutingDebugBadge = false;
                     </div>
                 `;
 
-                chatContainer.appendChild(messageDiv);
+                const replaceMessageId = String(
+                    meta?.replaceMessageId ||
+                    (!activeResponseRenderContext?.replacementConsumed ? activeResponseRenderContext?.replaceMessageId : '') ||
+                    ''
+                ).trim();
+                const replaceTarget = replaceMessageId
+                    ? Array.from(chatContainer.querySelectorAll('[data-message-id]'))
+                        .find(row => row.dataset.messageId === replaceMessageId)
+                    : null;
+                if (replaceTarget) {
+                    const oldMeta = getAssistantMessageMeta(replaceMessageId);
+                    const oldTurn = getConversationTurn(oldMeta?.turnId);
+                    const nextFeedback = replaceTarget.nextElementSibling;
+                    if (nextFeedback?.classList?.contains('feedback-container')) nextFeedback.remove();
+                    replaceTarget.replaceWith(messageDiv);
+                    assistantMessageMeta.delete(replaceMessageId);
+                    if (oldTurn) {
+                        oldTurn.assistantMessageIds = Array.from(new Set(
+                            oldTurn.assistantMessageIds.map(id => id === replaceMessageId ? messageId : id)
+                        ));
+                    }
+                    if (activeResponseRenderContext) activeResponseRenderContext.replacementConsumed = true;
+                } else {
+                    chatContainer.appendChild(messageDiv);
+                }
                 
                 
                 const hasMarkdownFormatting = /\[[^\]]+\]\((https?:\/\/[^)]+)\)|\*\*([^*]+)\*\*/.test(displayText);
@@ -9089,6 +9449,8 @@ async function sendTextInput() {
                 const normalizedOutgoingText = isLikelyCodeInput(outgoingText)
                     ? outgoingText
                     : normalizeIntentTypos(outgoingText);
+                const turn = createConversationTurn(outgoingText, normalizedOutgoingText, 'text');
+                const previousRenderContext = beginResponseRenderContext(turn);
                 input.value = '';
                 toggleSendButton();
                 window.__lastUserMessage = outgoingText;
@@ -9097,7 +9459,7 @@ async function sendTextInput() {
                     if (inputHistory.length > 50) inputHistory = inputHistory.slice(-50);
                 }
                 inputHistoryIndex = -1;
-                addChatMessage(outgoingText, true);
+                addChatMessage(outgoingText, true, null, { turnId: turn.id });
 
                 beginAssistantProcessing();
                 try {
@@ -9133,6 +9495,7 @@ async function sendTextInput() {
                     addChatMessage(fallback, false);
                     speak('I hit a temporary issue. Please try again.');
                 } finally {
+                    restoreResponseRenderContext(previousRenderContext);
                     endAssistantProcessing();
                     resetPrimaryActionButtonWhenIdle();
                 }
@@ -9804,7 +10167,7 @@ async function handleMarketLookup(text) {
             if (!t) return true;
             if (isLikelyTtsEcho(t)) return true;
 
-            const allowedShort = /^(yes|yeah|yep|no|nope|stop|wait|hold on|continue|next)$/;
+            const allowedShort = /^(yes|yeah|yep|no|nope|stop|wait|hold on|continue|next|why|what|how|who|when|where|really|hello|hey)$/;
             if (allowedShort.test(t)) return false;
 
             const words = t.split(/\s+/).filter(Boolean);
@@ -9979,13 +10342,16 @@ async function handleMarketLookup(text) {
                     converseTurnState.pausedOrInterrupted = false;
                     conversePausedByUser = false;
                     converseTurnState.lastUserPrompt = continuationPrompt;
-                    addChatMessage(finalText, true);
                     if (isProcessing) return;
+                    const turn = createConversationTurn(finalText, continuationPrompt, 'converse');
+                    const previousRenderContext = beginResponseRenderContext(turn);
+                    addChatMessage(finalText, true, null, { turnId: turn.id });
                     isProcessing = true;
                     setConverseSessionState('processing');
                     try {
                         await processCommand(continuationPrompt);
                     } finally {
+                        restoreResponseRenderContext(previousRenderContext);
                         isProcessing = false;
                         if (converseMode && listeningRequested && !isAssistantSpeaking) {
                             startConverseListeningLoop();
@@ -10001,9 +10367,11 @@ async function handleMarketLookup(text) {
             }
 
             if (isProcessing) return;
+            const turn = createConversationTurn(finalText, finalText, converseMode ? 'converse' : 'voice');
+            const previousRenderContext = beginResponseRenderContext(turn);
             isProcessing = true;
             if (converseMode) setConverseSessionState('processing');
-            addChatMessage(finalText, true);
+            addChatMessage(finalText, true, null, { turnId: turn.id });
             if (converseMode) {
                 converseTurnState.lastUserPrompt = finalText;
                 converseTurnState.activeTopicLabel = detectPrimaryTopicLabel(finalText) || converseTurnState.activeTopicLabel;
@@ -10041,6 +10409,7 @@ async function handleMarketLookup(text) {
 
                 await processCommand(finalText);
             } finally {
+                restoreResponseRenderContext(previousRenderContext);
                 isProcessing = false;
                 if (converseMode && listeningRequested && !isAssistantSpeaking) {
                     startConverseListeningLoop();
@@ -10099,6 +10468,7 @@ async function handleMarketLookup(text) {
                 converseBrowserStartFailures = 0;
                 converseFallbackActive = false;
                 if (converseMode) {
+                    converseSession.micOwner = 'recognition';
                     setConverseSessionState('listening');
                 }
                 if (!converseMode && !activeWakeSession && !isPassiveListening) {
@@ -10275,6 +10645,7 @@ async function handleMarketLookup(text) {
  
             continuousRecognition.onend = () => { 
                 isListening = false;
+                if (converseSession.micOwner === 'recognition') converseSession.micOwner = 'none';
                 if (converseMode && listeningRequested) {
                     if (!['listening', 'user_speaking'].includes(converseSession.state)) {
                         updateVoiceInteractionGraphics();
@@ -20907,10 +21278,9 @@ function toggleMemoryPersistence(enabled) {
             else if (words <= 46) rate = 0.95;
             else rate = 0.93;
 
-            // Slightly faster in Converse mode for a more natural dialog rhythm.
-            if (isConverse) rate += 0.01;
             // Global speed-up requested: +10%.
             rate *= 1.1;
+            if (isConverse) rate *= 0.95;
 
             return {
                 rate: Math.max(0.95, Math.min(1.2, rate)),
@@ -20962,6 +21332,7 @@ function toggleMemoryPersistence(enabled) {
             currentUtterance = null;
             currentExternalAudio = null;
             currentAudioBufferSource = null;
+            if (!converseSession.interruptionActive) stopBargeInMonitor(false);
             updateTTSVisualizer(false);
             if (currentSpeakerButton) {
                 currentSpeakerButton.querySelector('.play-icon')?.classList.remove('hidden');
@@ -20993,7 +21364,7 @@ function toggleMemoryPersistence(enabled) {
                     startListening();
                 }
             } else if (converseMode && listeningRequested && !isListening && !isProcessing) {
-                setTimeout(() => startConverseListeningLoop(), 140);
+                setTimeout(() => startConverseListeningLoop(), 180);
             }
         }
 
@@ -21151,6 +21522,7 @@ function toggleMemoryPersistence(enabled) {
                     const source = ctx.createBufferSource();
                     currentAudioBufferSource = source;
                     source.buffer = audioBuffer;
+                    source.playbackRate.value = converseMode ? 0.95 : 1;
                     source.connect(ctx.destination);
                     source.onended = resolve;
                     try {
@@ -21163,6 +21535,7 @@ function toggleMemoryPersistence(enabled) {
             }
 
             const audio = new Audio(`data:${mimeType || 'audio/wav'};base64,${audioBase64}`);
+            audio.playbackRate = converseMode ? 0.95 : 1;
             currentExternalAudio = audio;
             await new Promise((resolve, reject) => {
                 audio.onended = resolve;
@@ -21246,6 +21619,9 @@ function toggleMemoryPersistence(enabled) {
             updateTTSVisualizer(true);
 
             const speechSessionId = ++currentSpeechSessionId;
+            if (converseMode) {
+                void startBargeInMonitor(speechSessionId);
+            }
             if (!synth) {
                 void speakWithGroqTts(cleanText, speechSessionId)
                     .then(ok => {
@@ -21264,10 +21640,13 @@ function toggleMemoryPersistence(enabled) {
         }
         
         
-        function stopSpeaking() { 
+        function stopSpeaking(options = {}) { 
+            const resumeConverse = options?.resumeConverse !== false;
+            const preserveBargeIn = options?.preserveBargeIn === true;
             isAssistantSpeaking = false;
             currentSpeechTextLower = '';
             currentSpeechSessionId += 1;
+            if (!preserveBargeIn) stopBargeInMonitor(false);
             updateTTSVisualizer(false);
             if (currentExternalAudio) {
                 try { currentExternalAudio.pause(); } catch (e) {}
@@ -21286,12 +21665,12 @@ function toggleMemoryPersistence(enabled) {
                 btn.classList.remove('is-speaking');
             });
             currentUtterance = null;
-            if (converseMode && listeningRequested && !isListening) {
+            if (resumeConverse && converseMode && listeningRequested && !isListening) {
                 setTimeout(() => {
                     if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking) {
-                        startListening();
+                        startConverseListeningLoop();
                     }
-                }, 90);
+                }, 120);
             }
         }
 
@@ -21362,6 +21741,9 @@ async function editMessage(button) {
     }
     button.dataset.message = encodeURIComponent(nextText);
     window.__lastUserMessage = nextText;
+    const turn = createConversationTurn(nextText, nextText, 'edited');
+    const previousRenderContext = beginResponseRenderContext(turn);
+    if (userRow) userRow.dataset.turnId = turn.id;
 
     // ChatGPT-like behavior: regenerate from this edited turn by removing following turns.
     if (userRow) {
@@ -21373,7 +21755,11 @@ async function editMessage(button) {
         }
     }
 
-    await processCommand(nextText);
+    try {
+        await processCommand(nextText);
+    } finally {
+        restoreResponseRenderContext(previousRenderContext);
+    }
 }
 
 let conversationHistory = [];
