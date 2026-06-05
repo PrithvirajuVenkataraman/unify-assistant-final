@@ -1282,12 +1282,12 @@ Quick recap: ...
         }
         if (!answer) return false;
 
-        addModelAssistantMessage(answer, 'Model answer');
+        const assistantMessageId = addModelAssistantMessage(answer, 'Model answer');
         speak(answer);
         await maybeShowReferenceImageForQuery(userText, answer);
         saveToHistory(historyKey || userText, answer);
         suggestQuickReplies(answer);
-        addFeedbackButtons(historyKey || userText, answer);
+        addFeedbackButtons(historyKey || userText, answer, assistantMessageId);
         return true;
     } catch (error) {
         if (!fallback) return false;
@@ -1935,7 +1935,7 @@ function handleNegativeFeedback(buttonElement) {
 }
 
 // Add feedback buttons after AI response
-function addFeedbackButtons(query, response) {
+function addFeedbackButtons(query, response, assistantMessageId = '') {
     // Store for feedback reference
     lastQueryResponse = { query, response };
 
@@ -1944,6 +1944,7 @@ function addFeedbackButtons(query, response) {
     feedbackDiv.className = 'flex justify-start my-2 fade-in feedback-container';
     feedbackDiv.dataset.query = encodeURIComponent(String(query || ''));
     feedbackDiv.dataset.response = encodeURIComponent(String(response || ''));
+    feedbackDiv.dataset.assistantMessageId = String(assistantMessageId || '');
 
     const bgClass = darkMode ? 'bg-gray-800' : 'bg-gray-100';
     const textClass = darkMode ? 'text-gray-400' : 'text-gray-600';
@@ -1968,7 +1969,25 @@ function addFeedbackButtons(query, response) {
         </div>
     `;
 
-    chatContainer.appendChild(feedbackDiv);
+    const targetId = String(assistantMessageId || '').trim();
+    const targetMessage = targetId
+        ? Array.from(chatContainer.querySelectorAll('.chat-row[data-message-id]'))
+            .find(row => row.dataset.messageId === targetId)
+        : null;
+    if (targetMessage) {
+        chatContainer.querySelectorAll('.feedback-container').forEach(existing => {
+            if (existing.dataset.assistantMessageId === targetId) existing.remove();
+        });
+        targetMessage.insertAdjacentElement('afterend', feedbackDiv);
+    } else if (
+        targetId &&
+        activeResponseRenderContext?.isRegeneration &&
+        activeResponseRenderContext?.replacementCandidate?.messageId === targetId
+    ) {
+        activeResponseRenderContext.pendingFeedback = feedbackDiv;
+    } else {
+        chatContainer.appendChild(feedbackDiv);
+    }
     maybeAutoScroll(chatContainer);
 }
 
@@ -3833,7 +3852,14 @@ async function publishResolvedModelMessage(userMessage, answerText, options = {}
     const finalized = await resolveFinalAssistantAnswer(userMessage, answerText);
     const safeText = String(finalized || '').trim();
     if (!safeText) return false;
-    addModelAssistantMessage(safeText, label, { routing: options?.routing || null });
+    const messageMeta = {
+        routing: options?.routing || null,
+        detached: options?.detached === true
+    };
+    if (Object.prototype.hasOwnProperty.call(options || {}, 'turnId')) {
+        messageMeta.turnId = options.turnId;
+    }
+    const assistantMessageId = addModelAssistantMessage(safeText, label, messageMeta);
     if (speechText) {
         speak(speechText);
     } else {
@@ -3841,7 +3867,7 @@ async function publishResolvedModelMessage(userMessage, answerText, options = {}
     }
     saveToHistory(userMessage, historyText || safeText);
     if (options?.feedback !== false) {
-        addFeedbackButtons(userMessage, historyText || safeText);
+        addFeedbackButtons(userMessage, historyText || safeText, assistantMessageId);
     }
     return true;
 }
@@ -3891,12 +3917,17 @@ async function deliverApiReply(intent, data = {}, options = {}) {
     const finalText = reply || fallbackText;
     if (!finalText) return '';
 
+    const responseMeta = { detached: options?.detached === true };
+    if (Object.prototype.hasOwnProperty.call(options || {}, 'turnId')) {
+        responseMeta.turnId = options.turnId;
+    }
+    let assistantMessageId = '';
     if (options?.label) {
-        addModelAssistantMessage(finalText, options.label);
+        assistantMessageId = addModelAssistantMessage(finalText, options.label, responseMeta);
     } else if (options?.verifiedLabel) {
-        addVerifiedAssistantMessage(finalText, options.verifiedLabel);
+        assistantMessageId = addVerifiedAssistantMessage(finalText, options.verifiedLabel, responseMeta);
     } else {
-        addChatMessage(finalText, false, options?.typewriter ?? true);
+        assistantMessageId = addChatMessage(finalText, false, options?.typewriter ?? true, responseMeta);
     }
 
     if (options?.speak !== false) {
@@ -4576,6 +4607,7 @@ let showRoutingDebugBadge = false;
         let conversationTurnCounter = 0;
         const conversationTurns = new Map();
         let activeResponseRenderContext = null;
+        let regenerationInProgress = false;
         let openAssistantActionMenuId = '';
         let lastAssistantMessageId = '';
 
@@ -4629,18 +4661,9 @@ let showRoutingDebugBadge = false;
             stream: null,
             audioSource: null,
             micOwner: 'none',
-            bargeInStream: null,
-            bargeInAnalyser: null,
-            bargeInSource: null,
-            bargeInRecorder: null,
-            bargeInMimeType: '',
-            bargeInChunks: [],
-            bargeInTimer: null,
-            bargeInMaxTimer: null,
-            bargeInBaseline: 0,
-            bargeInSilenceAt: 0,
-            bargeInStartedAt: 0,
-            interruptionActive: false,
+            bargeInRun: null,
+            bargeInRunCounter: 0,
+            failureReported: '',
             turnId: 0
         };
         let lastWakeAckTime = 0;
@@ -5557,22 +5580,43 @@ let showRoutingDebugBadge = false;
             clearTimeout(followUpTimer);
             converseSession.startedAt = Date.now();
             converseSession.turnId += 1;
+            converseSession.failureReported = '';
             speakConverseGreeting();
         }
 
         function speakConverseGreeting() {
             setConverseSessionState('greeting');
-            speak('Hey.', true);
+            speak('Hey.', true, { allowBargeIn: false });
+        }
+
+        function handleConverseFallbackStatus(status) {
+            if (status === 'started' || !converseMode) return status;
+            const failure = status === 'permission_denied' ? 'permission_denied' : 'unsupported';
+            if (converseSession.failureReported === failure) return failure;
+            converseSession.failureReported = failure;
+            stopConverseSession(failure);
+            if (failure === 'permission_denied') {
+                void deliverApiReply('microphone_permission_denied', {}, {
+                    fallbackText: 'Microphone access is unavailable. Please allow mic access to use Converse mode.',
+                    detached: true
+                });
+            } else {
+                void deliverApiReply('speech_recognition_unavailable', {}, {
+                    fallbackText: 'Converse mode needs microphone access, browser speech recognition, or server transcription support.',
+                    detached: true
+                });
+            }
+            return failure;
         }
 
         function startConverseListeningLoop() {
-            if (!converseMode || !listeningRequested || conversePausedByUser || isProcessing || isAssistantSpeaking || isListening) return;
+            if (!converseMode || !listeningRequested || isProcessing || isAssistantSpeaking || isListening) return;
             if (converseSession.micOwner !== 'none') {
                 setTimeout(() => startConverseListeningLoop(), 160);
                 return;
             }
             resetConverseTurnCapture();
-            setConverseSessionState('listening');
+            setConverseSessionState(conversePausedByUser ? 'paused' : 'listening');
             if (!continuousRecognition) {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 if (SpeechRecognition) initializeSpeechRecognition();
@@ -5585,7 +5629,7 @@ let showRoutingDebugBadge = false;
                         converseBrowserStartFailures += 1;
                         if (converseBrowserStartFailures >= 2) {
                             converseFallbackActive = true;
-                            void startConverseFallbackCapture();
+                            void startConverseFallbackCapture().then(status => handleConverseFallbackStatus(status));
                         } else {
                             startListening();
                         }
@@ -5594,15 +5638,7 @@ let showRoutingDebugBadge = false;
                 return;
             }
             converseFallbackActive = true;
-            void startConverseFallbackCapture().then(started => {
-                if (!started && converseMode) {
-                    setConverseSessionState('unsupported');
-                    stopConverseSession('unsupported');
-                    void deliverApiReply('speech_recognition_unavailable', {}, {
-                        fallbackText: 'Converse mode needs microphone access, browser speech recognition, or server transcription support.'
-                    });
-                }
-            });
+            void startConverseFallbackCapture().then(status => handleConverseFallbackStatus(status));
         }
 
         function stopConverseSession(reason = 'off') {
@@ -5990,43 +6026,37 @@ let showRoutingDebugBadge = false;
             return Math.sqrt(sum / dataArray.length);
         }
 
-        function cleanupBargeInResources() {
-            if (converseSession.bargeInTimer) {
-                clearTimeout(converseSession.bargeInTimer);
-                converseSession.bargeInTimer = null;
+        function cleanupBargeInRun(run) {
+            if (!run || run.cleaned) return;
+            run.cleaned = true;
+            if (run.pollTimer) clearTimeout(run.pollTimer);
+            if (run.maxTimer) clearTimeout(run.maxTimer);
+            try { run.source?.disconnect?.(); } catch (e) {}
+            try { run.stream?.getTracks?.().forEach(track => track.stop()); } catch (e) {}
+            if (converseSession.bargeInRun === run) {
+                converseSession.bargeInRun = null;
+                if (converseSession.micOwner === 'barge_in') converseSession.micOwner = 'none';
             }
-            if (converseSession.bargeInMaxTimer) {
-                clearTimeout(converseSession.bargeInMaxTimer);
-                converseSession.bargeInMaxTimer = null;
-            }
-            try { converseSession.bargeInSource?.disconnect?.(); } catch (e) {}
-            if (converseSession.bargeInStream) {
-                converseSession.bargeInStream.getTracks().forEach(track => track.stop());
-            }
-            converseSession.bargeInStream = null;
-            converseSession.bargeInAnalyser = null;
-            converseSession.bargeInSource = null;
-            converseSession.bargeInRecorder = null;
-            converseSession.bargeInMimeType = '';
-            converseSession.bargeInSilenceAt = 0;
-            converseSession.bargeInStartedAt = 0;
-            converseSession.bargeInBaseline = 0;
-            converseSession.micOwner = 'none';
         }
 
-        function stopBargeInMonitor(commitInterruption = false) {
-            const recorder = converseSession.bargeInRecorder;
+        function stopBargeInMonitor(commitInterruption = false, run = converseSession.bargeInRun) {
+            if (!run) return;
+            run.commitInterruption = !!commitInterruption;
             if (!commitInterruption) {
-                converseSession.interruptionActive = false;
-                converseSession.bargeInChunks = [];
+                run.interruptionActive = false;
+                run.chunks = [];
             }
-            if (recorder && recorder.state !== 'inactive') {
+            if (run.recorder && run.recorder.state !== 'inactive') {
                 try {
-                    recorder.stop();
+                    run.recorder.stop();
                     return;
                 } catch (e) {}
             }
-            cleanupBargeInResources();
+            if (commitInterruption && run.interruptionActive) {
+                void finishBargeInCapture(run);
+                return;
+            }
+            cleanupBargeInRun(run);
         }
 
         function isCapturedTtsEcho(text, spokenText) {
@@ -6040,12 +6070,15 @@ let showRoutingDebugBadge = false;
             return capturedWords.length >= 3 && overlap / capturedWords.length >= 0.8;
         }
 
-        async function finishBargeInCapture(spokenText) {
-            const chunks = converseSession.bargeInChunks.slice();
-            const mimeType = converseSession.bargeInMimeType || getGroqVoiceTypingMimeType() || 'audio/webm';
-            converseSession.bargeInChunks = [];
-            converseSession.interruptionActive = false;
-            cleanupBargeInResources();
+        async function finishBargeInCapture(run) {
+            if (!run || run.finishStarted) return;
+            run.finishStarted = true;
+            const chunks = run.chunks.slice();
+            const mimeType = run.mimeType || getGroqVoiceTypingMimeType() || 'audio/webm';
+            const spokenText = run.spokenText;
+            run.chunks = [];
+            run.interruptionActive = false;
+            cleanupBargeInRun(run);
 
             if (!converseMode || !listeningRequested || !chunks.length) {
                 if (converseMode && listeningRequested && !isAssistantSpeaking) startConverseListeningLoop();
@@ -6091,6 +6124,7 @@ let showRoutingDebugBadge = false;
             const mimeType = getGroqVoiceTypingMimeType();
             if (!mimeType) return false;
 
+            let pendingStream = null;
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: {
@@ -6099,6 +6133,7 @@ let showRoutingDebugBadge = false;
                         autoGainControl: true
                     }
                 });
+                pendingStream = stream;
                 if (!converseMode || !isAssistantSpeaking || speechSessionId !== currentSpeechSessionId) {
                     stream.getTracks().forEach(track => track.stop());
                     return false;
@@ -6115,91 +6150,105 @@ let showRoutingDebugBadge = false;
                 }
                 const dataArray = analyser ? new Uint8Array(analyser.fftSize) : null;
                 const recorder = new MediaRecorder(stream, { mimeType });
-                const spokenText = currentSpeechTextLower;
-
-                converseSession.bargeInStream = stream;
-                converseSession.bargeInAnalyser = analyser;
-                converseSession.bargeInSource = source;
-                converseSession.bargeInRecorder = recorder;
-                converseSession.bargeInMimeType = mimeType;
-                converseSession.bargeInChunks = [];
-                converseSession.bargeInBaseline = 0;
-                converseSession.bargeInStartedAt = Date.now();
-                converseSession.interruptionActive = false;
+                const run = {
+                    id: ++converseSession.bargeInRunCounter,
+                    speechSessionId,
+                    spokenText: currentSpeechTextLower,
+                    stream,
+                    analyser,
+                    source,
+                    recorder,
+                    mimeType,
+                    dataArray,
+                    chunks: [],
+                    baseline: 0,
+                    silenceAt: 0,
+                    startedAt: Date.now(),
+                    interruptionActive: false,
+                    commitInterruption: false,
+                    pollTimer: null,
+                    maxTimer: null,
+                    finishStarted: false,
+                    cleaned: false
+                };
+                converseSession.bargeInRun = run;
+                pendingStream = null;
                 converseSession.micOwner = 'barge_in';
 
                 recorder.ondataavailable = event => {
                     if (!event.data || event.data.size <= 0) return;
-                    converseSession.bargeInChunks.push(event.data);
-                    if (!converseSession.interruptionActive && converseSession.bargeInChunks.length > 3) {
-                        converseSession.bargeInChunks.splice(0, converseSession.bargeInChunks.length - 3);
+                    run.chunks.push(event.data);
+                    if (!run.interruptionActive && run.chunks.length > 3) {
+                        run.chunks.splice(0, run.chunks.length - 3);
                     }
                 };
                 recorder.onstop = () => {
-                    if (converseSession.interruptionActive) {
-                        void finishBargeInCapture(spokenText);
+                    if (run.commitInterruption && run.interruptionActive) {
+                        void finishBargeInCapture(run);
                     } else {
-                        cleanupBargeInResources();
+                        cleanupBargeInRun(run);
                     }
                 };
                 recorder.start(150);
 
                 const poll = () => {
-                    if (!converseMode || (!converseSession.interruptionActive && speechSessionId !== currentSpeechSessionId)) {
-                        stopBargeInMonitor(false);
+                    if (run.cleaned) return;
+                    if (!converseMode || (!run.interruptionActive && speechSessionId !== currentSpeechSessionId)) {
+                        stopBargeInMonitor(false, run);
                         return;
                     }
                     const now = Date.now();
-                    const rms = calculateAudioRms(analyser, dataArray);
-                    const elapsed = now - converseSession.bargeInStartedAt;
+                    const rms = calculateAudioRms(run.analyser, run.dataArray);
+                    const elapsed = now - run.startedAt;
 
-                    if (!converseSession.interruptionActive) {
+                    if (!run.interruptionActive) {
                         if (elapsed < 350) {
-                            converseSession.bargeInBaseline = Math.max(converseSession.bargeInBaseline, rms);
+                            run.baseline = Math.max(run.baseline, rms);
                         } else {
-                            const baseline = converseSession.bargeInBaseline || 0.006;
+                            const baseline = run.baseline || 0.006;
                             const trigger = Math.max(0.018, baseline * 1.75 + 0.004);
                             if (rms >= trigger) {
-                                converseSession.interruptionActive = true;
-                                converseSession.bargeInSilenceAt = 0;
+                                run.interruptionActive = true;
+                                run.silenceAt = 0;
                                 converseTurnState.pausedOrInterrupted = true;
-                                converseTurnState.interruptedAnswerText = spokenText;
+                                converseTurnState.interruptedAnswerText = run.spokenText;
                                 setConverseSessionState('user_speaking');
                                 stopSpeaking({ resumeConverse: false, preserveBargeIn: true });
-                                converseSession.bargeInMaxTimer = setTimeout(() => {
-                                    stopBargeInMonitor(true);
+                                run.maxTimer = setTimeout(() => {
+                                    stopBargeInMonitor(true, run);
                                 }, 12000);
                             } else {
-                                converseSession.bargeInBaseline = baseline * 0.96 + rms * 0.04;
+                                run.baseline = baseline * 0.96 + rms * 0.04;
                             }
                         }
                     } else {
-                        const speechFloor = Math.max(0.012, converseSession.bargeInBaseline * 1.2 + 0.002);
+                        const speechFloor = Math.max(0.012, run.baseline * 1.2 + 0.002);
                         if (rms >= speechFloor) {
-                            converseSession.bargeInSilenceAt = 0;
+                            run.silenceAt = 0;
                         } else {
-                            if (!converseSession.bargeInSilenceAt) converseSession.bargeInSilenceAt = now;
-                            if (now - converseSession.bargeInSilenceAt >= 650) {
-                                stopBargeInMonitor(true);
+                            if (!run.silenceAt) run.silenceAt = now;
+                            if (now - run.silenceAt >= 650) {
+                                stopBargeInMonitor(true, run);
                                 return;
                             }
                         }
                     }
-                    converseSession.bargeInTimer = setTimeout(poll, 55);
+                    run.pollTimer = setTimeout(poll, 55);
                 };
                 poll();
                 return true;
             } catch (error) {
-                cleanupBargeInResources();
+                try { pendingStream?.getTracks?.().forEach(track => track.stop()); } catch (e) {}
                 return false;
             }
         }
 
         async function startConverseFallbackCapture() {
-            if (!converseMode || !listeningRequested || isAssistantSpeaking || isProcessing || conversePausedByUser) return false;
-            if (converseFallbackRecorder || converseVadTimer || typeof MediaRecorder === 'undefined') return false;
+            if (!converseMode || !listeningRequested || isAssistantSpeaking || isProcessing) return 'unsupported';
+            if (converseFallbackRecorder || converseVadTimer) return 'started';
+            if (typeof MediaRecorder === 'undefined') return 'unsupported';
             const mimeType = getGroqVoiceTypingMimeType();
-            if (!mimeType) return false;
+            if (!mimeType) return 'unsupported';
 
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -6225,7 +6274,7 @@ let showRoutingDebugBadge = false;
                 }
                 converseFallbackActive = true;
                 isListening = true;
-                setConverseSessionState('listening');
+                setConverseSessionState(conversePausedByUser ? 'paused' : 'listening');
                 updateVoiceInteractionGraphics();
                 const speechThreshold = 0.018;
                 const silenceThreshold = 0.012;
@@ -6267,7 +6316,7 @@ let showRoutingDebugBadge = false;
                 };
 
                 const pollVad = () => {
-                    if (!converseMode || !listeningRequested || isAssistantSpeaking || isProcessing || conversePausedByUser) {
+                    if (!converseMode || !listeningRequested || isAssistantSpeaking || isProcessing) {
                         stopConverseFallbackCapture(false);
                         return;
                     }
@@ -6291,18 +6340,22 @@ let showRoutingDebugBadge = false;
                     converseVadTimer = setTimeout(pollVad, 80);
                 };
                 pollVad();
-                return true;
+                return 'started';
             } catch (error) {
                 converseFallbackActive = false;
                 isListening = false;
+                try { converseSession.audioSource?.disconnect?.(); } catch (e) {}
+                try { converseFallbackStream?.getTracks?.().forEach(track => track.stop()); } catch (e) {}
+                converseFallbackStream = null;
+                converseSession.stream = null;
+                converseSession.audioSource = null;
+                converseSession.audioAnalyser = null;
+                if (converseSession.micOwner === 'fallback') converseSession.micOwner = 'none';
                 updateVoiceInteractionGraphics();
-                setConverseSessionState('permission_denied');
-                void deliverApiReply('microphone_permission_denied', {
-                    reason: String(error?.name || error?.message || 'microphone_unavailable')
-                }, {
-                    fallbackText: 'Microphone access is unavailable. Please allow mic access to use Converse mode.'
-                });
-                return false;
+                const reason = String(error?.name || error?.message || 'microphone_unavailable');
+                return /notallowed|not-allowed|permission|security/i.test(reason)
+                    ? 'permission_denied'
+                    : 'unsupported';
             }
         }
 
@@ -6398,17 +6451,17 @@ let showRoutingDebugBadge = false;
             } catch (error) {
                 showTemporaryMessage('Converse transcription failed. I will keep listening.');
             } finally {
-                if (converseMode && listeningRequested && !isAssistantSpeaking && !isProcessing && converseFallbackActive && !conversePausedByUser && ['listening', 'user_speaking'].includes(converseSession.state)) {
+                if (converseMode && listeningRequested && !isAssistantSpeaking && !isProcessing && converseFallbackActive && ['listening', 'user_speaking', 'paused'].includes(converseSession.state)) {
                     scheduleConverseFallbackRestart(220);
                 }
             }
         }
 
         function scheduleConverseFallbackRestart(delayMs = 220) {
-            if (!converseMode || !listeningRequested || !converseFallbackActive || conversePausedByUser) return;
+            if (!converseMode || !listeningRequested || !converseFallbackActive) return;
             setTimeout(() => {
-                if (converseMode && listeningRequested && !isListening && !isAssistantSpeaking && !isProcessing && converseFallbackActive && !conversePausedByUser && ['listening', 'user_speaking'].includes(converseSession.state)) {
-                    void startConverseFallbackCapture();
+                if (converseMode && listeningRequested && !isListening && !isAssistantSpeaking && !isProcessing && converseFallbackActive && ['listening', 'user_speaking', 'paused'].includes(converseSession.state)) {
+                    void startConverseFallbackCapture().then(status => handleConverseFallbackStatus(status));
                 }
             }, delayMs);
         }
@@ -7057,14 +7110,20 @@ let showRoutingDebugBadge = false;
             return `assistant_msg_${Date.now()}_${assistantMessageCounter}`;
         }
 
-        function createConversationTurn(rawPrompt, processingPrompt = rawPrompt, source = 'text') {
+        function createConversationTurn(rawPrompt, processingPrompt = rawPrompt, source = 'text', options = {}) {
             conversationTurnCounter += 1;
             const turnId = `turn_${Date.now()}_${conversationTurnCounter}`;
+            const cleanRawPrompt = String(rawPrompt || '').trim();
             const record = {
                 id: turnId,
-                rawPrompt: String(rawPrompt || '').trim(),
+                rawPrompt: cleanRawPrompt,
                 processingPrompt: String(processingPrompt || rawPrompt || '').trim(),
                 source: String(source || 'text'),
+                topicLabel: String(options?.topicLabel || detectPrimaryTopicLabel(cleanRawPrompt)).trim(),
+                controlKind: String(options?.controlKind || 'substantive').trim(),
+                sourceContext: options?.sourceContext && typeof options.sourceContext === 'object'
+                    ? { ...options.sourceContext }
+                    : {},
                 contextSnapshot: Array.isArray(conversationContext)
                     ? conversationContext.map(item => ({ ...item }))
                     : [],
@@ -7085,7 +7144,9 @@ let showRoutingDebugBadge = false;
                 turnId: String(turn?.id || options?.turnId || ''),
                 replaceMessageId: String(options?.replaceMessageId || ''),
                 isRegeneration: !!options?.isRegeneration,
-                replacementConsumed: false
+                replacementConsumed: false,
+                replacementCandidate: null,
+                pendingFeedback: null
             };
             return previous;
         }
@@ -7110,7 +7171,7 @@ let showRoutingDebugBadge = false;
                 id: messageId,
                 text: String(meta?.text || '').trim(),
                 speechText: String(meta?.speechText || meta?.text || '').trim(),
-                priorUserPrompt: String(meta?.priorUserPrompt || window.__lastUserMessage || '').trim(),
+                priorUserPrompt: String(meta?.priorUserPrompt || '').trim(),
                 turnId: String(meta?.turnId || activeResponseRenderContext?.turnId || '').trim(),
                 sourceType: String(meta?.sourceType || 'default').trim(),
                 sourceLabel: String(meta?.sourceLabel || meta?.sourceType || 'Assistant answer').trim(),
@@ -7123,11 +7184,13 @@ let showRoutingDebugBadge = false;
                 turn.assistantMessageIds.push(messageId);
             }
             lastAssistantMessageId = messageId;
-            if (converseMode && clean.text) {
+            if (converseMode && clean.text && turn) {
                 converseTurnState.lastAssistantAnswer = clean.text;
                 converseTurnState.interruptedAnswerText = '';
                 converseTurnState.pausedOrInterrupted = false;
-                converseTurnState.activeTopicLabel = detectPrimaryTopicLabel(clean.priorUserPrompt || clean.text);
+                if (!['continue', 'recall', 'pause'].includes(turn?.controlKind)) {
+                    converseTurnState.activeTopicLabel = turn?.topicLabel || detectPrimaryTopicLabel(clean.priorUserPrompt || clean.text);
+                }
             }
         }
 
@@ -7222,15 +7285,64 @@ let showRoutingDebugBadge = false;
             toggleSpeak(text, button);
         }
 
+        function discardRegenerationCandidate(renderContext) {
+            const candidate = renderContext?.replacementCandidate;
+            if (!candidate) return;
+            candidate.messageDiv.__typewriterRun && (candidate.messageDiv.__typewriterRun.cancelled = true);
+            assistantMessageMeta.delete(candidate.messageId);
+            const turn = getConversationTurn(candidate.turnId);
+            if (turn) {
+                turn.assistantMessageIds = turn.assistantMessageIds.filter(id => id !== candidate.messageId);
+            }
+            renderContext.replacementCandidate = null;
+            renderContext.pendingFeedback = null;
+            renderContext.replacementConsumed = false;
+        }
+
+        function commitRegenerationCandidate(renderContext) {
+            const candidate = renderContext?.replacementCandidate;
+            if (!candidate?.replaceTarget?.isConnected) return false;
+            document.querySelectorAll('.feedback-container').forEach(feedback => {
+                if (feedback.dataset.assistantMessageId === candidate.replaceMessageId) feedback.remove();
+            });
+            const oldFeedback = candidate.replaceTarget.nextElementSibling;
+            if (
+                oldFeedback?.classList?.contains('feedback-container') &&
+                (!oldFeedback.dataset.assistantMessageId || oldFeedback.dataset.assistantMessageId === candidate.replaceMessageId)
+            ) {
+                oldFeedback.remove();
+            }
+            candidate.replaceTarget.replaceWith(candidate.messageDiv);
+            assistantMessageMeta.delete(candidate.replaceMessageId);
+            if (candidate.oldTurn) {
+                candidate.oldTurn.assistantMessageIds = Array.from(new Set(
+                    candidate.oldTurn.assistantMessageIds.map(id => id === candidate.replaceMessageId ? candidate.messageId : id)
+                ));
+            }
+            if (renderContext.pendingFeedback) {
+                renderContext.pendingFeedback.dataset.assistantMessageId = candidate.messageId;
+                candidate.messageDiv.insertAdjacentElement('afterend', renderContext.pendingFeedback);
+            }
+            renderContext.replacementConsumed = true;
+            renderContext.replacementCandidate = null;
+            renderContext.pendingFeedback = null;
+            return true;
+        }
+
         async function regenerateAssistantMessage(messageId) {
             const meta = getAssistantMessageMeta(messageId);
             const turn = getConversationTurn(meta?.turnId);
-            const rawPrompt = String(turn?.rawPrompt || meta?.priorUserPrompt || '').trim();
+            const rawPrompt = String(turn?.rawPrompt || '').trim();
             const processingPrompt = String(turn?.processingPrompt || rawPrompt).trim();
             if (!rawPrompt || !processingPrompt) {
                 showTemporaryMessage('This answer cannot be regenerated because its source turn is unavailable.');
                 return;
             }
+            if (regenerationInProgress || activeRequestController || isProcessing || isAssistantProcessing()) {
+                showTemporaryMessage('Another response is already being generated. Please wait a moment.');
+                return;
+            }
+            regenerationInProgress = true;
             closeAssistantActionMenus();
             const actionButton = Array.from(document.querySelectorAll('.assistant-action-row'))
                 .find(row => row.dataset.messageId === String(messageId || ''))
@@ -7263,17 +7375,20 @@ let showRoutingDebugBadge = false;
                     ? turn.contextSnapshot.map(item => ({ ...item }))
                     : previousContext;
                 await processCommand(processingPrompt);
-                if (!activeResponseRenderContext?.replacementConsumed) {
+                if (!commitRegenerationCandidate(activeResponseRenderContext)) {
+                    discardRegenerationCandidate(activeResponseRenderContext);
                     showTemporaryMessage('I could not regenerate that answer. The original response was kept.');
                 }
             } catch (error) {
                 console.error('regenerate failed:', error);
+                discardRegenerationCandidate(activeResponseRenderContext);
                 showTemporaryMessage('I could not regenerate that answer. The original response was kept.');
             } finally {
                 conversationContext = previousContext;
                 window.__lastUserMessage = previousLastUserMessage;
                 restoreResponseRenderContext(previousRenderContext);
                 endAssistantProcessing();
+                regenerationInProgress = false;
                 if (actionButton?.isConnected) actionButton.disabled = false;
                 listeningRequested = previousListeningRequested;
                 if (resumeConverse && converseMode && !isAssistantSpeaking) {
@@ -7301,6 +7416,10 @@ let showRoutingDebugBadge = false;
             const visible = String(visibleText || '').trim();
             const actual = String(hiddenText || visibleText || '').trim();
             if (!actual) return;
+            if (regenerationInProgress || activeRequestController || isProcessing || isAssistantProcessing()) {
+                showTemporaryMessage('Another response is already being generated. Please wait a moment.');
+                return;
+            }
             closeAssistantActionMenus();
             hideSelectionHelperPopover();
             window.__lastUserMessage = actual;
@@ -7357,7 +7476,13 @@ let showRoutingDebugBadge = false;
             const messageDiv = document.createElement('div');
             messageDiv.className = `chat-row flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-3`;
             messageDiv.dataset.role = isUser ? 'user' : 'assistant';
-            const messageTurnId = String(meta?.turnId || activeResponseRenderContext?.turnId || '').trim();
+            const messageTurnId = meta?.detached
+                ? ''
+                : String(
+                    Object.prototype.hasOwnProperty.call(meta || {}, 'turnId')
+                        ? meta.turnId
+                        : (activeResponseRenderContext?.turnId || '')
+                ).trim();
             if (messageTurnId) messageDiv.dataset.turnId = messageTurnId;
 
             if (isUser) {
@@ -7410,7 +7535,7 @@ let showRoutingDebugBadge = false;
                 window[speechId] = textForSpeech;
                 const messageId = createAssistantMessageId();
                 const sourceTurn = getConversationTurn(messageTurnId);
-                const priorUserPrompt = String(meta?.userMessage || sourceTurn?.rawPrompt || window.__lastUserMessage || '').trim();
+                const priorUserPrompt = String(meta?.userMessage || sourceTurn?.rawPrompt || '').trim();
                 const plainMessageText = hasHtmlContent ? stripAssistantHtmlForText(displayText) : String(displayText || '').trim();
                 const sourceLabel = sourceType === 'verified'
                     ? 'Verified source reply'
@@ -7436,7 +7561,7 @@ let showRoutingDebugBadge = false;
                                 <div class="assistant-message-text typewriter-text text-sm leading-relaxed text-left" data-message-id="${messageId}"></div>
                             </div>
                         </div>
-                        ${buildAssistantActionsHtml(messageId, speechId, !!priorUserPrompt)}
+                        ${buildAssistantActionsHtml(messageId, speechId, !!sourceTurn?.rawPrompt)}
                         </div>
                     </div>
                 `;
@@ -7450,19 +7575,26 @@ let showRoutingDebugBadge = false;
                     ? Array.from(chatContainer.querySelectorAll('[data-message-id]'))
                         .find(row => row.dataset.messageId === replaceMessageId)
                     : null;
-                if (replaceTarget) {
+                if (replaceTarget && activeResponseRenderContext?.isRegeneration) {
                     const oldMeta = getAssistantMessageMeta(replaceMessageId);
                     const oldTurn = getConversationTurn(oldMeta?.turnId);
-                    const nextFeedback = replaceTarget.nextElementSibling;
-                    if (nextFeedback?.classList?.contains('feedback-container')) nextFeedback.remove();
-                    replaceTarget.replaceWith(messageDiv);
-                    assistantMessageMeta.delete(replaceMessageId);
-                    if (oldTurn) {
-                        oldTurn.assistantMessageIds = Array.from(new Set(
-                            oldTurn.assistantMessageIds.map(id => id === replaceMessageId ? messageId : id)
-                        ));
+                    if (activeResponseRenderContext.replacementCandidate) {
+                        assistantMessageMeta.delete(messageId);
+                        const turn = getConversationTurn(messageTurnId);
+                        if (turn) turn.assistantMessageIds = turn.assistantMessageIds.filter(id => id !== messageId);
+                        return activeResponseRenderContext.replacementCandidate.messageId;
                     }
-                    if (activeResponseRenderContext) activeResponseRenderContext.replacementConsumed = true;
+                    activeResponseRenderContext.replacementCandidate = {
+                        replaceMessageId,
+                        replaceTarget,
+                        messageId,
+                        messageDiv,
+                        turnId: messageTurnId,
+                        oldMeta,
+                        oldTurn
+                    };
+                } else if (replaceTarget) {
+                    replaceTarget.replaceWith(messageDiv);
                 } else {
                     chatContainer.appendChild(messageDiv);
                 }
@@ -7479,6 +7611,7 @@ let showRoutingDebugBadge = false;
                     const textElement = messageDiv.querySelector('.typewriter-text');
                     textElement.classList.add('is-streaming');
                     const typewriterRun = { cancelled: false };
+                    messageDiv.__typewriterRun = typewriterRun;
                     activeTypewriterRuns.add(typewriterRun);
                     beginAssistantProcessing();
                     let charIndex = 0;
@@ -7528,12 +7661,13 @@ let showRoutingDebugBadge = false;
                 
                 maybeAutoScroll(chatContainer);
                 chatHistory.push({ text: displayText, isUser });
-                return;
+                return messageId;
             }
             
             chatContainer.appendChild(messageDiv);
             maybeAutoScroll(chatContainer);
             chatHistory.push({ text: displayText, isUser });
+            return '';
         }
 
         function formatFileSize(bytes) {
@@ -7622,10 +7756,13 @@ function normalizeUiTokens(text) {
             return safe ? `[${safe}]` : '[Verified live sources]';
         }
 
-        function addVerifiedAssistantMessage(text, label = 'Verified live sources') {
+        function addVerifiedAssistantMessage(text, label = 'Verified live sources', meta = {}) {
             const body = String(text || '').trim();
             const finalText = normalizeVerifiedLiveMessage(body);
-            addChatMessage(finalText, false, false, { sourceType: 'verified' });
+            return addChatMessage(finalText, false, false, {
+                ...meta,
+                sourceType: 'verified'
+            });
         }
 
         function normalizeVerifiedLiveMessage(input) {
@@ -7667,7 +7804,11 @@ function normalizeUiTokens(text) {
             const badge = formatModelSourceBadge(label);
             const body = String(text || '').trim();
             const finalText = badge ? `${badge}\n${body}`.trim() : body;
-            addChatMessage(finalText, false, null, { sourceType: 'model', routing: meta.routing || null });
+            return addChatMessage(finalText, false, null, {
+                ...meta,
+                sourceType: 'model',
+                routing: meta.routing || null
+            });
         }
 
         function getRoutingDebugBadgeText(routing) {
@@ -9485,7 +9626,7 @@ async function sendTextInput() {
                             return;
                         }
                         waitingForLocation = false;
-                        getWeatherByCity(cleanLocation);
+                        await getWeatherByCity(cleanLocation);
                     } else {
                         await processCommand(normalizedOutgoingText);
                     }
@@ -10234,14 +10375,12 @@ async function handleMarketLookup(text) {
 
         function handleConversePause(text) {
             converseTurnState.pausedOrInterrupted = true;
-            conversePausedByUser = false;
-            setConverseSessionState('paused');
             if (currentSpeechTextLower) {
                 converseTurnState.interruptedAnswerText = currentSpeechTextLower;
             }
-            stopSpeaking();
-            addChatMessage('Paused. Say "continue" when you want me to resume.', false, false);
-            saveToHistory(text, 'Paused. Say "continue" when you want me to resume.');
+            conversePausedByUser = true;
+            stopSpeaking({ resumeConverse: false });
+            setConverseSessionState('paused');
             setTimeout(() => startConverseListeningLoop(), 120);
         }
 
@@ -10272,7 +10411,7 @@ async function handleMarketLookup(text) {
             resetConverseTurnCapture();
             if (!text || shouldIgnoreConverseNoise(text, 1, true)) {
                 if (converseMode && listeningRequested && !isAssistantSpeaking && !isProcessing) {
-                    setConverseSessionState('listening');
+                    setConverseSessionState(conversePausedByUser ? 'paused' : 'listening');
                 }
                 return;
             }
@@ -10341,9 +10480,15 @@ async function handleMarketLookup(text) {
                     const continuationPrompt = buildConverseContinuationPrompt(finalText);
                     converseTurnState.pausedOrInterrupted = false;
                     conversePausedByUser = false;
-                    converseTurnState.lastUserPrompt = continuationPrompt;
                     if (isProcessing) return;
-                    const turn = createConversationTurn(finalText, continuationPrompt, 'converse');
+                    const turn = createConversationTurn(finalText, continuationPrompt, 'converse', {
+                        controlKind: utteranceKind,
+                        topicLabel: converseTurnState.activeTopicLabel,
+                        sourceContext: {
+                            priorUserPrompt: converseTurnState.lastUserPrompt,
+                            interruptedAnswer: converseTurnState.interruptedAnswerText
+                        }
+                    });
                     const previousRenderContext = beginResponseRenderContext(turn);
                     addChatMessage(finalText, true, null, { turnId: turn.id });
                     isProcessing = true;
@@ -10364,10 +10509,14 @@ async function handleMarketLookup(text) {
                     startConverseListeningLoop();
                     return;
                 }
+                conversePausedByUser = false;
             }
 
             if (isProcessing) return;
-            const turn = createConversationTurn(finalText, finalText, converseMode ? 'converse' : 'voice');
+            const turn = createConversationTurn(finalText, finalText, converseMode ? 'converse' : 'voice', {
+                controlKind: 'substantive',
+                topicLabel: detectPrimaryTopicLabel(finalText)
+            });
             const previousRenderContext = beginResponseRenderContext(turn);
             isProcessing = true;
             if (converseMode) setConverseSessionState('processing');
@@ -10469,7 +10618,7 @@ async function handleMarketLookup(text) {
                 converseFallbackActive = false;
                 if (converseMode) {
                     converseSession.micOwner = 'recognition';
-                    setConverseSessionState('listening');
+                    setConverseSessionState(conversePausedByUser ? 'paused' : 'listening');
                 }
                 if (!converseMode && !activeWakeSession && !isPassiveListening) {
                     stopSpeaking();
@@ -10617,20 +10766,14 @@ async function handleMarketLookup(text) {
                 isListening = false;
                 const err = String(event?.error || '').toLowerCase();
                 if (err === 'not-allowed' || err === 'service-not-allowed') {
-                    setConverseSessionState('permission_denied');
-                    stopConverseSession('permission_denied');
-                    void deliverApiReply('microphone_permission_denied', {
-                        reason: err
-                    }, {
-                        fallbackText: 'Microphone permission is blocked. Please allow mic access to use Converse mode.'
-                    });
+                    handleConverseFallbackStatus('permission_denied');
                     return;
                 }
                 if (converseMode && listeningRequested) {
                     converseBrowserStartFailures += 1;
                     if (converseBrowserStartFailures >= 2) {
                         converseFallbackActive = true;
-                        void startConverseFallbackCapture();
+                        void startConverseFallbackCapture().then(status => handleConverseFallbackStatus(status));
                         return;
                     }
                     setTimeout(() => {
@@ -10647,7 +10790,7 @@ async function handleMarketLookup(text) {
                 isListening = false;
                 if (converseSession.micOwner === 'recognition') converseSession.micOwner = 'none';
                 if (converseMode && listeningRequested) {
-                    if (!['listening', 'user_speaking'].includes(converseSession.state)) {
+                    if (!['listening', 'user_speaking', 'paused'].includes(converseSession.state)) {
                         updateVoiceInteractionGraphics();
                         return;
                     }
@@ -10656,7 +10799,7 @@ async function handleMarketLookup(text) {
                         return;
                     }
                     setTimeout(() => {
-                        if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking && ['listening', 'user_speaking'].includes(converseSession.state)) {
+                        if (converseMode && listeningRequested && !isListening && !isProcessing && !isAssistantSpeaking && ['listening', 'user_speaking', 'paused'].includes(converseSession.state)) {
                             startConverseListeningLoop();
                         }
                     }, 300);
@@ -10730,7 +10873,7 @@ async function handleMarketLookup(text) {
                     converseBrowserStartFailures += 1;
                     if (converseBrowserStartFailures >= 3) {
                         converseFallbackActive = true;
-                        void startConverseFallbackCapture();
+                        void startConverseFallbackCapture().then(status => handleConverseFallbackStatus(status));
                         return;
                     }
                     setTimeout(() => {
@@ -10744,7 +10887,7 @@ async function handleMarketLookup(text) {
                     converseBrowserStartFailures += 1;
                     if (converseBrowserStartFailures >= 2) {
                         converseFallbackActive = true;
-                        void startConverseFallbackCapture();
+                        void startConverseFallbackCapture().then(status => handleConverseFallbackStatus(status));
                         return;
                     }
                 }
@@ -19000,7 +19143,7 @@ Quick recap: ...
                 }
                 
                 waitingForLocation = false;
-                getWeatherByCity(cleanLocation);
+                await getWeatherByCity(cleanLocation);
                 return;
             }
 
@@ -19176,12 +19319,12 @@ Quick recap: ...
             }
             
             else if (isMemoryRecallRequest(cleanText)) {
-                handleMemoryRecall(cleanText);
+                await handleMemoryRecall(cleanText);
                 return;
             }
 
             else if (isMemoryStorageRequest(cleanText)) {
-                handleMemoryStorage(cleanText);
+                await handleMemoryStorage(cleanText);
                 return;
             }
 
@@ -19617,7 +19760,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 const inferredLocation = detectPrimaryLocationFromText(text);
                 const finalizedResponse = await resolveFinalAssistantAnswer(text, aiResponse?.response || aiResponse?.text || '');
                 const safeResponse = sanitizeHallucinatedTerrain(finalizedResponse, text, inferredLocation);
-                addModelAssistantMessage(safeResponse, 'Model answer', { routing: aiResponse?.routing || null });
+                const assistantMessageId = addModelAssistantMessage(safeResponse, 'Model answer', { routing: aiResponse?.routing || null });
                 speak(safeResponse);
                 await maybeShowReferenceImageForQuery(text, safeResponse);
 
@@ -19628,7 +19771,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 suggestQuickReplies(safeResponse);
 
                 // Add feedback buttons for learning
-                addFeedbackButtons(text, safeResponse);
+                addFeedbackButtons(text, safeResponse, assistantMessageId);
             }
         }
 
@@ -20735,7 +20878,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 (position) => handleTripPositionUpdate(position),
                 () => {
                     const warn = 'Live trip tracking lost GPS access. Keep location permission on and the website open.';
-                    addChatMessage(warn, false);
+                    addChatMessage(warn, false, null, { detached: true });
                     speak(warn);
                     stopForegroundTrip(false);
                 },
@@ -20806,7 +20949,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         destination: tripState.destinationText,
                         distanceMiles: Number(roadMilesLeft.toFixed(2)),
                         distanceKm: Number(milesToKm(roadMilesLeft).toFixed(2))
-                    }, { speak: true });
+                    }, { speak: true, detached: true });
                     maybeNotifyTripEvent('Trip warning', warn);
                 }
             }
@@ -20824,7 +20967,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     destination: tripState.destinationText,
                     distanceMiles: Number(roadMilesLeft.toFixed(2)),
                     distanceKm: Number(milesToKm(roadMilesLeft).toFixed(2))
-                }, { speak: true });
+                }, { speak: true, detached: true });
                 maybeNotifyTripEvent('Near destination', closeMsg);
             }
 
@@ -20861,7 +21004,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             };
             renderTripCard();
             if (announce && hadTrip) {
-                deliverApiReply('trip_stopped', {}, { speak: true });
+                deliverApiReply('trip_stopped', {}, { speak: true, detached: true });
             }
         }
 
@@ -20942,7 +21085,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             });
         }
 
-        function handleMemoryStorage(text) {
+        async function handleMemoryStorage(text) {
             const lower = text.toLowerCase();
             
             
@@ -20987,12 +21130,12 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 memoryStore[normalizedThing] = fullLocation;
                 saveUserData();
                 
-                deliverApiReply('memory_saved', {
+                await deliverApiReply('memory_saved', {
                     thing: normalizedThing,
                     location: fullLocation
                 }, { speak: true });
             } else {
-                deliverApiReply('memory_save_prompt_retry', {
+                await deliverApiReply('memory_save_prompt_retry', {
                     example: 'My car keys are on the kitchen counter'
                 }, { speak: true });
             }
@@ -21039,7 +21182,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             return thing;
         }
 
-        function handleMemoryRecall(text) {
+        async function handleMemoryRecall(text) {
             const lower = text.toLowerCase();
             
             let thing = null;
@@ -21078,17 +21221,17 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 }
                 
                 if (location) {
-                    deliverApiReply('memory_recall_found', {
+                    await deliverApiReply('memory_recall_found', {
                         thing,
                         location
                     }, { speak: true });
                 } else {
-                    deliverApiReply('memory_recall_missing', {
+                    await deliverApiReply('memory_recall_missing', {
                         thing
                     }, { speak: true });
                 }
             } else {
-                deliverApiReply('memory_recall_prompt', {}, { speak: true });
+                await deliverApiReply('memory_recall_prompt', {}, { speak: true });
             }
         }
 
@@ -21332,7 +21475,7 @@ function toggleMemoryPersistence(enabled) {
             currentUtterance = null;
             currentExternalAudio = null;
             currentAudioBufferSource = null;
-            if (!converseSession.interruptionActive) stopBargeInMonitor(false);
+            if (!converseSession.bargeInRun?.interruptionActive) stopBargeInMonitor(false);
             updateTTSVisualizer(false);
             if (currentSpeakerButton) {
                 currentSpeakerButton.querySelector('.play-icon')?.classList.remove('hidden');
@@ -21602,7 +21745,7 @@ function toggleMemoryPersistence(enabled) {
             return speechText;
         }
         
-        function speak(text, force = false) { 
+        function speak(text, force = false, options = {}) { 
             const shouldAutoSpeak = converseMode || activeWakeSession;
             if (!shouldAutoSpeak && !force) return; 
              
@@ -21619,7 +21762,8 @@ function toggleMemoryPersistence(enabled) {
             updateTTSVisualizer(true);
 
             const speechSessionId = ++currentSpeechSessionId;
-            if (converseMode) {
+            const allowBargeIn = options?.allowBargeIn !== false;
+            if (converseMode && allowBargeIn) {
                 void startBargeInMonitor(speechSessionId);
             }
             if (!synth) {
