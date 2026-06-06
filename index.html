@@ -2209,51 +2209,12 @@ async function processTranslatorMode(text) {
 
         addChatMessage(translationMsg, false);
 
-        // Extract just the translation for speech (first line, without pronunciation guide)
-        const translationOnly = result.translation.split('\n')[0].replace(/^\[|\]$/g, '').trim();
-
-        // Try to speak in the target language
-        speakInLanguage(translationOnly, langInfo.voiceLang);
     } else {
         await deliverApiReply('translator_error', {
             language: langInfo.name,
             userMessage: text
         });
     }
-}
-
-// Speak text in a specific language
-function speakInLanguage(text, langCode) {
-    // Stop any current speech first
-    stopSpeaking();
-
-    // Free browser-native TTS path (no paid/provider dependency).
-    const synth = window.speechSynthesis;
-    if (!synth) return;
-
-    const speakWithVoices = () => {
-        const utterance = new SpeechSynthesisUtterance(String(text || ''));
-        const voices = synth.getVoices();
-        const preferredVoice =
-            voices.find(v => String(v.lang || '').toLowerCase() === String(langCode || '').toLowerCase()) ||
-            voices.find(v => String(v.lang || '').toLowerCase().startsWith(String(langCode || '').slice(0, 2).toLowerCase())) ||
-            voices.find(v => /^en(-|_)/i.test(String(v.lang || ''))) ||
-            voices[0];
-
-        if (preferredVoice) {
-            utterance.voice = preferredVoice;
-            utterance.lang = preferredVoice.lang || langCode || 'en-US';
-        } else {
-            utterance.lang = langCode || 'en-US';
-        }
-        utterance.rate = 0.95;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-        synth.speak(utterance);
-    };
-
-    if (synth.getVoices().length > 0) speakWithVoices();
-    else synth.onvoiceschanged = speakWithVoices;
 }
 
 // ============ END TRANSLATOR MODE ============
@@ -7208,15 +7169,13 @@ let showRoutingDebugBadge = false;
                 share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3"></path><path d="M7 8l5-5 5 5"></path><path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"></path></svg>',
                 retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7"></path><path d="M21 3v6h-6"></path></svg>',
                 dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>',
-                read: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9v6h4l5 4V5L7 9H3z"></path><path d="M16 8a5 5 0 0 1 0 8"></path><path d="M19 5a9 9 0 0 1 0 14"></path></svg>',
                 ask: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.7-2.5 2-2.5 3.5"></path><path d="M12 17h.01"></path></svg>'
             };
             return icons[name] || icons.dots;
         }
 
-        function buildAssistantActionsHtml(messageId, speechId, canRegenerate) {
+        function buildAssistantActionsHtml(messageId, canRegenerate) {
             const safeId = escapeHtml(messageId);
-            const safeSpeechId = escapeHtml(speechId);
             const regenAttr = canRegenerate ? '' : 'disabled aria-disabled="true"';
             return `
                 <div class="assistant-action-row" data-message-id="${safeId}">
@@ -7226,7 +7185,6 @@ let showRoutingDebugBadge = false;
                     <div class="assistant-action-menu-wrap">
                         <button type="button" class="assistant-action-icon assistant-action-dots" onclick="toggleAssistantActionMenu('${safeId}', this)" title="More" aria-label="More actions" aria-expanded="false">${getActionIconSvg('dots')}</button>
                         <div id="assistant-action-menu-${safeId}" class="assistant-action-menu hidden" role="menu">
-                            <button type="button" onclick="readAloudAssistantMessage('${safeId}', '${safeSpeechId}', this)" role="menuitem">${getActionIconSvg('read')}<span>Read Aloud</span></button>
                             <button type="button" onclick="askJarvisAboutMessage('${safeId}')" role="menuitem">${getActionIconSvg('ask')}<span>Ask Jarvis</span></button>
                         </div>
                     </div>
@@ -7274,15 +7232,6 @@ let showRoutingDebugBadge = false;
                 }
             }
             copyToClipboard(text);
-        }
-
-        function readAloudAssistantMessage(messageId, speechId, button) {
-            unlockMobileSpeechPlayback();
-            const meta = getAssistantMessageMeta(messageId);
-            const text = meta?.speechText || window[speechId] || meta?.text || '';
-            if (!text) return;
-            closeAssistantActionMenus();
-            toggleSpeak(text, button);
         }
 
         function discardRegenerationCandidate(renderContext) {
@@ -7530,9 +7479,6 @@ let showRoutingDebugBadge = false;
                 const routeBadgeHtml = buildRoutingDebugBadgeHtml(meta?.routing, sourceType);
                 const avatarHtml = '';
 
-                // Store text safely for speech - use data attribute to avoid escaping issues
-                const speechId = 'speech_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                window[speechId] = textForSpeech;
                 const messageId = createAssistantMessageId();
                 const sourceTurn = getConversationTurn(messageTurnId);
                 const priorUserPrompt = String(meta?.userMessage || sourceTurn?.rawPrompt || '').trim();
@@ -7561,7 +7507,7 @@ let showRoutingDebugBadge = false;
                                 <div class="assistant-message-text typewriter-text text-sm leading-relaxed text-left" data-message-id="${messageId}"></div>
                             </div>
                         </div>
-                        ${buildAssistantActionsHtml(messageId, speechId, !!sourceTurn?.rawPrompt)}
+                        ${buildAssistantActionsHtml(messageId, !!sourceTurn?.rawPrompt)}
                         </div>
                     </div>
                 `;
@@ -21377,39 +21323,6 @@ function toggleMemoryPersistence(enabled) {
         let currentExternalAudio = null;
         let currentSpeechSessionId = 0;
         
-        // Toggle speak using stored text ID (safer for special characters)
-        function toggleSpeakById(speechId, button) {
-            const text = window[speechId];
-            if (!text) {
-                return;
-            }
-            toggleSpeak(text, button);
-        }
-
-        function toggleSpeak(text, button) {
-            // Check if currently speaking
-            const isSpeaking = !!(synth && synth.speaking) || !!(currentExternalAudio && !currentExternalAudio.paused) || !!currentAudioBufferSource;
-
-            if (isSpeaking) {
-                stopSpeaking();
-
-                document.querySelectorAll('.speaker-btn').forEach(btn => {
-                    btn.querySelector('.play-icon')?.classList.remove('hidden');
-                    btn.querySelector('.stop-icon')?.classList.add('hidden');
-                    btn.classList.remove('is-speaking');
-                });
-                currentSpeakerButton = null;
-                return;
-            }
-
-            // Start speaking
-            currentSpeakerButton = button;
-            button.querySelector('.play-icon')?.classList.add('hidden');
-            button.querySelector('.stop-icon')?.classList.remove('hidden');
-            button.classList.add('is-speaking');
-            speak(text, true);
-        }
-
         function getSpeechProfile(text, isConverse) {
             const content = String(text || '').trim();
             const words = content ? content.split(/\s+/).filter(Boolean).length : 0;
@@ -21533,9 +21446,6 @@ function toggleMemoryPersistence(enabled) {
                     source.connect(ctx.destination);
                     source.start(0);
                 }
-            } catch (e) {}
-            try {
-                if (synth) synth.resume();
             } catch (e) {}
         }
 
@@ -21688,41 +21598,7 @@ function toggleMemoryPersistence(enabled) {
         }
 
         async function speakWithGroqTts(cleanText, speechSessionId) {
-            const chunks = splitTextForGroqTts(cleanText);
-            if (!chunks.length) return false;
-
-            for (const chunk of chunks) {
-                if (speechSessionId !== currentSpeechSessionId) return true;
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 6500);
-                let response;
-                try {
-                    response = await fetch('/api/speech', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        signal: controller.signal,
-                        body: JSON.stringify({
-                            mode: 'tts',
-                            text: chunk,
-                            responseFormat: 'wav'
-                        })
-                    });
-                } finally {
-                    clearTimeout(timeoutId);
-                }
-                if (speechSessionId !== currentSpeechSessionId) return true;
-                if (!response.ok) return false;
-                const data = await response.json();
-                if (speechSessionId !== currentSpeechSessionId) return true;
-                if (!data?.success || !data?.audioBase64) return false;
-
-                await playGeneratedSpeechAudio(data.audioBase64, data.mimeType || 'audio/wav', speechSessionId);
-            }
-
-            if (speechSessionId === currentSpeechSessionId) {
-                onSpeechPlaybackEnded();
-            }
-            return true;
+            return false;
         }
 
         function sanitizeTextForSpeech(text) {
@@ -21745,42 +21621,9 @@ function toggleMemoryPersistence(enabled) {
             return speechText;
         }
         
-        function speak(text, force = false, options = {}) { 
-            const shouldAutoSpeak = converseMode || activeWakeSession;
-            if (!shouldAutoSpeak && !force) return; 
-             
-            if (activeWakeSession && currentSpeechContext !== 'wake_ack' && currentSpeechContext !== 'followup_ask' && currentSpeechContext !== 'sleep_ack') {
-                currentSpeechContext = 'normal_answer';
-            }
-
-            const cleanText = sanitizeTextForSpeech(text);
-            if (!cleanText) return;
-            const speechProfile = getSpeechProfile(cleanText, converseMode);
-            currentSpeechTextLower = cleanText.toLowerCase();
-            isAssistantSpeaking = true;
-            if (converseMode) setConverseSessionState('assistant_speaking');
-            updateTTSVisualizer(true);
-
-            const speechSessionId = ++currentSpeechSessionId;
-            const allowBargeIn = options?.allowBargeIn !== false;
-            if (converseMode && allowBargeIn) {
-                void startBargeInMonitor(speechSessionId);
-            }
-            if (!synth) {
-                void speakWithGroqTts(cleanText, speechSessionId)
-                    .then(ok => {
-                        if (!ok && speechSessionId === currentSpeechSessionId) onSpeechPlaybackEnded();
-                    })
-                    .catch(() => {
-                        if (speechSessionId === currentSpeechSessionId) onSpeechPlaybackEnded();
-                    });
-                return;
-            }
-            if (converseMode) {
-                speakWithWebSpeech(cleanText, speechProfile, speechSessionId);
-                return;
-            }
-            speakWithWebSpeech(cleanText, speechProfile, speechSessionId);
+        function speak() {
+            // Assistant audio output is intentionally disabled. Voice-to-text remains available.
+            stopSpeaking();
         }
         
         
