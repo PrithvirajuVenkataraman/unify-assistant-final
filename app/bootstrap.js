@@ -21,6 +21,9 @@ function initializeSpeechInput() {
         onComposerChanged() {
             globalThis.handleComposerInput?.();
         },
+        onStateChanged() {
+            globalThis.toggleSendButton?.();
+        },
         onSubmit(submission) {
             return globalThis.sendTextInput?.(submission);
         },
