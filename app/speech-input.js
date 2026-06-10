@@ -355,7 +355,7 @@ export function installSpeechInputUI(options = {}) {
         const selected = controller.setLanguage(language);
         try {
             globalThis.localStorage?.setItem?.('jarvis_voice_input_language', selected);
-        } catch {}
+        } catch {} 
         return selected;
     };
     globalThis.JarvisSpeechInput = controller;
