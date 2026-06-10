@@ -48,7 +48,7 @@ assert.match(appHtml, /replaceMessageId:\s*messageId/);
 assert.match(appHtml, /window\.__lastUserMessage = previousLastUserMessage/);
 assert.match(appHtml, /id="send-message-btn"/);
 assert.match(appHtml, /id="voice-to-text-btn"/);
-assert.match(appHtml, /id="converse-mode-btn"/);
+assert.doesNotMatch(appHtml, /id="converse-mode-btn"/);
 assert.doesNotMatch(appHtml, /speechSynthesis|SpeechSynthesisUtterance|\/api\/speech/);
 assert.doesNotMatch(appHtml, /minimumThinkMs|new Promise\(resolve => setTimeout\(resolve,\s*250\)\)/);
 assert.match(appHtml, /async function sendTextInput\(submission = \{\}\)/);
