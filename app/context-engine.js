@@ -389,7 +389,7 @@ function snapshotState(state) {
         preferences: { ...state.preferences }
     };
 }
-
+       
 function cleanText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
