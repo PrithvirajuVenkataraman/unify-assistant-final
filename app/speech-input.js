@@ -275,9 +275,8 @@ export function createSpeechInputController(options = {}) {
 export function installSpeechInputUI(options = {}) {
     const input = document.getElementById('text-input');
     const vttButton = document.getElementById('voice-to-text-btn');
-    const converseButton = document.getElementById('converse-mode-btn');
     const status = document.getElementById('speech-input-status');
-    if (!input || !vttButton || !converseButton) return null;
+    if (!input || !vttButton) return null;
 
     const Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
     let committedText = '';
@@ -314,12 +313,8 @@ export function installSpeechInputUI(options = {}) {
         },
         onState(state) {
             vttButton.classList.toggle('is-listening', state.mode === 'dictation' && state.listening);
-            converseButton.classList.toggle('is-active', state.converseEnabled);
-            converseButton.classList.toggle('is-listening', state.converseEnabled && state.listening);
             vttButton.setAttribute('aria-pressed', state.mode === 'dictation' && state.listening ? 'true' : 'false');
-            converseButton.setAttribute('aria-pressed', state.converseEnabled ? 'true' : 'false');
             vttButton.disabled = !state.supported || state.processing || state.converseEnabled;
-            converseButton.disabled = !state.supported;
             input.placeholder = state.converseEnabled
                 ? (state.processing ? 'Listening for an interruption...' : 'Converse mode is listening...')
                 : (state.mode === 'dictation' && state.listening ? 'Listening...' : 'Ask anything...');
@@ -344,24 +339,19 @@ export function installSpeechInputUI(options = {}) {
         return controller.toggleDictation();
     };
     globalThis.toggleConverseMode = () => {
-        committedText = '';
-        input.value = '';
-        delete input.dataset.inputSource;
-        options.onComposerChanged?.();
-        return controller.toggleConverse();
+        return false;
     };
     globalThis.syncVttUiState = () => controller.getState();
     globalThis.setVoiceInputLanguage = language => {
         const selected = controller.setLanguage(language);
         try {
             globalThis.localStorage?.setItem?.('jarvis_voice_input_language', selected);
-        } catch {} 
+        } catch {}
         return selected;
     };
     globalThis.JarvisSpeechInput = controller;
 
     vttButton.addEventListener('click', globalThis.toggleVoiceToText);
-    converseButton.addEventListener('click', globalThis.toggleConverseMode);
     globalThis.addEventListener('jarvis:assistant-processing', event => {
         controller.setProcessing(Boolean(event.detail?.active));
     });
