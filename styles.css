@@ -479,8 +479,8 @@ body.dark .composer-action-item:hover {
 }
 
 .chat-bubble-user {
-    background: var(--ui-primary) !important;
-    border: 1px solid var(--ui-primary) !important;
+    background: #000000 !important;
+    border: 1px solid rgba(255,255,255,0.34) !important;
     color: #ffffff !important;
     box-shadow: none !important;
     border-radius: 12px 12px 6px 12px !important;
