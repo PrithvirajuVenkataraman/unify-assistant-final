@@ -227,7 +227,7 @@ async function classifySafetyWithGroq(message, options = {}) {
             body: JSON.stringify({
                 model,
                 temperature: 0,
-                max_tokens: 300,
+                max_tokens: 5000,
                 messages: [{ role: 'user', content: policyPrompt }]
             })
         }, {
@@ -1519,7 +1519,7 @@ function buildLengthPolicy(message, clientSystemPrompt, options = {}) {
     if (isRecipeGenerationRequest(message)) {
         return {
             instruction: 'User asked for a recipe. Provide the complete recipe with all required sections and finish every step cleanly. Keep it concise but do not truncate the final cooking/resting step.',
-            maxTokens: 5000,
+            maxTokens: 7500,
             temperature: 0.6,
             wordSpec: null
         };
@@ -1527,7 +1527,7 @@ function buildLengthPolicy(message, clientSystemPrompt, options = {}) {
     if (isLongTravelPlanningRequest(message)) {
         return {
             instruction: 'User asked for a substantial travel plan. Provide the full itinerary without truncating: use clear day-by-day sections, practical timing, transit, food guidance, and concise bullets for each stop.',
-            maxTokens: 9000,
+            maxTokens: 15000,
             temperature: 0.7,
             wordSpec: null
         };
@@ -1535,7 +1535,7 @@ function buildLengthPolicy(message, clientSystemPrompt, options = {}) {
     if (detail === 'detailed') {
         return {
             instruction: 'User asked for detail. Provide a structured, in-depth explanation with enough depth to fully answer.',
-            maxTokens: 7000,
+            maxTokens: 10000,
             temperature: 0.7,
             wordSpec: null
         };
