@@ -688,6 +688,25 @@ body.dark .composer-action-item:hover {
     animation: jarvis-input-pulse 1.35s ease-in-out infinite;
 }
 
+#send-message-btn.is-converse-ready {
+    background: #000000 !important;
+    border-color: rgba(255, 255, 255, 0.55) !important;
+    color: #ffffff !important;
+}
+
+#send-message-btn.is-converse-active {
+    background: #ffffff !important;
+    border-color: #ffffff !important;
+    color: #000000 !important;
+    animation: jarvis-input-pulse 1.35s ease-in-out infinite;
+}
+
+#send-message-btn.is-converse-active svg,
+#send-message-btn.is-converse-active svg * {
+    color: #000000 !important;
+    stroke: currentColor !important;
+}
+
 .speech-input-meta {
     min-height: 18px;
     margin-top: 4px;
