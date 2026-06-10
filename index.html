@@ -7608,6 +7608,24 @@ ${code}
             }
         }
 
+        function clearSubmittedPromptBox(...submittedValues) {
+            const input = document.getElementById('text-input');
+            if (!input) return;
+            const current = input.value.trim();
+            const submitted = submittedValues
+                .map(value => String(value || '').trim())
+                .filter(Boolean);
+            if (!current || submitted.includes(current)) {
+                input.value = '';
+                delete input.dataset.inputSource;
+                input.placeholder = window.JarvisSpeechInput?.getState?.().converseEnabled
+                    ? 'Converse mode is listening...'
+                    : 'Ask anything...';
+                autoResizeComposerTextarea();
+                toggleSendButton();
+            }
+        }
+
 async function sendTextInput(submission = {}) {
             closeComposerActionsMenu();
             const input = document.getElementById('text-input');
@@ -7722,6 +7740,7 @@ async function sendTextInput(submission = {}) {
                     const fallback = 'I hit a temporary issue while processing that. Please try again.';
                     addChatMessage(fallback, false);
                 } finally {
+                    clearSubmittedPromptBox(outgoingText, normalizedOutgoingText);
                     restoreResponseRenderContext(previousRenderContext);
                     endAssistantProcessing();
                     resetPrimaryActionButtonWhenIdle();
