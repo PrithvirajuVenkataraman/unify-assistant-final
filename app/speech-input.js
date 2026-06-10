@@ -327,6 +327,7 @@ export function installSpeechInputUI(options = {}) {
                             ? 'Listening for one message...'
                             : '';
             }
+            options.onStateChanged?.(state);
         },
         onError(message) {
             if (status) status.textContent = message;
@@ -339,8 +340,14 @@ export function installSpeechInputUI(options = {}) {
         return controller.toggleDictation();
     };
     globalThis.toggleConverseMode = () => {
-        return false;
+        committedText = '';
+        input.value = '';
+        delete input.dataset.inputSource;
+        options.onComposerChanged?.();
+        return controller.toggleConverse();
     };
+    globalThis.JarvisSpeechInput = controller;
+    globalThis.JarvisSpeechInput.toggleConverse = globalThis.toggleConverseMode;
     globalThis.syncVttUiState = () => controller.getState();
     globalThis.setVoiceInputLanguage = language => {
         const selected = controller.setLanguage(language);
@@ -349,8 +356,6 @@ export function installSpeechInputUI(options = {}) {
         } catch {}
         return selected;
     };
-    globalThis.JarvisSpeechInput = controller;
-
     vttButton.addEventListener('click', globalThis.toggleVoiceToText);
     globalThis.addEventListener('jarvis:assistant-processing', event => {
         controller.setProcessing(Boolean(event.detail?.active));
