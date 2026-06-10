@@ -658,17 +658,6 @@ body.dark .composer-action-item:hover {
     animation: jarvis-input-pulse 1.35s ease-in-out infinite;
 }
 
-#converse-mode-btn.is-active {
-    color: #ffffff !important;
-    background: #7c3aed !important;
-    border-color: #8b5cf6 !important;
-}
-
-#converse-mode-btn.is-active.is-listening {
-    background: #6d28d9 !important;
-    border-color: #a78bfa !important;
-}
-
 .speech-input-meta {
     min-height: 18px;
     margin-top: 4px;
