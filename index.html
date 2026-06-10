@@ -4337,6 +4337,16 @@ let showRoutingDebugBadge = false;
             `;
         }
 
+        function getConverseIconSvg() {
+            return `
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>
+                    <path d="M8 9h8"></path>
+                    <path d="M8 13h5"></path>
+                </svg>
+            `;
+        }
+
         function setPrimaryActionButtonToSend() {
             const btn = document.getElementById('send-message-btn');
             if (!btn) return;
@@ -4344,9 +4354,26 @@ let showRoutingDebugBadge = false;
             btn.onclick = sendTextInput;
             btn.innerHTML = getSendIconSvg();
             btn.classList.add('is-send-ready');
+            btn.classList.remove('is-converse-ready', 'is-converse-active');
             btn.disabled = false;
             btn.setAttribute('aria-label', 'Send message');
             btn.title = 'Send message';
+        }
+
+        function setPrimaryActionButtonToConverse() {
+            const btn = document.getElementById('send-message-btn');
+            if (!btn) return;
+            const state = window.JarvisSpeechInput?.getState?.() || {};
+            const active = !!state.converseEnabled;
+            btn.dataset.mode = 'converse';
+            btn.onclick = togglePrimaryConverseMode;
+            btn.innerHTML = getConverseIconSvg();
+            btn.classList.remove('is-send-ready');
+            btn.classList.add('is-converse-ready');
+            btn.classList.toggle('is-converse-active', active);
+            btn.disabled = state.supported === false;
+            btn.setAttribute('aria-label', active ? 'Stop Converse mode' : 'Start Converse mode');
+            btn.title = active ? 'Stop Converse mode' : 'Start Converse mode';
         }
 
         function setPrimaryActionButtonToStop() {
@@ -4356,6 +4383,7 @@ let showRoutingDebugBadge = false;
             btn.onclick = stopActiveGeneration;
             btn.innerHTML = getStopIconSvg();
             btn.classList.add('is-send-ready');
+            btn.classList.remove('is-converse-ready', 'is-converse-active');
             btn.disabled = false;
             btn.setAttribute('aria-label', 'Stop generating');
             btn.title = 'Stop generating';
@@ -4367,17 +4395,21 @@ let showRoutingDebugBadge = false;
             if (input && input.value.trim()) {
                 setPrimaryActionButtonToSend();
             } else {
-                const btn = document.getElementById('send-message-btn');
-                if (btn) {
-                    btn.dataset.mode = 'send';
-                    btn.onclick = sendTextInput;
-                    btn.innerHTML = getSendIconSvg();
-                    btn.disabled = true;
-                    btn.classList.remove('is-send-ready');
-                    btn.setAttribute('aria-label', 'Send message');
-                    btn.title = 'Type a message to send';
-                }
+                setPrimaryActionButtonToConverse();
             }
+        }
+
+        function togglePrimaryConverseMode() {
+            const input = document.getElementById('text-input');
+            if (input?.value?.trim()) {
+                void sendTextInput();
+                return;
+            }
+            const toggled = window.JarvisSpeechInput?.toggleConverse?.();
+            if (toggled === false && !window.JarvisSpeechInput?.getState?.().supported) {
+                showTemporaryMessage('Voice input is unavailable in this browser.');
+            }
+            toggleSendButton();
         }
 
         function isAbortError(error) {
@@ -7604,7 +7636,7 @@ ${code}
             if (shouldSend) {
                 setPrimaryActionButtonToSend();
             } else {
-                resetPrimaryActionButtonWhenIdle();
+                setPrimaryActionButtonToConverse();
             }
         }
 
