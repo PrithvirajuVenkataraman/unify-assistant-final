@@ -15,7 +15,7 @@ export function createApplicationState(initial = {}) {
     };
 
     return {
-        get snapshot() {
+        get snapshot() { 
             return structuredClone(state);
         },
         setActiveFeature(feature) {
