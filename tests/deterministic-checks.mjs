@@ -52,6 +52,8 @@ assert.doesNotMatch(appHtml, /id="converse-mode-btn"/);
 assert.doesNotMatch(appHtml, /speechSynthesis|SpeechSynthesisUtterance|\/api\/speech/);
 assert.doesNotMatch(appHtml, /minimumThinkMs|new Promise\(resolve => setTimeout\(resolve,\s*250\)\)/);
 assert.match(appHtml, /async function sendTextInput\(submission = \{\}\)/);
+assert.match(appHtml, /function clearSubmittedPromptBox\(/);
+assert.match(appHtml, /clearSubmittedPromptBox\(outgoingText, normalizedOutgoingText\)/);
 assert.match(appHtml, /preserveTranscript \|\| isLikelyCodeInput/);
 assert.match(appHtml, /submission\?\.source \|\| input\.dataset\.inputSource/);
 assert.match(appHtml, /app\/bootstrap\.js/);
