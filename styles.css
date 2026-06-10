@@ -240,6 +240,7 @@ option {
     right: 0;
     bottom: 0;
     width: 100%;
+    background: #000000 !important;
     padding: 0 0 calc(10px + env(safe-area-inset-bottom));
 }
 
@@ -258,7 +259,7 @@ option {
 #input-bar-inner,
 .modern-input {
     min-width: 0;
-    background: var(--ui-surface) !important;
+    background: #000000 !important;
     border: 1px solid var(--ui-border) !important;
     border-radius: var(--ui-radius) !important;
     box-shadow: none !important;
@@ -298,12 +299,41 @@ option {
     padding: 10px 0;
     font-size: 14px !important;
     font-weight: 500 !important;
-    color: var(--ui-text) !important;
+    background: #000000 !important;
+    color: #ffffff !important;
+    caret-color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    appearance: none;
+    -webkit-appearance: none;
 }
 
 #text-input::placeholder {
-    color: var(--ui-text-muted) !important;
+    color: rgba(255, 255, 255, 0.72) !important;
+    -webkit-text-fill-color: rgba(255, 255, 255, 0.72) !important;
     opacity: 0.65;
+}
+
+#text-input:focus,
+#text-input:hover,
+#text-input:active {
+    background: #000000 !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    outline: none !important;
+}
+
+#text-input::selection {
+    background: rgba(255, 255, 255, 0.24) !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+#text-input:-webkit-autofill,
+#text-input:-webkit-autofill:hover,
+#text-input:-webkit-autofill:focus {
+    box-shadow: 0 0 0 1000px #000000 inset !important;
+    -webkit-box-shadow: 0 0 0 1000px #000000 inset !important;
+    -webkit-text-fill-color: #ffffff !important;
 }
 
 .composer-actions {
