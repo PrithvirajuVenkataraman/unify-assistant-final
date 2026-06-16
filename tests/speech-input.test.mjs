@@ -133,6 +133,10 @@ converseController.setLanguage('hi-IN');
 await Promise.resolve();
 assert.equal(FakeRecognition.instances.at(-1).lang, 'hi-IN');
 assert.notEqual(FakeRecognition.instances.at(-1), activeRecognition);
+await activeRecognition.emitResult('stale old session text', true);
+assert.equal(autoSubmitCount, 2, 'stale final results from an old session must not submit');
+await FakeRecognition.instances.at(-1).emitResult('interrupt with a new topic', true);
+assert.equal(autoSubmitCount, 2, 'rapid duplicate Converse transcripts must not submit across restarted sessions');
 
 converseController.stop({ disableConverse: true });
 
