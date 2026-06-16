@@ -479,8 +479,8 @@ body.dark .composer-action-item:hover {
 }
 
 .chat-bubble-user {
-    background: #000000 !important;
-    border: 1px solid rgba(255,255,255,0.34) !important;
+    background: var(--ui-primary) !important;
+    border: 1px solid var(--ui-primary) !important;
     color: #ffffff !important;
     box-shadow: none !important;
     border-radius: 12px 12px 6px 12px !important;
@@ -1182,6 +1182,35 @@ body.dark .footer-action-btn-primary:hover {
     background: var(--ui-surface-muted);
 }
 
+.custom-system-prompt-input,
+.help-select-control {
+    width: 100%;
+    border: 1px solid var(--ui-border);
+    border-radius: 10px;
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    font-size: 13px;
+    line-height: 1.45;
+    outline: none;
+}
+
+.custom-system-prompt-input {
+    min-height: 118px;
+    resize: vertical;
+    padding: 11px 12px;
+}
+
+.help-select-control {
+    min-height: 40px;
+    padding: 8px 10px;
+}
+
+.custom-system-prompt-input:focus,
+.help-select-control:focus {
+    border-color: rgba(255, 255, 255, 0.78);
+    box-shadow: var(--jarvis-focus-ring);
+}
+
 .help-section-heading {
     display: flex;
     align-items: flex-start;
@@ -1351,23 +1380,25 @@ body.dark .response-action-btn {
 .assistant-thinking-bubble {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px !important;
-    border-radius: 12px !important;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0 !important;
+    border-radius: 999px !important;
     border: 1px solid var(--ui-border) !important;
-    background: var(--ui-surface-muted) !important;
-}
+    background: var(--ui-surface) !important;
+    }
 
 .assistant-thinking-avatar {
     display: none;
 }
 
 .assistant-thinking-spinner {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 999px;
-    border: 2px solid rgba(37, 99, 235, 0.22);
-    border-top-color: #2563eb;
+    border: 2px solid rgba(255, 255, 255, 0.28);
+    border-top-color: #ffffff;
     animation: jarvis-spin 0.8s linear infinite;
     flex-shrink: 0;
 }
