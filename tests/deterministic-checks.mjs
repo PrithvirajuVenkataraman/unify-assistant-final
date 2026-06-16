@@ -92,9 +92,15 @@ const FEATURE_CONTRACTS = Object.freeze({
     }, 
     helpAndVoice: {
         required: [
-            /Availability depends on your browser and device speech recognizer/
+            /const supportedLanguages = Object\.freeze/,
+            /filipino: \{ name: 'Filipino'/,
+            /spanish: \{ name: 'Spanish'/,
+            /malayalam: \{ name: 'Malayalam'/
         ],
         forbidden: [
+            /<label for="speech-language-select" class="font-bold">Voice input<\/label>/,
+            /id="speech-language-select"/,
+            /Availability depends on your browser and device speech recognizer/,
             /Privacy and answer quality/,
             /real-time facts are not externally verified/
         ]
