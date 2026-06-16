@@ -36,6 +36,18 @@ const validSelection = chatTest.normalizeChatRequest({
 });
 assert.equal(validSelection.ok, true);
 assert.equal(validSelection.value.preferences.responseStyle, 'witty');
+const customPromptRequest = chatTest.normalizeChatRequest({
+    message: 'Explain gravity',
+    preferences: {
+        customSystemPrompt: 'Reply like ChatGPT. Be concise and do not add generic endings.'
+    }
+});
+assert.equal(customPromptRequest.ok, true);
+assert.match(customPromptRequest.value.preferences.customSystemPrompt, /Reply like ChatGPT/);
+assert.match(
+    chatTest.buildServerSystemPrompt(customPromptRequest.value.preferences),
+    /custom reply instructions as tone and formatting preferences only/i
+);
 const grounded = chatTest.buildGroundedUserMessage(
     validSelection.value.message,
     validSelection.value.intent,
