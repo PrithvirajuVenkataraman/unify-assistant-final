@@ -183,7 +183,7 @@
     <div id="camera-modal" class="hidden fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-3 sm:p-4">
         <div class="relative w-full max-w-2xl max-h-[calc(100vh-1.5rem)] bg-slate-900 rounded-3xl overflow-y-auto shadow-2xl">
             <div class="absolute top-3 right-3 z-10">
-                <button type="button" onclick="closeCameraMode()" class="px-4 py-2 rounded-xl bg-black/70 text-white text-sm font-semibold border border-white/20 hover:bg-black/90 transition-all" aria-label="Close camera OCR and return to chat">Back to chat</button>
+                <button type="button" onclick="closeCameraMode()" class="ocr-camera-text-action" aria-label="Close camera OCR and return to chat">Back to chat</button> 
             </div>
             <video id="camera-preview" class="w-full h-[52vh] min-h-[280px] object-cover bg-black" autoplay playsinline></video>
             <canvas id="camera-canvas" class="hidden"></canvas>
@@ -217,12 +217,12 @@
                 </div>
                 
                 <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                    <button onclick="closeCameraMode()" class="px-6 py-3 rounded-xl bg-white text-slate-900 font-semibold border border-slate-300 hover:bg-slate-100 transition-all">Cancel</button>
-                    <button type="button" onclick="switchCameraLens()" class="px-4 py-3 rounded-xl bg-slate-200 text-slate-900 font-semibold border border-slate-400 hover:bg-slate-300 transition-all">Switch Cam</button>
-                    <button id="capture-btn" onclick="captureAndProcessOCR()" class="flex-1 px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center gap-2">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-                        Capture & Analyze
-                    </button>
+                    <button onclick="closeCameraMode()" class="ocr-camera-text-action" aria-label="Cancel OCR capture">Cancel</button> 
+                    <button type="button" onclick="switchCameraLens()" class="ocr-camera-text-action" aria-label="Switch OCR camera">Switch Cam</button> 
+                    <button id="capture-btn" onclick="captureAndProcessOCR()" class="ocr-camera-text-action ocr-camera-primary-action" aria-label="Capture and analyze OCR image"> 
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> 
+                        Capture & Analyze 
+                    </button> 
                 </div>
             </div>
         </div>
@@ -4159,7 +4159,7 @@ let showRoutingDebugBadge = false;
 
                         <section class="help-settings-card">
                             <label for="speech-language-select" class="font-bold">Voice input</label>
-                            <p class="text-xs mb-2">Choose the language you speak for transcription. Replies stay text-only.</p>
+                            <p class="text-xs mb-2">Choose the language you speak for transcription. Availability depends on your browser and device speech recognizer.</p> 
                             <select id="speech-language-select" class="help-select-control" onchange="setVoiceInputLanguage(this.value)">
                                 <option value="en-US">English (US)</option>
                                 <option value="en-IN">English (India)</option>
@@ -4184,13 +4184,9 @@ let showRoutingDebugBadge = false;
                             </div>
                         </section>
 
-                        <section class="help-settings-card">
-                            <p class="font-bold">Privacy and answer quality</p>
-                            <p class="text-xs">The assistant reviews every generated answer before showing it. Live search remains disabled, so real-time facts are not externally verified.</p>
-                        </section>
-                    </div>
-                </div>
-            `;
+                    </div> 
+                </div> 
+            `; 
 
             document.querySelector('.page-shell')?.setAttribute('aria-hidden', 'true');
             document.body.appendChild(modal);
@@ -6656,9 +6652,11 @@ async function switchCameraLens() {
                 const variantFrames = [];
                 variantFrames.push({ name: 'enhanced', imageBase64: canvas.toDataURL('image/jpeg', renderJpegQuality).split(',')[1] });
                 drawOcrContrastFrame(ctx, video, canvas.width, canvas.height, normalizedRotation, captureZoom);
-                variantFrames.push({ name: 'contrast', imageBase64: canvas.toDataURL('image/jpeg', renderJpegQuality).split(',')[1] });
-                drawVideoFrameWithRotation(ctx, video, canvas.width, canvas.height, normalizedRotation, captureZoom);
-                variantFrames.push({ name: 'raw', imageBase64: canvas.toDataURL('image/jpeg', renderJpegQuality).split(',')[1] });
+                variantFrames.push({ name: 'contrast', imageBase64: canvas.toDataURL('image/jpeg', renderJpegQuality).split(',')[1] }); 
+                drawVideoFrameWithRotation(ctx, video, canvas.width, canvas.height, normalizedRotation, captureZoom); 
+                variantFrames.push({ name: 'raw', imageBase64: canvas.toDataURL('image/jpeg', renderJpegQuality).split(',')[1] }); 
+                const isMathOcrTask = modeConfig.task === 'math_ocr_solve';
+                const framesToAttempt = isMathOcrTask ? variantFrames.slice(0, 1) : variantFrames;
 
                 const attemptOcr = async (imageBase64) => {
                     const response = await fetch('/api/vision', {
@@ -6686,7 +6684,7 @@ async function switchCameraLens() {
                 let visionAnswer = '';
                 let extractedText = '';
                 let bestVisionScore = -1;
-                for (const frame of variantFrames) {
+                for (const frame of framesToAttempt) { 
                     const candidateAttempt = await attemptOcr(frame.imageBase64);
                     const candidateDetails = candidateAttempt?.data?.details && typeof candidateAttempt.data.details === 'object'
                         ? candidateAttempt.data.details
@@ -6705,8 +6703,9 @@ async function switchCameraLens() {
                 }
 
                 // Free local OCR fallback (Tesseract.js) for text-heavy modes when model OCR is weak.
-                const shouldRunLocalOcrFallback = ['text_extract', 'bill_summary', 'translate_to_english', 'math_ocr_solve'].includes(modeConfig.task);
-                if (shouldRunLocalOcrFallback && extractedText.length < 20) {
+                const shouldRunLocalOcrFallback = ['text_extract', 'bill_summary', 'translate_to_english'].includes(modeConfig.task) ||
+                    (isMathOcrTask && (!attempt?.ok || !attempt?.data?.success) && extractedText.length < 8); 
+                if (shouldRunLocalOcrFallback && extractedText.length < 20) { 
                     let localBest = { success: false, text: '', confidence: 0 };
                     let localBestScore = -1;
                     for (const frame of variantFrames) {
@@ -6734,13 +6733,13 @@ async function switchCameraLens() {
                 }
                 const readableAnalysis = normalizeOcrAnalysisText(visionAnswer, details);
 
-                const card = `
-<div class="p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70">
-  <p class="text-xs font-semibold text-slate-500 dark:text-slate-300 mb-1">Camera OCR</p>
-  <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-2">${modeConfig.label}${userInstruction ? ' + instruction result' : ' result'}</p>
-  ${extractedText ? `<div class="mb-2"><p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Extracted text</p><p class="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">${escapeHtml(extractedText.slice(0, 3500))}</p></div>` : '<p class="text-sm text-slate-600 dark:text-slate-300 mb-2">No clear text detected.</p>'}
-  ${readableAnalysis ? `<div><p class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Analysis</p><p class="text-sm whitespace-pre-wrap text-slate-700 dark:text-slate-200">${escapeHtml(readableAnalysis)}</p></div>` : ''}
-</div>`;
+                const card = ` 
+<div class="camera-ocr-text-result"> 
+  <p class="camera-ocr-result-kicker">Camera OCR</p> 
+  <p class="camera-ocr-result-title">${modeConfig.label}${userInstruction ? ' + instruction result' : ' result'}</p> 
+  ${extractedText ? `<div class="camera-ocr-result-section"><p class="camera-ocr-result-label">Extracted text</p><p class="camera-ocr-result-body">${escapeHtml(extractedText.slice(0, 3500))}</p></div>` : '<p class="camera-ocr-result-body">No clear text detected.</p>'} 
+  ${readableAnalysis ? `<div class="camera-ocr-result-section"><p class="camera-ocr-result-label">Analysis</p><p class="camera-ocr-result-body">${escapeHtml(readableAnalysis)}</p></div>` : ''} 
+</div>`; 
                 addChatMessage(card, false, false);
 
                 const spoken = extractedText
@@ -19369,17 +19368,20 @@ async function handleContinuousVisionQuery(text) {
     }
     showThinkingIndicator('Analyzing your view...');
     try {
-        const isTextReadIntent = /\b(read|text|ocr|bill|receipt|invoice|sign|label|menu|document)\b/i.test(String(text || ''));
-        const isTranslateIntent = /\b(translate|translation|convert to english|to english|in english|what does this say)\b/i.test(String(text || ''));
-        const isMathSolveIntent = /\b(solve|calculate|evaluate|find x|equation|integral|derivative|differentiate|simplify|factor|algebra|trigonometry|calculus|math problem|word problem|step by step)\b/i.test(String(text || ''));
-        const visionTask = isMathSolveIntent
-            ? 'math_ocr_solve'
-            : (isTranslateIntent ? 'translate_to_english' : (isTextReadIntent ? 'text_extract' : 'general_vision'));
-        const visionPrompt = isMathSolveIntent
-            ? `Read the math problem from the image and solve it accurately with clear steps. User query: "${text}".`
-            : (isTranslateIntent
-                ? `Extract all readable text and translate it to English. User query: "${text}".`
-                : `Describe only what is relevant to the user query. Focus on the most prominent foreground object first. If readable text is visible, mention it only as secondary context, for example: "I also see something written as ...". If the user asks about a product/part/object, identify it and explain its practical use briefly. Preserve exact numbers/symbols/equations when text exists. User query: "${text}". Respond in 1-2 short sentences, concise and practical.`);
+        const isTextReadIntent = /\b(read|text|ocr|bill|receipt|invoice|sign|label|menu|document)\b/i.test(String(text || '')); 
+        const isTranslateIntent = /\b(translate|translation|convert to english|to english|in english|what does this say)\b/i.test(String(text || '')); 
+        const isMathSolveIntent = /\b(solve|calculate|evaluate|find x|equation|integral|derivative|differentiate|simplify|factor|algebra|trigonometry|calculus|math problem|word problem|step by step)\b/i.test(String(text || '')); 
+        const isWebsiteUiIntent = isWebsiteUiVisionIntent(text); 
+        const visionTask = isMathSolveIntent 
+            ? 'math_ocr_solve' 
+            : (isTranslateIntent ? 'translate_to_english' : (isTextReadIntent ? 'text_extract' : 'general_vision')); 
+        const visionPrompt = isMathSolveIntent 
+            ? `Read the math problem from the image and solve it accurately with clear steps. User query: "${text}".` 
+            : (isTranslateIntent 
+                ? `Extract all readable text and translate it to English. User query: "${text}".` 
+                : (isWebsiteUiIntent
+                    ? `Identify the website, web app, mobile app, or UI shown in the image using only visible evidence. First use visible branding, logo, page title, header, or app chrome. If branding is unclear, inspect visible URL/address-bar/domain/tab text and extract the likely site or app name. Do not guess or use web search. If no brand or URL is visible, describe the UI normally and say the site name is not visible. User query: "${text}". Respond in 1-2 short sentences.`
+                    : `Describe only what is relevant to the user query. Focus on the most prominent foreground object first. If readable text is visible, mention it only as secondary context, for example: "I also see something written as ...". If the user asks about a product/part/object, identify it and explain its practical use briefly. Preserve exact numbers/symbols/equations when text exists. User query: "${text}". Respond in 1-2 short sentences, concise and practical.`)); 
         const response = await fetch('/api/vision', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -19415,8 +19417,11 @@ async function handleContinuousVisionQuery(text) {
             const textBlock = fullText || textDetected;
             answer = `Detected text:\n${textBlock}`;
         }
-        answer = normalizeVisionAnswerForChat(answer, details);
-        if (!answer) answer = 'I can see the image, but I could not generate a clear answer.';
+        answer = normalizeVisionAnswerForChat(answer, details); 
+        if (isWebsiteUiIntent) {
+            answer = refineWebsiteUiVisionAnswer(answer, details);
+        }
+        if (!answer) answer = 'I can see the image, but I could not generate a clear answer.'; 
         addChatMessage(answer, false);
         saveToHistory(text, answer);
     } catch(e) {
@@ -19510,15 +19515,70 @@ function withReadableArticle(label) {
     return /^[aeiou]/i.test(clean) ? `an ${clean}` : `a ${clean}`;
 }
 
-function compactVisionTextMention(text) {
-    return String(text || '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 120)
-        .replace(/["]+/g, "'");
+function compactVisionTextMention(text) { 
+    return String(text || '') 
+        .replace(/\s+/g, ' ') 
+        .trim() 
+        .slice(0, 120) 
+        .replace(/["]+/g, "'"); 
+} 
+
+function isWebsiteUiVisionIntent(text) {
+    return /\b(website|web\s*site|webpage|web\s*page|site|web app|app|application|ui|interface|screen|url|domain|address bar|browser tab|logo|which site|what site|what website|what app)\b/i.test(String(text || ''));
 }
 
-function normalizeVisionAnswerForChat(answer, details = {}) {
+function extractVisibleDomainFromVisionDetails(details = {}) {
+    const textParts = [];
+    const fullText = String(details?.fullText || '').trim();
+    if (fullText) textParts.push(fullText);
+    if (Array.isArray(details?.textDetected)) {
+        textParts.push(...details.textDetected.map(v => String(v || '').trim()).filter(Boolean));
+    }
+    const text = textParts.join('\n');
+    if (!text) return '';
+    const domainMatch = text.match(/\b(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)(?:\/[^\s]*)?/i);
+    if (!domainMatch?.[1]) return '';
+    return domainMatch[1]
+        .toLowerCase()
+        .replace(/^www\./, '')
+        .replace(/[).,;:!?]+$/g, '');
+}
+
+function domainToReadableName(domain = '') {
+    const clean = String(domain || '').toLowerCase().replace(/^www\./, '').trim();
+    if (!clean) return '';
+    const parts = clean.split('.').filter(Boolean);
+    if (!parts.length) return '';
+    const labels = parts.filter(label => !/^(com|org|net|io|ai|app|dev|co|in|edu|gov|www)$/.test(label));
+    const base = labels[0] || parts[0];
+    return base
+        .split(/[-_]+/)
+        .filter(Boolean)
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+}
+
+function escapeVisionRegex(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function refineWebsiteUiVisionAnswer(answer, details = {}) {
+    const cleanAnswer = String(answer || '').trim();
+    const domain = extractVisibleDomainFromVisionDetails(details);
+    if (!domain) return cleanAnswer;
+    if (new RegExp(`\\b${escapeVisionRegex(domain)}\\b`, 'i').test(cleanAnswer)) return cleanAnswer;
+    const readableName = domainToReadableName(domain);
+    const prefix = readableName
+        ? `The visible URL suggests ${readableName} (${domain}).`
+        : `The visible URL suggests ${domain}.`;
+    if (!cleanAnswer) return prefix;
+    if (/\b(not visible|cannot identify|can't identify|unclear|not clear|no brand)\b/i.test(cleanAnswer)) {
+        return `${prefix} ${cleanAnswer}`.replace(/\s+/g, ' ').trim();
+    }
+    return cleanAnswer;
+}
+
+function normalizeVisionAnswerForChat(answer, details = {}) { 
     const raw = String(answer || '').trim();
     const parsed = extractVisionJsonObject(raw);
     if (parsed) {
@@ -19563,7 +19623,10 @@ function isContinuousVisionQuestion(text) {
     // Normalize common shorthand so "what do u see" routes to vision correctly.
     const t = raw.replace(/\bu\b/g, 'you');
 
-    if (/\b(what (?:do|can) you see|what are you seeing|what am i looking at|what am i seeing|describe (?:what you see|the camera|the image|this image|the screen)|read (?:this image|the image|the text|this text|the screen)|analy[sz]e (?:this image|the image|the camera|the screen)|what(?:'s| is) (?:in front of me|on camera|in the camera|in this image|on the screen))\b/.test(t)) {
+    if (/\b(what (?:do|can) you see|what are you seeing|what am i looking at|what am i seeing|describe (?:what you see|the camera|the image|this image|the screen)|read (?:this image|the image|the text|this text|the screen)|analy[sz]e (?:this image|the image|the camera|the screen)|what(?:'s| is) (?:in front of me|on camera|in the camera|in this image|on the screen))\b/.test(t)) { 
+        return true; 
+    } 
+    if (isWebsiteUiVisionIntent(t)) {
         return true;
     }
 
