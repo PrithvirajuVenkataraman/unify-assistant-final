@@ -24,11 +24,12 @@ export function createConversationEngine(options = {}) {
         threads: new Map(),
         turns: [],
         pending: null,
-        preferences: {
-            responseLength: 'normal',
-            responseFormat: 'paragraph',
-            responseStyle: 'balanced'
-        }
+        preferences: { 
+            responseLength: 'normal', 
+            responseFormat: 'paragraph', 
+            responseStyle: 'balanced',
+            customSystemPrompt: ''
+        } 
     };
 
     return {
@@ -133,10 +134,14 @@ function resolveInput(state, input, limits) {
         decisionReason = 'pending_clarification_answer';
         confidence = 0.96;
         return resolution(originalMessage, originalMessage, activeThread, decisionReason, confidence, null);
-    } else if (classification.isFollowUp && activeThread) {
-        const resolved = resolvePronouns(originalMessage, activeThread.entity || activeThread.topic);
-        decisionReason = classification.isCorrection ? 'conversation_repair' : 'contextual_follow_up';
-        confidence = FOLLOW_UP_SIGNALS.test(originalMessage) ? 0.92 : 0.78;
+    } else if (classification.isFollowUp && activeThread) { 
+        if (!shouldResolveAgainstActiveThread(originalMessage, classification, activeThread)) {
+            const thread = createThread(state, classification.topic || originalMessage, limits.maxThreads);
+            return resolution(originalMessage, originalMessage, thread, 'new_intent_low_context_confidence', 0.66, null);
+        }
+        const resolved = resolvePronouns(originalMessage, activeThread.entity || activeThread.topic); 
+        decisionReason = classification.isCorrection ? 'conversation_repair' : 'contextual_follow_up'; 
+        confidence = FOLLOW_UP_SIGNALS.test(originalMessage) ? 0.92 : 0.78; 
         return resolution(originalMessage, resolved, activeThread, decisionReason, confidence, null);
     }
 
@@ -310,6 +315,7 @@ function restoreState(state, snapshot, limits) {
         responseLength: 'normal',
         responseFormat: 'paragraph',
         responseStyle: 'balanced',
+        customSystemPrompt: '',
         ...sanitizePreferences(source.preferences)
     };
     if (!state.threads.has(state.activeThreadId)) state.activeThreadId = '';
@@ -354,6 +360,25 @@ function resolvePronouns(text, entity) {
     );
 }
 
+function shouldResolveAgainstActiveThread(message, classification, activeThread) {
+    if (!activeThread) return false;
+    if (classification?.isCorrection) return true;
+    const raw = cleanText(message);
+    const tokens = Array.isArray(classification?.tokens) ? classification.tokens : tokenize(raw);
+    const topicTokens = tokenize(`${activeThread.topic || ''} ${activeThread.entity || ''}`);
+    const overlap = countOverlap(tokens, topicTokens);
+    const hasEntity = Boolean(cleanText(activeThread.entity));
+    const hasTopicAnchor = hasEntity || topicTokens.length > 0;
+    const explicitReference = /\b(it|its|this|that|they|them|those|these|same|earlier|previous|above|continue|more|further)\b/i.test(raw);
+    const bareShortQuestion = /^(who|what|when|where|why|how|which)\b/i.test(raw) && tokens.length <= 3 && overlap === 0;
+    const namedLikeNewTopic = /^(who|what)\s+is\s+[A-Za-z0-9][A-Za-z0-9 .'-]{2,}\??$/i.test(raw) && overlap === 0;
+
+    if (namedLikeNewTopic || bareShortQuestion) return false;
+    if (overlap > 0) return true;
+    if (explicitReference && hasTopicAnchor && tokens.length <= 5) return true;
+    return explicitReference && tokens.length <= 3 && hasTopicAnchor;
+}
+
 function tokenize(text) {
     return cleanText(text)
         .toLowerCase()
@@ -377,6 +402,8 @@ function sanitizePreferences(preferences) {
     if (['balanced', 'witty', 'chatty', 'supportive', 'debate'].includes(responseStyle)) {
         out.responseStyle = responseStyle;
     }
+    const customSystemPrompt = cleanText(preferences.customSystemPrompt).slice(0, 1200);
+    if (customSystemPrompt) out.customSystemPrompt = customSystemPrompt;
     return out;
 }
 
@@ -389,7 +416,7 @@ function snapshotState(state) {
         preferences: { ...state.preferences }
     };
 }
-       
+
 function cleanText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
