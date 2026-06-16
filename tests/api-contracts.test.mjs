@@ -6,6 +6,19 @@ import marketsHandler from '../api/markets.js';
 import searchHandler from '../api/search.js';
 import visionHandler from '../api/vision.js';
 
+const SAMPLE = Object.freeze({
+    chatMessage: 'q',
+    selectionText: 'const v = 1;',
+    customInstruction: 'q q',
+    customPrompt: 'a b c',
+    challengedAnswer: 'verify q',
+    challengedResponse: '2020.',
+    currentQuery: 'q q',
+    marketQuery: 'q q',
+    budgetQuery: 'Plan 3 days under INR 12000',
+    imageBase64: 'eA=='
+});
+
 assert.equal(resolveRequestPath({ url: '/api/chat-groq?x=1' }), '/api/chat-groq');
 assert.equal(resolveRequestPath({ url: '/api/chat-groq-extra' }), '/api/chat-groq-extra');
 
@@ -19,31 +32,31 @@ assert.equal(invalidChat.body.success, false);
 assert.equal(invalidChat.body.error.code, 'invalid_request');
 
 const invalidSelection = chatTest.normalizeChatRequest({
-    message: 'Explain this',
+    message: SAMPLE.customInstruction,
     intent: 'selection_explain'
 });
 assert.equal(invalidSelection.ok, false);
 
 const validSelection = chatTest.normalizeChatRequest({
-    message: 'Explain this',
+    message: SAMPLE.customInstruction,
     intent: 'selection_explain',
     grounding: {
-        selectedText: 'const value = 1;',
-        sourceAnswer: 'Example: const value = 1;',
-        originalRequest: 'Show a JavaScript example.'
+        selectedText: SAMPLE.selectionText,
+        sourceAnswer: SAMPLE.selectionText,
+        originalRequest: SAMPLE.chatMessage
     },
     preferences: { responseStyle: 'witty' }
 });
 assert.equal(validSelection.ok, true);
 assert.equal(validSelection.value.preferences.responseStyle, 'witty');
 const customPromptRequest = chatTest.normalizeChatRequest({
-    message: 'Explain gravity',
+    message: SAMPLE.chatMessage,
     preferences: {
-        customSystemPrompt: 'Reply like ChatGPT. Be concise and do not add generic endings.'
+        customSystemPrompt: SAMPLE.customPrompt
     }
 });
 assert.equal(customPromptRequest.ok, true);
-assert.match(customPromptRequest.value.preferences.customSystemPrompt, /Reply like ChatGPT/);
+assert.equal(customPromptRequest.value.preferences.customSystemPrompt, SAMPLE.customPrompt);
 assert.match(
     chatTest.buildServerSystemPrompt(customPromptRequest.value.preferences),
     /custom reply instructions as tone and formatting preferences only/i
@@ -60,7 +73,7 @@ assert.deepEqual(
     ['balanced', 'witty', 'chatty', 'supportive', 'debate']
 );
 assert.equal(chatTest.normalizeResponseStyle('unknown'), 'balanced');
-assert.ok(chatTest.getQualityRiskReasons('That answer is wrong, verify it', 'The date is 2020.', 'chat').length > 0);
+assert.ok(chatTest.getQualityRiskReasons(SAMPLE.challengedAnswer, SAMPLE.challengedResponse, 'chat').length > 0);
 
 const wrongMethod = await callHandler(currentFactsHandler, {
     ...request('/api/current-facts', {}),
@@ -70,24 +83,24 @@ const wrongMethod = await callHandler(currentFactsHandler, {
 assert.equal(wrongMethod.statusCode, 405);
 assert.equal(wrongMethod.body.error.code, 'method_not_allowed');
 
-const disabledFacts = await callHandler(currentFactsHandler, request('/api/current-facts', { query: 'latest update' }));
+const disabledFacts = await callHandler(currentFactsHandler, request('/api/current-facts', { query: SAMPLE.currentQuery }));
 assert.equal(disabledFacts.statusCode, 503);
 assert.equal(disabledFacts.body.error.code, 'feature_disabled');
 
-const disabledSearch = await callHandler(searchHandler, request('/api/search', { query: 'latest update' }));
+const disabledSearch = await callHandler(searchHandler, request('/api/search', { query: SAMPLE.currentQuery }));
 assert.equal(disabledSearch.statusCode, 503);
 assert.equal(disabledSearch.body.error.code, 'feature_disabled');
 
 const disabledMarkets = await callHandler(marketsHandler, request('/api/markets', {
     mode: 'markets',
-    query: 'latest movers'
+    query: SAMPLE.marketQuery
 }));
 assert.equal(disabledMarkets.statusCode, 503);
 assert.equal(disabledMarkets.body.error.code, 'feature_disabled');
 
 const budgetPlan = await callHandler(marketsHandler, request('/api/markets', {
     mode: 'budget_plan',
-    query: 'Plan a 3 day trip to Munnar under INR 12000'
+    query: SAMPLE.budgetQuery
 }));
 assert.equal(budgetPlan.statusCode, 200);
 assert.equal(budgetPlan.body.success, true);
@@ -96,7 +109,7 @@ assert.equal(budgetPlan.body.plan.currency, 'INR');
 const invalidVisionMime = await callHandler(visionHandler, request('/api/vision', {
     task: 'general_vision',
     mimeType: 'text/plain',
-    imageBase64: 'eA=='
+    imageBase64: SAMPLE.imageBase64
 }));
 assert.equal(invalidVisionMime.statusCode, 415);
 assert.equal(invalidVisionMime.body.error.code, 'unsupported_media_type');
