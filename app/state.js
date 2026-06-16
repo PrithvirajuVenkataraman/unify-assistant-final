@@ -9,13 +9,14 @@ export function createApplicationState(initial = {}) {
         preferences: {
             responseLength: 'normal',
             responseFormat: 'paragraph',
-            responseStyle: 'balanced'
+            responseStyle: 'balanced',
+            customSystemPrompt: ''
         },
         ...initial
     };
 
     return {
-        get snapshot() { 
+        get snapshot() {
             return structuredClone(state);
         },
         setActiveFeature(feature) {
