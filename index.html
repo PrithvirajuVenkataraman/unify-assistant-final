@@ -3589,6 +3589,9 @@ function postProcessAssistantResponse(rawText, userMessage = '') {
     text = text
         .replace(/\s*(would you like to know more about[^?]*\?)\s*$/i, '')
         .replace(/\s*(is there (?:anything|something) else i can help you with\??)\s*$/i, '')
+        .replace(/\s*(?:this is the answer[.!]?\s*)?(?:i(?:'| a)m|i am)\s+(?:going to|gonna|about to)\s+(?:end|stop)\s+(?:it|this|here)(?:\s+here)?[.!]?\s*$/i, '')
+        .replace(/\s*i(?:'| wi)ll\s+stop\s+here(?:\s+because[^.?!]*)?[.!]?\s*$/i, '')
+        .replace(/\s*(?:so,?\s*)?this is (?:the|my) (?:final )?answer[.!]?\s*$/i, '')
         .trim();
 
     // Keep tense accurate for historical "When did ... release?" questions.
@@ -3623,9 +3626,7 @@ function ensureCompleteAssistantResponse(text) {
     const hangingClause = /(?:[,;:]|\.\.\.|[\-â€“â€”(])$/.test(lastLine) ||
         /\b(and|or|but|because|so|with|to|for|from|the|a|an|in|on|at|as|by|of|if|then|while|where|when|which|who|that|this|is|are|was|were|will|would|could|should|can|do|does|did|not)$/i.test(lastLine);
 
-    if (hangingClause || countAssistantWords(visible) >= 12) {
-        return `${out}\n\nI'll stop here because the response appears to have been cut off.`;
-    }
+    if (hangingClause || countAssistantWords(visible) >= 12) return out;
 
     return `${out}.`;
 }
@@ -3696,7 +3697,8 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
                     userName,
                     responseLength: responseMode,
                     responseFormat: formatMode,
-                    responseStyle
+                    responseStyle,
+                    customSystemPrompt
                 },
                 intent: requestOptions?.intent || 'chat',
                 grounding: requestOptions?.grounding || null
@@ -3881,6 +3883,7 @@ async function handleNameCorrection(text) {
         let responseStyle = 'balanced';
         let responseLength = 'normal';
         let responseFormat = 'paragraph';
+        let customSystemPrompt = '';
         let newsVerificationMode = 'normal';
         let persistMemoryToDevice = true;
         let medicalMode = false;
@@ -4125,108 +4128,66 @@ let showRoutingDebugBadge = false;
 
             modal.innerHTML = `
                 <div class="help-modal-enhanced max-w-2xl w-full">
-                    <div class="help-modal-header bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm p-6 border-b border-gray-200/50 dark:border-gray-700/50 flex justify-between items-center gap-4">
-                        <div class="flex min-w-0 items-center gap-3">
-                            <div class="p-2 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-xl">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                                </svg>
-                            </div>
-                            <h2 id="help-modal-title" class="text-2xl font-bold text-gray-900 dark:text-white">Help & Options</h2>
-                        </div>
-                        <button onclick="closeHelpModal()" class="help-modal-close-btn p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-all" aria-label="Close Help & Options">
+                    <div class="help-modal-header p-5 flex justify-between items-center gap-4">
+                        <h2 id="help-modal-title" class="text-xl font-bold">Help & Options</h2>
+                        <button onclick="closeHelpModal()" class="help-modal-close-btn" aria-label="Close Help & Options">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="18" y1="6" x2="6" y2="18"></line>
                                 <line x1="6" y1="6" x2="18" y2="18"></line>
                             </svg>
                         </button>
                     </div>
-                    
-                    <div class="help-modal-body p-6 space-y-6 custom-scrollbar">
-                        <section>
-                            <h3 class="text-lg font-bold text-purple-600 dark:text-purple-400 mb-3">Settings</h3>
-                            <div class="space-y-4">
-                                <div class="help-settings-card">
-                                    <div class="help-section-heading">
-                                        <div>
-                                            <p class="font-semibold text-gray-900 dark:text-white">How JARVIS replies</p>
-                                            <p class="text-xs text-gray-500 dark:text-gray-400">Choose a default style. Accuracy and safety always take priority.</p>
-                                        </div>
-                                    </div>
-                                    <div class="response-style-grid" role="group" aria-label="JARVIS response style">
-                                        ${[
-                                            ['balanced', 'Balanced', 'Clear, practical, natural, and concise.'],
-                                            ['witty', 'Witty', 'Light intelligent humor when it fits.'],
-                                            ['chatty', 'Chatty', 'Warm, conversational, and more detailed.'],
-                                            ['supportive', 'Supportive', 'Empathetic, encouraging, and concrete.'],
-                                            ['debate', 'Debate', 'Respectfully tests assumptions and alternatives.']
-                                        ].map(([value, label, description]) => `
-                                            <button type="button"
-                                                class="response-style-card"
-                                                data-mode-group="response-style"
-                                                data-mode-value="${value}"
-                                                aria-pressed="${responseStyle === value ? 'true' : 'false'}"
-                                                onclick="setResponseStyle('${value}')">
-                                                <span class="response-style-title">${label}</span>
-                                                <span class="response-style-description">${description}</span>
-                                            </button>
-                                        `).join('')}
-                                    </div>
+
+                    <div class="help-modal-body p-5 space-y-4 custom-scrollbar">
+                        <section class="help-settings-card">
+                            <div class="help-section-heading">
+                                <div>
+                                    <h3 class="font-bold">Custom instructions</h3>
+                                    <p class="text-xs">Tell JARVIS how to reply. Accuracy and safety still come first.</p>
                                 </div>
-                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                                    <label for="speech-language-select" class="font-semibold text-gray-900 dark:text-white">Voice input language</label>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Choose the language you speak for more accurate transcription. JARVIS replies remain text-only.</p>
-                                    <select id="speech-language-select" class="w-full rounded-lg border px-3 py-2 text-sm" onchange="setVoiceInputLanguage(this.value)">
-                                        <option value="en-US">English (US)</option>
-                                        <option value="en-IN">English (India)</option>
-                                        <option value="hi-IN">Hindi</option>
-                                        <option value="ta-IN">Tamil</option>
-                                        <option value="te-IN">Telugu</option>
-                                        <option value="kn-IN">Kannada</option>
-                                        <option value="ml-IN">Malayalam</option>
-                                    </select>
-                                </div>
-                                <div class="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                                    <p class="font-semibold text-gray-900 dark:text-white mb-2">Memory</p>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Manage saved memory and this account's chat history.</p>
-                                    <label class="memory-persist-row flex items-center justify-between gap-3 mb-3 p-2 rounded-lg border">
-                                        <span class="memory-persist-label text-xs font-medium">Persist memory on this device</span>
-                                        <input type="checkbox" id="persist-memory-toggle" class="h-4 w-4 accent-purple-600" ${persistMemoryToDevice ? 'checked' : ''} onchange="toggleMemoryPersistence(this.checked)">
-                                    </label>
-                                    <div class="flex flex-wrap gap-2">
-                                        <button
-                                            onclick="clearSavedMemoryStore()"
-                                            class="memory-action-btn px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-xs font-semibold transition-all"
-                                            title="Clear saved memory">
-                                            Clear Memory
-                                        </button>
-                                        <button
-                                            onclick="clearConversationHistoryData()"
-                                            class="memory-action-btn px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-xs font-semibold transition-all"
-                                            title="Clear chat history">
-                                            Clear Chat History
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="help-settings-card">
-                                    <p class="font-semibold text-gray-900 dark:text-white">Privacy and answer quality</p>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">Chat history and preferences can be stored on this device. Risk-based self-review can reduce mistakes, but it is not live external verification and cannot guarantee correctness.</p>
-                                </div>
-                                <button
-                                    onclick="openFeatureRequest()"
-                                    class="w-full h-11 px-4 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 whitespace-nowrap transition-all hover:scale-[1.02] shadow-md hover:shadow-lg"
-                                    title="Request a Feature">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                        <path d="M12 20h9"></path>
-                                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                                    </svg>
-                                    Request Feature
-                                </button>
+                                <button type="button" class="memory-action-btn" onclick="resetCustomSystemPrompt()">Reset</button>
+                            </div>
+                            <textarea
+                                id="custom-system-prompt-input"
+                                class="custom-system-prompt-input"
+                                rows="5"
+                                maxlength="1200"
+                                placeholder="Example: Reply like ChatGPT. Be concise, structured, direct, and avoid unnecessary endings."
+                                oninput="setCustomSystemPrompt(this.value, false)"
+                                onchange="setCustomSystemPrompt(this.value, true)">${escapeHtml(customSystemPrompt)}</textarea>
+                        </section>
+
+                        <section class="help-settings-card">
+                            <label for="speech-language-select" class="font-bold">Voice input</label>
+                            <p class="text-xs mb-2">Choose the language you speak for transcription. Replies stay text-only.</p>
+                            <select id="speech-language-select" class="help-select-control" onchange="setVoiceInputLanguage(this.value)">
+                                <option value="en-US">English (US)</option>
+                                <option value="en-IN">English (India)</option>
+                                <option value="hi-IN">Hindi</option>
+                                <option value="ta-IN">Tamil</option>
+                                <option value="te-IN">Telugu</option>
+                                <option value="kn-IN">Kannada</option>
+                                <option value="ml-IN">Malayalam</option>
+                            </select>
+                        </section>
+
+                        <section class="help-settings-card">
+                            <p class="font-bold mb-2">Memory</p>
+                            <p class="text-xs mb-3">Manage saved memory and chat history on this device.</p>
+                            <label class="memory-persist-row flex items-center justify-between gap-3 mb-3">
+                                <span class="memory-persist-label text-xs font-medium">Persist memory on this device</span>
+                                <input type="checkbox" id="persist-memory-toggle" class="h-4 w-4" ${persistMemoryToDevice ? 'checked' : ''} onchange="toggleMemoryPersistence(this.checked)">
+                            </label>
+                            <div class="flex flex-wrap gap-2">
+                                <button onclick="clearSavedMemoryStore()" class="memory-action-btn" title="Clear saved memory">Clear Memory</button>
+                                <button onclick="clearConversationHistoryData()" class="memory-action-btn" title="Clear chat history">Clear Chat History</button>
                             </div>
                         </section>
 
+                        <section class="help-settings-card">
+                            <p class="font-bold">Privacy and answer quality</p>
+                            <p class="text-xs">The assistant reviews every generated answer before showing it. Live search remains disabled, so real-time facts are not externally verified.</p>
+                        </section>
                     </div>
                 </div>
             `;
@@ -4314,6 +4275,7 @@ let showRoutingDebugBadge = false;
                     responseStyle,
                     responseLength,
                     responseFormat,
+                    customSystemPrompt,
                     newsVerificationMode,
                     medicalMode
                 }));
@@ -4574,12 +4536,17 @@ let showRoutingDebugBadge = false;
             updateModeButtonGroup('response-length', responseLength);
             updateModeButtonGroup('response-format', responseFormat);
             updateModeButtonGroup('medical-mode', medicalMode ? 'on' : 'off');
+            const customInput = document.getElementById('custom-system-prompt-input');
+            if (customInput && customInput.value !== customSystemPrompt) {
+                customInput.value = customSystemPrompt;
+            }
         }
 
         function loadAssistantModes() {
             responseStyle = 'balanced';
             responseLength = 'normal';
             responseFormat = 'paragraph';
+            customSystemPrompt = '';
             newsVerificationMode = 'normal';
             medicalMode = false;
             supportConversationMode = false;
@@ -4592,6 +4559,7 @@ let showRoutingDebugBadge = false;
                         : (['balanced', 'supportive', 'debate'].includes(parsed.supportModeLock) ? parsed.supportModeLock : 'balanced');
                     responseLength = parsed.responseLength || 'normal';
                     responseFormat = ['paragraph', 'bullet', 'steps'].includes(parsed.responseFormat) ? parsed.responseFormat : 'paragraph';
+                    customSystemPrompt = String(parsed.customSystemPrompt || '').trim().slice(0, 1200);
                     newsVerificationMode = ['normal', 'strict'].includes(parsed.newsVerificationMode) ? parsed.newsVerificationMode : 'normal';
                     medicalMode = !!parsed.medicalMode;
                 }
@@ -4599,18 +4567,21 @@ let showRoutingDebugBadge = false;
             window.responseStyle = responseStyle;
             window.responseLength = responseLength;
             window.responseFormat = responseFormat;
+            window.customSystemPrompt = customSystemPrompt;
             window.learningMode = 'standard';
             window.newsVerificationMode = newsVerificationMode;
             window.medicalMode = medicalMode;
             window.JarvisConversation?.setPreferences({
                 responseLength,
                 responseFormat,
-                responseStyle
+                responseStyle,
+                customSystemPrompt
             });
             window.JarvisState?.setPreferences({
                 responseLength,
                 responseFormat,
-                responseStyle
+                responseStyle,
+                customSystemPrompt
             });
             updateAssistantModeUI();
         }
@@ -4626,6 +4597,26 @@ let showRoutingDebugBadge = false;
                 const label = responseStyle.charAt(0).toUpperCase() + responseStyle.slice(1);
                 showTemporaryMessage(`Response style set to ${label}.`);
             }
+        }
+
+        function setCustomSystemPrompt(value, announce = false) {
+            customSystemPrompt = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
+            window.customSystemPrompt = customSystemPrompt;
+            window.JarvisConversation?.setPreferences({ customSystemPrompt });
+            window.JarvisState?.setPreferences({ customSystemPrompt });
+            saveAssistantModes();
+            if (announce) showTemporaryMessage(customSystemPrompt ? 'Custom instructions saved.' : 'Custom instructions cleared.');
+        }
+
+        function resetCustomSystemPrompt() {
+            customSystemPrompt = '';
+            window.customSystemPrompt = '';
+            const input = document.getElementById('custom-system-prompt-input');
+            if (input) input.value = '';
+            window.JarvisConversation?.setPreferences({ customSystemPrompt: '' });
+            window.JarvisState?.setPreferences({ customSystemPrompt: '' });
+            saveAssistantModes();
+            showTemporaryMessage('Custom instructions reset.');
         }
 
         async function setResponseLength(mode) {
@@ -15687,6 +15678,16 @@ function detectInputLanguageHint(text) {
         async function processCommand(text) {
             syncConversationPendingState();
             const contextResolution = window.JarvisConversation?.resolve({ message: text }) || null;
+            const activeTurnForResolution = getConversationTurn(activeResponseRenderContext?.turnId);
+            if (activeTurnForResolution && contextResolution) {
+                activeTurnForResolution.sourceContext = {
+                    ...(activeTurnForResolution.sourceContext || {}),
+                    originalUserText: String(contextResolution.originalMessage || text || ''),
+                    resolvedUserText: String(contextResolution.resolvedMessage || text || ''),
+                    contextDecisionReason: String(contextResolution.decisionReason || ''),
+                    contextConfidence: Number(contextResolution.confidence) || 0
+                };
+            }
             if (contextResolution?.cancelledPendingState) {
                 clearSupersededConversationState();
             }
@@ -18952,33 +18953,12 @@ function showThinkingIndicator(message = 'Thinking') {
         row.id = 'chat-thinking-indicator';
         row.className = 'chat-row flex justify-start fade-in';
         row.innerHTML = `
-            <div class="chat-bubble-assistant assistant-thinking-bubble inline-flex items-center gap-2.5">
+            <div class="chat-bubble-assistant assistant-thinking-bubble" role="status" aria-live="polite">
                 <span class="assistant-thinking-spinner" aria-hidden="true"></span>
-                <span id="chat-thinking-phase" class="assistant-thinking-phase-pill">Reasoning</span>
-                <span id="chat-thinking-text" class="assistant-thinking-text text-xs font-semibold"></span>
+                <span id="chat-thinking-text" class="sr-only">Generating answer</span>
             </div>
         `;
         chatContainer.appendChild(row);
-    }
-
-    const cleanedMessage = String(message || 'Thinking')
-        .replace(/^\s*\[[^\]]+\]\s*/i, '')
-        .trim() || 'Thinking';
-    const text = document.getElementById('chat-thinking-text');
-    if (text) text.textContent = cleanedMessage;
-    const phase = resolveThinkingPhase(cleanedMessage);
-    const phaseEl = document.getElementById('chat-thinking-phase');
-    if (phaseEl) {
-        phaseEl.textContent = phase.label;
-        phaseEl.dataset.phase = phase.key;
-    }
-    const bubble = row.querySelector('.assistant-thinking-bubble');
-    if (bubble) {
-        const isSearching = phase.key === 'searching';
-        const textEl = document.getElementById('chat-thinking-text');
-        if (textEl) textEl.style.display = isSearching ? 'none' : '';
-        if (phaseEl) phaseEl.style.display = isSearching ? 'none' : '';
-        bubble.classList.toggle('assistant-thinking-minimal', isSearching);
     }
     maybeAutoScroll(chatContainer);
 }
@@ -19319,6 +19299,7 @@ function captureVisionFrame() {
     if (!isContinuousVisionActive) return null;
     const videoEl = document.getElementById('continuous-vision-video');
     const canvas = document.getElementById('continuous-vision-canvas');
+    if (!videoEl || !canvas || (videoEl.readyState || 0) < 2 || !(videoEl.videoWidth > 0) || !(videoEl.videoHeight > 0)) return null;
     const ctx = canvas.getContext('2d', { alpha: false });
     const sourceW = videoEl.videoWidth || 1280;
     const sourceH = videoEl.videoHeight || 720;
@@ -19333,16 +19314,52 @@ function captureVisionFrame() {
     if (canvas.width === 0 || canvas.height === 0) return null;
     const captureZoom = continuousVisionZoomState.hardware ? 1 : Number(continuousVisionZoomState.value || 1);
     drawVideoFrameWithRotation(ctx, videoEl, canvas.width, canvas.height, normalizedRotation, captureZoom);
+    if (isCanvasFrameBlank(ctx, canvas.width, canvas.height)) return null;
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
     return dataUrl.split(',')[1];
 }
 
-async function handleContinuousVisionQuery(text) {
+async function waitForContinuousVisionReady(timeoutMs = 1600) {
+    const startedAt = Date.now();
     const videoEl = document.getElementById('continuous-vision-video');
-    if (videoEl && (videoEl.videoWidth || 0) === 0) {
-        await new Promise(resolve => setTimeout(resolve, 350));
+    while (Date.now() - startedAt < timeoutMs) {
+        if (videoEl && (videoEl.readyState || 0) >= 2 && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+            return true;
+        }
+        await new Promise(resolve => setTimeout(resolve, 80));
     }
-    const base64 = captureVisionFrame();
+    return false;
+}
+
+function isCanvasFrameBlank(ctx, width, height) {
+    if (!ctx || width <= 0 || height <= 0) return true;
+    const sampleW = Math.min(32, width);
+    const sampleH = Math.min(32, height);
+    let data;
+    try {
+        data = ctx.getImageData(Math.floor((width - sampleW) / 2), Math.floor((height - sampleH) / 2), sampleW, sampleH).data;
+    } catch (_) {
+        return false;
+    }
+    let total = 0;
+    let variance = 0;
+    const pixels = data.length / 4;
+    for (let i = 0; i < data.length; i += 4) {
+        const lum = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        total += lum;
+        variance += Math.abs(lum - 8);
+    }
+    const average = total / Math.max(1, pixels);
+    return average < 3 || (average < 8 && variance / Math.max(1, pixels) < 4);
+}
+
+async function handleContinuousVisionQuery(text) {
+    await waitForContinuousVisionReady();
+    let base64 = captureVisionFrame();
+    if (!base64) {
+        await waitForContinuousVisionReady(900);
+        base64 = captureVisionFrame();
+    }
     if (!base64) {
         const msg = 'I cannot see anything. Make sure the camera is active and has permissions.';
         addChatMessage(msg, false);
@@ -19549,6 +19566,9 @@ function isContinuousVisionQuestion(text) {
     }
 
     // Fallback for short camera-context prompts only while continuous vision is active.
+    if (isContinuousVisionActive && /\b(what is this|what's this|what is it|what's it|read it|solve this|scan this|translate this|what am i holding|what is in my hand|what do i have)\b/.test(t)) {
+        return true;
+    }
     if (isContinuousVisionActive && /\b(what|can you|please|tell me)\b/.test(t) && /\b(see|read|look(?:ing)? at|describe|analy[sz]e|front|camera|image|screen|text)\b/.test(t)) {
         return true;
     }
