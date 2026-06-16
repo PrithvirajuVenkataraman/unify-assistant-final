@@ -5,9 +5,15 @@ const ERROR_MESSAGES = {
     network: 'Speech recognition could not reach the recognition service. Language support depends on your browser and device; try English or another language.', 
     'no-speech': 'No speech was detected. If this repeats, try English or another browser-supported language.' 
 }; 
-const enqueueMicrotask = globalThis.queueMicrotask || (callback => Promise.resolve().then(callback));
+const enqueueMicrotask = globalThis.queueMicrotask || (callback => Promise.resolve().then(callback)); 
+const TEXT_ONLY_LANGUAGE_NOTICE = 'Non-English languages are supported by text translation only. Voice input uses English transcription.';
 
-export function createSpeechInputController(options = {}) {
+function normalizeVoiceInputLanguage(language = '') {
+    const value = String(language || '').trim();
+    return value === 'en-IN' ? 'en-IN' : 'en-US';
+}
+
+export function createSpeechInputController(options = {}) { 
     const Recognition = options.Recognition;
     const callbacks = {
         onInterim: options.onInterim || (() => {}),
@@ -26,7 +32,7 @@ export function createSpeechInputController(options = {}) {
     let restartRequested = false;
     let restartQueued = false;
     let currentInterim = '';
-    let language = options.language || 'en-US';
+    let language = normalizeVoiceInputLanguage(options.language || 'en-US'); 
     const submittedResultIds = new Set();
     const recentConverseSubmissions = new Map();
 
@@ -267,10 +273,10 @@ export function createSpeechInputController(options = {}) {
         emitState();
     }
 
-    function setLanguage(nextLanguage) {
-        const normalized = String(nextLanguage || '').trim();
-        if (!normalized) return language;
-        language = normalized;
+    function setLanguage(nextLanguage) { 
+        const normalized = normalizeVoiceInputLanguage(nextLanguage || ''); 
+        if (!normalized) return language; 
+        language = normalized; 
         clearInterim();
         if (recognition) {
             stopRecognition('language_change');
@@ -388,13 +394,17 @@ export function installSpeechInputUI(options = {}) {
     globalThis.JarvisSpeechInput = controller;
     globalThis.JarvisSpeechInput.toggleConverse = globalThis.toggleConverseMode;
     globalThis.syncVttUiState = () => controller.getState();
-    globalThis.setVoiceInputLanguage = language => {
-        const selected = controller.setLanguage(language);
-        try {
-            globalThis.localStorage?.setItem?.('jarvis_voice_input_language', selected);
-        } catch {}
-        return selected;
-    };
+    globalThis.setVoiceInputLanguage = language => { 
+        const requested = String(language || '').trim();
+        const selected = controller.setLanguage(language); 
+        try { 
+            globalThis.localStorage?.setItem?.('jarvis_voice_input_language', selected); 
+        } catch {} 
+        if (requested && requested !== selected) {
+            setStatusText(TEXT_ONLY_LANGUAGE_NOTICE);
+        }
+        return selected; 
+    }; 
     vttButton.addEventListener('click', globalThis.toggleVoiceToText);
     globalThis.addEventListener('jarvis:assistant-processing', event => {
         controller.setProcessing(Boolean(event.detail?.active));
