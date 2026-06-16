@@ -3,10 +3,12 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import currentFactsHandler, { __test as currentFacts } from '../api/current-facts.js';
 
-const SOURCE = Object.freeze({
-    science: fs.readFileSync(new URL('../science-format.js', import.meta.url), 'utf8'),
-    appHtml: fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8')
-});
+const SOURCE = Object.freeze({ 
+    science: fs.readFileSync(new URL('../science-format.js', import.meta.url), 'utf8'), 
+    appHtml: fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
+    visionApi: fs.readFileSync(new URL('../api/vision.js', import.meta.url), 'utf8'),
+    speechInput: fs.readFileSync(new URL('../app/speech-input.js', import.meta.url), 'utf8') 
+}); 
 
 const SAMPLE = Object.freeze({
     sciA: '6.022e23',
@@ -78,10 +80,36 @@ const FEATURE_CONTRACTS = Object.freeze({
             /I'll stop here because the response appears to have been cut off/
         ]
     },
-    visionMode: {
+    visionMode: { 
+        required: [ 
+            /waitForContinuousVisionReady/, 
+            /what am i holding/,
+            /function isWebsiteUiVisionIntent/,
+            /visible branding, logo, page title, header, or app chrome/,
+            /extractVisibleDomainFromVisionDetails/,
+            /Do not guess or use web search/
+        ] 
+    }, 
+    helpAndVoice: {
         required: [
-            /waitForContinuousVisionReady/,
-            /what am i holding/
+            /Availability depends on your browser and device speech recognizer/
+        ],
+        forbidden: [
+            /Privacy and answer quality/,
+            /real-time facts are not externally verified/
+        ]
+    },
+    ocrCamera: {
+        required: [
+            /class="ocr-camera-text-action"/,
+            /class="ocr-camera-text-action ocr-camera-primary-action"/,
+            /class="camera-ocr-text-result"/,
+            /const framesToAttempt = isMathOcrTask \? variantFrames\.slice\(0, 1\) : variantFrames/
+        ],
+        forbidden: [
+            /onclick="closeCameraMode\(\)" class="px-6 py-3 rounded-xl bg-white/,
+            /onclick="switchCameraLens\(\)" class="px-4 py-3 rounded-xl bg-slate-200/,
+            /id="capture-btn" onclick="captureAndProcessOCR\(\)" class="flex-1 px-6 py-3 rounded-xl bg-emerald-600/
         ]
     },
     interruptionAndFeedback: {
@@ -160,10 +188,14 @@ assert.equal(disabledApi.body.resolved, false);
 assert.match(SOURCE.appHtml, /let responseStyle = 'balanced'/);
 assert.match(SOURCE.appHtml, /\['balanced', 'witty', 'chatty', 'supportive', 'debate'\]/);
 assert.match(SOURCE.appHtml, /preserveTranscript \|\| isLikelyCodeInput/);
-assert.match(SOURCE.appHtml, /app\/bootstrap\.js/);
-assertContracts(SOURCE.appHtml, FEATURE_CONTRACTS);
+assert.match(SOURCE.appHtml, /app\/bootstrap\.js/); 
+assertContracts(SOURCE.appHtml, FEATURE_CONTRACTS); 
+assert.match(SOURCE.visionApi, /function shouldEscalateMathOcrSolve/);
+assert.match(SOURCE.visionApi, /pipeline:\s*'fast-math-ocr-solve'/);
+assert.match(SOURCE.visionApi, /pipeline:\s*'planner-critic-solver'/);
+assert.match(SOURCE.speechInput, /try English or another language/);
 
-console.log('deterministic-checks-ok');
+console.log('deterministic-checks-ok'); 
 
 async function callJsonHandler(handler, req) {
     const res = {
