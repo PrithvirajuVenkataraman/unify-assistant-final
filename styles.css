@@ -718,6 +718,32 @@ body.dark .composer-action-item:hover {
     text-align: center;
 }
 
+.speech-listening-status {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    min-width: 72px;
+}
+
+.speech-listening-dots {
+    display: inline-flex;
+    width: 1.1em;
+    justify-content: flex-start;
+}
+
+.speech-listening-dots span {
+    opacity: 0;
+    animation: speech-dot-step 1.05s steps(1, end) infinite;
+}
+
+.speech-listening-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.speech-listening-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
 @keyframes jarvis-input-pulse {
     0%, 100% {
         box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.28) !important;
@@ -725,6 +751,11 @@ body.dark .composer-action-item:hover {
     50% {
         box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.08) !important;
     }
+}
+
+@keyframes speech-dot-step {
+    0%, 20% { opacity: 0; }
+    25%, 100% { opacity: 1; }
 }
 
 .message-action-btn {
@@ -843,6 +874,11 @@ body.dark .composer-action-item:hover {
 @media (prefers-reduced-motion: reduce) {
     .speech-input-btn.is-listening {
         animation: none !important;
+    }
+
+    .speech-listening-dots span {
+        animation: none !important;
+        opacity: 1;
     }
 }
 
