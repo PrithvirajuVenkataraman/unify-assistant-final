@@ -1,6 +1,10 @@
 export const config = { maxDuration: 60 };
 import { applyApiSecurity } from './security.js';
 
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const MAX_IMAGE_BASE64_CHARS = 8 * 1024 * 1024;
+const PROVIDER_TIMEOUT_MS = 20_000;
+
 export default async function handler(req, res) {
     const guard = applyApiSecurity(req, res, {
         methods: ['POST'],
@@ -13,30 +17,45 @@ export default async function handler(req, res) {
     try {
         const { prompt = '', task = 'general_vision', mimeType = 'image/jpeg', imageBase64 = '' } = req.body || {};
         if (String(prompt).length > 2000 || String(task).length > 120) {
-            return res.status(413).json({ success: false, error: 'Prompt is too long' });
+            return sendVisionError(res, 413, 'payload_too_large', 'Prompt or task is too long.');
         }
         if (!imageBase64 || typeof imageBase64 !== 'string') {
-            return res.status(400).json({ success: false, error: 'imageBase64 is required' });
+            return sendVisionError(res, 400, 'invalid_request', 'imageBase64 is required.');
         }
-        if (!/^image\//i.test(String(mimeType || ''))) {
-            return res.status(400).json({ success: false, error: 'Unsupported mimeType' });
+        const normalizedMimeType = String(mimeType || '').trim().toLowerCase();
+        if (!ALLOWED_IMAGE_TYPES.has(normalizedMimeType)) {
+            return sendVisionError(res, 415, 'unsupported_media_type', 'Supported image types are JPEG, PNG, WebP, and GIF.');
+        }
+        if (imageBase64.length > MAX_IMAGE_BASE64_CHARS || !/^[A-Za-z0-9+/]+={0,2}$/.test(imageBase64)) {
+            return sendVisionError(res, 413, 'invalid_image', 'Image data is malformed or too large.');
         }
 
         const providers = getVisionProviders();
         if (!providers.groqApiKey && !providers.geminiApiKey) {
-            return res.status(500).json({ success: false, error: 'Vision API key not configured' });
+            return sendVisionError(res, 503, 'provider_unavailable', 'Vision provider is not configured.');
         }
 
-        if (task === 'math_ocr_solve') {
-            const result = await runMathOcrSolvePipeline({
-                providers,
-                mimeType,
-                imageBase64,
-                userPrompt: prompt
-            });
-            return res.status(200).json({
-                success: true,
-                task,
+        if (task === 'math_ocr_solve') { 
+            let fastResult = null;
+            try {
+                fastResult = await runFastMathOcrSolvePipeline({ 
+                    providers, 
+                    mimeType: normalizedMimeType, 
+                    imageBase64, 
+                    userPrompt: prompt 
+                });
+            } catch (_) {}
+            const result = shouldEscalateMathOcrSolve(fastResult, prompt)
+                ? await runMathOcrSolvePipeline({ 
+                    providers, 
+                    mimeType: normalizedMimeType, 
+                    imageBase64, 
+                    userPrompt: prompt 
+                })
+                : fastResult; 
+            return res.status(200).json({ 
+                success: true, 
+                task, 
                 response: result.response,
                 details: result.details
             });
@@ -44,7 +63,7 @@ export default async function handler(req, res) {
         if (task === 'translate_to_english') {
             const result = await runTranslateToEnglishPipeline({
                 providers,
-                mimeType,
+                mimeType: normalizedMimeType,
                 imageBase64,
                 userPrompt: prompt
             });
@@ -60,11 +79,11 @@ export default async function handler(req, res) {
         const rawText = await callVisionText({
             providers,
             systemPrompt,
-            mimeType,
+            mimeType: normalizedMimeType,
             imageBase64
         });
         if (!rawText) {
-            return res.status(502).json({ success: false, error: 'Vision model returned an empty response' });
+            return sendVisionError(res, 502, 'empty_provider_response', 'Vision provider returned an empty response.');
         }
 
         const parsed = safeParseJson(rawText) || extractJsonFromText(rawText);
@@ -85,13 +104,31 @@ export default async function handler(req, res) {
         });
     } catch (error) {
         const detail = String(error?.message || '').trim();
-        return res.status(500).json({
-            success: false,
-            error: detail ? `Vision processing failed: ${detail}` : 'Vision processing failed'
-        });
+        return sendVisionError(
+            res,
+            502,
+            'provider_error',
+            detail ? `Vision processing failed: ${detail}` : 'Vision processing failed.'
+        );
     }
 }
 
+function sendVisionError(res, status, code, message) {
+    return res.status(status).json({
+        success: false,
+        error: { code, message }
+    });
+}
+
+async function fetchWithTimeout(url, init = {}) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+    try {
+        return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+        clearTimeout(timeout);
+    }
+}
 
 const GEMINI_API_VERSIONS = ['v1beta', 'v1'];
 const GEMINI_MODEL_FALLBACKS = [
@@ -158,7 +195,7 @@ async function callGroqVisionText({ apiKey, configuredModel, systemPrompt, mimeT
 
     for (const model of candidates) {
         try {
-            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            const response = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -198,7 +235,7 @@ async function callGeminiVision({ apiKey, configuredModel = '', systemPrompt, mi
     for (const apiVersion of GEMINI_API_VERSIONS) {
         for (const model of modelFallbacks) {
             try {
-                const response = await fetch(
+                const response = await fetchWithTimeout(
                     `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`,
                     {
                         method: 'POST',
@@ -287,7 +324,7 @@ async function callGroqText({ apiKey, configuredModel, systemPrompt, userPrompt,
 
     for (const model of candidates) {
         try {
-            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            const response = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -322,7 +359,7 @@ async function callGeminiText({ apiKey, configuredModel = '', systemPrompt, user
     for (const apiVersion of GEMINI_API_VERSIONS) {
         for (const model of modelFallbacks) {
             try {
-                const response = await fetch(
+                const response = await fetchWithTimeout(
                     `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`,
                     {
                         method: 'POST',
@@ -380,16 +417,91 @@ function extractJsonFromText(text) {
     return null;
 }
 
-function normalizeMathOcrText(details = {}) {
-    const fullText = String(details?.fullText || '').trim();
-    const snippets = Array.isArray(details?.textDetected)
-        ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean)
-        : [];
-    if (fullText) return fullText;
-    return snippets.join('\n').trim();
+function normalizeMathOcrText(details = {}) { 
+    const fullText = String(details?.fullText || '').trim(); 
+    const snippets = Array.isArray(details?.textDetected) 
+        ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean) 
+        : []; 
+    if (fullText) return fullText; 
+    return snippets.join('\n').trim(); 
+} 
+
+async function runFastMathOcrSolvePipeline({ providers, mimeType, imageBase64, userPrompt }) {
+    const prompt = [
+        'Read the math problem from the image and solve it in one pass.',
+        'Return strict JSON only:',
+        '{',
+        '  "problemText": "<normalized problem statement with equations>",',
+        '  "steps": ["short step 1", "short step 2"],',
+        '  "finalAnswer": "<final answer>",',
+        '  "verification": ["brief check when useful"],',
+        '  "ambiguities": ["unreadable or uncertain symbols"],',
+        '  "ocrConfidence": "high|medium|low",',
+        '  "confidence": "high|medium|low"',
+        '}',
+        'Rules:',
+        '- Preserve symbols, exponents, fractions, and equation structure.',
+        '- Keep steps concise unless the user asks for detailed/hard step-by-step solving.',
+        '- If a core number, operator, or symbol is unreadable, put it in ambiguities and set ocrConfidence to low.',
+        `User intent: ${String(userPrompt || 'Solve the problem in the image.').trim()}`
+    ].join('\n');
+
+    const rawText = await callVisionText({
+        providers,
+        systemPrompt: prompt,
+        mimeType,
+        imageBase64
+    });
+    if (!rawText) throw new Error('Fast math OCR returned empty response');
+
+    const parsed = extractJsonFromText(rawText) || safeParseJson(rawText) || {};
+    const problemText = String(parsed?.problemText || '').trim();
+    const steps = Array.isArray(parsed?.steps) ? parsed.steps.map(s => String(s || '').trim()).filter(Boolean) : [];
+    const verification = Array.isArray(parsed?.verification) ? parsed.verification.map(s => String(s || '').trim()).filter(Boolean) : [];
+    const ambiguities = Array.isArray(parsed?.ambiguities) ? parsed.ambiguities.map(s => String(s || '').trim()).filter(Boolean) : [];
+    const finalAnswer = String(parsed?.finalAnswer || '').trim();
+    const ocrConfidence = String(parsed?.ocrConfidence || '').trim().toLowerCase();
+    const confidence = String(parsed?.confidence || '').trim().toLowerCase();
+    if (!problemText || !finalAnswer) {
+        throw new Error('Fast math OCR could not read and solve the problem clearly');
+    }
+
+    const lines = [];
+    lines.push(`Problem: ${problemText}`);
+    if (ambiguities.length) lines.push(`Ambiguities: ${ambiguities.join(' | ')}`);
+    if (steps.length) {
+        lines.push('Solution:');
+        steps.forEach((step, idx) => lines.push(`${idx + 1}. ${step}`));
+    }
+    lines.push(`Final answer: ${finalAnswer}`);
+    if (verification.length) lines.push(`Verification: ${verification.join(' | ')}`);
+    lines.push(`Confidence: ${confidence || ocrConfidence || 'medium'}`);
+
+    return {
+        response: lines.join('\n\n'),
+        details: {
+            pipeline: 'fast-math-ocr-solve',
+            fullText: problemText,
+            textDetected: [problemText],
+            ocrConfidence: ocrConfidence || 'medium',
+            confidence: confidence || ocrConfidence || 'medium',
+            ambiguities,
+            solver: parsed
+        }
+    };
 }
 
-async function runMathOcrSolvePipeline({ providers, mimeType, imageBase64, userPrompt }) {
+function shouldEscalateMathOcrSolve(result, userPrompt = '') {
+    if (!result || typeof result !== 'object') return true;
+    const prompt = String(userPrompt || '').toLowerCase();
+    if (/\b(hard|difficult|advanced|detailed|full steps|step by step|prove|derivation|derive)\b/.test(prompt)) return true;
+    const details = result?.details && typeof result.details === 'object' ? result.details : {};
+    const confidence = String(details?.ocrConfidence || details?.confidence || '').toLowerCase();
+    const ambiguities = Array.isArray(details?.ambiguities) ? details.ambiguities.filter(Boolean) : [];
+    return confidence === 'low' || ambiguities.length > 0;
+}
+
+async function runMathOcrSolvePipeline({ providers, mimeType, imageBase64, userPrompt }) { 
     const extractionPrompt = [
         'Extract the math problem from the image.',
         'Return strict JSON only:',
@@ -521,11 +633,15 @@ async function runMathOcrSolvePipeline({ providers, mimeType, imageBase64, userP
 
     return {
         response: lines.join('\n\n'),
-        details: {
-            pipeline: 'planner-critic-solver',
-            ocr: ocrJson,
-            planner: plannerJson,
-            critic: criticJson,
+        details: { 
+            pipeline: 'planner-critic-solver', 
+            fullText: canonicalProblem,
+            textDetected: [canonicalProblem],
+            ocrConfidence: String(ocrJson?.ocrConfidence || '').trim() || (approved ? 'medium' : 'low'),
+            confidence,
+            ocr: ocrJson, 
+            planner: plannerJson, 
+            critic: criticJson, 
             solver: solverJson
         }
     };
