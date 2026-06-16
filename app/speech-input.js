@@ -299,12 +299,31 @@ export function installSpeechInputUI(options = {}) {
     const Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
     let committedText = '';
 
+    function setStatusText(message = '') {
+        if (!status) return;
+        status.classList.remove('speech-listening-status');
+        status.textContent = message;
+    }
+
+    function setListeningStatus() {
+        if (!status) return;
+        status.classList.add('speech-listening-status');
+        status.innerHTML = 'Listening<span class="speech-listening-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>';
+    }
+
     const savedLanguage = globalThis.localStorage?.getItem?.('jarvis_voice_input_language');
     const controller = createSpeechInputController({
         Recognition,
         language: savedLanguage || navigator.language || 'en-US',
-        onInterim(text) {
+        onInterim(text, state) {
             input.value = [committedText, text].filter(Boolean).join(' ').trim();
+            if (state?.mode === 'dictation' && state.listening && status) {
+                if (text) {
+                    setStatusText('Listening');
+                } else {
+                    setListeningStatus();
+                }
+            }
             options.onComposerChanged?.();
         },
         async onFinal(text, event) {
@@ -337,18 +356,20 @@ export function installSpeechInputUI(options = {}) {
                 ? (state.processing ? 'Listening for an interruption...' : 'Converse mode is listening...')
                 : (state.mode === 'dictation' && state.listening ? 'Listening...' : 'Ask anything...');
             if (status) {
-                status.textContent = !state.supported
-                    ? 'Voice input is unavailable in this browser.'
-                    : state.converseEnabled
-                        ? (state.processing ? 'JARVIS is responding. Speak to interrupt.' : 'Converse mode on. Speak naturally; replies remain text-only.')
-                        : state.listening
-                            ? 'Listening for one message...'
-                            : '';
+                if (!state.supported) {
+                    setStatusText('Voice input is unavailable in this browser.');
+                } else if (state.converseEnabled) {
+                    setStatusText(state.processing ? 'JARVIS is responding. Speak to interrupt.' : 'Converse mode on. Speak naturally; replies remain text-only.');
+                } else if (state.mode === 'dictation' && state.listening) {
+                    setListeningStatus();
+                } else {
+                    setStatusText('');
+                }
             }
             options.onStateChanged?.(state);
         },
         onError(message) {
-            if (status) status.textContent = message;
+            setStatusText(message);
             options.onError?.(message);
         }
     });
