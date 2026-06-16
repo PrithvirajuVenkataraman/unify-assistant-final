@@ -1,8 +1,8 @@
 const ERROR_MESSAGES = { 
     'not-allowed': 'Microphone permission was denied. Allow microphone access in your browser settings.', 
-    'service-not-allowed': 'Speech recognition is blocked by the browser or device policy. Language support depends on your browser and device; try English or another language.', 
+    'service-not-allowed': 'Speech recognition is blocked by the browser or device policy.', 
     'audio-capture': 'No working microphone was found.', 
-    network: 'Speech recognition could not reach the recognition service. Language support depends on your browser and device; try English or another language.', 
+    network: 'Speech recognition could not reach the recognition service.', 
     'no-speech': 'No speech was detected. If this repeats, try English or another browser-supported language.' 
 }; 
 const enqueueMicrotask = globalThis.queueMicrotask || (callback => Promise.resolve().then(callback)); 
