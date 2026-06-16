@@ -18,6 +18,14 @@ const TOPIC = Object.freeze({
     pendingBypass: `${token(5)} ${token(6)}`
 });
 
+const SAMPLE = Object.freeze({
+    usefulUser: `${token(7)} ${token(8)}`,
+    usefulAssistant: `${token(9)} ${token(10)}`,
+    failedAssistant: `${token(11)} ${token(12)}`,
+    interruptedUser: `${token(13)} ${token(14)}`,
+    interruptedAssistant: `${token(15)} ${token(16)}`
+});
+
 const PROMPT = Object.freeze({
     introduce: topic => `Tell me about ${topic}`,
     explain: topic => `Explain ${topic}`,
@@ -90,14 +98,14 @@ result = engine.resolve({ message: PROMPT.acknowledgement });
 assert.notEqual(result.decisionReason, 'clear_new_intent');
 
 const currentThread = engine.getState().activeThreadId;
-recordExchange(engine, currentThread, 'Useful turn', 'Useful response');
-engine.recordTurn({ role: 'assistant', text: 'Failed response', threadId: currentThread, error: true });
-assert.equal(engine.buildContext().some(turn => turn.text === 'Failed response'), false);
+recordExchange(engine, currentThread, SAMPLE.usefulUser, SAMPLE.usefulAssistant);
+engine.recordTurn({ role: 'assistant', text: SAMPLE.failedAssistant, threadId: currentThread, error: true });
+assert.equal(engine.buildContext().some(turn => turn.text === SAMPLE.failedAssistant), false);
 
-engine.recordTurn({ id: 'interrupted_user', turnId: 'turn_interrupted', role: 'user', text: 'Interrupted question', threadId: currentThread });
-engine.recordTurn({ id: 'interrupted_answer', turnId: 'turn_interrupted', role: 'assistant', text: 'Partial answer', threadId: currentThread });
+engine.recordTurn({ id: 'interrupted_user', turnId: 'turn_interrupted', role: 'user', text: SAMPLE.interruptedUser, threadId: currentThread });
+engine.recordTurn({ id: 'interrupted_answer', turnId: 'turn_interrupted', role: 'assistant', text: SAMPLE.interruptedAssistant, threadId: currentThread });
 assert.equal(engine.discardTurn('turn_interrupted'), 2);
-assert.equal(engine.buildContext().some(turn => /Interrupted question|Partial answer/.test(turn.text)), false);
+assert.equal(engine.buildContext().some(turn => [SAMPLE.interruptedUser, SAMPLE.interruptedAssistant].includes(turn.text)), false);
 
 const before = engine.getState();
 engine.buildContext();
