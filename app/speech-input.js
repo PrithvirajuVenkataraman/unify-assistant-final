@@ -28,6 +28,7 @@ export function createSpeechInputController(options = {}) {
     let currentInterim = '';
     let language = options.language || 'en-US';
     const submittedResultIds = new Set();
+    const recentConverseSubmissions = new Map();
 
     function getState() {
         return {
@@ -57,6 +58,20 @@ export function createSpeechInputController(options = {}) {
         if (submittedResultIds.size <= 100) return;
         const oldest = submittedResultIds.values().next().value;
         submittedResultIds.delete(oldest);
+    }
+
+    function shouldSubmitConverseTranscript(text, transcriptId) {
+        const normalized = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        if (!normalized) return false;
+        const now = Date.now();
+        for (const [key, createdAt] of recentConverseSubmissions) {
+            if (now - createdAt > 1800) recentConverseSubmissions.delete(key);
+        }
+        const key = `${normalized}:${String(transcriptId || '')}`;
+        if (recentConverseSubmissions.has(key) || recentConverseSubmissions.has(normalized)) return false;
+        recentConverseSubmissions.set(key, now);
+        recentConverseSubmissions.set(normalized, now);
+        return true;
     }
 
     function stopRecognition(reason = 'manual') {
@@ -142,6 +157,9 @@ export function createSpeechInputController(options = {}) {
             const transcriptId = finalResultIds.join('|');
 
             if (nextMode === 'converse') {
+                if (activeSession !== session || session.closed || !shouldSubmitConverseTranscript(finalText, transcriptId)) {
+                    return;
+                }
                 submissionsInFlight += 1;
                 try {
                     await callbacks.onFinal(finalText, {
