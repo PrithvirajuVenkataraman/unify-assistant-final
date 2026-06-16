@@ -43,6 +43,13 @@ class FakeRecognition {
     }
 }
 
+const SAMPLE = Object.freeze({
+    dictation: 'alpha beta',
+    converse: 'gamma delta',
+    interrupt: 'epsilon zeta',
+    stale: 'eta theta'
+});
+
 const finalEvents = [];
 const interimEvents = [];
 const states = [];
@@ -60,10 +67,10 @@ assert.equal(controller.getState().supported, true);
 assert.equal(controller.toggleDictation(), true);
 assert.equal(FakeRecognition.instances[0].lang, 'en-IN');
 assert.equal(FakeRecognition.instances[0].continuous, false);
-await FakeRecognition.instances[0].emitResult('hello jarvis', false);
-assert.equal(interimEvents.at(-1), 'hello jarvis');
-await FakeRecognition.instances[0].emitResult('hello jarvis', true);
-assert.equal(finalEvents.at(-1).text, 'hello jarvis');
+await FakeRecognition.instances[0].emitResult(SAMPLE.dictation, false);
+assert.equal(interimEvents.at(-1), SAMPLE.dictation);
+await FakeRecognition.instances[0].emitResult(SAMPLE.dictation, true);
+assert.equal(finalEvents.at(-1).text, SAMPLE.dictation);
 assert.equal(finalEvents.at(-1).autoSubmit, false);
 assert.equal(finalEvents.at(-1).mode, 'dictation');
 assert.ok(finalEvents.at(-1).transcriptId);
@@ -100,8 +107,8 @@ converseController = createSpeechInputController({
 });
 converseController.toggleConverse();
 const submittedRecognition = FakeRecognition.instances.at(-1);
-await submittedRecognition.emitResult('explain this further', true);
-assert.equal(autoSubmitted.text, 'explain this further');
+await submittedRecognition.emitResult(SAMPLE.converse, true);
+assert.equal(autoSubmitted.text, SAMPLE.converse);
 assert.equal(autoSubmitted.autoSubmit, true);
 assert.equal(autoSubmitted.mode, 'converse');
 assert.ok(autoSubmitted.sessionId);
@@ -110,10 +117,10 @@ assert.equal(autoSubmitCount, 1);
 assert.equal(converseController.getState().processing, true);
 assert.equal(converseController.getState().listening, true);
 
-await submittedRecognition.emitResult('explain this further', true);
+await submittedRecognition.emitResult(SAMPLE.converse, true);
 assert.equal(autoSubmitCount, 1, 'duplicate or late final results must not submit twice');
 
-await submittedRecognition.emitResult('interrupt with a new topic', true);
+await submittedRecognition.emitResult(SAMPLE.interrupt, true);
 assert.equal(autoSubmitCount, 2, 'a new finalized Converse result may interrupt an active response');
 assert.equal(autoSubmitted.interrupt, true);
 
@@ -133,9 +140,9 @@ converseController.setLanguage('hi-IN');
 await Promise.resolve();
 assert.equal(FakeRecognition.instances.at(-1).lang, 'hi-IN');
 assert.notEqual(FakeRecognition.instances.at(-1), activeRecognition);
-await activeRecognition.emitResult('stale old session text', true);
+await activeRecognition.emitResult(SAMPLE.stale, true);
 assert.equal(autoSubmitCount, 2, 'stale final results from an old session must not submit');
-await FakeRecognition.instances.at(-1).emitResult('interrupt with a new topic', true);
+await FakeRecognition.instances.at(-1).emitResult(SAMPLE.interrupt, true);
 assert.equal(autoSubmitCount, 2, 'rapid duplicate Converse transcripts must not submit across restarted sessions');
 
 converseController.stop({ disableConverse: true });
