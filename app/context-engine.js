@@ -1,18 +1,48 @@
-const ACKNOWLEDGEMENTS = /^(yes|yeah|yep|yup|no|nope|nah|ok|okay|sure|alright|fine|thanks|thank you|got it|cool|hmm|uh huh)$/i;
-const CANCEL_COMMANDS = /^(cancel|never mind|nevermind|stop|reset|start over|forget that|clear context)$/i;
-const FOLLOW_UP_SIGNALS = /\b(it|its|this|that|they|them|those|these|same|earlier|previous|above|more|continue|explain further|tell me more|what about|how about|then what|what next)\b/i;
-const CORRECTION_SIGNALS = /^(?:no|nah|nope|actually|wait|sorry)[,\s]+(?:i meant|that is|that was|you misunderstood)|\b(?:that is wrong|that'?s wrong|you got that wrong|not what i meant|i meant)\b/i;
-const EXPLICIT_SWITCH = /\b(change|switch|new|different|another)\s+(topic|subject)\b|\b(anyway|moving on|on another note)\b|\b(?:let'?s|lets)\s+(?:talk|discuss)\s+about\b/i;
-const EXPLICIT_RESUME = /\b(?:back to|return to|resume|continue with|earlier|previous topic|again about|regarding)\b/i;
-const SETTINGS_COMMAND = /\b(?:set|change|switch|turn|enable|disable)\s+(?:response|answer|dark|light|medical|support|news|memory|history|camera|vision|ocr|translator)\b/i;
-const FEATURE_COMMAND = /\b(?:weather|forecast|trip|itinerary|travel|translate|translator|camera|ocr|scan|vision|remember|memory|export|delete all data)\b/i;
+const INTENT_TERMS = Object.freeze({
+    acknowledgements: ['yes', 'yeah', 'yep', 'yup', 'no', 'nope', 'nah', 'ok', 'okay', 'sure', 'alright', 'fine', 'thanks', 'thank you', 'got it', 'cool', 'hmm', 'uh huh'],
+    cancelCommands: ['cancel', 'never mind', 'nevermind', 'stop', 'reset', 'start over', 'forget that', 'clear context'],
+    questionLeads: ['who', 'what', 'when', 'where', 'why', 'how', 'which'],
+    requestStarters: ['who', 'what', 'when', 'where', 'why', 'how', 'explain', 'tell', 'give', 'show', 'plan', 'create', 'write', 'compare', 'calculate', 'translate', 'remember', 'open', 'start'],
+    settingTargets: ['response', 'answer', 'dark', 'light', 'medical', 'support', 'news', 'memory', 'history', 'camera', 'vision', 'ocr', 'translator'],
+    featureTargets: ['weather', 'forecast', 'trip', 'itinerary', 'travel', 'translate', 'translator', 'camera', 'ocr', 'scan', 'vision', 'remember', 'memory', 'export', 'delete all data'],
+    followUpReferences: ['it', 'its', 'this', 'that', 'they', 'them', 'those', 'these', 'same', 'earlier', 'previous', 'above'],
+    followUpPhrases: ['more', 'continue', 'explain further', 'tell me more', 'what about', 'how about', 'then what', 'what next', 'further'],
+    correctionOpeners: ['no', 'nah', 'nope', 'actually', 'wait', 'sorry'],
+    correctionIntents: ['i meant', 'that is', 'that was', 'you misunderstood'],
+    correctionPhrases: ['that is wrong', "that's wrong", 'you got that wrong', 'not what i meant', 'i meant'],
+    switchActions: ['change', 'switch', 'new', 'different', 'another'],
+    switchTargets: ['topic', 'subject'],
+    switchPhrases: ['anyway', 'moving on', 'on another note', "let's talk about", 'lets talk about', "let's discuss about", 'lets discuss about'],
+    resumePhrases: ['back to', 'return to', 'resume', 'continue with', 'earlier', 'previous topic', 'again about', 'regarding'],
+    pronounTargets: ['it', 'its', 'this', 'that', 'this one', 'that one', 'the company', 'the person', 'the topic'],
+    entityQuestionLeads: ['who', 'what'],
+    entityDescriptionLeads: ['tell me about', 'about', 'regarding'],
+    entityPrepositions: ['in', 'to', 'for']
+});
+const ACKNOWLEDGEMENTS = exactPhrasePattern(INTENT_TERMS.acknowledgements);
+const CANCEL_COMMANDS = exactPhrasePattern(INTENT_TERMS.cancelCommands);
+const REQUEST_STARTERS = leadingWordPattern(INTENT_TERMS.requestStarters);
+const REQUEST_STARTERS_WITH_STOP = leadingWordPattern([...INTENT_TERMS.requestStarters, 'stop']);
+const QUESTION_LEADS = leadingWordPattern(INTENT_TERMS.questionLeads);
+const FOLLOW_UP_SIGNALS = containsPhrasePattern([...INTENT_TERMS.followUpReferences, ...INTENT_TERMS.followUpPhrases]);
+const CORRECTION_SIGNALS = correctionPattern();
+const EXPLICIT_SWITCH = switchPattern();
+const EXPLICIT_RESUME = containsPhrasePattern(INTENT_TERMS.resumePhrases);
+const SETTINGS_COMMAND = commandTargetPattern(['set', 'change', 'switch', 'turn', 'enable', 'disable'], INTENT_TERMS.settingTargets);
+const FEATURE_COMMAND = containsPhrasePattern(INTENT_TERMS.featureTargets);
 
-const STOP_WORDS = new Set([
+const TOKEN_FILTER_WORDS = [
     'a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'than', 'is', 'are', 'am', 'was', 'were',
     'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'can', 'could', 'would', 'will',
     'should', 'what', 'which', 'who', 'when', 'where', 'why', 'how', 'i', 'me', 'my', 'you', 'your',
     'we', 'our', 'they', 'their', 'he', 'she', 'it', 'this', 'that', 'these', 'those', 'please',
     'tell', 'show', 'give', 'explain', 'about', 'for', 'to', 'of', 'in', 'on', 'at', 'with', 'from'
+];
+const STOP_WORDS = new Set(TOKEN_FILTER_WORDS);
+const ENTITY_PATTERNS = Object.freeze([
+    new RegExp(`\\b(?:${phraseAlternation(INTENT_TERMS.entityQuestionLeads)})\\s+is\\s+([A-Za-z0-9][A-Za-z0-9 .'-]{1,70})`, 'i'),
+    new RegExp(`\\b(?:${phraseAlternation(INTENT_TERMS.entityDescriptionLeads)})\\s+([A-Za-z0-9][A-Za-z0-9 .'-]{1,70})`, 'i'),
+    new RegExp(`\\b(?:${phraseAlternation(INTENT_TERMS.entityPrepositions)})\\s+([A-Z][A-Za-z .'-]{1,50})`)
 ]);
 
 export function createConversationEngine(options = {}) {
@@ -62,7 +92,7 @@ export function classifyInput(message, pending = null, activeThread = null) {
     const isFollowUp = isCorrection || FOLLOW_UP_SIGNALS.test(lower) || (isAcknowledgement && Boolean(activeThread));
     const pendingMatch = pending ? matchesPending(originalMessage, pending) : false;
     const hasSubstantiveIntent = tokens.length >= 1 && !isAcknowledgement;
-    const startsClearRequest = /^(who|what|when|where|why|how|explain|tell|give|show|plan|create|write|compare|calculate|translate|remember|open|start)\b/i.test(originalMessage);
+    const startsClearRequest = REQUEST_STARTERS.test(originalMessage);
     const topic = deriveTopic(originalMessage);
     const topicOverlap = activeThread ? countOverlap(tokens, tokenize(activeThread.topic)) : 0;
     const clearNewIntent = !isCancel &&
@@ -238,7 +268,7 @@ function matchesPending(message, pending) {
     if (pending.expected === 'yes_no') return /^(yes|yeah|yep|sure|ok|okay|no|nope|nah)$/i.test(text);
     if (pending.expected === 'name') return /^[A-Za-z][A-Za-z '-]{1,70}$/.test(text);
     if (pending.expected === 'location') {
-        const startsNewRequest = /^(who|what|when|where|why|how|explain|tell|give|show|plan|create|write|compare|calculate|translate|remember|open|start|stop)\b/i.test(text);
+        const startsNewRequest = REQUEST_STARTERS_WITH_STOP.test(text);
         return !startsNewRequest &&
             !FEATURE_COMMAND.test(text) &&
             !SETTINGS_COMMAND.test(text) &&
@@ -340,12 +370,7 @@ function deriveTopic(text) {
 
 function deriveEntity(text) {
     const raw = cleanText(text);
-    const patterns = [
-        /\b(?:who|what)\s+is\s+([A-Za-z0-9][A-Za-z0-9 .'-]{1,70})/i,
-        /\b(?:tell me about|about|regarding)\s+([A-Za-z0-9][A-Za-z0-9 .'-]{1,70})/i,
-        /\b(?:in|to|for)\s+([A-Z][A-Za-z .'-]{1,50})/
-    ];
-    for (const pattern of patterns) {
+    for (const pattern of ENTITY_PATTERNS) {
         const match = raw.match(pattern);
         if (match?.[1]) return cleanText(match[1]).replace(/[?.!,;]+$/g, '').slice(0, 80);
     }
@@ -355,7 +380,7 @@ function deriveEntity(text) {
 function resolvePronouns(text, entity) {
     if (!entity) return text;
     return cleanText(text).replace(
-        /\b(it|its|this|that|this one|that one|the company|the person|the topic)\b/gi,
+        containsPhrasePattern(INTENT_TERMS.pronounTargets, 'g'),
         entity
     );
 }
@@ -369,9 +394,9 @@ function shouldResolveAgainstActiveThread(message, classification, activeThread)
     const overlap = countOverlap(tokens, topicTokens);
     const hasEntity = Boolean(cleanText(activeThread.entity));
     const hasTopicAnchor = hasEntity || topicTokens.length > 0;
-    const explicitReference = /\b(it|its|this|that|they|them|those|these|same|earlier|previous|above|continue|more|further)\b/i.test(raw);
-    const bareShortQuestion = /^(who|what|when|where|why|how|which)\b/i.test(raw) && tokens.length <= 3 && overlap === 0;
-    const namedLikeNewTopic = /^(who|what)\s+is\s+[A-Za-z0-9][A-Za-z0-9 .'-]{2,}\??$/i.test(raw) && overlap === 0;
+    const explicitReference = FOLLOW_UP_SIGNALS.test(raw);
+    const bareShortQuestion = QUESTION_LEADS.test(raw) && tokens.length <= 3 && overlap === 0;
+    const namedLikeNewTopic = new RegExp(`^(?:${phraseAlternation(INTENT_TERMS.entityQuestionLeads)})\\s+is\\s+[A-Za-z0-9][A-Za-z0-9 .'-]{2,}\\??$`, 'i').test(raw) && overlap === 0;
 
     if (namedLikeNewTopic || bareShortQuestion) return false;
     if (overlap > 0) return true;
@@ -386,6 +411,47 @@ function tokenize(text) {
         .split(/\s+/)
         .filter(token => token && token.length > 1 && !STOP_WORDS.has(token))
         .slice(0, 24);
+}
+
+function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function phraseAlternation(phrases) {
+    return phrases
+        .map(phrase => escapeRegExp(phrase).replace(/\s+/g, '\\s+'))
+        .join('|');
+}
+
+function exactPhrasePattern(phrases) {
+    return new RegExp(`^(?:${phraseAlternation(phrases)})$`, 'i');
+}
+
+function containsPhrasePattern(phrases, extraFlags = '') {
+    const flags = `i${extraFlags}`.replace(/(.)(?=.*\1)/g, '');
+    return new RegExp(`\\b(?:${phraseAlternation(phrases)})\\b`, flags);
+}
+
+function leadingWordPattern(words) {
+    return new RegExp(`^(?:${phraseAlternation(words)})\\b`, 'i');
+}
+
+function commandTargetPattern(commands, targets) {
+    return new RegExp(`\\b(?:${phraseAlternation(commands)})\\s+(?:${phraseAlternation(targets)})\\b`, 'i');
+}
+
+function correctionPattern() {
+    const opener = phraseAlternation(INTENT_TERMS.correctionOpeners);
+    const intent = phraseAlternation(INTENT_TERMS.correctionIntents);
+    const phrase = phraseAlternation(INTENT_TERMS.correctionPhrases);
+    return new RegExp(`^(?:${opener})[,\\s]+(?:${intent})|\\b(?:${phrase})\\b`, 'i');
+}
+
+function switchPattern() {
+    const action = phraseAlternation(INTENT_TERMS.switchActions);
+    const target = phraseAlternation(INTENT_TERMS.switchTargets);
+    const phrase = phraseAlternation(INTENT_TERMS.switchPhrases);
+    return new RegExp(`\\b(?:${action})\\s+(?:${target})\\b|\\b(?:${phrase})\\b`, 'i');
 }
 
 function countOverlap(a, b) {
