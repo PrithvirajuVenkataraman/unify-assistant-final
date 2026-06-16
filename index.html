@@ -1933,41 +1933,42 @@ function addFeedbackButtons(query, response, assistantMessageId = '') {
 // ============ TRANSLATOR MODE ============
 
 // Check if user wants to enable translator mode
-function detectTranslatorRequest(text) {
-    const lower = text.toLowerCase();
+function detectTranslatorRequest(text) { 
+    const lower = text.toLowerCase(); 
+    const languagePattern = '(tamil|kannada|telugu|hindi|malayalam|spanish|filipino|filapino)';
 
-    // Patterns to detect translator mode activation
-    const activationPatterns = [
-        // "speak in Tamil", "talk in Hindi", etc.
-        /(?:speak|talk|translate|switch|change)\s+(?:in|to)\s+(tamil|kannada|telugu|hindi)/i,
-        // "Tamil la pesu" (Tamil: speak in Tamil)
-        /tamil\s+(?:la|le)\s+(?:pesu|peslama|pesalam)/i,
-        // "Kannada alli maathaadu" (Kannada: speak in Kannada)
-        /kannada\s+(?:alli)\s+(?:maathaadu|matadi)/i,
-        // "Hindi mein bolo" (Hindi: speak in Hindi)
-        /hindi\s+(?:mein|me)\s+(?:bolo|baat)/i,
-        // "Telugu lo cheppu" (Telugu: speak in Telugu)
-        /telugu\s+(?:lo)\s+(?:cheppu|matlaadu)/i,
-        // "help me speak to" patterns
-        /help\s+(?:me\s+)?(?:speak|talk|communicate)\s+(?:to|with).*(?:in\s+)?(tamil|kannada|telugu|hindi)/i,
-        // "I need to talk to auto/rickshaw driver in Kannada"
-        /(?:talk|speak|communicate)\s+(?:to|with)\s+(?:auto|rickshaw|taxi|driver|shopkeeper|vendor).*(?:in\s+)?(tamil|kannada|telugu|hindi)/i,
-        // "translate to Tamil"
-        /translate\s+(?:to|into)\s+(tamil|kannada|telugu|hindi)/i,
-        // "can you speak Tamil"
-        /can\s+you\s+(?:speak|talk)\s+(?:in\s+)?(tamil|kannada|telugu|hindi)/i
-    ];
+    // Patterns to detect translator mode activation 
+    const activationPatterns = [ 
+        // "speak in Tamil", "talk in Hindi", etc. 
+        new RegExp(`(?:speak|talk|translate|switch|change)\\s+(?:in|to)\\s+${languagePattern}`, 'i'), 
+        // "Tamil la pesu" (Tamil: speak in Tamil) 
+        /tamil\s+(?:la|le)\s+(?:pesu|peslama|pesalam)/i, 
+        // "Kannada alli maathaadu" (Kannada: speak in Kannada) 
+        /kannada\s+(?:alli)\s+(?:maathaadu|matadi)/i, 
+        // "Hindi mein bolo" (Hindi: speak in Hindi) 
+        /hindi\s+(?:mein|me)\s+(?:bolo|baat)/i, 
+        // "Telugu lo cheppu" (Telugu: speak in Telugu) 
+        /telugu\s+(?:lo)\s+(?:cheppu|matlaadu)/i, 
+        // "help me speak to" patterns 
+        new RegExp(`help\\s+(?:me\\s+)?(?:speak|talk|communicate)\\s+(?:to|with).*(?:in\\s+)?${languagePattern}`, 'i'), 
+        // "I need to talk to auto/rickshaw driver in Kannada" 
+        new RegExp(`(?:talk|speak|communicate)\\s+(?:to|with)\\s+(?:auto|rickshaw|taxi|driver|shopkeeper|vendor).*(?:in\\s+)?${languagePattern}`, 'i'), 
+        // "translate to Tamil" 
+        new RegExp(`translate\\s+(?:to|into)\\s+${languagePattern}`, 'i'), 
+        // "can you speak Tamil" 
+        new RegExp(`can\\s+you\\s+(?:speak|talk)\\s+(?:in\\s+)?${languagePattern}`, 'i') 
+    ]; 
 
-    for (const pattern of activationPatterns) {
-        const match = lower.match(pattern);
-        if (match) {
-            // Extract the language
-            const langMatch = lower.match(/\b(tamil|kannada|telugu|hindi)\b/i);
-            if (langMatch) {
-                return langMatch[1].toLowerCase();
-            }
-        }
-    }
+    for (const pattern of activationPatterns) { 
+        const match = lower.match(pattern); 
+        if (match) { 
+            // Extract the language 
+            const langMatch = lower.match(new RegExp(`\\b${languagePattern}\\b`, 'i')); 
+            if (langMatch) { 
+                return normalizeTranslatorLanguageKey(langMatch[1]); 
+            } 
+        } 
+    } 
 
     // Check for deactivation
     if (lower.match(/(?:stop|exit|end|disable|turn off)\s+(?:translat|interpreter)/i) ||
@@ -1976,11 +1977,17 @@ function detectTranslatorRequest(text) {
         return 'exit';
     }
 
-    return null;
+    return null; 
+} 
+
+function normalizeTranslatorLanguageKey(language) {
+    const key = String(language || '').toLowerCase().trim();
+    if (key === 'filapino') return 'filipino';
+    return key;
 }
 
-// Activate translator mode
-async function activateTranslatorMode(language) {
+// Activate translator mode 
+async function activateTranslatorMode(language) { 
     const langInfo = supportedLanguages[language];
     if (!langInfo) return false;
 
@@ -2000,7 +2007,7 @@ async function activateTranslatorMode(language) {
             'I need help'
         ]
     }, {
-        fallbackText: `[Globe] **Translator Mode Activated - ${langInfo.name} (${langInfo.nativeName})**\n\nI will now help you communicate in ${langInfo.name}.\n\n[Mic] **Ready!** What would you like to say in ${langInfo.name}?`
+        fallbackText: `[Globe] **Translator Mode Activated - ${langInfo.name} (${langInfo.nativeName})**\n\nI will now help you communicate in ${langInfo.name} by text.\n\nType what you want to say in ${langInfo.name}.` 
     });
 
     addChatMessage(activationMsg, false);
@@ -2008,7 +2015,7 @@ async function activateTranslatorMode(language) {
         language: langInfo.name,
         nativeName: langInfo.nativeName
     }, {
-        fallbackText: `Translator mode activated for ${langInfo.name}. Tell me what you want to say and I will translate it for you.`
+        fallbackText: `Translator mode activated for ${langInfo.name}. Type what you want to say and I will translate it for you.` 
     });
 
     return true;
@@ -3888,6 +3895,16 @@ async function handleNameCorrection(text) {
         let persistMemoryToDevice = true;
         let medicalMode = false;
 let supportConversationMode = false;
+
+const supportedLanguages = Object.freeze({
+    hindi: { name: 'Hindi', nativeName: 'Hindi' },
+    malayalam: { name: 'Malayalam', nativeName: 'Malayalam' },
+    kannada: { name: 'Kannada', nativeName: 'Kannada' },
+    telugu: { name: 'Telugu', nativeName: 'Telugu' },
+    tamil: { name: 'Tamil', nativeName: 'Tamil' },
+    spanish: { name: 'Spanish', nativeName: 'Spanish' },
+    filipino: { name: 'Filipino', nativeName: 'Filipino' }
+});
 let showRoutingDebugBadge = false;
 
         // UI/settings state
@@ -4157,22 +4174,8 @@ let showRoutingDebugBadge = false;
                                 onchange="setCustomSystemPrompt(this.value, true)">${escapeHtml(customSystemPrompt)}</textarea>
                         </section>
 
-                        <section class="help-settings-card">
-                            <label for="speech-language-select" class="font-bold">Voice input</label>
-                            <p class="text-xs mb-2">Choose the language you speak for transcription. Availability depends on your browser and device speech recognizer.</p> 
-                            <select id="speech-language-select" class="help-select-control" onchange="setVoiceInputLanguage(this.value)">
-                                <option value="en-US">English (US)</option>
-                                <option value="en-IN">English (India)</option>
-                                <option value="hi-IN">Hindi</option>
-                                <option value="ta-IN">Tamil</option>
-                                <option value="te-IN">Telugu</option>
-                                <option value="kn-IN">Kannada</option>
-                                <option value="ml-IN">Malayalam</option>
-                            </select>
-                        </section>
-
-                        <section class="help-settings-card">
-                            <p class="font-bold mb-2">Memory</p>
+                        <section class="help-settings-card"> 
+                            <p class="font-bold mb-2">Memory</p> 
                             <p class="text-xs mb-3">Manage saved memory and chat history on this device.</p>
                             <label class="memory-persist-row flex items-center justify-between gap-3 mb-3">
                                 <span class="memory-persist-label text-xs font-medium">Persist memory on this device</span>
@@ -4189,17 +4192,9 @@ let showRoutingDebugBadge = false;
             `; 
 
             document.querySelector('.page-shell')?.setAttribute('aria-hidden', 'true');
-            document.body.appendChild(modal);
-            syncHelpModalModeButtons();
-            const speechLanguageSelect = document.getElementById('speech-language-select');
-            if (speechLanguageSelect) {
-                speechLanguageSelect.value = localStorage.getItem('jarvis_voice_input_language') || navigator.language || 'en-US';
-                if (!speechLanguageSelect.value) {
-                    speechLanguageSelect.value = 'en-US';
-                    setVoiceInputLanguage('en-US');
-                }
-            }
-            modal.querySelector('.help-modal-close-btn')?.focus();
+            document.body.appendChild(modal); 
+            syncHelpModalModeButtons(); 
+            modal.querySelector('.help-modal-close-btn')?.focus(); 
             modal.addEventListener('keydown', trapModalFocus);
         }
 
