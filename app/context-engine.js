@@ -6,7 +6,13 @@ const INTENT_TERMS = Object.freeze({
     settingTargets: ['response', 'answer', 'dark', 'light', 'medical', 'support', 'news', 'memory', 'history', 'camera', 'vision', 'ocr', 'translator'],
     featureTargets: ['weather', 'forecast', 'trip', 'itinerary', 'travel', 'translate', 'translator', 'camera', 'ocr', 'scan', 'vision', 'remember', 'memory', 'export', 'delete all data'],
     followUpReferences: ['it', 'its', 'this', 'that', 'they', 'them', 'those', 'these', 'same', 'earlier', 'previous', 'above'],
-    followUpPhrases: ['more', 'continue', 'explain further', 'tell me more', 'what about', 'how about', 'then what', 'what next', 'further'],
+    followUpPhrases: [
+        'more', 'continue', 'continue from earlier', 'explain further', 'tell me more',
+        'what about', 'how about', 'then what', 'what next', 'further',
+        'compare', 'compare it', 'show examples', 'show me examples', 'examples',
+        'price', 'cost', 'latest', 'latest news', 'latest mission', 'mission',
+        'source', 'sources', 'pros', 'cons', 'difference', 'differences'
+    ],
     correctionOpeners: ['no', 'nah', 'nope', 'actually', 'wait', 'sorry'],
     correctionIntents: ['i meant', 'that is', 'that was', 'you misunderstood'],
     correctionPhrases: ['that is wrong', "that's wrong", 'you got that wrong', 'not what i meant', 'i meant'],
@@ -147,7 +153,7 @@ function resolveInput(state, input, limits) {
             resumedThread.updatedAt = Date.now();
             return resolution(
                 originalMessage,
-                resolvePronouns(originalMessage, resumedThread.entity || resumedThread.topic),
+                resolveFollowUpText(originalMessage, resumedThread.entity || resumedThread.topic),
                 resumedThread,
                 'explicit_thread_resume',
                 0.97,
@@ -169,7 +175,7 @@ function resolveInput(state, input, limits) {
             const thread = createThread(state, classification.topic || originalMessage, limits.maxThreads);
             return resolution(originalMessage, originalMessage, thread, 'new_intent_low_context_confidence', 0.66, null);
         }
-        const resolved = resolvePronouns(originalMessage, activeThread.entity || activeThread.topic); 
+        const resolved = resolveFollowUpText(originalMessage, activeThread.entity || activeThread.topic); 
         decisionReason = classification.isCorrection ? 'conversation_repair' : 'contextual_follow_up'; 
         confidence = FOLLOW_UP_SIGNALS.test(originalMessage) ? 0.92 : 0.78; 
         return resolution(originalMessage, resolved, activeThread, decisionReason, confidence, null);
@@ -385,6 +391,33 @@ function resolvePronouns(text, entity) {
     );
 }
 
+function resolveFollowUpText(text, entity) {
+    const raw = cleanText(text);
+    const anchor = cleanText(entity);
+    if (!anchor) return raw;
+    const pronounResolved = resolvePronouns(raw, anchor);
+    if (pronounResolved !== raw) return pronounResolved;
+    if (!isContextualExpansionCandidate(raw)) return pronounResolved;
+    if (/^(?:more|continue|continue from earlier|explain further|tell me more|further|then what|what next)\b/i.test(raw)) {
+        return `${raw} about ${anchor}`;
+    }
+    return `${raw} for ${anchor}`;
+}
+
+function isContextualExpansionCandidate(text) {
+    const raw = cleanText(text);
+    if (!raw) return false;
+    if (/^(?:who|what|when|where|why|how|which)\s+(?:is|are|was|were)\s+[A-Za-z0-9][A-Za-z0-9 .'-]{2,}\??$/i.test(raw)) {
+        return false;
+    }
+    return FOLLOW_UP_SIGNALS.test(raw) && tokenize(raw).length <= 6;
+}
+
+function hasExplicitNewObject(text) {
+    const raw = cleanText(text);
+    return /\b(?:of|for|on|about|with)\s+(?:[A-Z][A-Za-z0-9.'-]{1,}(?:\s+[A-Z][A-Za-z0-9.'-]{1,}){0,4}|[A-Z0-9]{2,})\b/.test(raw);
+}
+
 function shouldResolveAgainstActiveThread(message, classification, activeThread) {
     if (!activeThread) return false;
     if (classification?.isCorrection) return true;
@@ -397,8 +430,9 @@ function shouldResolveAgainstActiveThread(message, classification, activeThread)
     const explicitReference = FOLLOW_UP_SIGNALS.test(raw);
     const bareShortQuestion = QUESTION_LEADS.test(raw) && tokens.length <= 3 && overlap === 0;
     const namedLikeNewTopic = new RegExp(`^(?:${phraseAlternation(INTENT_TERMS.entityQuestionLeads)})\\s+is\\s+[A-Za-z0-9][A-Za-z0-9 .'-]{2,}\\??$`, 'i').test(raw) && overlap === 0;
+    const explicitNewObject = hasExplicitNewObject(raw) && overlap === 0 && !containsPhrasePattern(INTENT_TERMS.pronounTargets).test(raw);
 
-    if (namedLikeNewTopic || bareShortQuestion) return false;
+    if (namedLikeNewTopic || bareShortQuestion || explicitNewObject) return false;
     if (overlap > 0) return true;
     if (explicitReference && hasTopicAnchor && tokens.length <= 5) return true;
     return explicitReference && tokens.length <= 3 && hasTopicAnchor;
