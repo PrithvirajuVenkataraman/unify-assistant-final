@@ -216,6 +216,7 @@
 
 const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'};
 const LIVE_RETRIEVAL_ENABLED = globalThis.JARVIS_LIVE_RETRIEVAL_ENABLED !== false;
+const STRUCTURED_CURRENT_FACTS_ENABLED = globalThis.JARVIS_STRUCTURED_CURRENT_FACTS_ENABLED === true;
 const LIVE_DISABLED_MESSAGE = 'Live search and current updates are temporarily disabled. I can answer from general knowledge, but I cannot verify real-time facts right now.';
 const SUPPORT_MODE_HINTS = {
     balanced: 'Be clear, practical, and warm. Keep a neutral supportive tone.',
@@ -5646,6 +5647,7 @@ let showRoutingDebugBadge = false;
             if (!chatContainer) return;
             if (!isUser) hideThinkingIndicator();
             const rawDisplayText = normalizeUiTokens(String(text ?? ''));
+            if (isUser && !rawDisplayText.trim()) return;
             const displayText = isUser || /<(iframe|div|img|table)\s/i.test(rawDisplayText)
                 ? rawDisplayText
                 : ensureCompleteAssistantResponse(rawDisplayText);
@@ -7318,10 +7320,10 @@ async function fetchLiveSearchJson(query, options = {}) {
 }
 
 async function fetchCurrentFactJson(query, options = {}) {
-    if (!LIVE_RETRIEVAL_ENABLED) {
-        const error = new Error('Live search is temporarily disabled.');
+    if (!LIVE_RETRIEVAL_ENABLED || !STRUCTURED_CURRENT_FACTS_ENABLED) {
+        const error = new Error('Structured current-fact resolver is disabled.');
         error.status = 503;
-        error.data = { success: false, disabled: true, resolved: false, error: 'Live search is temporarily disabled.', answer: '', sources: [] };
+        error.data = { success: false, disabled: true, resolved: false, error: 'Structured current-fact resolver is disabled.', answer: '', sources: [] };
         throw error;
     }
 
@@ -10698,7 +10700,7 @@ function buildStrictLatestFailureMessage(intent, queryText, reason = 'verificati
 
 function formatStrictLatestAnswer(answerText, sources) {
     const clean = String(answerText || '').replace(/\s+/g, ' ').trim();
-    const sentenceMatches = clean.match(/[^.!?]+[.!?]?/g) || [];
+    const sentenceMatches = splitReadableSentences(clean);
     const concise = sentenceMatches.map(s => s.trim()).filter(Boolean).slice(0, 3).join(' ').trim() || clean;
     const sourceLines = (Array.isArray(sources) ? sources : [])
         .slice(0, 5)
@@ -18250,17 +18252,23 @@ function showThinkingIndicator(message = 'Thinking') {
     if (!chatContainer) return;
 
     let row = document.getElementById('chat-thinking-indicator');
+    const statusText = String(message || 'Thinking').replace(/\s+/g, ' ').trim() || 'Thinking';
     if (!row) {
         row = document.createElement('div');
         row.id = 'chat-thinking-indicator';
         row.className = 'chat-row flex justify-start fade-in';
         row.innerHTML = `
             <div class="chat-bubble-assistant assistant-thinking-bubble" role="status" aria-live="polite">
-                <span class="assistant-thinking-spinner" aria-hidden="true"></span>
-                <span id="chat-thinking-text" class="sr-only">Generating answer</span>
+                <span id="chat-thinking-text" class="assistant-thinking-text">${escapeHtml(statusText)}</span>
+                <span class="assistant-thinking-pulse" aria-hidden="true">
+                    <span></span><span></span><span></span>
+                </span>
             </div>
         `;
         chatContainer.appendChild(row);
+    } else {
+        const text = row.querySelector('#chat-thinking-text');
+        if (text) text.textContent = statusText;
     }
     maybeAutoScroll(chatContainer);
 }
@@ -18298,7 +18306,7 @@ function formatAssistantTextForReadability(rawText) {
     if (rawText.includes('\n')) return rawText;
     if (rawText.length < 300) return rawText;
 
-    const sentences = (rawText.match(/[^.!?]+[.!?]+/g) || []).map(s => s.trim()).filter(Boolean);
+    const sentences = splitReadableSentences(rawText).filter(s => /[.!?]$/.test(s));
     if (sentences.length < 5) return rawText;
 
     let closingQuestion = '';
@@ -18312,6 +18320,30 @@ function formatAssistantTextForReadability(rawText) {
 
     const bullets = sentences.map(s => `- ${s}`).join('\n');
     return closingQuestion ? `${bullets}\n\n${closingQuestion}` : bullets;
+}
+
+function splitReadableSentences(text) {
+    const raw = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return [];
+
+    const sentences = [];
+    let start = 0;
+    for (let i = 0; i < raw.length; i += 1) {
+        const char = raw[i];
+        if (!/[.!?]/.test(char)) continue;
+        const prev = raw[i - 1] || '';
+        const next = raw[i + 1] || '';
+        if (char === '.' && /\d/.test(prev) && /\d/.test(next)) continue;
+        if (next && !/\s/.test(next)) continue;
+
+        const sentence = raw.slice(start, i + 1).trim();
+        if (sentence) sentences.push(sentence);
+        start = i + 1;
+    }
+
+    const tail = raw.slice(start).trim();
+    if (tail) sentences.push(tail);
+    return sentences;
 }
 
 function isLikelyItineraryText(text) {
@@ -18910,7 +18942,7 @@ function refineVisionAnswer(text) {
         .replace(/\s+/g, ' ')
         .trim();
 
-    const sentences = out.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+    const sentences = splitReadableSentences(out);
     if (sentences.length > 2) {
         out = sentences.slice(0, 2).join(' ');
     }
