@@ -71,11 +71,14 @@ export default async function handler(req, res) {
             ...search
         });
     } catch (error) {
-        return res.status(502).json({
+        const status = Number(error?.httpStatus) || 502;
+        return res.status(status).json({
             success: false,
             error: {
-                code: 'search_failed',
-                message: String(error?.message || 'Live search failed.')
+                code: String(error?.code || 'search_failed'),
+                message: String(error?.publicMessage || error?.message || 'Live search failed.'),
+                upstreamStatus: Number(error?.upstreamStatus) || undefined,
+                retryable: error?.retryable !== false
             },
             results: []
         });
@@ -94,21 +97,39 @@ export async function searchSerper(query, options = {}) {
     if (!normalizedQuery) return [];
 
     const limit = clampInt(options.limit, 8, 1, 20);
-    const response = await fetchWithTimeout(SERPER_SEARCH_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-API-KEY': apiKey
-        },
-        body: JSON.stringify({
-            q: normalizedQuery,
-            num: Math.min(20, Math.max(10, limit))
-        })
-    }, SEARCH_TIMEOUT_MS);
+    let response;
+    try {
+        response = await fetchWithTimeout(SERPER_SEARCH_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-API-KEY': apiKey
+            },
+            body: JSON.stringify({
+                q: normalizedQuery,
+                num: Math.min(20, Math.max(10, limit))
+            })
+        }, SEARCH_TIMEOUT_MS);
+    } catch (error) {
+        if (error?.name === 'AbortError') {
+            throw createSearchError({
+                code: 'search_timeout',
+                httpStatus: 504,
+                publicMessage: 'Live search timed out while contacting Serper.',
+                retryable: true
+            });
+        }
+        throw createSearchError({
+            code: 'search_network_error',
+            httpStatus: 502,
+            publicMessage: 'Live search could not reach Serper from the server.',
+            retryable: true
+        });
+    }
 
     if (!response.ok) {
         const detail = await response.text().catch(() => '');
-        throw new Error(`Serper returned ${response.status}${detail ? `: ${detail.slice(0, 160)}` : ''}`);
+        throw createSerperStatusError(response.status, detail);
     }
 
     const data = await response.json();
@@ -212,6 +233,63 @@ function normalizeSearchQuery(query) {
     return String(query || '').replace(/\s+/g, ' ').trim().slice(0, MAX_QUERY_LENGTH);
 }
 
+function createSerperStatusError(status, detail = '') {
+    const upstreamStatus = Number(status) || 0;
+    const cleanDetail = sanitizeUpstreamDetail(detail);
+    if (upstreamStatus === 401 || upstreamStatus === 403) {
+        return createSearchError({
+            code: 'serper_auth_failed',
+            httpStatus: 502,
+            upstreamStatus,
+            publicMessage: `Serper rejected the API key or permissions${cleanDetail ? `: ${cleanDetail}` : '.'}`,
+            retryable: false
+        });
+    }
+    if (upstreamStatus === 429) {
+        return createSearchError({
+            code: 'serper_quota_or_rate_limit',
+            httpStatus: 502,
+            upstreamStatus,
+            publicMessage: `Serper rate limit or quota was hit${cleanDetail ? `: ${cleanDetail}` : '.'}`,
+            retryable: true
+        });
+    }
+    if (upstreamStatus >= 400 && upstreamStatus < 500) {
+        return createSearchError({
+            code: 'serper_request_rejected',
+            httpStatus: 502,
+            upstreamStatus,
+            publicMessage: `Serper rejected the search request${cleanDetail ? `: ${cleanDetail}` : '.'}`,
+            retryable: false
+        });
+    }
+    return createSearchError({
+        code: 'serper_upstream_error',
+        httpStatus: 502,
+        upstreamStatus,
+        publicMessage: `Serper returned an upstream error${upstreamStatus ? ` (${upstreamStatus})` : ''}${cleanDetail ? `: ${cleanDetail}` : '.'}`,
+        retryable: true
+    });
+}
+
+function createSearchError({ code, httpStatus, upstreamStatus, publicMessage, retryable }) {
+    const error = new Error(publicMessage);
+    error.code = code;
+    error.httpStatus = httpStatus;
+    error.upstreamStatus = upstreamStatus;
+    error.publicMessage = publicMessage;
+    error.retryable = retryable;
+    return error;
+}
+
+function sanitizeUpstreamDetail(detail) {
+    const text = String(detail || '')
+        .replace(/\s+/g, ' ')
+        .replace(/[A-Za-z0-9_-]{24,}/g, '[redacted]')
+        .trim();
+    return text.slice(0, 220);
+}
+
 async function fetchWithTimeout(url, init, timeoutMs) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -234,6 +312,7 @@ function clampInt(value, fallback, min, max) {
 
 export const __test = {
     liveSearchDisabledResponse: LIVE_SEARCH_DISABLED_RESPONSE,
+    createSerperStatusError,
     normalizeSerperResults,
     runVerifiedWebSearch,
     isTrustedLiveSource
