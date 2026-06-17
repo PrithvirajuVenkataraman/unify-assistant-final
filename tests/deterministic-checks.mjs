@@ -5,6 +5,7 @@ import currentFactsHandler, { __test as currentFacts } from '../api/current-fact
 
 const SOURCE = Object.freeze({ 
     science: fs.readFileSync(new URL('../science-format.js', import.meta.url), 'utf8'), 
+    readme: fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8'),
     appHtml: fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
     styles: fs.readFileSync(new URL('../styles.css', import.meta.url), 'utf8'),
     visionApi: fs.readFileSync(new URL('../api/vision.js', import.meta.url), 'utf8'),
@@ -199,6 +200,12 @@ assert.match(SOURCE.appHtml, /gemini-2\.5-flash-lite/);
 assert.match(SOURCE.appHtml, /free public-source aggregation through Wikipedia, GDELT, and official shortcuts first/);
 assert.match(SOURCE.appHtml, /optionally Gemini-assisted for query planning, ranking, and snippets/);
 assert.match(SOURCE.appHtml, /optional Serper via SERPER_API_KEY fallback/);
+assert.match(SOURCE.appHtml, /function buildContextCopilotBadgeHtml/);
+assert.match(SOURCE.appHtml, /function shouldShowContextCopilotBadge/);
+assert.match(SOURCE.appHtml, /contextual_follow_up/);
+assert.doesNotMatch(SOURCE.appHtml, /alwaysShowContextCopilotBadge\s*=\s*true/);
+assert.match(SOURCE.readme, /Standout Feature: Context Copilot/);
+assert.match(SOURCE.readme, /local, deterministic, private, and free-for-life/);
 assert.match(SOURCE.appHtml, /localStorage when memory persistence is enabled/);
 assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
 
