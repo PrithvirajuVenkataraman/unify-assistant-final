@@ -75,7 +75,7 @@ const FEATURE_CONTRACTS = Object.freeze({
     },
     spinnerOnlyLoading: {
         required: [
-            /id="chat-thinking-text" class="assistant-thinking-text"/,
+            /aria-label="\$\{escapeHtml\(statusText\)\}"/,
             /class="assistant-thinking-pulse"/
         ],
         forbidden: [
@@ -229,7 +229,7 @@ assert.equal(disabledApi.body.resolved, false);
 
 assert.match(SOURCE.appHtml, /let responseStyle = 'balanced'/);
 assert.match(SOURCE.appHtml, /\['balanced', 'witty', 'chatty', 'supportive', 'debate'\]/);
-assert.match(SOURCE.appHtml, /preserveTranscript \|\| isLikelyCodeInput/);
+assert.match(SOURCE.appHtml, /const normalizedOutgoingText = isLikelyCodeInput\(outgoingText\)/);
 assert.match(SOURCE.appHtml, /app\/bootstrap\.js/); 
 assertContracts(SOURCE.appHtml, FEATURE_CONTRACTS); 
 assert.match(SOURCE.visionApi, /function shouldEscalateMathOcrSolve/);
