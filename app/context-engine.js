@@ -428,7 +428,7 @@ function shouldResolveAgainstActiveThread(message, classification, activeThread)
     const hasEntity = Boolean(cleanText(activeThread.entity));
     const hasTopicAnchor = hasEntity || topicTokens.length > 0;
     const explicitReference = FOLLOW_UP_SIGNALS.test(raw);
-    const bareShortQuestion = QUESTION_LEADS.test(raw) && tokens.length <= 3 && overlap === 0;
+    const bareShortQuestion = QUESTION_LEADS.test(raw) && tokens.length <= 3 && overlap === 0 && !explicitReference;
     const namedLikeNewTopic = new RegExp(`^(?:${phraseAlternation(INTENT_TERMS.entityQuestionLeads)})\\s+is\\s+[A-Za-z0-9][A-Za-z0-9 .'-]{2,}\\??$`, 'i').test(raw) && overlap === 0;
     const explicitNewObject = hasExplicitNewObject(raw) && overlap === 0 && !containsPhrasePattern(INTENT_TERMS.pronounTargets).test(raw);
 
