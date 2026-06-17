@@ -22,10 +22,16 @@ const SAMPLE = Object.freeze({
 const ORIGINAL_SERPER_API_KEY = process.env.SERPER_API_KEY;
 const ORIGINAL_SERPER_KEY = process.env.SERPER_KEY;
 const ORIGINAL_LIVE_RETRIEVAL_ENABLED = process.env.LIVE_RETRIEVAL_ENABLED;
+const ORIGINAL_GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const ORIGINAL_GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
+const ORIGINAL_GEMINI_SEARCH_MODEL = process.env.GEMINI_SEARCH_MODEL;
 const ORIGINAL_FETCH = globalThis.fetch;
 delete process.env.SERPER_API_KEY;
 delete process.env.SERPER_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
+delete process.env.GEMINI_API_KEY;
+delete process.env.GOOGLE_API_KEY;
+delete process.env.GEMINI_SEARCH_MODEL;
 
 assert.equal(resolveRequestPath({ url: '/api/chat-groq?x=1' }), '/api/chat-groq');
 assert.equal(resolveRequestPath({ url: '/api/chat-groq-extra' }), '/api/chat-groq-extra');
@@ -159,9 +165,110 @@ assert.equal(publicSearch.statusCode, 200);
 assert.equal(publicSearch.body.success, true);
 assert.equal(publicSearch.body.provider, 'public_sources');
 assert.equal(publicSearch.body.results.length, 2);
-assert.deepEqual(publicSearch.body.distinctDomains, ['en.wikipedia.org', 'bbc.com']);
+assert.deepEqual(publicSearch.body.distinctDomains, ['bbc.com', 'en.wikipedia.org']);
 assert.equal(publicSearch.body.trustedCount, 2);
+assert.equal(publicSearch.body.geminiEnhanced, false);
+assert.equal(publicSearch.body.results[0].sourceLabel, 'bbc.com via GDELT');
 globalThis.fetch = ORIGINAL_FETCH;
+
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('en.wikipedia.org/w/api.php')) {
+        return okJson({ query: { search: [] } });
+    }
+    if (href.includes('api.gdeltproject.org')) {
+        return okJson({ articles: [] });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const officialShortcutSearch = await callHandler(searchHandler, request('/api/search', { query: 'latest ISRO news', limit: 5 }));
+assert.equal(officialShortcutSearch.statusCode, 200);
+assert.equal(officialShortcutSearch.body.success, true);
+assert.equal(officialShortcutSearch.body.provider, 'public_sources');
+assert.ok(officialShortcutSearch.body.results.some(item => item.domain === 'isro.gov.in'));
+assert.ok(officialShortcutSearch.body.results.some(item => item.sourceType === 'official_source'));
+globalThis.fetch = ORIGINAL_FETCH;
+
+process.env.GEMINI_API_KEY = 'test-gemini-key';
+let geminiCallCount = 0;
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('generativelanguage.googleapis.com')) {
+        geminiCallCount += 1;
+        if (geminiCallCount === 1) {
+            return okJson({
+                candidates: [{ content: { parts: [{ text: '{"queries":["ISRO official latest update","ISRO launch news"]}' }] } }]
+            });
+        }
+        return okJson({
+            candidates: [{
+                content: {
+                    parts: [{
+                        text: '{"ranked":[{"index":0,"description":"Official ISRO source for current updates.","reason":"official source"}]}'
+                    }]
+                }
+            }]
+        });
+    }
+    if (href.includes('en.wikipedia.org/w/api.php')) {
+        return okJson({ query: { search: [] } });
+    }
+    if (href.includes('api.gdeltproject.org')) {
+        return okJson({
+            articles: [{
+                title: 'ISRO update reported',
+                url: 'https://www.bbc.com/news/science-environment-isro',
+                domain: 'bbc.com',
+                seendate: '20260617121000'
+            }]
+        });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const geminiSearch = await callHandler(searchHandler, request('/api/search', { query: 'latest ISRO news', limit: 5 }));
+assert.equal(geminiSearch.statusCode, 200);
+assert.equal(geminiSearch.body.success, true);
+assert.equal(geminiSearch.body.geminiEnhanced, true);
+assert.equal(geminiSearch.body.results[0].domain, 'isro.gov.in');
+assert.match(geminiSearch.body.results[0].description, /Official ISRO source/);
+assert.ok(geminiCallCount >= 2);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GEMINI_API_KEY;
+
+process.env.GEMINI_API_KEY = 'test-gemini-key';
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('generativelanguage.googleapis.com')) {
+        return {
+            ok: false,
+            status: 500,
+            async json() { return {}; },
+            async text() { return 'gemini unavailable'; }
+        };
+    }
+    if (href.includes('en.wikipedia.org/w/api.php')) {
+        return okJson({ query: { search: [{ title: 'NASA', snippet: 'NASA profile.' }] } });
+    }
+    if (href.includes('en.wikipedia.org/api/rest_v1/page/summary')) {
+        return okJson({
+            title: 'NASA',
+            extract: 'NASA is the United States space agency.',
+            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/NASA' } }
+        });
+    }
+    if (href.includes('api.gdeltproject.org')) {
+        return okJson({ articles: [] });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const geminiFailureSearch = await callHandler(searchHandler, request('/api/search', { query: 'NASA facts', limit: 5 }));
+assert.equal(geminiFailureSearch.statusCode, 200);
+assert.equal(geminiFailureSearch.body.success, true);
+assert.equal(geminiFailureSearch.body.geminiEnhanced, false);
+assert.ok(geminiFailureSearch.body.warnings.some(item => item.includes('gemini_')));
+assert.ok(geminiFailureSearch.body.results.length >= 1);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GEMINI_API_KEY;
 
 process.env.SERPER_API_KEY = 'test-serper-key';
 process.env.LIVE_RETRIEVAL_ENABLED = 'true';
@@ -250,6 +357,9 @@ assert.equal(invalidVisionMime.body.error.code, 'unsupported_media_type');
 restoreEnv('SERPER_API_KEY', ORIGINAL_SERPER_API_KEY);
 restoreEnv('SERPER_KEY', ORIGINAL_SERPER_KEY);
 restoreEnv('LIVE_RETRIEVAL_ENABLED', ORIGINAL_LIVE_RETRIEVAL_ENABLED);
+restoreEnv('GEMINI_API_KEY', ORIGINAL_GEMINI_API_KEY);
+restoreEnv('GOOGLE_API_KEY', ORIGINAL_GOOGLE_API_KEY);
+restoreEnv('GEMINI_SEARCH_MODEL', ORIGINAL_GEMINI_SEARCH_MODEL);
 globalThis.fetch = ORIGINAL_FETCH;
 
 console.log('api-contract-tests-ok');
@@ -260,6 +370,19 @@ function restoreEnv(name, value) {
     } else {
         process.env[name] = value;
     }
+}
+
+function okJson(payload) {
+    return {
+        ok: true,
+        status: 200,
+        async json() {
+            return payload;
+        },
+        async text() {
+            return '';
+        }
+    };
 }
 
 function request(url, body) {
