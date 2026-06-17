@@ -102,6 +102,53 @@ assert.equal(chatTest.classifyRoutingDecision('What is the capital of France?', 
 delete process.env.SERPER_API_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
 assert.equal(chatTest.classifyRoutingDecision('What is the current president of France?', '', {}).strategy, 'live_first');
+assert.equal(
+    chatTest.resolveContextualLiveQuery('Who is Ada Lovelace?', [
+        { role: 'user', text: 'Tell me about ISRO' },
+        { role: 'assistant', text: 'ISRO summary' }
+    ]),
+    'Who is Ada Lovelace?'
+);
+assert.match(
+    chatTest.resolveContextualLiveQuery('latest on it', [
+        { role: 'user', text: 'Tell me about ISRO' },
+        { role: 'assistant', text: 'ISRO summary' }
+    ]),
+    /\bisro\b/i
+);
+for (const scenario of [
+    {
+        prior: 'Tell me about UNICEF',
+        assistant: 'UNICEF summary',
+        standalone: 'Who is Marie Curie?',
+        expectedStandalone: 'Who is Marie Curie?',
+        followup: 'latest on it',
+        expectedAnchor: /\bunicef\b/i
+    },
+    {
+        prior: 'Explain quantum computing',
+        assistant: 'Quantum computing summary',
+        standalone: 'What is photosynthesis?',
+        expectedStandalone: 'What is photosynthesis?',
+        followup: 'show sources for it',
+        expectedAnchor: /\bquantum\b/i
+    }
+]) {
+    assert.equal(
+        chatTest.resolveContextualLiveQuery(scenario.standalone, [
+            { role: 'user', text: scenario.prior },
+            { role: 'assistant', text: scenario.assistant }
+        ]),
+        scenario.expectedStandalone
+    );
+    assert.match(
+        chatTest.resolveContextualLiveQuery(scenario.followup, [
+            { role: 'user', text: scenario.prior },
+            { role: 'assistant', text: scenario.assistant }
+        ]),
+        scenario.expectedAnchor
+    );
+}
 
 const wrongMethod = await callHandler(currentFactsHandler, {
     ...request('/api/current-facts', {}),
