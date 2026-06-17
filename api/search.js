@@ -4,7 +4,9 @@ import { createHash } from 'node:crypto';
 import { applyApiSecurity } from './security.js';
 
 const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
+const MEILI_INDEX_NAME = 'jarvis_web_pages';
 const SEARCH_TIMEOUT_MS = 8_000;
+const MEILI_SEARCH_TIMEOUT_MS = 4_000;
 const MAX_QUERY_LENGTH = 500;
 
 export const LIVE_SEARCH_DISABLED_RESPONSE = Object.freeze({
@@ -50,7 +52,7 @@ export default async function handler(req, res) {
     });
     if (guard.handled) return;
 
-    if (!hasSerperKey()) {
+    if (!hasLiveSearchProvider()) {
         return res.status(503).json({ ...LIVE_SEARCH_DISABLED_RESPONSE });
     }
 
@@ -89,6 +91,72 @@ export default async function handler(req, res) {
 
 export function hasSerperKey() {
     return Boolean(getSerperApiKey());
+}
+
+export function hasCrawlerIndex() {
+    return Boolean(getMeiliHost() && getMeiliSearchKey());
+}
+
+export function hasLiveSearchProvider() {
+    return hasCrawlerIndex() || hasSerperKey();
+}
+
+export async function searchCrawlerIndex(query, options = {}) {
+    const host = getMeiliHost();
+    const key = getMeiliSearchKey();
+    const normalizedQuery = normalizeSearchQuery(query);
+    if (!host || !key || !normalizedQuery) return [];
+
+    const limit = clampInt(options.limit, 8, 1, 20);
+    const index = encodeURIComponent(String(options.indexName || process.env.MEILI_INDEX || MEILI_INDEX_NAME).trim());
+    let response;
+    try {
+        response = await fetchWithTimeout(`${host}/indexes/${index}/search`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${key}`
+            },
+            body: JSON.stringify({
+                q: normalizedQuery,
+                limit: Math.max(limit, 8),
+                attributesToRetrieve: [
+                    'title',
+                    'description',
+                    'text',
+                    'url',
+                    'canonicalUrl',
+                    'domain',
+                    'publishedAt',
+                    'fetchedAt',
+                    'trusted'
+                ]
+            })
+        }, MEILI_SEARCH_TIMEOUT_MS);
+    } catch (error) {
+        if (error?.name === 'AbortError') {
+            throw createSearchError({
+                code: 'crawler_index_timeout',
+                httpStatus: 504,
+                publicMessage: 'Crawler index search timed out.',
+                retryable: true
+            });
+        }
+        throw createSearchError({
+            code: 'crawler_index_unreachable',
+            httpStatus: 502,
+            publicMessage: 'Crawler index could not be reached from the server.',
+            retryable: true
+        });
+    }
+
+    if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw createCrawlerIndexStatusError(response.status, detail);
+    }
+
+    const data = await response.json();
+    return normalizeMeiliResults(data, normalizedQuery).slice(0, limit);
 }
 
 export async function searchSerper(query, options = {}) {
@@ -140,16 +208,38 @@ export async function searchSerper(query, options = {}) {
 
 export async function runVerifiedWebSearch(query, options = {}) {
     const limit = clampInt(options.limit, 8, 1, 20);
-    const results = dedupeSearchResults(await searchSerper(query, { limit: Math.max(limit, 10) })).slice(0, limit);
-    const distinctDomains = Array.from(new Set(results.map(item => item.domain).filter(Boolean)));
-    const trustedCount = results.filter(item => item.trusted).length;
-    return {
-        results,
-        distinctDomains,
-        trustedCount,
-        sourceCount: results.length,
-        distinctDomainCount: distinctDomains.length
-    };
+    const weakCrawlerThreshold = Math.min(3, limit);
+    let crawlerResults = [];
+    let crawlerError = null;
+
+    if (hasCrawlerIndex()) {
+        try {
+            crawlerResults = dedupeSearchResults(await searchCrawlerIndex(query, { limit })).slice(0, limit);
+        } catch (error) {
+            crawlerError = error;
+        }
+        if (crawlerResults.length >= weakCrawlerThreshold || !hasSerperKey()) {
+            if (!crawlerResults.length && crawlerError) throw crawlerError;
+            return buildSearchSummary(crawlerResults, {
+                provider: 'crawler_index',
+                indexResultCount: crawlerResults.length
+            });
+        }
+    }
+
+    if (hasSerperKey()) {
+        const serperResults = await searchSerper(query, { limit: Math.max(limit, 10) });
+        const merged = dedupeSearchResults([...crawlerResults, ...serperResults]).slice(0, limit);
+        return buildSearchSummary(merged, {
+            provider: crawlerResults.length ? 'crawler_index+serper' : 'serper',
+            indexResultCount: crawlerResults.length
+        });
+    }
+
+    return buildSearchSummary(crawlerResults, {
+        provider: 'crawler_index',
+        indexResultCount: crawlerResults.length
+    });
 }
 
 export async function searchGoogleNewsRss() {
@@ -188,6 +278,30 @@ function normalizeSerperResults(data, query) {
         .filter(item => item.title && item.url);
 }
 
+function normalizeMeiliResults(data, query) {
+    const hits = Array.isArray(data?.hits) ? data.hits : [];
+    return hits
+        .map((item, index) => normalizeMeiliItem(item, query, index))
+        .filter(item => item.title && item.url);
+}
+
+function normalizeMeiliItem(item, query, index) {
+    const url = String(item?.canonicalUrl || item?.url || '').trim();
+    const domain = String(item?.domain || getDomainFromUrl(url)).toLowerCase().replace(/^www\./, '');
+    const description = String(item?.description || item?.text || '').replace(/\s+/g, ' ').trim();
+    return {
+        title: String(item?.title || domain || url).trim(),
+        description: description.slice(0, 320),
+        url,
+        domain,
+        source: domain || 'crawler_index',
+        date: String(item?.publishedAt || item?.fetchedAt || '').trim(),
+        position: index + 1,
+        trusted: Boolean(item?.trusted) || isTrustedLiveSource(domain),
+        query
+    };
+}
+
 function normalizeSerperItem(item, query, index) {
     const url = String(item?.link || item?.url || '').trim();
     const domain = getDomainFromUrl(url);
@@ -214,6 +328,20 @@ function dedupeSearchResults(results) {
         deduped.push(item);
     }
     return deduped;
+}
+
+function buildSearchSummary(results, metadata = {}) {
+    const distinctDomains = Array.from(new Set(results.map(item => item.domain).filter(Boolean)));
+    const trustedCount = results.filter(item => item.trusted).length;
+    return {
+        results,
+        distinctDomains,
+        trustedCount,
+        sourceCount: results.length,
+        distinctDomainCount: distinctDomains.length,
+        provider: metadata.provider || 'unknown',
+        indexResultCount: Number(metadata.indexResultCount) || 0
+    };
 }
 
 function normalizeResultKey(item) {
@@ -274,6 +402,27 @@ function createSerperStatusError(status, detail = '') {
     });
 }
 
+function createCrawlerIndexStatusError(status, detail = '') {
+    const upstreamStatus = Number(status) || 0;
+    const cleanDetail = sanitizeUpstreamDetail(detail);
+    if (upstreamStatus === 401 || upstreamStatus === 403) {
+        return createSearchError({
+            code: 'crawler_index_auth_failed',
+            httpStatus: 502,
+            upstreamStatus,
+            publicMessage: `Crawler index rejected the search key${cleanDetail ? `: ${cleanDetail}` : '.'}`,
+            retryable: false
+        });
+    }
+    return createSearchError({
+        code: 'crawler_index_error',
+        httpStatus: 502,
+        upstreamStatus,
+        publicMessage: `Crawler index returned an error${upstreamStatus ? ` (${upstreamStatus})` : ''}${cleanDetail ? `: ${cleanDetail}` : '.'}`,
+        retryable: true
+    });
+}
+
 function createSearchError({ code, httpStatus, upstreamStatus, publicMessage, retryable }) {
     const error = new Error(publicMessage);
     error.code = code;
@@ -306,6 +455,14 @@ function getSerperApiKey() {
     return String(process.env.SERPER_API_KEY || process.env.SERPER_KEY || '').trim();
 }
 
+function getMeiliHost() {
+    return String(process.env.MEILI_HOST || '').trim().replace(/\/+$/, '');
+}
+
+function getMeiliSearchKey() {
+    return String(process.env.MEILI_SEARCH_KEY || '').trim();
+}
+
 function getSerperKeyFingerprint() {
     const key = getSerperApiKey();
     if (!key) return '';
@@ -320,9 +477,13 @@ function clampInt(value, fallback, min, max) {
 
 export const __test = {
     liveSearchDisabledResponse: LIVE_SEARCH_DISABLED_RESPONSE,
+    createCrawlerIndexStatusError,
     createSerperStatusError,
     getSerperKeyFingerprint,
+    hasCrawlerIndex,
+    normalizeMeiliResults,
     normalizeSerperResults,
     runVerifiedWebSearch,
+    searchCrawlerIndex,
     isTrustedLiveSource
 };
