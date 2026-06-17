@@ -186,6 +186,8 @@ recoverableController.stop({ disableConverse: true });
 const source = fs.readFileSync(new URL('../app/speech-input.js', import.meta.url), 'utf8');
 assert.doesNotMatch(source, /speechSynthesis|SpeechSynthesisUtterance|AudioContext|new Audio\s*\(/);
 assert.doesNotMatch(source, /setTimeout\s*\([^)]*startRecognition|scheduleConverseRestart/);
+assert.match(source, /const toggleConverseController = controller\.toggleConverse/);
+assert.match(source, /return toggleConverseController\(\)/);
 assert.match(source, /interrupt:\s*processing/);
 
 console.log('speech-input-tests-ok');
