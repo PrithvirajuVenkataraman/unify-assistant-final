@@ -6,7 +6,7 @@ const INTENT_TERMS = Object.freeze({
     settingTargets: ['response', 'answer', 'dark', 'light', 'medical', 'support', 'news', 'memory', 'history', 'camera', 'vision', 'ocr', 'translator'],
     featureTargets: ['weather', 'forecast', 'trip', 'itinerary', 'travel', 'translate', 'translator', 'camera', 'ocr', 'scan', 'vision', 'remember', 'memory', 'export', 'delete all data'],
     followUpReferences: ['it', 'its', 'this', 'that', 'they', 'them', 'those', 'these', 'same', 'earlier', 'previous', 'above'],
-    followUpPhrases: [
+    followUpPhrases: [ 
         'more', 'continue', 'continue from earlier', 'explain further', 'tell me more',
         'what about', 'how about', 'then what', 'what next', 'further',
         'compare', 'compare it', 'show examples', 'show me examples', 'examples',
