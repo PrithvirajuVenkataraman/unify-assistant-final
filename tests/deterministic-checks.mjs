@@ -188,10 +188,16 @@ assert.match(SOURCE.styles, /body\.dark \.chat-bubble-assistant\s*\{[\s\S]*backg
 assert.match(SOURCE.styles, /body \.chat-row \.chat-bubble-user,\s*body \.chat-row \.chat-bubble-assistant,[\s\S]*border:\s*none !important[\s\S]*border-radius:\s*0 !important/);
 assert.match(SOURCE.styles, /\.selection-helper-popover\s*\{[\s\S]*display:\s*none !important[\s\S]*visibility:\s*hidden !important[\s\S]*pointer-events:\s*none !important/);
 assert.match(SOURCE.styles, /\.selection-helper-popover\.visible\s*\{[\s\S]*display:\s*flex !important[\s\S]*visibility:\s*visible !important/);
+assert.match(SOURCE.styles, /#chat-thinking-indicator \.assistant-thinking-spinner\s*\{[\s\S]*border-top-color:\s*#ffffff !important[\s\S]*border-right-color:\s*#ffffff !important[\s\S]*animation:\s*jarvis-spin/);
 assert.match(SOURCE.styles, /\.assistant-message-text a\s*\{[\s\S]*color:\s*#ffffff !important/);
 assert.doesNotMatch(SOURCE.appHtml, /chat-bubble-user text-white px-4 py-3/);
 assert.match(SOURCE.appHtml, /popover\.hidden = true/);
 assert.match(SOURCE.appHtml, /popover\.hidden = false/);
+assert.match(SOURCE.appHtml, /function isJarvisTechStackRequest/);
+assert.match(SOURCE.appHtml, /openai\/gpt-oss-120b/);
+assert.match(SOURCE.appHtml, /gemini-2\.5-flash-lite/);
+assert.match(SOURCE.appHtml, /Serper via SERPER_API_KEY/);
+assert.match(SOURCE.appHtml, /localStorage when memory persistence is enabled/);
 assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
 
 const disabledApi = await callJsonHandler(currentFactsHandler, {
