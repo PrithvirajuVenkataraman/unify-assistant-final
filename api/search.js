@@ -4,8 +4,11 @@ import { createHash } from 'node:crypto';
 import { applyApiSecurity } from './security.js';
 
 const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
+const WIKIPEDIA_SEARCH_URL = 'https://en.wikipedia.org/w/api.php';
+const WIKIPEDIA_SUMMARY_URL = 'https://en.wikipedia.org/api/rest_v1/page/summary';
+const GDELT_DOC_URL = 'https://api.gdeltproject.org/api/v2/doc/doc';
 const SEARCH_TIMEOUT_MS = 8_000;
-const CRAWLER_SEARCH_TIMEOUT_MS = 4_000;
+const PUBLIC_SOURCE_TIMEOUT_MS = 5_000;
 const MAX_QUERY_LENGTH = 500;
 
 export const LIVE_SEARCH_DISABLED_RESPONSE = Object.freeze({
@@ -13,7 +16,7 @@ export const LIVE_SEARCH_DISABLED_RESPONSE = Object.freeze({
     disabled: true,
     error: Object.freeze({
         code: 'feature_disabled',
-        message: 'Live search is temporarily disabled.'
+        message: 'Live search is unavailable.'
     }),
     results: []
 });
@@ -39,7 +42,9 @@ const TRUSTED_SOURCE_HOSTS = Object.freeze([
     'worldbank.org',
     'europa.eu',
     'gov.uk',
-    'usa.gov'
+    'usa.gov',
+    'wikipedia.org',
+    'wikidata.org'
 ]);
 
 export default async function handler(req, res) {
@@ -51,10 +56,6 @@ export default async function handler(req, res) {
     });
     if (guard.handled) return;
 
-    if (!hasLiveSearchProvider()) {
-        return res.status(503).json({ ...LIVE_SEARCH_DISABLED_RESPONSE });
-    }
-
     const query = normalizeSearchQuery(req.body?.query || req.body?.q || '');
     if (!query) {
         return res.status(400).json({
@@ -65,7 +66,7 @@ export default async function handler(req, res) {
     }
 
     try {
-        const limit = clampInt(req.body?.limit, 8, 1, 20);
+        const limit = clampInt(req.body?.limit || req.body?.maxResults, 8, 1, 20);
         const search = await runVerifiedWebSearch(query, { limit });
         return res.status(200).json({
             success: true,
@@ -92,58 +93,68 @@ export function hasSerperKey() {
     return Boolean(getSerperApiKey());
 }
 
-export function hasCrawlerIndex() {
-    return Boolean(getCrawlerSearchEndpoint());
-}
-
 export function hasLiveSearchProvider() {
-    return hasCrawlerIndex() || hasSerperKey();
+    return true;
 }
 
-export async function searchCrawlerIndex(query, options = {}) {
-    const endpoint = getCrawlerSearchEndpoint();
-    const key = getCrawlerSearchKey();
+export async function searchPublicSources(query, options = {}) {
     const normalizedQuery = normalizeSearchQuery(query);
-    if (!endpoint || !normalizedQuery) return [];
-
+    if (!normalizedQuery) return [];
     const limit = clampInt(options.limit, 8, 1, 20);
-    let response;
-    try {
-        response = await fetchWithTimeout(`${endpoint}/search`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                ...(key ? { Authorization: `Bearer ${key}` } : {})
-            },
-            body: JSON.stringify({
-                query: normalizedQuery,
-                limit: Math.max(limit, 8)
-            })
-        }, CRAWLER_SEARCH_TIMEOUT_MS);
-    } catch (error) {
-        if (error?.name === 'AbortError') {
-            throw createSearchError({
-                code: 'crawler_index_timeout',
-                httpStatus: 504,
-                publicMessage: 'Crawler index search timed out.',
-                retryable: true
-            });
-        }
-        throw createSearchError({
-            code: 'crawler_index_unreachable',
-            httpStatus: 502,
-            publicMessage: 'Crawler index could not be reached from the server.',
-            retryable: true
-        });
-    }
+    const settled = await Promise.allSettled([
+        searchWikipedia(normalizedQuery, { limit: Math.min(5, limit) }),
+        searchGdeltNews(normalizedQuery, { limit })
+    ]);
+    return settled
+        .flatMap(result => result.status === 'fulfilled' ? result.value : [])
+        .filter(Boolean)
+        .slice(0, Math.max(limit, 8));
+}
 
-    if (!response.ok) {
-        const detail = await response.text().catch(() => '');
-        throw createCrawlerIndexStatusError(response.status, detail);
-    }
+export async function searchWikipedia(query, options = {}) {
+    const limit = clampInt(options.limit, 4, 1, 10);
+    const url = new URL(WIKIPEDIA_SEARCH_URL);
+    url.searchParams.set('action', 'query');
+    url.searchParams.set('list', 'search');
+    url.searchParams.set('srsearch', query);
+    url.searchParams.set('srlimit', String(limit));
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('origin', '*');
 
+    const response = await fetchWithTimeout(url.toString(), {
+        headers: { Accept: 'application/json' }
+    }, PUBLIC_SOURCE_TIMEOUT_MS);
+    if (!response.ok) return [];
     const data = await response.json();
-    return normalizeCrawlerServiceResults(data, normalizedQuery).slice(0, limit);
+    const hits = Array.isArray(data?.query?.search) ? data.query.search : [];
+    const summaries = [];
+    for (const hit of hits.slice(0, limit)) {
+        const title = String(hit?.title || '').trim();
+        if (!title) continue;
+        const summary = await fetchWikipediaSummary(title).catch(() => null);
+        summaries.push(normalizeWikipediaItem(summary || hit, query));
+    }
+    return summaries.filter(item => item.title && item.url);
+}
+
+export async function searchGdeltNews(query, options = {}) {
+    const limit = clampInt(options.limit, 8, 1, 20);
+    const url = new URL(GDELT_DOC_URL);
+    url.searchParams.set('query', query);
+    url.searchParams.set('mode', 'ArtList');
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('maxrecords', String(Math.min(limit, 20)));
+    url.searchParams.set('sort', 'HybridRel');
+
+    const response = await fetchWithTimeout(url.toString(), {
+        headers: { Accept: 'application/json' }
+    }, PUBLIC_SOURCE_TIMEOUT_MS);
+    if (!response.ok) return [];
+    const data = await response.json();
+    const articles = Array.isArray(data?.articles) ? data.articles : [];
+    return articles
+        .map((item, index) => normalizeGdeltItem(item, query, index))
+        .filter(item => item.title && item.url);
 }
 
 export async function searchSerper(query, options = {}) {
@@ -195,42 +206,24 @@ export async function searchSerper(query, options = {}) {
 
 export async function runVerifiedWebSearch(query, options = {}) {
     const limit = clampInt(options.limit, 8, 1, 20);
-    const weakCrawlerThreshold = Math.min(3, limit);
-    let crawlerResults = [];
-    let crawlerError = null;
-
-    if (hasCrawlerIndex()) {
-        try {
-            crawlerResults = dedupeSearchResults(await searchCrawlerIndex(query, { limit })).slice(0, limit);
-        } catch (error) {
-            crawlerError = error;
-        }
-        if (crawlerResults.length >= weakCrawlerThreshold || !hasSerperKey()) {
-            if (!crawlerResults.length && crawlerError) throw crawlerError;
-            return buildSearchSummary(crawlerResults, {
-                provider: 'crawler_index',
-                indexResultCount: crawlerResults.length
-            });
-        }
-    }
-
-    if (hasSerperKey()) {
-        const serperResults = await searchSerper(query, { limit: Math.max(limit, 10) });
-        const merged = dedupeSearchResults([...crawlerResults, ...serperResults]).slice(0, limit);
-        return buildSearchSummary(merged, {
-            provider: crawlerResults.length ? 'crawler_index+serper' : 'serper',
-            indexResultCount: crawlerResults.length
+    const publicResults = dedupeSearchResults(await searchPublicSources(query, { limit })).slice(0, limit);
+    if (publicResults.length >= Math.min(3, limit) || !hasSerperKey()) {
+        return buildSearchSummary(publicResults, {
+            provider: 'public_sources',
+            publicSourceCount: publicResults.length
         });
     }
 
-    return buildSearchSummary(crawlerResults, {
-        provider: 'crawler_index',
-        indexResultCount: crawlerResults.length
+    const serperResults = await searchSerper(query, { limit: Math.max(limit, 10) });
+    const merged = dedupeSearchResults([...publicResults, ...serperResults]).slice(0, limit);
+    return buildSearchSummary(merged, {
+        provider: publicResults.length ? 'public_sources+serper' : 'serper',
+        publicSourceCount: publicResults.length
     });
 }
 
-export async function searchGoogleNewsRss() {
-    return [];
+export async function searchGoogleNewsRss(query = '', options = {}) {
+    return searchGdeltNews(query, options);
 }
 
 export function extractSearchTopic(text) {
@@ -257,36 +250,56 @@ export function isTrustedLiveSource(urlOrDomain) {
     return TRUSTED_SOURCE_HOSTS.some(host => domain === host || domain.endsWith(`.${host}`));
 }
 
+async function fetchWikipediaSummary(title) {
+    const url = `${WIKIPEDIA_SUMMARY_URL}/${encodeURIComponent(String(title || '').replace(/\s+/g, '_'))}`;
+    const response = await fetchWithTimeout(url, {
+        headers: { Accept: 'application/json' }
+    }, PUBLIC_SOURCE_TIMEOUT_MS);
+    if (!response.ok) return null;
+    return response.json();
+}
+
+function normalizeWikipediaItem(item, query) {
+    const title = String(item?.title || '').trim();
+    const pageUrl = String(item?.content_urls?.desktop?.page || '').trim() ||
+        (title ? `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/\s+/g, '_'))}` : '');
+    const description = stripHtml(String(item?.extract || item?.snippet || item?.description || '')).trim();
+    const domain = getDomainFromUrl(pageUrl);
+    return {
+        title,
+        description,
+        url: pageUrl,
+        domain,
+        source: 'Wikipedia',
+        date: '',
+        position: Number(item?.index || 1),
+        trusted: true,
+        query
+    };
+}
+
+function normalizeGdeltItem(item, query, index) {
+    const url = String(item?.url || '').trim();
+    const domain = getDomainFromUrl(url);
+    return {
+        title: String(item?.title || '').trim(),
+        description: String(item?.seendate || item?.sourcecountry || '').trim(),
+        url,
+        domain,
+        source: String(item?.domain || domain || 'GDELT').trim(),
+        date: normalizeGdeltDate(item?.seendate),
+        position: index + 1,
+        trusted: isTrustedLiveSource(domain),
+        query
+    };
+}
+
 function normalizeSerperResults(data, query) {
     const organic = Array.isArray(data?.organic) ? data.organic : [];
     const news = Array.isArray(data?.news) ? data.news : [];
     return [...organic, ...news]
         .map((item, index) => normalizeSerperItem(item, query, index))
         .filter(item => item.title && item.url);
-}
-
-function normalizeCrawlerServiceResults(data, query) {
-    const hits = Array.isArray(data?.results) ? data.results : [];
-    return hits
-        .map((item, index) => normalizeCrawlerServiceItem(item, query, index))
-        .filter(item => item.title && item.url);
-}
-
-function normalizeCrawlerServiceItem(item, query, index) {
-    const url = String(item?.url || item?.canonicalUrl || '').trim();
-    const domain = String(item?.domain || getDomainFromUrl(url)).toLowerCase().replace(/^www\./, '');
-    const description = String(item?.description || '').replace(/\s+/g, ' ').trim();
-    return {
-        title: String(item?.title || domain || url).trim(),
-        description: description.slice(0, 320),
-        url,
-        domain,
-        source: domain || 'crawler_index',
-        date: String(item?.publishedAt || item?.fetchedAt || '').trim(),
-        position: index + 1,
-        trusted: Boolean(item?.trusted) || isTrustedLiveSource(domain),
-        query
-    };
 }
 
 function normalizeSerperItem(item, query, index) {
@@ -326,8 +339,8 @@ function buildSearchSummary(results, metadata = {}) {
         trustedCount,
         sourceCount: results.length,
         distinctDomainCount: distinctDomains.length,
-        provider: metadata.provider || 'unknown',
-        indexResultCount: Number(metadata.indexResultCount) || 0
+        provider: metadata.provider || 'public_sources',
+        publicSourceCount: Number(metadata.publicSourceCount) || 0
     };
 }
 
@@ -362,13 +375,13 @@ function createSerperStatusError(status, detail = '') {
             retryable: false
         });
     }
-    if (upstreamStatus === 429) {
+    if (upstreamStatus === 429 || /not enough credits|quota|credits/i.test(cleanDetail)) {
         return createSearchError({
             code: 'serper_quota_or_rate_limit',
             httpStatus: 502,
             upstreamStatus,
-            publicMessage: `Serper rate limit or quota was hit${cleanDetail ? `: ${cleanDetail}` : '.'}`,
-            retryable: true
+            publicMessage: `Serper rate limit, quota, or credits were exhausted${cleanDetail ? `: ${cleanDetail}` : '.'}`,
+            retryable: false
         });
     }
     if (upstreamStatus >= 400 && upstreamStatus < 500) {
@@ -385,27 +398,6 @@ function createSerperStatusError(status, detail = '') {
         httpStatus: 502,
         upstreamStatus,
         publicMessage: `Serper returned an upstream error${upstreamStatus ? ` (${upstreamStatus})` : ''}${cleanDetail ? `: ${cleanDetail}` : '.'}`,
-        retryable: true
-    });
-}
-
-function createCrawlerIndexStatusError(status, detail = '') {
-    const upstreamStatus = Number(status) || 0;
-    const cleanDetail = sanitizeUpstreamDetail(detail);
-    if (upstreamStatus === 401 || upstreamStatus === 403) {
-        return createSearchError({
-            code: 'crawler_index_auth_failed',
-            httpStatus: 502,
-            upstreamStatus,
-            publicMessage: `Crawler index rejected the search key${cleanDetail ? `: ${cleanDetail}` : '.'}`,
-            retryable: false
-        });
-    }
-    return createSearchError({
-        code: 'crawler_index_error',
-        httpStatus: 502,
-        upstreamStatus,
-        publicMessage: `Crawler index returned an error${upstreamStatus ? ` (${upstreamStatus})` : ''}${cleanDetail ? `: ${cleanDetail}` : '.'}`,
         retryable: true
     });
 }
@@ -438,16 +430,18 @@ async function fetchWithTimeout(url, init, timeoutMs) {
     }
 }
 
+function stripHtml(text) {
+    return String(text || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+}
+
+function normalizeGdeltDate(value) {
+    const raw = String(value || '').trim();
+    if (!/^\d{14}$/.test(raw)) return raw;
+    return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}T${raw.slice(8, 10)}:${raw.slice(10, 12)}:${raw.slice(12, 14)}Z`;
+}
+
 function getSerperApiKey() {
     return String(process.env.SERPER_API_KEY || process.env.SERPER_KEY || '').trim();
-}
-
-function getCrawlerSearchEndpoint() {
-    return String(process.env.CRAWLER_SEARCH_ENDPOINT || '').trim().replace(/\/+$/, '');
-}
-
-function getCrawlerSearchKey() {
-    return String(process.env.CRAWLER_SEARCH_KEY || '').trim();
 }
 
 function getSerperKeyFingerprint() {
@@ -464,13 +458,12 @@ function clampInt(value, fallback, min, max) {
 
 export const __test = {
     liveSearchDisabledResponse: LIVE_SEARCH_DISABLED_RESPONSE,
-    createCrawlerIndexStatusError,
     createSerperStatusError,
     getSerperKeyFingerprint,
-    hasCrawlerIndex,
-    normalizeCrawlerServiceResults,
     normalizeSerperResults,
     runVerifiedWebSearch,
-    searchCrawlerIndex,
+    searchGdeltNews,
+    searchPublicSources,
+    searchWikipedia,
     isTrustedLiveSource
 };
