@@ -186,4 +186,53 @@ for (const pending of PENDING_SCENARIOS) {
     assert.equal(switched.cancelledPendingState.type, pending.type);
 }
 
+const contextCopilotEngine = createConversationEngine({ maxTurns: 12, maxContextChars: 1200 });
+let copilot = contextCopilotEngine.resolve({ message: 'Tell me about ISRO' });
+assert.equal(copilot.decisionReason, 'clear_new_intent');
+const isroThread = copilot.activeThread.id;
+recordExchange(contextCopilotEngine, isroThread, copilot.resolvedMessage, 'ISRO summary.');
+
+copilot = contextCopilotEngine.resolve({ message: 'latest on it' });
+assert.equal(copilot.decisionReason, 'contextual_follow_up');
+assert.match(copilot.resolvedMessage, /\bISRO\b/i);
+recordExchange(contextCopilotEngine, isroThread, copilot.resolvedMessage, 'ISRO latest summary.');
+
+copilot = contextCopilotEngine.resolve({ message: 'Tell me about NASA' });
+assert.equal(copilot.decisionReason, 'clear_new_intent');
+const nasaThread = copilot.activeThread.id;
+assertDoesNotUseThread(copilot, isroThread);
+recordExchange(contextCopilotEngine, nasaThread, copilot.resolvedMessage, 'NASA summary.');
+
+copilot = contextCopilotEngine.resolve({ message: 'compare it with ISRO' });
+assert.equal(copilot.decisionReason, 'contextual_follow_up');
+assertUsesThread(copilot, nasaThread);
+assert.match(copilot.resolvedMessage, /\bNASA\b/i);
+assert.match(copilot.resolvedMessage, /\bISRO\b/i);
+
+copilot = contextCopilotEngine.resolve({ message: 'no, I meant its latest mission' });
+assert.equal(copilot.decisionReason, 'conversation_repair');
+assertUsesThread(copilot, nasaThread);
+assert.match(copilot.resolvedMessage, /\bNASA\b/i);
+
+copilot = contextCopilotEngine.resolve({ message: 'go back to ISRO' });
+assert.equal(copilot.decisionReason, 'explicit_thread_resume');
+assertUsesThread(copilot, isroThread);
+
+copilot = contextCopilotEngine.resolve({ message: 'who is Ada Lovelace?' });
+assert.equal(copilot.decisionReason, 'clear_new_intent');
+assertDoesNotUseThread(copilot, isroThread);
+assert.doesNotMatch(copilot.resolvedMessage, /\bISRO\b/i);
+const adaThread = copilot.activeThread.id;
+
+const adaTopicBeforeAcknowledgement = contextCopilotEngine.getState().threads
+    .find(thread => thread.id === adaThread).topic;
+copilot = contextCopilotEngine.resolve({ message: 'okay' });
+assert.notEqual(copilot.decisionReason, 'clear_new_intent');
+contextCopilotEngine.recordTurn({ role: 'user', text: 'okay', threadId: copilot.activeThread.id });
+assert.equal(
+    contextCopilotEngine.getState().threads.find(thread => thread.id === adaThread).topic,
+    adaTopicBeforeAcknowledgement,
+    'Context Copilot acknowledgement must not overwrite active topic'
+);
+
 console.log('context-engine-tests-ok');
