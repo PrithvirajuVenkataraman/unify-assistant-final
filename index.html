@@ -215,7 +215,7 @@
 })();
 
 const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'};
-const LIVE_RETRIEVAL_ENABLED = globalThis.JARVIS_LIVE_RETRIEVAL_ENABLED === true;
+const LIVE_RETRIEVAL_ENABLED = globalThis.JARVIS_LIVE_RETRIEVAL_ENABLED !== false;
 const LIVE_DISABLED_MESSAGE = 'Live search and current updates are temporarily disabled. I can answer from general knowledge, but I cannot verify real-time facts right now.';
 const SUPPORT_MODE_HINTS = {
     balanced: 'Be clear, practical, and warm. Keep a neutral supportive tone.',
@@ -995,7 +995,7 @@ function buildJarvisTechStackReply() {
         '',
         'AI models: Groq is tried first when GROQ_API_KEY is configured, with candidates like openai/gpt-oss-120b, openai/gpt-oss-20b, llama-3.3-70b-versatile, and llama-3.1-8b-instant. Gemini is the fallback when GEMINI_API_KEY or GOOGLE_API_KEY is configured, with candidates like gemini-3.5-flash, gemini-2.5-flash, gemini-2.5-flash-lite, and gemini-2.0-flash.',
         '',
-        'Live search: self-hosted crawler search service first, with optional Serper via SERPER_API_KEY fallback, normalized through /api/search when live retrieval is enabled.',
+        'Live search: free public-source aggregation through Wikipedia and GDELT first, with optional Serper via SERPER_API_KEY fallback, normalized through /api/search when live retrieval is enabled.',
         '',
         'Memory: device-local memory and chat history are stored in localStorage when memory persistence is enabled. It remembers simple user facts like where you put things, plus local preferences and history. There is no external database in this repo.',
         '',
