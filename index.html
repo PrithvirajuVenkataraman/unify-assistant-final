@@ -977,6 +977,34 @@ function isMemoryRecallRequest(text) {
     return /\b(where\s+(?:is|are)\s+(?:my|the)\s+.+|where\s+did\s+i\s+(?:put|leave)\s+(?:my|the)\s+.+|where'?s\s+(?:my|the)\s+.+)\b/.test(t);
 }
 
+function isJarvisTechStackRequest(text) {
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return false;
+    const aboutThisAssistant = /\b(you|your|this bot|this chatbot|jarvis|assistant|app|site|website)\b/.test(t);
+    const stackIntent = /\b(tech stack|stack|built with|made with|using|libraries?|frameworks?|models?|ai model|backend|frontend|hosting|database|memory|storage|architecture)\b/.test(t);
+    return aboutThisAssistant && stackIntent;
+}
+
+function buildJarvisTechStackReply() {
+    return [
+        'Here is the stack this JARVIS app uses:',
+        '',
+        'Frontend: vanilla HTML, CSS, and browser JavaScript in index.html, with small ES modules in app/ for API calls, state, storage, context, and speech input. No React/Vue/Angular dependency is used.',
+        '',
+        'Backend: Vercel serverless API routes under api/. The main chat route is /api/chat-groq. Other routes handle search, vision, market/current-fact stubs, and API security.',
+        '',
+        'AI models: Groq is tried first when GROQ_API_KEY is configured, with candidates like openai/gpt-oss-120b, openai/gpt-oss-20b, llama-3.3-70b-versatile, and llama-3.1-8b-instant. Gemini is the fallback when GEMINI_API_KEY or GOOGLE_API_KEY is configured, with candidates like gemini-3.5-flash, gemini-2.5-flash, gemini-2.5-flash-lite, and gemini-2.0-flash.',
+        '',
+        'Live search: Serper via SERPER_API_KEY, normalized through /api/search and used by chat retrieval when live retrieval is enabled.',
+        '',
+        'Memory: device-local memory and chat history are stored in localStorage when memory persistence is enabled. It remembers simple user facts like where you put things, plus local preferences and history. There is no external database in this repo.',
+        '',
+        'Voice and vision: voice input uses the browser Web Speech API. Live Vision uses browser camera APIs and /api/vision for image analysis when configured.',
+        '',
+        'Hosting: configured for Vercel with static index.html plus serverless functions.'
+    ].join('\n');
+}
+
 function isChemistryReactionQuery(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
@@ -15951,6 +15979,13 @@ Quick recap: ...
 
             else if (isMemoryStorageRequest(cleanText)) {
                 await handleMemoryStorage(cleanText);
+                return;
+            }
+
+            else if (isJarvisTechStackRequest(cleanText)) {
+                const stackReply = buildJarvisTechStackReply();
+                addChatMessage(stackReply, false);
+                saveToHistory(text, stackReply);
                 return;
             }
 
