@@ -7,8 +7,10 @@ const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
 const WIKIPEDIA_SEARCH_URL = 'https://en.wikipedia.org/w/api.php';
 const WIKIPEDIA_SUMMARY_URL = 'https://en.wikipedia.org/api/rest_v1/page/summary';
 const GDELT_DOC_URL = 'https://api.gdeltproject.org/api/v2/doc/doc';
+const GEMINI_GENERATE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const SEARCH_TIMEOUT_MS = 8_000;
 const PUBLIC_SOURCE_TIMEOUT_MS = 5_000;
+const GEMINI_SEARCH_TIMEOUT_MS = 6_000;
 const MAX_QUERY_LENGTH = 500;
 
 export const LIVE_SEARCH_DISABLED_RESPONSE = Object.freeze({
@@ -45,6 +47,20 @@ const TRUSTED_SOURCE_HOSTS = Object.freeze([
     'usa.gov',
     'wikipedia.org',
     'wikidata.org'
+]);
+
+const OFFICIAL_SOURCE_SHORTCUTS = Object.freeze([
+    { pattern: /\bisro|indian space research/i, label: 'ISRO official', url: 'https://www.isro.gov.in/', query: 'ISRO latest official update' },
+    { pattern: /\bnasa\b/i, label: 'NASA official', url: 'https://www.nasa.gov/', query: 'NASA latest official update' },
+    { pattern: /\bwho\b|world health organization/i, label: 'WHO official', url: 'https://www.who.int/', query: 'WHO latest official update' },
+    { pattern: /\bcdc\b|centers for disease control/i, label: 'CDC official', url: 'https://www.cdc.gov/', query: 'CDC latest official update' },
+    { pattern: /\brbi\b|reserve bank of india/i, label: 'RBI official', url: 'https://www.rbi.org.in/', query: 'RBI latest official update' },
+    { pattern: /\bsec\b|securities and exchange commission/i, label: 'SEC official', url: 'https://www.sec.gov/', query: 'SEC latest official update' },
+    { pattern: /\bimf\b|international monetary fund/i, label: 'IMF official', url: 'https://www.imf.org/', query: 'IMF latest official update' },
+    { pattern: /\bworld bank\b/i, label: 'World Bank official', url: 'https://www.worldbank.org/', query: 'World Bank latest official update' },
+    { pattern: /\bnoaa\b|hurricane|climate|weather alert/i, label: 'NOAA official', url: 'https://www.noaa.gov/', query: 'NOAA latest official update' },
+    { pattern: /\busa\.gov|us government|u\.s\. government/i, label: 'USA.gov official', url: 'https://www.usa.gov/', query: 'USA.gov official update' },
+    { pattern: /\bgov\.uk|uk government|british government/i, label: 'GOV.UK official', url: 'https://www.gov.uk/', query: 'GOV.UK official update' }
 ]);
 
 export default async function handler(req, res) {
@@ -101,12 +117,22 @@ export async function searchPublicSources(query, options = {}) {
     const normalizedQuery = normalizeSearchQuery(query);
     if (!normalizedQuery) return [];
     const limit = clampInt(options.limit, 8, 1, 20);
-    const settled = await Promise.allSettled([
-        searchWikipedia(normalizedQuery, { limit: Math.min(5, limit) }),
-        searchGdeltNews(normalizedQuery, { limit })
-    ]);
+    const plannedQueries = Array.isArray(options.plannedQueries) && options.plannedQueries.length
+        ? options.plannedQueries
+        : [normalizedQuery];
+    const querySet = Array.from(new Set([
+        normalizedQuery,
+        ...plannedQueries.map(item => normalizeSearchQuery(item)).filter(Boolean),
+        ...getOfficialSourceShortcuts(normalizedQuery).map(item => item.query)
+    ])).slice(0, 5);
+    const settled = await Promise.allSettled(querySet.flatMap(candidate => [
+        searchWikipedia(candidate, { limit: Math.min(4, limit) }),
+        searchGdeltNews(candidate, { limit })
+    ]));
+    const official = getOfficialSourceShortcuts(normalizedQuery).map((item, index) => normalizeOfficialShortcut(item, normalizedQuery, index));
     return settled
         .flatMap(result => result.status === 'fulfilled' ? result.value : [])
+        .concat(official)
         .filter(Boolean)
         .slice(0, Math.max(limit, 8));
 }
@@ -206,19 +232,42 @@ export async function searchSerper(query, options = {}) {
 
 export async function runVerifiedWebSearch(query, options = {}) {
     const limit = clampInt(options.limit, 8, 1, 20);
-    const publicResults = dedupeSearchResults(await searchPublicSources(query, { limit })).slice(0, limit);
-    if (publicResults.length >= Math.min(3, limit) || !hasSerperKey()) {
-        return buildSearchSummary(publicResults, {
+    const planning = await buildGeminiSearchPlan(query).catch(error => ({
+        queries: [],
+        warning: `gemini_query_planning_failed:${String(error?.code || error?.message || 'unknown')}`
+    }));
+    const publicResults = rankSearchResults(query, dedupeSearchResults(await searchPublicSources(query, {
+        limit,
+        plannedQueries: planning.queries
+    }))).slice(0, limit);
+    let warnings = buildSearchWarnings(publicResults, planning.warning ? [planning.warning] : []);
+    const enhanced = await enhanceResultsWithGemini(query, publicResults, { limit }).catch(error => ({
+        results: publicResults,
+        enhanced: false,
+        warning: `gemini_enhancement_failed:${String(error?.code || error?.message || 'unknown')}`
+    }));
+    const enhancedResults = rankSearchResults(query, dedupeSearchResults(enhanced.results || publicResults)).slice(0, limit);
+    warnings = buildSearchWarnings(enhancedResults, [
+        ...warnings,
+        enhanced.warning || ''
+    ].filter(Boolean));
+
+    if (enhancedResults.length >= Math.min(3, limit) || !hasSerperKey()) {
+        return buildSearchSummary(enhancedResults, {
             provider: 'public_sources',
-            publicSourceCount: publicResults.length
+            publicSourceCount: enhancedResults.length,
+            geminiEnhanced: Boolean(enhanced.enhanced),
+            warnings
         });
     }
 
     const serperResults = await searchSerper(query, { limit: Math.max(limit, 10) });
-    const merged = dedupeSearchResults([...publicResults, ...serperResults]).slice(0, limit);
+    const merged = rankSearchResults(query, dedupeSearchResults([...enhancedResults, ...serperResults])).slice(0, limit);
     return buildSearchSummary(merged, {
-        provider: publicResults.length ? 'public_sources+serper' : 'serper',
-        publicSourceCount: publicResults.length
+        provider: enhancedResults.length ? 'public_sources+serper' : 'serper',
+        publicSourceCount: enhancedResults.length,
+        geminiEnhanced: Boolean(enhanced.enhanced),
+        warnings: buildSearchWarnings(merged, warnings)
     });
 }
 
@@ -271,9 +320,13 @@ function normalizeWikipediaItem(item, query) {
         url: pageUrl,
         domain,
         source: 'Wikipedia',
+        sourceType: 'encyclopedia',
+        sourceLabel: 'Wikipedia',
         date: '',
+        freshness: 'reference',
         position: Number(item?.index || 1),
         trusted: true,
+        qualitySignals: ['public_reference', 'trusted_source'],
         query
     };
 }
@@ -281,15 +334,43 @@ function normalizeWikipediaItem(item, query) {
 function normalizeGdeltItem(item, query, index) {
     const url = String(item?.url || '').trim();
     const domain = getDomainFromUrl(url);
+    const date = normalizeGdeltDate(item?.seendate);
+    const title = String(item?.title || '').trim();
     return {
-        title: String(item?.title || '').trim(),
-        description: String(item?.seendate || item?.sourcecountry || '').trim(),
+        title,
+        description: buildGdeltDescription(item, domain, date),
         url,
         domain,
         source: String(item?.domain || domain || 'GDELT').trim(),
-        date: normalizeGdeltDate(item?.seendate),
+        sourceType: isTrustedLiveSource(domain) ? 'trusted_news' : 'public_news',
+        sourceLabel: `${domain || 'GDELT'} via GDELT`,
+        date,
+        freshness: date ? 'recent_or_indexed' : 'unknown',
         position: index + 1,
         trusted: isTrustedLiveSource(domain),
+        qualitySignals: [
+            'public_news_index',
+            isTrustedLiveSource(domain) ? 'trusted_domain' : ''
+        ].filter(Boolean),
+        query
+    };
+}
+
+function normalizeOfficialShortcut(item, query, index) {
+    const domain = getDomainFromUrl(item.url);
+    return {
+        title: item.label,
+        description: `Official source for ${item.label.replace(/\s+official$/i, '')} updates and primary information.`,
+        url: item.url,
+        domain,
+        source: item.label,
+        sourceType: 'official_source',
+        sourceLabel: item.label,
+        date: '',
+        freshness: 'official_homepage',
+        position: index + 1,
+        trusted: true,
+        qualitySignals: ['official_source', 'trusted_domain'],
         query
     };
 }
@@ -311,9 +392,16 @@ function normalizeSerperItem(item, query, index) {
         url,
         domain,
         source: String(item?.source || domain || 'web').trim(),
+        sourceType: isTrustedLiveSource(domain) ? 'trusted_web' : 'web',
+        sourceLabel: String(item?.source || domain || 'web').trim(),
         date: String(item?.date || '').trim(),
+        freshness: String(item?.date || '').trim() ? 'dated' : 'unknown',
         position: Number.isFinite(Number(item?.position)) ? Number(item.position) : index + 1,
         trusted: isTrustedLiveSource(domain),
+        qualitySignals: [
+            'serper',
+            isTrustedLiveSource(domain) ? 'trusted_domain' : ''
+        ].filter(Boolean),
         query
     };
 }
@@ -340,8 +428,173 @@ function buildSearchSummary(results, metadata = {}) {
         sourceCount: results.length,
         distinctDomainCount: distinctDomains.length,
         provider: metadata.provider || 'public_sources',
-        publicSourceCount: Number(metadata.publicSourceCount) || 0
+        publicSourceCount: Number(metadata.publicSourceCount) || 0,
+        geminiEnhanced: Boolean(metadata.geminiEnhanced),
+        warnings: Array.from(new Set((metadata.warnings || []).filter(Boolean)))
     };
+}
+
+async function buildGeminiSearchPlan(query) {
+    if (!hasGeminiKey()) return { queries: [], enhanced: false };
+    const prompt = `Return strict JSON only.
+Task: rewrite this user search query into 2 to 4 concise public-source search queries.
+Prefer official domains, Wikipedia/Wikidata style entity terms, and news phrasing when current.
+User query: ${JSON.stringify(query)}
+JSON shape: {"queries":["..."]}`;
+    const json = await callGeminiJson(prompt, { maxOutputTokens: 300, temperature: 0.1 });
+    const queries = Array.isArray(json?.queries)
+        ? json.queries.map(item => normalizeSearchQuery(item)).filter(Boolean).slice(0, 4)
+        : [];
+    return { queries, enhanced: queries.length > 0 };
+}
+
+async function enhanceResultsWithGemini(query, results, options = {}) {
+    if (!hasGeminiKey() || !Array.isArray(results) || !results.length) {
+        return { results, enhanced: false };
+    }
+    const limit = clampInt(options.limit, 8, 1, 20);
+    const compact = results.slice(0, 12).map((item, index) => ({
+        index,
+        title: item.title,
+        description: item.description,
+        domain: item.domain,
+        sourceType: item.sourceType,
+        sourceLabel: item.sourceLabel,
+        date: item.date,
+        url: item.url
+    }));
+    const prompt = `Return strict JSON only.
+Task: rank and improve source snippets for a public-source search result list.
+Rules:
+- Use only the fields provided. Do not invent facts.
+- Keep descriptions concise, source-grounded, and under 180 characters.
+- Prefer official_source, trusted_news, and exact query relevance.
+- Return indexes from the input list only.
+User query: ${JSON.stringify(query)}
+Results JSON: ${JSON.stringify(compact)}
+JSON shape: {"ranked":[{"index":0,"description":"...","reason":"..."}]}`;
+    const json = await callGeminiJson(prompt, { maxOutputTokens: 900, temperature: 0.1 });
+    const ranked = Array.isArray(json?.ranked) ? json.ranked : [];
+    if (!ranked.length) return { results, enhanced: false };
+    const byIndex = new Map(results.map((item, index) => [index, item]));
+    const used = new Set();
+    const enhanced = [];
+    for (const entry of ranked) {
+        const index = Number(entry?.index);
+        const item = byIndex.get(index);
+        if (!item || used.has(index)) continue;
+        used.add(index);
+        enhanced.push({
+            ...item,
+            description: String(entry?.description || item.description || '').replace(/\s+/g, ' ').trim().slice(0, 320),
+            qualitySignals: Array.from(new Set([...(item.qualitySignals || []), 'gemini_ranked'])),
+            geminiReason: String(entry?.reason || '').slice(0, 160)
+        });
+    }
+    for (const [index, item] of byIndex) {
+        if (!used.has(index)) enhanced.push(item);
+    }
+    return { results: enhanced.slice(0, limit), enhanced: true };
+}
+
+async function callGeminiJson(prompt, options = {}) {
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) return null;
+    const model = String(process.env.GEMINI_SEARCH_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite').trim();
+    const response = await fetchWithTimeout(`${GEMINI_GENERATE_URL}/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                temperature: Number.isFinite(Number(options.temperature)) ? Number(options.temperature) : 0.1,
+                maxOutputTokens: clampInt(options.maxOutputTokens, 700, 100, 1600)
+            }
+        })
+    }, GEMINI_SEARCH_TIMEOUT_MS);
+    if (!response.ok) {
+        const error = createSearchError({
+            code: 'gemini_search_enhancer_failed',
+            httpStatus: 200,
+            upstreamStatus: response.status,
+            publicMessage: 'Gemini search enhancement failed.',
+            retryable: true
+        });
+        throw error;
+    }
+    const data = await response.json();
+    const text = String(data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+    return extractJsonObject(text);
+}
+
+function extractJsonObject(text) {
+    const raw = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
+    try {
+        return JSON.parse(raw);
+    } catch (_) {
+        const start = raw.indexOf('{');
+        const end = raw.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            try {
+                return JSON.parse(raw.slice(start, end + 1));
+            } catch (_) {}
+        }
+    }
+    return null;
+}
+
+function getOfficialSourceShortcuts(query) {
+    return OFFICIAL_SOURCE_SHORTCUTS.filter(item => item.pattern.test(query));
+}
+
+function rankSearchResults(query, results) {
+    const terms = tokenize(query);
+    return [...(Array.isArray(results) ? results : [])].sort((a, b) => scoreSearchResult(b, terms) - scoreSearchResult(a, terms));
+}
+
+function scoreSearchResult(item, terms) {
+    const title = String(item?.title || '').toLowerCase();
+    const description = String(item?.description || '').toLowerCase();
+    const domain = String(item?.domain || '').toLowerCase();
+    let score = 0;
+    if (item?.sourceType === 'official_source') score += 30;
+    if (item?.trusted) score += 12;
+    if (item?.sourceType === 'trusted_news') score += 8;
+    if (item?.sourceType === 'encyclopedia') score += 4;
+    for (const term of terms) {
+        if (title.includes(term)) score += 5;
+        if (domain.includes(term)) score += 4;
+        if (description.includes(term)) score += 2;
+    }
+    if (item?.date) score += 2;
+    return score;
+}
+
+function buildSearchWarnings(results, existing = []) {
+    const warnings = [...existing];
+    if (!Array.isArray(results) || !results.length) {
+        warnings.push('No public-source results were found. This is not full-web coverage.');
+    } else if (results.length < 3) {
+        warnings.push('Limited public-source coverage; results may be incomplete.');
+    }
+    if (!results.some(item => item.sourceType === 'official_source' || item.trusted)) {
+        warnings.push('No trusted or official source was found in the public-source result set.');
+    }
+    return Array.from(new Set(warnings.filter(Boolean)));
+}
+
+function buildGdeltDescription(item, domain, date) {
+    const country = String(item?.sourcecountry || '').trim();
+    const parts = [
+        domain ? `Source: ${domain}` : '',
+        date ? `Indexed: ${date.slice(0, 10)}` : '',
+        country ? `Country: ${country}` : ''
+    ].filter(Boolean);
+    return parts.length ? parts.join(' | ') : 'News article indexed by GDELT.';
+}
+
+function tokenize(text = '') {
+    return Array.from(new Set(String(text || '').toLowerCase().match(/[a-z0-9]{2,}/g) || []));
 }
 
 function normalizeResultKey(item) {
@@ -444,6 +697,14 @@ function getSerperApiKey() {
     return String(process.env.SERPER_API_KEY || process.env.SERPER_KEY || '').trim();
 }
 
+function getGeminiApiKey() {
+    return String(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
+}
+
+function hasGeminiKey() {
+    return Boolean(getGeminiApiKey());
+}
+
 function getSerperKeyFingerprint() {
     const key = getSerperApiKey();
     if (!key) return '';
@@ -465,5 +726,7 @@ export const __test = {
     searchGdeltNews,
     searchPublicSources,
     searchWikipedia,
+    buildGeminiSearchPlan,
+    enhanceResultsWithGemini,
     isTrustedLiveSource
 };
