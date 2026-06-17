@@ -5287,6 +5287,72 @@ let showRoutingDebugBadge = false;
             return raw.split(/[.?!]/)[0].trim().slice(0, 80);
         }
 
+        function shouldShowContextCopilotBadge(reason) {
+            return [
+                'contextual_follow_up',
+                'conversation_repair',
+                'explicit_thread_resume',
+                'pending_clarification_answer',
+                'new_intent_low_context_confidence'
+            ].includes(String(reason || ''));
+        }
+
+        function getContextCopilotTopic(context = {}) {
+            return String(
+                context.activeThreadEntity ||
+                context.activeThreadTopic ||
+                context.resolvedUserText ||
+                ''
+            ).replace(/\s+/g, ' ').trim().slice(0, 80);
+        }
+
+        function getContextCopilotSummary(context = {}) {
+            const reason = String(context.contextDecisionReason || '');
+            const topic = getContextCopilotTopic(context);
+            if (reason === 'conversation_repair') return topic ? `Correction applied: ${topic}` : 'Correction applied';
+            if (reason === 'explicit_thread_resume') return topic ? `Returned to earlier topic: ${topic}` : 'Returned to earlier topic';
+            if (reason === 'pending_clarification_answer') return 'Clarification answer understood';
+            if (reason === 'new_intent_low_context_confidence') return 'New topic detected';
+            if (reason === 'contextual_follow_up') return topic ? `Follow-up understood: ${topic}` : 'Follow-up understood';
+            return '';
+        }
+
+        function buildContextCopilotBadgeHtml(context = {}) {
+            const reason = String(context.contextDecisionReason || '');
+            if (!shouldShowContextCopilotBadge(reason)) return '';
+            const summary = getContextCopilotSummary(context);
+            if (!summary) return '';
+            const confidence = Math.round((Number(context.contextConfidence) || 0) * 100);
+            const original = String(context.originalUserText || '').trim();
+            const resolved = String(context.resolvedUserText || '').trim();
+            return `
+                <details class="context-copilot-badge">
+                    <summary>
+                        <span class="context-copilot-dot" aria-hidden="true"></span>
+                        <span>${escapeHtml(summary)}</span>
+                    </summary>
+                    <div class="context-copilot-details">
+                        ${original ? `<div><strong>Original:</strong> ${escapeHtml(original)}</div>` : ''}
+                        ${resolved ? `<div><strong>Understood as:</strong> ${escapeHtml(resolved)}</div>` : ''}
+                        <div><strong>Reason:</strong> ${escapeHtml(reason)}</div>
+                        ${confidence ? `<div><strong>Confidence:</strong> ${confidence}%</div>` : ''}
+                    </div>
+                </details>
+            `;
+        }
+
+        function updateContextCopilotBadge(turnId) {
+            const turn = getConversationTurn(turnId);
+            if (!turn?.sourceContext) return;
+            const html = buildContextCopilotBadgeHtml(turn.sourceContext);
+            const row = document.querySelector(`.chat-row[data-role="user"][data-turn-id="${CSS.escape(String(turnId || ''))}"]`);
+            const bubble = row?.querySelector('.chat-bubble-user');
+            if (!bubble) return;
+            bubble.querySelector('.context-copilot-badge')?.remove();
+            if (!html) return;
+            bubble.insertAdjacentHTML('beforeend', html);
+        }
+
         function getActionIconSvg(name) {
             const icons = {
                 copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>',
@@ -14911,8 +14977,11 @@ function detectInputLanguageHint(text) {
                     originalUserText: String(contextResolution.originalMessage || text || ''),
                     resolvedUserText: String(contextResolution.resolvedMessage || text || ''),
                     contextDecisionReason: String(contextResolution.decisionReason || ''),
-                    contextConfidence: Number(contextResolution.confidence) || 0
+                    contextConfidence: Number(contextResolution.confidence) || 0,
+                    activeThreadTopic: String(contextResolution.activeThread?.topic || ''),
+                    activeThreadEntity: String(contextResolution.activeThread?.entity || '')
                 };
+                updateContextCopilotBadge(activeTurnForResolution.id);
             }
             if (contextResolution?.cancelledPendingState) {
                 clearSupersededConversationState();
