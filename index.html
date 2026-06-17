@@ -4787,6 +4787,8 @@ let showRoutingDebugBadge = false;
             popover.className = 'selection-helper-popover';
             popover.setAttribute('role', 'toolbar');
             popover.setAttribute('aria-label', 'Actions for selected JARVIS text');
+            popover.setAttribute('aria-hidden', 'true');
+            popover.hidden = true;
             popover.innerHTML = `
                 <span id="selection-helper-chip" class="selection-helper-chip"></span>
                 <div class="selection-helper-actions">
@@ -4888,6 +4890,8 @@ let showRoutingDebugBadge = false;
             if (chip) chip.textContent = selectedText;
 
             popover.classList.add('visible');
+            popover.hidden = false;
+            popover.setAttribute('aria-hidden', 'false');
             const spacing = 10;
             const maxLeft = Math.max(8, window.innerWidth - popover.offsetWidth - 8);
             const maxTop = Math.max(8, window.innerHeight - popover.offsetHeight - 8);
@@ -4907,6 +4911,8 @@ let showRoutingDebugBadge = false;
             const popover = selectionHelperState.popoverEl;
             if (!popover) return;
             popover.classList.remove('visible');
+            popover.hidden = true;
+            popover.setAttribute('aria-hidden', 'true');
         }
 
         function applySelectionAction(action) {
