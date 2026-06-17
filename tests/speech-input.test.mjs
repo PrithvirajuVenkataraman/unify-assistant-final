@@ -66,7 +66,7 @@ const controller = createSpeechInputController({
 assert.equal(controller.getState().supported, true);
 assert.equal(controller.toggleDictation(), true);
 assert.equal(FakeRecognition.instances[0].lang, 'en-IN');
-assert.equal(FakeRecognition.instances[0].continuous, false);
+assert.equal(FakeRecognition.instances[0].continuous, true);
 await FakeRecognition.instances[0].emitResult(SAMPLE.dictation, false);
 assert.equal(interimEvents.at(-1), SAMPLE.dictation);
 await FakeRecognition.instances[0].emitResult(SAMPLE.dictation, true);
@@ -75,8 +75,11 @@ assert.equal(finalEvents.at(-1).autoSubmit, false);
 assert.equal(finalEvents.at(-1).mode, 'dictation');
 assert.ok(finalEvents.at(-1).transcriptId);
 assert.equal(finalEvents.at(-1).sessionId, 1);
-assert.equal(controller.getState().mode, 'idle');
+assert.equal(controller.getState().mode, 'dictation');
+assert.equal(controller.getState().listening, true);
 assert.equal(controller.getState().submittedResultIds.length, 1);
+assert.equal(controller.toggleDictation(), false);
+assert.equal(controller.getState().mode, 'idle');
 
 assert.equal(controller.setLanguage('ta-IN'), 'en-US');
 assert.equal(controller.toggleConverse(), true);
@@ -187,7 +190,8 @@ const source = fs.readFileSync(new URL('../app/speech-input.js', import.meta.url
 assert.doesNotMatch(source, /speechSynthesis|SpeechSynthesisUtterance|AudioContext|new Audio\s*\(/);
 assert.doesNotMatch(source, /setTimeout\s*\([^)]*startRecognition|scheduleConverseRestart/);
 assert.match(source, /const toggleConverseController = controller\.toggleConverse/);
-assert.match(source, /return toggleConverseController\(\)/);
+assert.match(source, /const toggled = toggleConverseController\(\)/);
+assert.match(source, /stopActiveGeneration\?\.\('converse_stop'\)/);
 assert.match(source, /interrupt:\s*processing/);
 
 console.log('speech-input-tests-ok');
