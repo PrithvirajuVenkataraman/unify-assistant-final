@@ -75,10 +75,12 @@ const FEATURE_CONTRACTS = Object.freeze({
     },
     spinnerOnlyLoading: {
         required: [
-            /<span id="chat-thinking-text" class="sr-only">Generating answer<\/span>/
+            /id="chat-thinking-text" class="assistant-thinking-text"/,
+            /class="assistant-thinking-pulse"/
         ],
         forbidden: [
             /id="chat-thinking-phase"/,
+            /assistant-thinking-spinner/,
             /I'll stop here because the response appears to have been cut off/
         ]
     },
@@ -189,7 +191,9 @@ assert.match(SOURCE.styles, /body\.dark \.chat-bubble-assistant\s*\{[\s\S]*backg
 assert.match(SOURCE.styles, /body \.chat-row \.chat-bubble-user,\s*body \.chat-row \.chat-bubble-assistant,[\s\S]*border:\s*none !important[\s\S]*border-radius:\s*0 !important/);
 assert.match(SOURCE.styles, /\.selection-helper-popover\s*\{[\s\S]*display:\s*none !important[\s\S]*visibility:\s*hidden !important[\s\S]*pointer-events:\s*none !important/);
 assert.match(SOURCE.styles, /\.selection-helper-popover\.visible\s*\{[\s\S]*display:\s*flex !important[\s\S]*visibility:\s*visible !important/);
-assert.match(SOURCE.styles, /#chat-thinking-indicator \.assistant-thinking-spinner\s*\{[\s\S]*border-top-color:\s*#ffffff !important[\s\S]*border-right-color:\s*#ffffff !important[\s\S]*animation:\s*jarvis-spin/);
+assert.match(SOURCE.styles, /\.assistant-thinking-pulse\s*\{/);
+assert.match(SOURCE.styles, /@keyframes jarvis-thinking-pulse/);
+assert.doesNotMatch(SOURCE.styles, /assistant-thinking-spinner/);
 assert.match(SOURCE.styles, /\.assistant-message-text a\s*\{[\s\S]*color:\s*#ffffff !important/);
 assert.doesNotMatch(SOURCE.appHtml, /chat-bubble-user text-white px-4 py-3/);
 assert.match(SOURCE.appHtml, /popover\.hidden = true/);
@@ -204,6 +208,10 @@ assert.match(SOURCE.appHtml, /function buildContextCopilotBadgeHtml/);
 assert.match(SOURCE.appHtml, /function shouldShowContextCopilotBadge/);
 assert.match(SOURCE.appHtml, /contextual_follow_up/);
 assert.doesNotMatch(SOURCE.appHtml, /alwaysShowContextCopilotBadge\s*=\s*true/);
+assert.match(SOURCE.appHtml, /function splitReadableSentences\(text\)/);
+assert.ok(SOURCE.appHtml.includes("char === '.' && /\\d/.test(prev) && /\\d/.test(next)"));
+assert.match(SOURCE.appHtml, /if \(isUser && !rawDisplayText\.trim\(\)\) return/);
+assert.doesNotMatch(SOURCE.appHtml, /rawText\.match\(\s*\/\[\^\.\!\?\]\+\[\.\!\?\]\+\/g/);
 assert.match(SOURCE.readme, /Standout Feature: Context Copilot/);
 assert.match(SOURCE.readme, /local, deterministic, private, and free-for-life/);
 assert.match(SOURCE.appHtml, /localStorage when memory persistence is enabled/);
