@@ -1,67 +1,78 @@
-  import chatGroqHandler from './chat-groq.js';
-  import marketsHandler from './markets.js';
-  import speechHandler from './speech.js';
-  import visionHandler from './vision.js';
-  import searchHandler from './search.js';
-  import currentFactsHandler from './current-facts.js';
+import chatGroqHandler from './chat-groq.js';
+import currentFactsHandler from './current-facts.js';
+import marketsHandler from './markets.js';
+import searchHandler from './search.js';
+import visionHandler from './vision.js';
 
-  // Unified API Handler to bypass Vercel's Serverless Function limits
-  export default async function handler(req, res) {
+const ROUTES = new Map([
+    ['/api/chat-groq', chatGroqHandler],
+    ['/api/current-facts', currentFactsHandler],
+    ['/api/markets', marketsHandler],
+    ['/api/search', searchHandler],
+    ['/api/vision', visionHandler]
+]);
+
+const RETIRED_ROUTES = new Map([
+    ['/api/rag', 'Document upload has been retired. Live search is handled by /api/search.'],
+    ['/api/document-ingest', 'Document upload has been retired. Use Live Vision through /api/vision.']
+]);
+
+export default async function handler(req, res) {
     const path = resolveRequestPath(req);
-    
-    try {
-      if (path.includes('/chat-groq')) {
-        return await chatGroqHandler(req, res);
-      } else if (path.includes('/rag')) {
-        return res.status(410).json({
-          success: false,
-          error: 'The legacy /api/rag endpoint has been retired.',
-          hint: 'Document upload and live retrieval have been retired in this focused build.'
-        });
-      } else if (path.includes('/document-ingest')) {
-        return res.status(410).json({
-          success: false,
-          error: 'Document upload has been retired. Use camera OCR through /api/vision.'
-        });
-      } else if (path.includes('/markets')) {
-        return await marketsHandler(req, res);
-      } else if (path.includes('/current-facts')) {
-        return await currentFactsHandler(req, res);
-      } else if (path.includes('/search')) {
-        return await searchHandler(req, res);
-      } else if (path.includes('/speech')) {
-        return await speechHandler(req, res);
-      } else if (path.includes('/vision')) {
-        return await visionHandler(req, res);
-      }
-      
-      // Add any additional handlers here...
-      return res.status(404).json({ error: 'Unified API Route Not Found' });
-    } catch (error) {
-      console.error("API Error:", error);
-      return res.status(500).json({ error: 'Internal Server Error' });
-    }
-  }
+    const routeHandler = ROUTES.get(path);
 
-  function resolveRequestPath(req) {
+    try {
+        if (routeHandler) return await routeHandler(req, res);
+        if (RETIRED_ROUTES.has(path)) {
+            return res.status(410).json({
+                success: false,
+                error: {
+                    code: 'route_retired',
+                    message: RETIRED_ROUTES.get(path)
+                }
+            });
+        }
+        return res.status(404).json({
+            success: false,
+            error: {
+                code: 'route_not_found',
+                message: 'API route not found.'
+            }
+        });
+    } catch (error) {
+        console.error('[api] unhandled route error', {
+            path,
+            reason: String(error?.message || 'unknown_error')
+        });
+        return res.status(500).json({
+            success: false,
+            error: {
+                code: 'internal_error',
+                message: 'Internal server error.'
+            }
+        });
+    }
+}
+
+export function resolveRequestPath(req) {
     const candidates = [
-      req?.url,
-      req?.headers?.['x-original-uri'],
-      req?.headers?.['x-rewrite-url'],
-      req?.headers?.['x-forwarded-uri'],
-      req?.headers?.['x-invoke-path']
+        req?.url,
+        req?.headers?.['x-original-uri'],
+        req?.headers?.['x-rewrite-url'],
+        req?.headers?.['x-forwarded-uri'],
+        req?.headers?.['x-invoke-path']
     ]
-      .map(v => String(v || '').trim())
-      .filter(Boolean);
+        .map(value => String(value || '').trim())
+        .filter(Boolean);
 
     for (const value of candidates) {
-      try {
-        if (value.startsWith('http://') || value.startsWith('https://')) {
-          return new URL(value).pathname;
-        }
-        return value.split('?')[0] || value;
-      } catch (_) {}
+        try {
+            const pathname = value.startsWith('http://') || value.startsWith('https://')
+                ? new URL(value).pathname
+                : value.split('?')[0];
+            if (!pathname) continue;
+            return `/${pathname}`.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
+        } catch (_) {}
     }
-
     return '';
-  }
+}
