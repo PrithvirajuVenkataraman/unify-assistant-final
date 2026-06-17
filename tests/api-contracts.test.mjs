@@ -3,7 +3,7 @@ import apiHandler, { resolveRequestPath } from '../api/index.js';
 import chatHandler, { __test as chatTest } from '../api/chat-groq.js';
 import currentFactsHandler from '../api/current-facts.js';
 import marketsHandler from '../api/markets.js';
-import searchHandler from '../api/search.js';
+import searchHandler, { __test as searchTest } from '../api/search.js';
 import visionHandler from '../api/vision.js';
 
 const SAMPLE = Object.freeze({
@@ -18,6 +18,14 @@ const SAMPLE = Object.freeze({
     budgetQuery: 'Plan 3 days under INR 12000',
     imageBase64: 'eA=='
 });
+
+const ORIGINAL_SERPER_API_KEY = process.env.SERPER_API_KEY;
+const ORIGINAL_SERPER_KEY = process.env.SERPER_KEY;
+const ORIGINAL_LIVE_RETRIEVAL_ENABLED = process.env.LIVE_RETRIEVAL_ENABLED;
+const ORIGINAL_FETCH = globalThis.fetch;
+delete process.env.SERPER_API_KEY;
+delete process.env.SERPER_KEY;
+delete process.env.LIVE_RETRIEVAL_ENABLED;
 
 assert.equal(resolveRequestPath({ url: '/api/chat-groq?x=1' }), '/api/chat-groq');
 assert.equal(resolveRequestPath({ url: '/api/chat-groq-extra' }), '/api/chat-groq-extra');
@@ -74,6 +82,19 @@ assert.deepEqual(
 );
 assert.equal(chatTest.normalizeResponseStyle('unknown'), 'balanced');
 assert.ok(chatTest.getQualityRiskReasons(SAMPLE.challengedAnswer, SAMPLE.challengedResponse, 'chat').length > 0);
+assert.equal(chatTest.getStableFactAnswer('What is the capital of France?'), 'The capital of France is Paris.');
+const capitalReply = await callHandler(chatHandler, request('/api/chat-groq', { message: 'What is the capital of France?' }));
+assert.equal(capitalReply.statusCode, 200);
+assert.equal(capitalReply.body.provider, 'deterministic');
+assert.equal(capitalReply.body.response, 'The capital of France is Paris.');
+assert.equal(capitalReply.body.webEscalation.escalated, false);
+assert.equal(chatTest.classifyRoutingDecision('What is the capital of France?', '', {}).reason, 'live_retrieval_disabled');
+process.env.SERPER_API_KEY = 'test-serper-key';
+process.env.LIVE_RETRIEVAL_ENABLED = 'true';
+assert.equal(chatTest.classifyRoutingDecision('What is the current president of France?', '', {}).strategy, 'live_first');
+assert.equal(chatTest.classifyRoutingDecision('What is the capital of France?', '', {}).strategy, 'direct');
+delete process.env.SERPER_API_KEY;
+delete process.env.LIVE_RETRIEVAL_ENABLED;
 
 const wrongMethod = await callHandler(currentFactsHandler, {
     ...request('/api/current-facts', {}),
@@ -90,6 +111,54 @@ assert.equal(disabledFacts.body.error.code, 'feature_disabled');
 const disabledSearch = await callHandler(searchHandler, request('/api/search', { query: SAMPLE.currentQuery }));
 assert.equal(disabledSearch.statusCode, 503);
 assert.equal(disabledSearch.body.error.code, 'feature_disabled');
+
+process.env.SERPER_API_KEY = 'test-serper-key';
+process.env.LIVE_RETRIEVAL_ENABLED = 'true';
+globalThis.fetch = async (url, init) => {
+    assert.equal(String(url), 'https://google.serper.dev/search');
+    assert.equal(init?.headers?.['X-API-KEY'], 'test-serper-key');
+    return {
+        ok: true,
+        status: 200,
+        async json() {
+            return {
+                organic: [
+                    {
+                        title: 'France facts',
+                        link: 'https://www.bbc.com/news/world-europe-17298730?x=1',
+                        snippet: 'France country profile and current background.',
+                        position: 1
+                    },
+                    {
+                        title: 'France facts duplicate',
+                        link: 'https://www.bbc.com/news/world-europe-17298730?x=2',
+                        snippet: 'Duplicate URL after query stripping.',
+                        position: 2
+                    },
+                    {
+                        title: 'Official France',
+                        link: 'https://www.diplomatie.gouv.fr/en/',
+                        snippet: 'Official French foreign ministry.',
+                        position: 3
+                    }
+                ]
+            };
+        },
+        async text() {
+            return '';
+        }
+    };
+};
+const enabledSearch = await callHandler(searchHandler, request('/api/search', { query: 'France facts', limit: 5 }));
+assert.equal(enabledSearch.statusCode, 200);
+assert.equal(enabledSearch.body.success, true);
+assert.equal(enabledSearch.body.results.length, 2);
+assert.deepEqual(enabledSearch.body.distinctDomains, ['bbc.com', 'diplomatie.gouv.fr']);
+assert.equal(enabledSearch.body.trustedCount, 1);
+assert.equal(searchTest.isTrustedLiveSource('https://www.bbc.com/news'), true);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.SERPER_API_KEY;
+delete process.env.LIVE_RETRIEVAL_ENABLED;
 
 const disabledMarkets = await callHandler(marketsHandler, request('/api/markets', {
     mode: 'markets',
@@ -114,7 +183,20 @@ const invalidVisionMime = await callHandler(visionHandler, request('/api/vision'
 assert.equal(invalidVisionMime.statusCode, 415);
 assert.equal(invalidVisionMime.body.error.code, 'unsupported_media_type');
 
+restoreEnv('SERPER_API_KEY', ORIGINAL_SERPER_API_KEY);
+restoreEnv('SERPER_KEY', ORIGINAL_SERPER_KEY);
+restoreEnv('LIVE_RETRIEVAL_ENABLED', ORIGINAL_LIVE_RETRIEVAL_ENABLED);
+globalThis.fetch = ORIGINAL_FETCH;
+
 console.log('api-contract-tests-ok');
+
+function restoreEnv(name, value) {
+    if (typeof value === 'undefined') {
+        delete process.env[name];
+    } else {
+        process.env[name] = value;
+    }
+}
 
 function request(url, body) {
     return {
