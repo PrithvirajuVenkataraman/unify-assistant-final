@@ -186,8 +186,12 @@ assert.match(SOURCE.styles, /\.chat-bubble-user\s*\{[\s\S]*background:\s*transpa
 assert.match(SOURCE.styles, /\.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important/);
 assert.match(SOURCE.styles, /body\.dark \.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important[\s\S]*border:\s*none !important[\s\S]*padding:\s*0 !important/);
 assert.match(SOURCE.styles, /body \.chat-row \.chat-bubble-user,\s*body \.chat-row \.chat-bubble-assistant,[\s\S]*border:\s*none !important[\s\S]*border-radius:\s*0 !important/);
+assert.match(SOURCE.styles, /\.selection-helper-popover\s*\{[\s\S]*display:\s*none !important[\s\S]*visibility:\s*hidden !important[\s\S]*pointer-events:\s*none !important/);
+assert.match(SOURCE.styles, /\.selection-helper-popover\.visible\s*\{[\s\S]*display:\s*flex !important[\s\S]*visibility:\s*visible !important/);
 assert.match(SOURCE.styles, /\.assistant-message-text a\s*\{[\s\S]*color:\s*#ffffff !important/);
 assert.doesNotMatch(SOURCE.appHtml, /chat-bubble-user text-white px-4 py-3/);
+assert.match(SOURCE.appHtml, /popover\.hidden = true/);
+assert.match(SOURCE.appHtml, /popover\.hidden = false/);
 assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
 
 const disabledApi = await callJsonHandler(currentFactsHandler, {
