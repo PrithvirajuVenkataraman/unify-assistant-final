@@ -778,7 +778,7 @@ function hasLiveSearchConfiguredForChat() {
     return Boolean(
         process.env.SERPER_API_KEY ||
         process.env.SERPER_KEY ||
-        (process.env.MEILI_HOST && process.env.MEILI_SEARCH_KEY)
+        process.env.CRAWLER_SEARCH_ENDPOINT
     );
 }
 
