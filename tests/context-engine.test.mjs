@@ -235,4 +235,35 @@ assert.equal(
     'Context Copilot acknowledgement must not overwrite active topic'
 );
 
+for (const scenario of [
+    {
+        anchor: 'UNICEF',
+        standalone: 'Who is Marie Curie?',
+        followup: 'show examples',
+        followupMatch: /\bunicef\b/i
+    },
+    {
+        anchor: 'quantum computing',
+        standalone: 'What is photosynthesis?',
+        followup: 'what about cost?',
+        followupMatch: /\bquantum\b/i
+    }
+]) {
+    const engineForScenario = createConversationEngine({ maxTurns: 10, maxContextChars: 1000 });
+    let generic = engineForScenario.resolve({ message: `Tell me about ${scenario.anchor}` });
+    const anchorThread = generic.activeThread.id;
+    recordExchange(engineForScenario, anchorThread, generic.resolvedMessage, `${scenario.anchor} summary.`);
+
+    generic = engineForScenario.resolve({ message: scenario.standalone });
+    assert.equal(generic.decisionReason, 'clear_new_intent');
+    assertDoesNotUseThread(generic, anchorThread, `${scenario.standalone} must not inherit ${scenario.anchor}`);
+    const standaloneThread = generic.activeThread.id;
+    recordExchange(engineForScenario, standaloneThread, generic.resolvedMessage, `${scenario.standalone} summary.`);
+
+    generic = engineForScenario.resolve({ message: scenario.followup });
+    assert.equal(generic.decisionReason, 'contextual_follow_up');
+    assert.doesNotMatch(generic.resolvedMessage, scenario.followupMatch, 'follow-up after new standalone topic must not jump back to the old topic');
+    assertUsesThread(generic, standaloneThread);
+}
+
 console.log('context-engine-tests-ok');
