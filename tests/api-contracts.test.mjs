@@ -3,15 +3,17 @@ import apiHandler, { resolveRequestPath } from '../api/index.js';
 import chatHandler, { __test as chatTest } from '../api/chat-groq.js';
 import currentFactsHandler from '../api/current-facts.js';
 import marketsHandler from '../api/markets.js';
-import searchHandler, { __test as searchTest } from '../api/search.js';
-import visionHandler from '../api/vision.js';
+import searchHandler, { __test as searchTest } from '../api/search.js'; 
+import visionHandler from '../api/vision.js'; 
+import webSearchHandler from '../api/web-search.js';
+import { __test as webSearchTest } from '../api/_lib/web-search-core.js';
 
 const SAMPLE = Object.freeze({
     chatMessage: 'q',
     selectionText: 'const v = 1;',
     customInstruction: 'q q',
     customPrompt: 'a b c',
-    challengedAnswer: 'verify q', 
+    challengedAnswer: 'verify q',
     challengedResponse: '2020.',
     currentQuery: 'q q',
     marketQuery: 'q q',
@@ -22,23 +24,69 @@ const SAMPLE = Object.freeze({
 const ORIGINAL_SERPER_API_KEY = process.env.SERPER_API_KEY;
 const ORIGINAL_SERPER_KEY = process.env.SERPER_KEY;
 const ORIGINAL_LIVE_RETRIEVAL_ENABLED = process.env.LIVE_RETRIEVAL_ENABLED;
-const ORIGINAL_GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const ORIGINAL_GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
-const ORIGINAL_GEMINI_SEARCH_MODEL = process.env.GEMINI_SEARCH_MODEL;
-const ORIGINAL_FETCH = globalThis.fetch;
+const ORIGINAL_GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
+const ORIGINAL_GOOGLE_API_KEY = process.env.GOOGLE_API_KEY; 
+const ORIGINAL_GEMINI_SEARCH_MODEL = process.env.GEMINI_SEARCH_MODEL; 
+const ORIGINAL_SEARXNG_URL = process.env.SEARXNG_URL;
+const ORIGINAL_REDIS_URL = process.env.REDIS_URL;
+const ORIGINAL_FETCH = globalThis.fetch; 
 delete process.env.SERPER_API_KEY;
 delete process.env.SERPER_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
 delete process.env.GEMINI_API_KEY;
-delete process.env.GOOGLE_API_KEY;
-delete process.env.GEMINI_SEARCH_MODEL;
+delete process.env.GOOGLE_API_KEY; 
+delete process.env.GEMINI_SEARCH_MODEL; 
+delete process.env.SEARXNG_URL;
+delete process.env.REDIS_URL;
 
 assert.equal(resolveRequestPath({ url: '/api/chat-groq?x=1' }), '/api/chat-groq');
 assert.equal(resolveRequestPath({ url: '/api/chat-groq-extra' }), '/api/chat-groq-extra');
 
-const notFound = await callHandler(apiHandler, request('/api/chat-groq-extra', {}));
-assert.equal(notFound.statusCode, 404);
-assert.equal(notFound.body.error.code, 'route_not_found');
+const notFound = await callHandler(apiHandler, request('/api/chat-groq-extra', {})); 
+assert.equal(notFound.statusCode, 404); 
+assert.equal(notFound.body.error.code, 'route_not_found'); 
+
+const missingSearxng = await callHandler(webSearchHandler, request('/api/web-search', { query: 'latest open source search' }));
+assert.equal(missingSearxng.statusCode, 503);
+assert.equal(missingSearxng.body.error.code, 'searxng_not_configured');
+assert.equal(webSearchTest.normalizeSearchRequest({ query: '  chief minister Tamil Nadu  ' }).value.query, 'chief minister Tamil Nadu');
+assert.equal(webSearchTest.robotsAllows('User-agent: *\nDisallow: /private\nAllow: /private/public', '/private/page', 'UnifyAssistantWebSearch'), false);
+assert.equal(webSearchTest.robotsAllows('User-agent: *\nDisallow: /private\nAllow: /private/public', '/private/public/page', 'UnifyAssistantWebSearch'), true);
+
+process.env.SEARXNG_URL = 'https://searxng.test';
+globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.startsWith('https://searxng.test/search')) {
+        return okJson({
+            results: [
+                { title: 'Example Article', url: 'https://example.com/article', content: 'Example snippet', engine: 'mock' },
+                { title: 'Blocked Article', url: 'https://blocked.example/private', content: 'Blocked snippet', engine: 'mock' }
+            ]
+        });
+    }
+    if (value === 'https://example.com/robots.txt') {
+        return textResponse('User-agent: *\nAllow: /', 200, 'text/plain');
+    }
+    if (value === 'https://blocked.example/robots.txt') {
+        return textResponse('User-agent: *\nDisallow: /', 200, 'text/plain');
+    }
+    if (value === 'https://example.com/article') {
+        return textResponse('<html><head><title>Example Article</title><meta name="description" content="Clean description"></head><body><nav>menu</nav><article><h1>Example Article</h1><p>This is a readable article body with enough useful words to be included in the cleaned search result for prompt grounding and citation.</p><script>bad()</script><footer>footer</footer></article></body></html>');
+    }
+    throw new Error(`Unexpected fetch ${value}`);
+};
+const webSearchOk = await callHandler(webSearchHandler, request('/api/web-search', {
+    query: 'example article',
+    maxResults: 2,
+    textLimit: 2000
+}));
+assert.equal(webSearchOk.statusCode, 200);
+assert.equal(webSearchOk.body.success, true);
+assert.equal(webSearchOk.body.results.length, 1);
+assert.equal(webSearchOk.body.results[0].url, 'https://example.com/article');
+assert.doesNotMatch(webSearchOk.body.results[0].text, /menu|footer|bad/);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.SEARXNG_URL;
 
 const invalidChat = await callHandler(chatHandler, request('/api/chat-groq', { message: '' }));
 assert.equal(invalidChat.statusCode, 400);
@@ -404,10 +452,12 @@ assert.equal(invalidVisionMime.body.error.code, 'unsupported_media_type');
 restoreEnv('SERPER_API_KEY', ORIGINAL_SERPER_API_KEY);
 restoreEnv('SERPER_KEY', ORIGINAL_SERPER_KEY);
 restoreEnv('LIVE_RETRIEVAL_ENABLED', ORIGINAL_LIVE_RETRIEVAL_ENABLED);
-restoreEnv('GEMINI_API_KEY', ORIGINAL_GEMINI_API_KEY);
-restoreEnv('GOOGLE_API_KEY', ORIGINAL_GOOGLE_API_KEY);
-restoreEnv('GEMINI_SEARCH_MODEL', ORIGINAL_GEMINI_SEARCH_MODEL);
-globalThis.fetch = ORIGINAL_FETCH;
+restoreEnv('GEMINI_API_KEY', ORIGINAL_GEMINI_API_KEY); 
+restoreEnv('GOOGLE_API_KEY', ORIGINAL_GOOGLE_API_KEY); 
+restoreEnv('GEMINI_SEARCH_MODEL', ORIGINAL_GEMINI_SEARCH_MODEL); 
+restoreEnv('SEARXNG_URL', ORIGINAL_SEARXNG_URL);
+restoreEnv('REDIS_URL', ORIGINAL_REDIS_URL);
+globalThis.fetch = ORIGINAL_FETCH; 
 
 console.log('api-contract-tests-ok');
 
@@ -419,7 +469,7 @@ function restoreEnv(name, value) {
     }
 }
 
-function okJson(payload) {
+function okJson(payload) { 
     return {
         ok: true,
         status: 200,
@@ -430,9 +480,27 @@ function okJson(payload) {
             return '';
         }
     };
-}
+} 
 
-function request(url, body) {
+function textResponse(payload, status = 200, contentType = 'text/html; charset=utf-8') {
+    return {
+        ok: status >= 200 && status < 300,
+        status,
+        headers: {
+            get(name) {
+                return String(name || '').toLowerCase() === 'content-type' ? contentType : '';
+            }
+        },
+        async json() {
+            return JSON.parse(payload);
+        },
+        async text() {
+            return payload;
+        }
+    };
+}
+ 
+function request(url, body) { 
     return {
         method: 'POST',
         url,
