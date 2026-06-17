@@ -120,7 +120,6 @@
                     </button>
                     <div id="composer-actions-menu" class="composer-actions-menu hidden" role="menu" aria-label="Composer actions">
                         <button type="button" id="vision-toggle-btn" class="composer-action-item" onclick="handleComposerAction('vision')" role="menuitem">Vision analysis</button>
-                        <button type="button" class="composer-action-item" onclick="handleComposerAction('ocr')" role="menuitem">OCR camera</button>
                         <button type="button" id="help-btn" class="composer-action-item" onclick="handleComposerAction('help')" role="menuitem">Help & options</button>
                     </div>
                 </div>
@@ -179,54 +178,6 @@
             </div>
         </div>
     </div>
-    <!-- Camera/OCR Modal -->
-    <div id="camera-modal" class="hidden fixed inset-0 bg-black/90 z-[60] flex flex-col items-center justify-center p-3 sm:p-4">
-        <div class="relative w-full max-w-2xl max-h-[calc(100vh-1.5rem)] bg-slate-900 rounded-3xl overflow-y-auto shadow-2xl">
-            <div class="absolute top-3 right-3 z-10">
-                <button type="button" onclick="closeCameraMode()" class="ocr-camera-text-action" aria-label="Close camera OCR and return to chat">Back to chat</button> 
-            </div>
-            <video id="camera-preview" class="w-full h-[52vh] min-h-[280px] object-cover bg-black" autoplay playsinline></video>
-            <canvas id="camera-canvas" class="hidden"></canvas>
-            <div class="camera-zoom-controls" aria-label="Camera zoom controls">
-                <button type="button" class="camera-zoom-btn" onclick="adjustCameraZoom(-0.25)" aria-label="Zoom out">-</button>
-                <input id="camera-zoom-slider" class="camera-zoom-slider" type="range" min="1" max="3" step="0.1" value="1" oninput="setCameraZoomFromSlider(this.value)" aria-label="Camera zoom">
-                <button type="button" class="camera-zoom-btn" onclick="adjustCameraZoom(0.25)" aria-label="Zoom in">+</button>
-                <button type="button" class="camera-zoom-reset" onclick="resetCameraZoom()" aria-label="Reset camera zoom">Reset</button>
-            </div>
-            
-            <div class="p-6 space-y-4">
-                <div class="flex flex-col gap-2">
-                    <label class="text-xs font-bold text-slate-400 uppercase tracking-wider">Optional Instruction (e.g. "translate this to English")</label>
-                    <input type="text" id="ocr-comment-input" placeholder="What should I do with this image?" 
-                           class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
-                </div>
-                <div class="flex flex-col gap-2">
-                    <label for="ocr-mode-select" class="text-xs font-bold text-slate-400 uppercase tracking-wider">OCR Mode</label>
-                    <select id="ocr-mode-select" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
-                        <option value="auto" selected>Auto (recommended)</option>
-                        <option value="math">Math solve</option>
-                        <option value="translate">Translate to English</option>
-                        <option value="translate_hindi">Hindi to English</option>
-                        <option value="translate_kannada">Kannada to English</option>
-                        <option value="translate_malayalam">Malayalam to English</option>
-                        <option value="translate_telugu">Telugu to English</option>
-                        <option value="translate_tamil">Tamil to English</option>
-                        <option value="document">Extract visible text</option>
-                        <option value="general">General scene</option>
-                    </select>
-                </div>
-                
-                <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                    <button onclick="closeCameraMode()" class="ocr-camera-text-action" aria-label="Cancel OCR capture">Cancel</button> 
-                    <button type="button" onclick="switchCameraLens()" class="ocr-camera-text-action" aria-label="Switch OCR camera">Switch Cam</button> 
-                    <button id="capture-btn" onclick="captureAndProcessOCR()" class="ocr-camera-text-action ocr-camera-primary-action" aria-label="Capture and analyze OCR image"> 
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg> 
-                        Capture & Analyze 
-                    </button> 
-                </div>
-            </div>
-        </div>
-    </div>
     <div id="continuous-vision-preview-shell" class="continuous-vision-preview hidden" aria-live="polite">
         <div class="continuous-vision-preview-header">
             <span class="continuous-vision-pill">Live Vision</span>
@@ -264,7 +215,7 @@
 })();
 
 const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'};
-const LIVE_RETRIEVAL_ENABLED = false;
+const LIVE_RETRIEVAL_ENABLED = globalThis.JARVIS_LIVE_RETRIEVAL_ENABLED === true;
 const LIVE_DISABLED_MESSAGE = 'Live search and current updates are temporarily disabled. I can answer from general knowledge, but I cannot verify real-time facts right now.';
 const SUPPORT_MODE_HINTS = {
     balanced: 'Be clear, practical, and warm. Keep a neutral supportive tone.',
@@ -498,10 +449,10 @@ function isStepByStepMathRequest(text) {
 function normalizeMathExpression(rawText) {
     let s = String(rawText || '').trim();
     s = s
-        .replace(/[Ãƒâ€”x]/g, '*')
-        .replace(/ÃƒÂ·/g, '/')
-        .replace(/Ã¢Ë†â€™/g, '-')
-        .replace(/Ã¢â‚¬â€œ/g, '-')
+        .replace(/[Ã—x]/g, '*')
+        .replace(/Ã·/g, '/')
+        .replace(/âˆ’/g, '-')
+        .replace(/â€“/g, '-')
         .replace(/,/g, '')
         .replace(/\s+/g, ' ');
 
@@ -3627,10 +3578,10 @@ function ensureCompleteAssistantResponse(text) {
     if (/^https?:\/\//i.test(lastRawLine) || /\[[^\]]+\]\(https?:\/\/[^)]+\)$/i.test(lastRawLine)) return out;
     if (/(?:^|\n)\s*Sources:\s*/i.test(out) && /(https?:\/\/|\[[^\]]+\]\(https?:\/\/)/i.test(lastRawLine)) return out;
 
-    if (/[.!?ã€‚ï¼ï¼Ÿ)"'\]}]$/.test(visible)) return out;
+    if (/[.!?。！？)"'\]}]$/.test(visible)) return out;
 
     const lastLine = visible.toLowerCase().split('\n').map(line => line.trim()).filter(Boolean).pop() || '';
-    const hangingClause = /(?:[,;:]|\.\.\.|[\-â€“â€”(])$/.test(lastLine) ||
+    const hangingClause = /(?:[,;:]|\.\.\.|[\-–—(])$/.test(lastLine) ||
         /\b(and|or|but|because|so|with|to|for|from|the|a|an|in|on|at|as|by|of|if|then|while|where|when|which|who|that|this|is|are|was|were|will|would|could|should|can|do|does|did|not)$/i.test(lastLine);
 
     if (hangingClause || countAssistantWords(visible) >= 12) return out;
@@ -5032,7 +4983,7 @@ let showRoutingDebugBadge = false;
                 detail: navigator.geolocation ? 'Geolocation API available' : 'Geolocation API unavailable'
             });
             checks.push({
-                label: 'Camera/OCR support',
+                label: 'Live Vision support',
                 ok: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
                 detail: (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? 'Camera API available' : 'Camera API unavailable'
             });
@@ -6064,11 +6015,10 @@ function normalizeUiTokens(text) {
             closeComposerActionsMenu();
             const key = String(action || '').trim().toLowerCase();
             if (key === 'upload') {
-                showTemporaryMessage('Document upload is turned off. Use OCR camera for quick image text instead.');
+                showTemporaryMessage('Document upload is turned off. Use Live Vision for camera-based questions.');
                 return;
             }
             if (key === 'vision') return toggleContinuousVision();
-            if (key === 'ocr') return openCameraMode();
             if (key === 'help') return showHelpModal();
         }
 
@@ -6088,230 +6038,48 @@ function normalizeUiTokens(text) {
             });
         }
 
-let cameraStream = null;
-let cameraRotationDeg = 0;
-let cameraFacingMode = 'environment';
-let cameraZoomState = { value: 1, min: 1, max: 3, step: 0.1, hardware: false };
-let tesseractWorkerPromise = null;
-let tesseractWorkerLangKey = '';
-
         function normalizeCameraRotation(deg) {
             const n = Number(deg || 0);
             return ((n % 360) + 360) % 360;
         }
 
-        function applyCameraPreviewRotation() {
-            const video = document.getElementById('camera-preview');
-            if (!video) return;
-            const normalized = normalizeCameraRotation(cameraRotationDeg);
-            const zoom = Number(cameraZoomState.value || 1);
-            const transformParts = [];
-            if (normalized) transformParts.push(`rotate(${normalized}deg)`);
-            if (!cameraZoomState.hardware && zoom > 1) transformParts.push(`scale(${zoom})`);
-            video.style.transform = transformParts.length ? transformParts.join(' ') : 'none';
-            video.style.transformOrigin = 'center center';
+        function normalizeFacingMode(value) {
+            const v = String(value || '').toLowerCase();
+            return v === 'user' ? 'user' : 'environment';
         }
 
-function syncCameraZoomSlider() {
-    const slider = document.getElementById('camera-zoom-slider');
-    if (!slider) return;
-    slider.min = String(cameraZoomState.min);
-    slider.max = String(cameraZoomState.max);
-    slider.step = String(cameraZoomState.step);
-    slider.value = String(cameraZoomState.value);
-}
-
-async function initializeCameraZoomForTrack(track) {
-    const capabilities = track?.getCapabilities?.() || {};
-    const settings = track?.getSettings?.() || {};
-    const zoomCap = capabilities.zoom;
-    const hasHardwareZoom = !!zoomCap && Number.isFinite(Number(zoomCap.min)) && Number.isFinite(Number(zoomCap.max)) && Number(zoomCap.max) > Number(zoomCap.min);
-    cameraZoomState = {
-        value: 1,
-        min: hasHardwareZoom ? Number(zoomCap.min) : 1,
-        max: hasHardwareZoom ? Math.min(Number(zoomCap.max), 6) : 3,
-        step: hasHardwareZoom ? Number(zoomCap.step || 0.1) : 0.1,
-        hardware: hasHardwareZoom
-    };
-    if (hasHardwareZoom && Number.isFinite(Number(settings.zoom))) {
-        cameraZoomState.value = Math.max(cameraZoomState.min, Math.min(cameraZoomState.max, Number(settings.zoom)));
-    }
-    syncCameraZoomSlider();
-    await applyCameraZoom();
-}
-
-async function applyCameraZoom() {
-    const track = cameraStream?.getVideoTracks?.()[0] || null;
-    if (cameraZoomState.hardware && track?.applyConstraints) {
-        await track.applyConstraints({ advanced: [{ zoom: cameraZoomState.value }] }).catch(() => {
-            cameraZoomState.hardware = false;
-        });
-    }
-    applyCameraPreviewRotation();
-    syncCameraZoomSlider();
-}
-
-function setCameraZoomFromSlider(value) {
-    cameraZoomState.value = Math.max(cameraZoomState.min, Math.min(cameraZoomState.max, Number(value) || 1));
-    void applyCameraZoom();
-}
-
-function adjustCameraZoom(delta) {
-    setCameraZoomFromSlider((Number(cameraZoomState.value) || 1) + Number(delta || 0));
-}
-
-function resetCameraZoom() {
-    setCameraZoomFromSlider(cameraZoomState.min || 1);
-}
-
-function rotateCameraPreview() {
-    cameraRotationDeg = normalizeCameraRotation(cameraRotationDeg + 90);
-    applyCameraPreviewRotation();
-}
-
-function normalizeFacingMode(value) {
-    const v = String(value || '').toLowerCase();
-    return v === 'user' ? 'user' : 'environment';
-}
-
-function getTrackFacingMode(track) {
-    const settings = track?.getSettings?.() || {};
-    return normalizeFacingMode(settings?.facingMode || '');
-}
-
-async function requestCameraStreamForFacingMode(targetMode) {
-    const mode = normalizeFacingMode(targetMode);
-    const constraintsExact = {
-        video: {
-            facingMode: { exact: mode },
-            width: { ideal: mode === 'environment' ? 1920 : 1280 },
-            height: { ideal: mode === 'environment' ? 1080 : 720 }
-        },
-        audio: false
-    };
-    const constraintsIdeal = {
-        video: {
-            facingMode: { ideal: mode },
-            width: { ideal: mode === 'environment' ? 1920 : 1280 },
-            height: { ideal: mode === 'environment' ? 1080 : 720 }
-        },
-        audio: false
-    };
-
-    try {
-        return await navigator.mediaDevices.getUserMedia(constraintsExact);
-    } catch (_) {
-        try {
-            return await navigator.mediaDevices.getUserMedia(constraintsIdeal);
-        } catch (_) {
-            return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        function getTrackFacingMode(track) {
+            const settings = track?.getSettings?.() || {};
+            return normalizeFacingMode(settings?.facingMode || '');
         }
-    }
-}
 
-async function switchCameraLens() {
-    if (!cameraStream) {
-        rotateCameraPreview();
-        return;
-    }
-
-    const video = document.getElementById('camera-preview');
-    const currentTrack = cameraStream.getVideoTracks?.()[0] || null;
-    const currentFacing = getTrackFacingMode(currentTrack) || normalizeFacingMode(cameraFacingMode);
-    const nextFacing = currentFacing === 'environment' ? 'user' : 'environment';
-
-    try {
-        const newStream = await requestCameraStreamForFacingMode(nextFacing);
-        const newTrack = newStream.getVideoTracks?.()[0] || null;
-        const actualFacing = getTrackFacingMode(newTrack) || nextFacing;
-        cameraStream.getTracks().forEach(track => track.stop());
-        cameraStream = newStream;
-        cameraFacingMode = normalizeFacingMode(actualFacing);
-        if (video) {
-            video.srcObject = newStream;
-            await video.play().catch(() => {});
-        }
-        cameraRotationDeg = 0;
-        await initializeCameraZoomForTrack(newTrack);
-    } catch (_) {
-        rotateCameraPreview();
-    }
-}
-
-        async function openCameraMode() {
-            const modal = document.getElementById('camera-modal');
-            const video = document.getElementById('camera-preview');
-            if (!modal || !video) {
-                showError('Camera OCR UI is unavailable right now.');
-                return;
-            }
+        async function requestCameraStreamForFacingMode(targetMode) {
+            const mode = normalizeFacingMode(targetMode);
+            const constraintsExact = {
+                video: {
+                    facingMode: { exact: mode },
+                    width: { ideal: mode === 'environment' ? 1920 : 1280 },
+                    height: { ideal: mode === 'environment' ? 1080 : 720 }
+                },
+                audio: false
+            };
+            const constraintsIdeal = {
+                video: {
+                    facingMode: { ideal: mode },
+                    width: { ideal: mode === 'environment' ? 1920 : 1280 },
+                    height: { ideal: mode === 'environment' ? 1080 : 720 }
+                },
+                audio: false
+            };
 
             try {
-                const stream = await requestCameraStreamForFacingMode('environment');
-
-                cameraStream = stream;
-                const track = stream.getVideoTracks?.()[0] || null;
-                cameraFacingMode = getTrackFacingMode(track) || 'environment';
-                video.srcObject = stream;
-                cameraRotationDeg = 0;
-                applyCameraPreviewRotation();
-                if (track?.applyConstraints) {
-                    await track.applyConstraints({
-                        advanced: [
-                            { focusMode: 'continuous' },
-                            { exposureMode: 'continuous' },
-                            { whiteBalanceMode: 'continuous' }
-                        ]
-                    }).catch(() => {});
+                return await navigator.mediaDevices.getUserMedia(constraintsExact);
+            } catch (_) {
+                try {
+                    return await navigator.mediaDevices.getUserMedia(constraintsIdeal);
+                } catch (_) {
+                    return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                 }
-                await initializeCameraZoomForTrack(track);
-                modal.classList.remove('hidden');
-                document.body.classList.add('overflow-hidden');
-
-                const input = document.getElementById('ocr-comment-input');
-                if (input) {
-                    input.value = '';
-                    input.focus();
-                }
-                const modeSelect = document.getElementById('ocr-mode-select');
-                if (modeSelect) modeSelect.value = 'auto';
-            } catch (error) {
-                const msg = 'Camera access is blocked or unavailable. Please allow camera permission and try again.';
-                addChatMessage(msg, false);
-            }
-        }
-
-        function closeCameraMode() {
-            const modal = document.getElementById('camera-modal');
-            const video = document.getElementById('camera-preview');
-            if (modal) modal.classList.add('hidden');
-            document.body.classList.remove('overflow-hidden');
-
-            if (video) {
-                try { video.pause(); } catch (_) {}
-                video.srcObject = null;
-                video.style.transform = 'none';
-            }
-            if (cameraStream) {
-                cameraStream.getTracks().forEach(track => track.stop());
-                cameraStream = null;
-            }
-            cameraRotationDeg = 0;
-            cameraZoomState = { value: 1, min: 1, max: 3, step: 0.1, hardware: false };
-            syncCameraZoomSlider();
-        }
-
-        function setCaptureButtonBusy(isBusy) {
-            const btn = document.getElementById('capture-btn');
-            if (!btn) return;
-            btn.disabled = !!isBusy;
-            btn.classList.toggle('opacity-70', !!isBusy);
-            btn.classList.toggle('cursor-not-allowed', !!isBusy);
-            if (isBusy) {
-                btn.dataset.originalLabel = btn.innerHTML;
-                btn.innerHTML = '<span>Analyzing...</span>';
-            } else if (btn.dataset.originalLabel) {
-                btn.innerHTML = btn.dataset.originalLabel;
             }
         }
 
@@ -6341,584 +6109,12 @@ async function switchCameraLens() {
             }
             ctx.restore();
         }
-
-        function drawOcrEnhancedFrame(ctx, video, width, height, rotationDeg = 0, zoom = 1) {
-            drawVideoFrameWithRotation(ctx, video, width, height, rotationDeg, zoom);
-            const imageData = ctx.getImageData(0, 0, width, height);
-            const d = imageData.data;
-            let lumaSum = 0;
-            const pixels = d.length / 4;
-            for (let i = 0; i < d.length; i += 4) {
-                const r = d[i];
-                const g = d[i + 1];
-                const b = d[i + 2];
-                // Grayscale + contrast boost baseline.
-                let gray = 0.299 * r + 0.587 * g + 0.114 * b;
-                gray = Math.max(0, Math.min(255, (gray - 128) * 1.35 + 128));
-                lumaSum += gray;
-                d[i] = gray;
-                d[i + 1] = gray;
-                d[i + 2] = gray;
-            }
-            // Adaptive threshold to boost text/background separation.
-            const threshold = Math.max(95, Math.min(185, (lumaSum / Math.max(1, pixels)) * 0.95));
-            for (let i = 0; i < d.length; i += 4) {
-                const v = d[i] >= threshold ? 255 : 0;
-                d[i] = v;
-                d[i + 1] = v;
-                d[i + 2] = v;
-            }
-            ctx.putImageData(imageData, 0, 0);
-        }
-
-        function drawOcrContrastFrame(ctx, video, width, height, rotationDeg = 0, zoom = 1) {
-            drawVideoFrameWithRotation(ctx, video, width, height, rotationDeg, zoom);
-            const imageData = ctx.getImageData(0, 0, width, height);
-            const d = imageData.data;
-            for (let i = 0; i < d.length; i += 4) {
-                const r = d[i];
-                const g = d[i + 1];
-                const b = d[i + 2];
-                let gray = 0.299 * r + 0.587 * g + 0.114 * b;
-                gray = Math.max(0, Math.min(255, (gray - 128) * 1.18 + 128));
-                d[i] = gray;
-                d[i + 1] = gray;
-                d[i + 2] = gray;
-            }
-            ctx.putImageData(imageData, 0, 0);
-        }
-
-        function scoreOcrCandidate(text = '', confidence = 0) {
-            const raw = String(text || '').trim();
-            if (!raw) return 0;
-            const compact = raw.replace(/\s+/g, '');
-            const digits = (raw.match(/\d/g) || []).length;
-            const lines = raw.split('\n').map(v => v.trim()).filter(Boolean).length;
-            const conf = Number.isFinite(Number(confidence)) ? Number(confidence) : 0;
-            return compact.length + (digits * 2) + (lines * 3) + (conf * 4);
-        }
-
-        function normalizeOcrAnalysisText(visionAnswer = '', details = {}) {
-            const readable = normalizeVisionAnswerForChat(String(visionAnswer || ''), details);
-            if (!readable) return '';
-            const cleaned = String(readable || '').replace(/^Detected text:\s*/i, '').trim();
-            if (!cleaned) return '';
-            if (/^\{[\s\S]*\}$/.test(cleaned)) {
-                const parsed = extractVisionJsonObject(cleaned);
-                if (parsed) {
-                    const formatted = formatVisionJsonToReadableText(parsed);
-                    return String(formatted || '').replace(/^Detected text:\s*/i, '').trim();
-                }
-            }
-            return cleaned;
-        }
-
-        function extractTextFromVisionDetails(details = {}, visionAnswer = '') {
-            const linesFromArray = Array.isArray(details?.textDetected)
-                ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean)
-                : [];
-            const fullText = String(details?.fullText || '').trim();
-            if (fullText) return fullText;
-            if (linesFromArray.length) return linesFromArray.join('\n').trim();
-            const parsed = extractVisionJsonObject(visionAnswer);
-            if (parsed && typeof parsed === 'object') {
-                const parsedFullText = String(parsed?.fullText || '').trim();
-                if (parsedFullText) return parsedFullText;
-                const parsedLines = Array.isArray(parsed?.textDetected)
-                    ? parsed.textDetected.map(v => String(v || '').trim()).filter(Boolean)
-                    : [];
-                if (parsedLines.length) return parsedLines.join('\n').trim();
-            }
-            const m = String(visionAnswer || '').match(/Detected text:\s*([\s\S]+)/i);
-            return m && m[1] ? String(m[1]).split('\n\n')[0].trim() : '';
-        }
-
-        function detectPreferredOcrLangHint(text) {
-            const raw = String(text || '');
-            if (/[\u0B80-\u0BFF]/.test(raw)) return 'tam';
-            if (/[\u0900-\u097F]/.test(raw)) return 'hin';
-            if (/[\u0C00-\u0C7F]/.test(raw)) return 'tel';
-            if (/[\u0C80-\u0CFF]/.test(raw)) return 'kan';
-            if (/[\u0D00-\u0D7F]/.test(raw)) return 'mal';
-            if (/\bkannada\b/i.test(raw)) return 'kan';
-            if (/\bmalayalam\b/i.test(raw)) return 'mal';
-            return 'eng';
-        }
-
-        function buildTranslateToEnglishOcrMode(languageName, languageCode, userInstruction = '') {
-            const hint = String(userInstruction || '').trim();
-            return {
-                key: `translate_${languageCode}`,
-                label: `${languageName} to English`,
-                task: 'translate_to_english',
-                ocrLangHint: languageCode,
-                prompt: hint || `Extract all readable ${languageName} text from the image and translate it to natural English. Include the original text and the English translation.`
-            };
-        }
-
-        function getOcrCaptureModeConfig(mode, userInstruction = '') {
-            const selectedMode = String(mode || 'auto').toLowerCase();
-            const hint = String(userInstruction || '').trim();
-            const lowerHint = hint.toLowerCase();
-
-            if (selectedMode === 'math') {
-                return {
-                    key: 'math',
-                    label: 'Math solve',
-                    task: 'math_ocr_solve',
-                    prompt: hint || 'Read the math problem from the image and solve it with clear steps.'
-                };
-            }
-            if (selectedMode === 'translate') {
-                return {
-                    key: 'translate',
-                    label: 'Translate to English',
-                    task: 'translate_to_english',
-                    ocrLangHint: detectPreferredOcrLangHint(hint),
-                    prompt: hint || 'Extract all readable text and translate it to English. Include the original text and the English translation.'
-                };
-            }
-            if (selectedMode === 'translate_hindi') return buildTranslateToEnglishOcrMode('Hindi', 'hin', hint);
-            if (selectedMode === 'translate_kannada') return buildTranslateToEnglishOcrMode('Kannada', 'kan', hint);
-            if (selectedMode === 'translate_malayalam') return buildTranslateToEnglishOcrMode('Malayalam', 'mal', hint);
-            if (selectedMode === 'translate_telugu') return buildTranslateToEnglishOcrMode('Telugu', 'tel', hint);
-            if (selectedMode === 'translate_tamil') return buildTranslateToEnglishOcrMode('Tamil', 'tam', hint);
-            if (selectedMode === 'receipt') {
-                return {
-                    key: 'receipt',
-                    label: 'Receipt / bill',
-                    task: 'bill_summary',
-                    prompt: hint || 'Extract receipt line items, taxes, subtotal, and final total with exact numbers.'
-                };
-            }
-            if (selectedMode === 'general') {
-                return {
-                    key: 'general',
-                    label: 'General scene',
-                    task: 'general_vision',
-                    prompt: hint || 'Describe what is most relevant in this image in 1-2 short sentences.'
-                };
-            }
-            if (selectedMode === 'document') {
-                return {
-                    key: 'document',
-                    label: 'Document text',
-                    task: 'text_extract',
-                    prompt: hint || 'Extract all visible text exactly, preserving line order, punctuation, numbers, totals, units, and symbols.'
-                };
-            }
-
-            // Auto mode: infer from instruction keywords.
-            if (/\b(translate|translation|to english|in english)\b/.test(lowerHint)) {
-                return {
-                    key: 'auto_translate',
-                    label: 'Auto: Translate',
-                    task: 'translate_to_english',
-                    ocrLangHint: detectPreferredOcrLangHint(hint),
-                    prompt: hint || 'Extract all readable text and translate it to English. Include the original text and the English translation.'
-                };
-            }
-            if (/\b(solve|equation|integral|derivative|algebra|math|calculate|find x|trigonometry|calculus)\b/.test(lowerHint)) {
-                return {
-                    key: 'auto_math',
-                    label: 'Auto: Math',
-                    task: 'math_ocr_solve',
-                    prompt: hint || 'Read the math problem from the image and solve it with clear steps.'
-                };
-            }
-            if (/\b(bill|receipt|invoice|subtotal|tax|total|amount due)\b/.test(lowerHint)) {
-                return {
-                    key: 'auto_receipt',
-                    label: 'Auto: Receipt',
-                    task: 'bill_summary',
-                    prompt: hint || 'Extract receipt line items, taxes, subtotal, and final total with exact numbers.'
-                };
-            }
-            if (/\b(describe|what is this|what is that|object|scene|product)\b/.test(lowerHint)) {
-                return {
-                    key: 'auto_general',
-                    label: 'Auto: General',
-                    task: 'general_vision',
-                    prompt: hint || 'Describe what is most relevant in this image in 1-2 short sentences.'
-                };
-            }
-
-            return {
-                key: 'auto_document',
-                label: 'Auto: Document',
-                task: 'text_extract',
-                prompt: hint || 'Extract all visible text exactly, preserving line breaks and numeric accuracy. Then provide a concise professional summary.'
-            };
-        }
-
-        async function getTesseractWorker(langHint = 'eng') {
-            const lang = ['eng', 'tam', 'hin', 'tel'].includes(langHint) ? langHint : 'eng';
-            const langKey = lang === 'eng' ? 'eng' : `eng+${lang}`;
-            if (tesseractWorkerPromise && tesseractWorkerLangKey === langKey) return tesseractWorkerPromise;
-            tesseractWorkerPromise = (async () => {
-                const mod = await import('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js');
-                const worker = await mod.createWorker(langKey);
-                await worker.setParameters({
-                    tessedit_pageseg_mode: '6',
-                    preserve_interword_spaces: '1'
-                });
-                return worker;
-            })();
-            tesseractWorkerLangKey = langKey;
-            return tesseractWorkerPromise;
-        }
-
-        async function runLocalTesseractOcr(imageBase64, langHint = 'eng', pageSegModes = [6, 11]) {
-            try {
-                const worker = await getTesseractWorker(langHint);
-                const dataUrl = `data:image/jpeg;base64,${String(imageBase64 || '').trim()}`;
-                const modes = Array.isArray(pageSegModes) && pageSegModes.length ? pageSegModes : [6];
-                let best = { success: false, text: '', confidence: 0, score: 0 };
-                for (const mode of modes) {
-                    await worker.setParameters({
-                        tessedit_pageseg_mode: String(mode),
-                        preserve_interword_spaces: '1'
-                    });
-                    const result = await worker.recognize(dataUrl);
-                    const text = String(result?.data?.text || '').trim();
-                    const confidence = Number(result?.data?.confidence || 0);
-                    const score = scoreOcrCandidate(text, confidence);
-                    if (score > best.score) {
-                        best = {
-                            success: !!text,
-                            text,
-                            confidence: Number.isFinite(confidence) ? confidence : 0,
-                            score
-                        };
-                    }
-                }
-                return {
-                    success: best.success,
-                    text: best.text,
-                    confidence: best.confidence
-                };
-            } catch (_) {
-                return { success: false, text: '', confidence: 0 };
-            }
-        }
-
-        async function captureAndProcessOCR() {
-            const video = document.getElementById('camera-preview');
-            const canvas = document.getElementById('camera-canvas');
-            if (!video || !canvas) {
-                showError('Camera capture is unavailable.');
-                return;
-            }
-
-            const width = video.videoWidth || 1280;
-            const height = video.videoHeight || 720;
-            if (!width || !height) {
-                const msg = 'Camera is not ready yet. Please wait a moment and try again.';
-                addChatMessage(msg, false);
-                return;
-            }
-
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-                showError('Canvas context is unavailable for OCR.');
-                return;
-            }
-
-            setCaptureButtonBusy(true);
-            showThinkingIndicator('Reading text from image...');
-            try {
-                // Use a higher internal resolution for sharper OCR on small text.
-                const scale = width < 1600 ? 1.5 : 1;
-                const renderWidth = Math.max(960, Math.round(width * scale));
-                const renderHeight = Math.max(540, Math.round(height * scale));
-                const normalizedRotation = normalizeCameraRotation(cameraRotationDeg);
-                const swap = normalizedRotation === 90 || normalizedRotation === 270;
-                canvas.width = swap ? renderHeight : renderWidth;
-                canvas.height = swap ? renderWidth : renderHeight;
-                const captureZoom = cameraZoomState.hardware ? 1 : Number(cameraZoomState.value || 1);
-                drawOcrEnhancedFrame(ctx, video, canvas.width, canvas.height, normalizedRotation, captureZoom);
-
-                const userInstruction = String(document.getElementById('ocr-comment-input')?.value || '').trim();
-                const modeValue = String(document.getElementById('ocr-mode-select')?.value || 'auto').trim().toLowerCase();
-                const modeConfig = getOcrCaptureModeConfig(modeValue, userInstruction);
-                const ocrLangHint = modeConfig.ocrLangHint || detectPreferredOcrLangHint(userInstruction);
-                const prompt = modeConfig.prompt;
-                const renderJpegQuality = 0.95;
-                const variantFrames = [];
-                variantFrames.push({ name: 'enhanced', imageBase64: canvas.toDataURL('image/jpeg', renderJpegQuality).split(',')[1] });
-                drawOcrContrastFrame(ctx, video, canvas.width, canvas.height, normalizedRotation, captureZoom);
-                variantFrames.push({ name: 'contrast', imageBase64: canvas.toDataURL('image/jpeg', renderJpegQuality).split(',')[1] }); 
-                drawVideoFrameWithRotation(ctx, video, canvas.width, canvas.height, normalizedRotation, captureZoom); 
-                variantFrames.push({ name: 'raw', imageBase64: canvas.toDataURL('image/jpeg', renderJpegQuality).split(',')[1] }); 
-                const isMathOcrTask = modeConfig.task === 'math_ocr_solve';
-                const framesToAttempt = isMathOcrTask ? variantFrames.slice(0, 1) : variantFrames;
-
-                const attemptOcr = async (imageBase64) => {
-                    const response = await fetch('/api/vision', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            task: modeConfig.task,
-                            prompt,
-                            mimeType: 'image/jpeg',
-                            imageBase64
-                        })
-                    });
-                    const rawBody = await response.text();
-                    let data = {};
-                    try {
-                        data = rawBody ? JSON.parse(rawBody) : {};
-                    } catch (_) {
-                        data = {};
-                    }
-                    return { ok: response.ok, data };
-                };
-
-                let attempt = null;
-                let details = {};
-                let visionAnswer = '';
-                let extractedText = '';
-                let bestVisionScore = -1;
-                for (const frame of framesToAttempt) { 
-                    const candidateAttempt = await attemptOcr(frame.imageBase64);
-                    const candidateDetails = candidateAttempt?.data?.details && typeof candidateAttempt.data.details === 'object'
-                        ? candidateAttempt.data.details
-                        : {};
-                    const candidateAnswerRaw = String(candidateAttempt?.data?.response || candidateDetails?.summary || '').trim();
-                    const candidateExtractedText = extractTextFromVisionDetails(candidateDetails, candidateAnswerRaw);
-                    const candidateConfidence = Number(candidateDetails?.ocrConfidence || candidateAttempt?.data?.confidence || 0);
-                    const candidateScore = scoreOcrCandidate(candidateExtractedText, candidateConfidence) + (candidateAttempt?.ok && candidateAttempt?.data?.success ? 20 : 0);
-                    if (candidateScore > bestVisionScore) {
-                        attempt = candidateAttempt;
-                        details = candidateDetails;
-                        visionAnswer = candidateAnswerRaw;
-                        extractedText = candidateExtractedText;
-                        bestVisionScore = candidateScore;
-                    }
-                }
-
-                // Free local OCR fallback (Tesseract.js) for text-heavy modes when model OCR is weak.
-                const shouldRunLocalOcrFallback = ['text_extract', 'bill_summary', 'translate_to_english'].includes(modeConfig.task) ||
-                    (isMathOcrTask && (!attempt?.ok || !attempt?.data?.success) && extractedText.length < 8); 
-                if (shouldRunLocalOcrFallback && extractedText.length < 20) { 
-                    let localBest = { success: false, text: '', confidence: 0 };
-                    let localBestScore = -1;
-                    for (const frame of variantFrames) {
-                        const localCandidate = await runLocalTesseractOcr(frame.imageBase64, ocrLangHint, [6, 11, 4]);
-                        const localScore = scoreOcrCandidate(localCandidate?.text || '', localCandidate?.confidence || 0);
-                        if (localScore > localBestScore) {
-                            localBest = localCandidate;
-                            localBestScore = localScore;
-                        }
-                    }
-                    if (localBest?.success && String(localBest.text || '').length > extractedText.length) {
-                        extractedText = String(localBest.text || '').trim();
-                        if (!visionAnswer) {
-                            visionAnswer = `Used free local OCR fallback. Confidence: ${Math.round(localBest.confidence || 0)}%.`;
-                        } else {
-                            visionAnswer = `${visionAnswer}\n\nLocal OCR fallback confidence: ${Math.round(localBest.confidence || 0)}%.`;
-                        }
-                    }
-                }
-
-                if ((!attempt?.ok || !attempt?.data?.success) && extractedText.length < 8) {
-                    const errMsg = String(attempt?.data?.error || 'OCR analysis failed. Please try again.').trim();
-                    addChatMessage(errMsg, false);
-                    return;
-                }
-                const readableAnalysis = normalizeOcrAnalysisText(visionAnswer, details);
-
-                const card = ` 
-<div class="camera-ocr-text-result"> 
-  <p class="camera-ocr-result-kicker">Camera OCR</p> 
-  <p class="camera-ocr-result-title">${modeConfig.label}${userInstruction ? ' + instruction result' : ' result'}</p> 
-  ${extractedText ? `<div class="camera-ocr-result-section"><p class="camera-ocr-result-label">Extracted text</p><p class="camera-ocr-result-body">${escapeHtml(extractedText.slice(0, 3500))}</p></div>` : '<p class="camera-ocr-result-body">No clear text detected.</p>'} 
-  ${readableAnalysis ? `<div class="camera-ocr-result-section"><p class="camera-ocr-result-label">Analysis</p><p class="camera-ocr-result-body">${escapeHtml(readableAnalysis)}</p></div>` : ''} 
-</div>`; 
-                addChatMessage(card, false, false);
-
-                const spoken = extractedText
-                    ? 'I captured the image and extracted text for you.'
-                    : 'I captured the image and analyzed it.';
-
-                lastUploadedDocument = {
-                    fileName: `camera_capture_${Date.now()}.jpg`,
-                    kind: 'image',
-                    extractedText: extractedText || readableAnalysis,
-                    summary: readableAnalysis || 'Camera OCR analysis',
-                    bill: parseBillFromVisionDetails(details),
-                    userContext: userInstruction || '',
-                    uploadedAt: Date.now()
-                };
-                rememberUploadedDocument(lastUploadedDocument);
-
-                closeCameraMode();
-            } catch (error) {
-                const msg = 'OCR capture failed. Please try again.';
-                addChatMessage(msg, false);
-            } finally {
-                setCaptureButtonBusy(false);
-                hideThinkingIndicator();
-            }
-        }
-
         async function handleDocumentSelection(event) {
             const input = event?.target;
             if (input) input.value = '';
-            const msg = 'Document upload is turned off. Use OCR camera for quick image text and translation.';
+            const msg = 'Document upload is turned off. Use Live Vision for camera-based questions.';
             addChatMessage(msg, false);
-            return;
-            const file = input?.files?.[0];
-            if (!file) return;
-            input.value = '';
-            const userContext = String(pendingUploadContext || '').trim().slice(0, 500);
-            pendingUploadContext = '';
-            closeUploadContextPanel();
-
-            const parserMaxBytes = 10 * 1024 * 1024;
-            // Request body expands due to base64 (~33%) + JSON framing. Keep under deployment limits.
-            const requestSafeMaxBytes = 3 * 1024 * 1024;
-            const estimatedPayloadBytes = Math.ceil(file.size * 1.37) + 4096;
-
-            if (file.size > parserMaxBytes) {
-                const msg = 'File is too large. Please upload a file up to 10 MB.';
-                addChatMessage(msg, false);
-                return;
-            }
-            if (estimatedPayloadBytes > requestSafeMaxBytes) {
-                const msg = 'This file may exceed request-size limits after encoding. Please upload a file around 3 MB or less.';
-                addChatMessage(msg, false);
-                return;
-            }
-
-            addUserFileAttachmentMessage(file);
-            showThinkingIndicator('Processing your file...');
-
-            try {
-                const { fileBase64, mimeType, fileName } = await prepareFilePayload(file);
-                const intent = /\b(bill|receipt|invoice|expense)\b/i.test(file.name) ? 'bill' : 'general';
-
-                const response = await fetch('/api/document-ingest', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        fileName,
-                        mimeType,
-                        fileBase64,
-                        intent,
-                        userContext
-                    })
-                });
-                const rawBody = await response.text();
-                let data = {};
-                try {
-                    data = rawBody ? JSON.parse(rawBody) : {};
-                } catch (_) {
-                    data = {};
-                }
-                let succeeded = response.ok && !!data?.success;
-
-                if (!succeeded && response.status === 404 && isImageLikeMimeOrName(mimeType, fileName)) {
-                    const fallback = await fallbackImageIngestWithVision({
-                        fileBase64,
-                        mimeType,
-                        fileName,
-                        intent
-                    });
-                    if (fallback?.success) {
-                        data = fallback;
-                        succeeded = true;
-                    }
-                }
-
-                if (!succeeded) {
-                    // Free local OCR fallback for image uploads when server OCR is unavailable.
-                    if (isImageLikeMimeOrName(mimeType, fileName)) {
-                        const localOcr = await runLocalTesseractOcr(fileBase64, detectPreferredOcrLangHint(userContext || fileName));
-                        const localText = String(localOcr?.text || '').trim();
-                        if (localOcr?.success && localText.length >= 12) {
-                            const localSummary = buildShortDocumentSummary(localText);
-                            data = {
-                                success: true,
-                                fileName,
-                                mimeType,
-                                kind: 'image',
-                                extractionMode: 'local-ocr-fallback',
-                                extractionHint: `Used free local OCR fallback. Confidence: ${Math.round(localOcr.confidence || 0)}%.`,
-                                extractedText: localText.slice(0, 22000),
-                                extractedCharCount: Math.min(localText.length, 22000),
-                                summary: localSummary,
-                                bill: null
-                            };
-                            succeeded = true;
-                        }
-                    }
-                }
-
-                if (!succeeded) {
-                    const hint = data?.hint ? ` ${data.hint}` : '';
-                    let msg = data?.error || '';
-                    const details = data?.details ? ` Details: ${String(data.details)}` : '';
-                    if (!msg && response.status === 413) {
-                        msg = 'Upload payload exceeded server request limits after encoding. Please try a smaller file (around 3 MB or less).';
-                    }
-                    if (!msg && response.status === 404) {
-                        msg = 'Upload endpoint /api/document-ingest was not found in this deployment. Redeploy to include api/document-ingest.js.';
-                    }
-                    if (!msg && response.status >= 500) {
-                        msg = `Server error (${response.status}) while processing the file.`;
-                    }
-                    if (!msg && rawBody && !/^\s*</.test(rawBody)) {
-                        msg = String(rawBody).slice(0, 220);
-                    }
-                    if (!msg) {
-                        msg = 'I could not process that file.';
-                    }
-                    msg = `${msg}${details}${hint}`;
-                    addChatMessage(msg, false);
-                    return;
-                }
-
-                lastUploadedDocument = {
-                    fileName: data.fileName,
-                    kind: data.kind,
-                    extractedText: data.extractedText,
-                    summary: data.summary,
-                    bill: data.bill || null,
-                    userContext,
-                    uploadedAt: Date.now()
-                };
-                rememberUploadedDocument(lastUploadedDocument);
-
-                const resultCard = formatDocumentResultCard({ ...data, userContext });
-                addChatMessage(resultCard, false, false);
-                saveToHistory(`uploaded ${data.fileName}`, 'I have read the uploaded file. Details will be shared only on follow-up questions.');
-
-            } catch (error) {
-                const msg = 'Upload failed. Please try again.';
-                addChatMessage(msg, false);
-            } finally {
-                hideThinkingIndicator();
-            }
         }
-
-        function readFileAsBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const result = String(reader.result || '');
-                    const commaIndex = result.indexOf(',');
-                    if (commaIndex < 0) {
-                        reject(new Error('Invalid file encoding'));
-                        return;
-                    }
-                    resolve(result.slice(commaIndex + 1));
-                };
-                reader.onerror = () => reject(new Error('File read failed'));
-                reader.readAsDataURL(file);
-            });
-        }
-
         async function prepareFilePayload(file) {
             const lowerName = String(file?.name || '').toLowerCase();
             const mimeType = String(file?.type || '').toLowerCase();
@@ -7261,13 +6457,13 @@ async function switchCameraLens() {
             const billCurrency = String(bill?.currency || '').trim();
             if (billCurrency) return billCurrency;
             const t = String(text || '');
-            const m = t.match(/(Ã¢â€šÂ¹|rs\.?|inr|\$|usd|eur|Ã¢â€šÂ¬|Ã‚Â£)/i);
+            const m = t.match(/(â‚¹|rs\.?|inr|\$|usd|eur|â‚¬|Â£)/i);
             if (!m) return '';
             const token = m[1].toLowerCase();
             if (token === 'rs' || token === 'rs.' || token === 'inr') return 'INR';
             if (token === '$' || token === 'usd') return 'USD';
-            if (token === 'Ã¢â€šÂ¬' || token === 'eur') return 'EUR';
-            if (token === 'Ã‚Â£') return 'GBP';
+            if (token === 'â‚¬' || token === 'eur') return 'EUR';
+            if (token === 'Â£') return 'GBP';
             return m[1];
         }
 
@@ -7284,14 +6480,14 @@ async function switchCameraLens() {
             };
 
             // Pattern: "Alice paid 500", "I spent 300", "Bob contributed 200"
-            const verbPattern = /\b([a-z][a-z\s]{0,24}|i)\s+(?:paid|pay|spent|contributed|brought)\s*(?:rs\.?|inr|Ã¢â€šÂ¹|\$|usd|eur|Ã¢â€šÂ¬|Ã‚Â£)?\s*([0-9]+(?:\.[0-9]+)?)\b/gi;
+            const verbPattern = /\b([a-z][a-z\s]{0,24}|i)\s+(?:paid|pay|spent|contributed|brought)\s*(?:rs\.?|inr|â‚¹|\$|usd|eur|â‚¬|Â£)?\s*([0-9]+(?:\.[0-9]+)?)\b/gi;
             let match;
             while ((match = verbPattern.exec(raw)) !== null) {
                 addContribution(match[1], match[2]);
             }
 
             // Pattern: "Alice 500, Bob 200"
-            const simplePairPattern = /\b([a-z][a-z\s]{0,24}|i)\s*[:=-]?\s*(?:rs\.?|inr|Ã¢â€šÂ¹|\$|usd|eur|Ã¢â€šÂ¬|Ã‚Â£)?\s*([0-9]+(?:\.[0-9]+)?)\b/gi;
+            const simplePairPattern = /\b([a-z][a-z\s]{0,24}|i)\s*[:=-]?\s*(?:rs\.?|inr|â‚¹|\$|usd|eur|â‚¬|Â£)?\s*([0-9]+(?:\.[0-9]+)?)\b/gi;
             while ((match = simplePairPattern.exec(raw)) !== null) {
                 const nearby = raw.slice(Math.max(0, match.index - 14), Math.min(raw.length, match.index + match[0].length + 14));
                 if (/\b(phone|number|age|time|date)\b/i.test(nearby)) continue;
@@ -7300,7 +6496,7 @@ async function switchCameraLens() {
 
             // Total amount: explicit in text, else OCR bill total, else sum contributions.
             let total = null;
-            const totalMatch = raw.match(/\b(?:total|bill(?:\s+amount)?|grand total)\s*(?:is|=|:)?\s*(?:rs\.?|inr|Ã¢â€šÂ¹|\$|usd|eur|Ã¢â€šÂ¬|Ã‚Â£)?\s*([0-9]+(?:\.[0-9]+)?)\b/i);
+            const totalMatch = raw.match(/\b(?:total|bill(?:\s+amount)?|grand total)\s*(?:is|=|:)?\s*(?:rs\.?|inr|â‚¹|\$|usd|eur|â‚¬|Â£)?\s*([0-9]+(?:\.[0-9]+)?)\b/i);
             if (totalMatch) {
                 total = Number(totalMatch[1]);
             } else if (Number.isFinite(Number(bill?.total))) {
@@ -9303,8 +8499,8 @@ const GENERIC_INTENT_DOMAIN_WORDS = {
 
 function normalizeGenericIntentText(text) {
     return String(text || '')
-        .replace(/[Ã¢â‚¬Å“Ã¢â‚¬Â]/g, '"')
-        .replace(/[Ã¢â‚¬â„¢]/g, "'")
+        .replace(/[â€œâ€]/g, '"')
+        .replace(/[â€™]/g, "'")
         .replace(/[?!,;:()[\]{}]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -13539,7 +12735,7 @@ function extractFactCandidate(result, entityIntent) {
         const titleFirstPatterns = [
             /\b(?:latest|recent|new|upcoming|current|future)\s+(?:movie|film|release|song|album|single|show|series|project)\s+(?:is|was|:)\s*([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})/i,
             /\b(?:starring|stars in|release of|titled|title is)\s+([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})/i,
-            /["Ã¢â‚¬Å“]([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})["Ã¢â‚¬Â][^.]{0,40}\b(?:film|movie|song|album|series|project|release)\b/i
+            /["â€œ]([A-Z][A-Za-z0-9:&'().,\-]+(?:\s+[A-Z0-9][A-Za-z0-9:&'().,\-]+){0,6})["â€][^.]{0,40}\b(?:film|movie|song|album|series|project|release)\b/i
         ];
         for (const pattern of titleFirstPatterns) {
             const match = combined.match(pattern);
@@ -14327,11 +13523,11 @@ function normalizeRecipeOutputText(text) {
         .replace(/\u00bc/g, '1/4')
         .replace(/\u00bd/g, '1/2')
         .replace(/\u00be/g, '3/4')
-        .replace(/[Ã¢â‚¬Å“Ã¢â‚¬Â]/g, '"')
-        .replace(/[Ã¢â‚¬ËœÃ¢â‚¬â„¢]/g, "'")
-        .replace(/Ã‚Â¼/g, '1/4')
-        .replace(/Ã‚Â½/g, '1/2')
-        .replace(/Ã‚Â¾/g, '3/4')
+        .replace(/[â€œâ€]/g, '"')
+        .replace(/[â€˜â€™]/g, "'")
+        .replace(/Â¼/g, '1/4')
+        .replace(/Â½/g, '1/2')
+        .replace(/Â¾/g, '3/4')
         .replace(/\s+%/g, ' percent')
         .replace(/^(\s*)\d+\.\s+/gm, '$1- ')
         .replace(/[ \t]+/g, ' ')
@@ -15730,7 +14926,7 @@ function detectInputLanguageHint(text) {
             }
 
             if (/\b(open|start|launch|enable)\s+(camera|ocr|scan)\b|\b(scan|read)\s+(this|text|document)\b/i.test(lower)) {
-                await openCameraMode();
+                addChatMessage('The camera scanner has been removed. Use Live Vision for camera-based questions.', false);
                 return;
             }
 
@@ -17601,7 +16797,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     ? `Air Quality Index (US AQI): ${aqi.usAqi} (${aqi.label || 'Unknown'})`
                     : 'Air Quality Index (US AQI): unavailable right now';
                 const weatherFallback = [
-                    `In ${displayLocation}, it's ${celsius}Ã‚Â°C (${fahrenheit}Ã‚Â°F) with ${advice}.`,
+                    `In ${displayLocation}, it's ${celsius}Â°C (${fahrenheit}Â°F) with ${advice}.`,
                     isCurrentLocationAsk ? aqiLine : ''
                 ].filter(Boolean).join('\n');
                 await deliverApiReply('weather_result', {
@@ -17804,7 +17000,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     <div class="flex items-center justify-between gap-3 text-white/90 text-sm py-1">
                         <span class="font-semibold">${day}</span>
                         <span class="text-white/80">${escapeHtml(label)}</span>
-                        <span class="font-semibold">${Number.isFinite(max) ? Math.round(max) : '--'}Ã‚Â° / ${Number.isFinite(min) ? Math.round(min) : '--'}Ã‚Â°C</span>
+                        <span class="font-semibold">${Number.isFinite(max) ? Math.round(max) : '--'}Â° / ${Number.isFinite(min) ? Math.round(min) : '--'}Â°C</span>
                     </div>
                 `);
             }
@@ -19052,7 +18248,7 @@ function normalizeItineraryTextForReadability(rawText) {
 }
 
 function normalizeAssistantTextStyle(text) {
-    return String(text || '').replace(/[Ã¢â‚¬â€Ã¢â‚¬â€œ]/g, '-');
+    return String(text || '').replace(/[â€”â€“]/g, '-');
 }
 
 function autoBulletizeProcedureText(rawText) {
@@ -19705,7 +18901,7 @@ function startARFindSession(thing, location) {
             const overlay = document.getElementById('ar-overlay');
             overlay.innerHTML = `
                 <div style="position:absolute; top:10%; left:50%; transform:translateX(-50%); width:90%; background:rgba(0,0,0,0.8); color:#fff; padding:20px; border-radius:16px; border:2px solid #8b5cf6; text-align:center; font-family:sans-serif;">
-                    <div style="font-size:24px; margin-bottom:10px;">Ã°Å¸â€Â Locating Item</div>
+                    <div style="font-size:24px; margin-bottom:10px;">ðŸ” Locating Item</div>
                     <div style="font-size:18px; margin-bottom:20px;">Your <b>${thing}</b> is near <b>${location}</b></div>
                     <div style="font-size:14px; opacity:0.8; margin-bottom:20px;">Look around your physical space.</div>
                     <button onclick="endARSession()" style="padding:10px 24px; font-size:16px; background:#ef4444; color:white; border:none; border-radius:8px; font-weight:bold;">Close AR Lens</button>
