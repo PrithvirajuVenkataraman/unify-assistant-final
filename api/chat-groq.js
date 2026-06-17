@@ -748,7 +748,11 @@ async function buildLiveRagContext(message, req, contextTurns = []) {
                     description: String(result?.description || '').trim(),
                     url,
                     domain: String(result?.domain || getHost(url)).trim(),
+                    sourceType: String(result?.sourceType || '').trim(),
+                    sourceLabel: String(result?.sourceLabel || result?.source || result?.domain || getHost(url)).trim(),
                     date: String(result?.date || '').trim(),
+                    freshness: String(result?.freshness || '').trim(),
+                    qualitySignals: Array.isArray(result?.qualitySignals) ? result.qualitySignals : [],
                     trusted: Boolean(result?.trusted),
                     query: candidateQuery
                 });
@@ -766,6 +770,9 @@ async function buildLiveRagContext(message, req, contextTurns = []) {
         .map((item, index) => [
             `[${index + 1}] ${item.title}`,
             item.description ? `Summary: ${item.description}` : '',
+            item.sourceLabel ? `Source label: ${item.sourceLabel}` : '',
+            item.sourceType ? `Source type: ${item.sourceType}` : '',
+            item.freshness ? `Freshness: ${item.freshness}` : '',
             item.date ? `Date: ${item.date}` : '',
             `Source: ${item.url}`
         ].filter(Boolean).join('\n'))
