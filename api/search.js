@@ -1,5 +1,6 @@
 export const config = { maxDuration: 60 };
 
+import { createHash } from 'node:crypto';
 import { applyApiSecurity } from './security.js';
 
 const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
@@ -78,7 +79,8 @@ export default async function handler(req, res) {
                 code: String(error?.code || 'search_failed'),
                 message: String(error?.publicMessage || error?.message || 'Live search failed.'),
                 upstreamStatus: Number(error?.upstreamStatus) || undefined,
-                retryable: error?.retryable !== false
+                retryable: error?.retryable !== false,
+                keyFingerprint: getSerperKeyFingerprint()
             },
             results: []
         });
@@ -304,6 +306,12 @@ function getSerperApiKey() {
     return String(process.env.SERPER_API_KEY || process.env.SERPER_KEY || '').trim();
 }
 
+function getSerperKeyFingerprint() {
+    const key = getSerperApiKey();
+    if (!key) return '';
+    return createHash('sha256').update(key).digest('hex').slice(0, 10);
+}
+
 function clampInt(value, fallback, min, max) {
     const n = Number.parseInt(value, 10);
     if (!Number.isFinite(n)) return fallback;
@@ -313,6 +321,7 @@ function clampInt(value, fallback, min, max) {
 export const __test = {
     liveSearchDisabledResponse: LIVE_SEARCH_DISABLED_RESPONSE,
     createSerperStatusError,
+    getSerperKeyFingerprint,
     normalizeSerperResults,
     runVerifiedWebSearch,
     isTrustedLiveSource
