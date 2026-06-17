@@ -1,8 +1,8 @@
 const ERROR_MESSAGES = { 
     'not-allowed': 'Microphone permission was denied. Allow microphone access in your browser settings.', 
-    'service-not-allowed': 'Speech recognition is blocked by the browser or device policy.', 
+    'service-not-allowed': 'Speech recognition is blocked by the browser or device policy. Language support depends on your browser and device; try English or another language.', 
     'audio-capture': 'No working microphone was found.', 
-    network: 'Speech recognition could not reach the recognition service.', 
+    network: 'Speech recognition could not reach the recognition service. Language support depends on your browser and device; try English or another language.', 
     'no-speech': 'No speech was detected. If this repeats, try English or another browser-supported language.' 
 }; 
 const enqueueMicrotask = globalThis.queueMicrotask || (callback => Promise.resolve().then(callback)); 
@@ -379,6 +379,7 @@ export function installSpeechInputUI(options = {}) {
             options.onError?.(message);
         }
     });
+    const toggleConverseController = controller.toggleConverse;
 
     globalThis.toggleVoiceToText = () => {
         committedText = input.value.trim();
@@ -389,7 +390,7 @@ export function installSpeechInputUI(options = {}) {
         input.value = '';
         delete input.dataset.inputSource;
         options.onComposerChanged?.();
-        return controller.toggleConverse();
+        return toggleConverseController();
     };
     globalThis.JarvisSpeechInput = controller;
     globalThis.JarvisSpeechInput.toggleConverse = globalThis.toggleConverseMode;
