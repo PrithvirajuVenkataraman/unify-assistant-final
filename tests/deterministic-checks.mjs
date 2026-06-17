@@ -6,6 +6,7 @@ import currentFactsHandler, { __test as currentFacts } from '../api/current-fact
 const SOURCE = Object.freeze({ 
     science: fs.readFileSync(new URL('../science-format.js', import.meta.url), 'utf8'), 
     appHtml: fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
+    styles: fs.readFileSync(new URL('../styles.css', import.meta.url), 'utf8'),
     visionApi: fs.readFileSync(new URL('../api/vision.js', import.meta.url), 'utf8'),
     speechInput: fs.readFileSync(new URL('../app/speech-input.js', import.meta.url), 'utf8') 
 }); 
@@ -107,15 +108,16 @@ const FEATURE_CONTRACTS = Object.freeze({
     },
     ocrCamera: {
         required: [
-            /class="ocr-camera-text-action"/,
-            /class="ocr-camera-text-action ocr-camera-primary-action"/,
-            /class="camera-ocr-text-result"/,
-            /const framesToAttempt = isMathOcrTask \? variantFrames\.slice\(0, 1\) : variantFrames/
+            /Use Live Vision for camera-based questions/
         ],
         forbidden: [
-            /onclick="closeCameraMode\(\)" class="px-6 py-3 rounded-xl bg-white/,
-            /onclick="switchCameraLens\(\)" class="px-4 py-3 rounded-xl bg-slate-200/,
-            /id="capture-btn" onclick="captureAndProcessOCR\(\)" class="flex-1 px-6 py-3 rounded-xl bg-emerald-600/
+            /OCR camera/,
+            /id="camera-modal"/,
+            /onclick="captureAndProcessOCR\(\)"/,
+            /function openCameraMode\(/,
+            /function captureAndProcessOCR\(/,
+            /class="ocr-camera-text-action"/,
+            /class="camera-ocr-text-result"/
         ]
     },
     interruptionAndFeedback: {
@@ -180,6 +182,10 @@ assert.match(chemText, new RegExp(SAMPLE.relationOut));
 
 assert.equal(currentFacts.liveDisabledResponse.disabled, true);
 assert.equal(currentFacts.liveDisabledResponse.success, false);
+assert.match(SOURCE.styles, /\.chat-bubble-user\s*\{[\s\S]*background:\s*transparent !important/);
+assert.match(SOURCE.styles, /\.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important/);
+assert.match(SOURCE.styles, /\.assistant-message-text a\s*\{[\s\S]*color:\s*#ffffff !important/);
+assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
 
 const disabledApi = await callJsonHandler(currentFactsHandler, {
     method: 'POST',
