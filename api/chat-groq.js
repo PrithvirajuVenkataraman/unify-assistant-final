@@ -10,7 +10,7 @@ const CHAT_ROUTER_MODE = String(process.env.CHAT_ROUTER_MODE || 'strict_single_p
 function isLiveRetrievalConfigured() {
     const flag = String(process.env.LIVE_RETRIEVAL_ENABLED || '').trim().toLowerCase();
     if (['0', 'false', 'no', 'off'].includes(flag)) return false;
-    return hasLiveSearchConfiguredForChat();
+    return true;
 }
 
 export default async function handler(req, res) {
@@ -775,11 +775,7 @@ async function buildLiveRagContext(message, req, contextTurns = []) {
 }
 
 function hasLiveSearchConfiguredForChat() {
-    return Boolean(
-        process.env.SERPER_API_KEY ||
-        process.env.SERPER_KEY ||
-        process.env.CRAWLER_SEARCH_ENDPOINT
-    );
+    return true;
 }
 
 function buildChatLiveSearchQueries(query, contextTurns = []) {
