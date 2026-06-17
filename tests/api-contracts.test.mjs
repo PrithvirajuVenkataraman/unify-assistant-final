@@ -11,7 +11,7 @@ const SAMPLE = Object.freeze({
     selectionText: 'const v = 1;',
     customInstruction: 'q q',
     customPrompt: 'a b c',
-    challengedAnswer: 'verify q',
+    challengedAnswer: 'verify q', 
     challengedResponse: '2020.',
     currentQuery: 'q q',
     marketQuery: 'q q',
