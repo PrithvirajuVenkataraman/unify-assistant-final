@@ -10,7 +10,7 @@ const CHAT_ROUTER_MODE = String(process.env.CHAT_ROUTER_MODE || 'strict_single_p
 function isLiveRetrievalConfigured() {
     const flag = String(process.env.LIVE_RETRIEVAL_ENABLED || '').trim().toLowerCase();
     if (['0', 'false', 'no', 'off'].includes(flag)) return false;
-    return hasSerperConfiguredForChat();
+    return hasLiveSearchConfiguredForChat();
 }
 
 export default async function handler(req, res) {
@@ -774,8 +774,12 @@ async function buildLiveRagContext(message, req, contextTurns = []) {
     return { ragText, sources };
 }
 
-function hasSerperConfiguredForChat() {
-    return Boolean(process.env.SERPER_API_KEY || process.env.SERPER_KEY);
+function hasLiveSearchConfiguredForChat() {
+    return Boolean(
+        process.env.SERPER_API_KEY ||
+        process.env.SERPER_KEY ||
+        (process.env.MEILI_HOST && process.env.MEILI_SEARCH_KEY)
+    );
 }
 
 function buildChatLiveSearchQueries(query, contextTurns = []) {
