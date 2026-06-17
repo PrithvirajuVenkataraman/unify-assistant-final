@@ -673,16 +673,23 @@ Rules:
 function normalizeIntentTypos(text) {
     const raw = String(text || '');
     if (!raw.trim()) return '';
+    const targeted = raw
+        .replace(/\bcief\b/gi, 'chief')
+        .replace(/\brtamil\s*nadu\b/gi, 'Tamil Nadu')
+        .replace(/\brtamilnadu\b/gi, 'Tamil Nadu')
+        .replace(/\btamilnadu\b/gi, 'Tamil Nadu')
+        .replace(/\b(my|left|right|the)\s+food\b(?=[^?.!]*(?:hurt|hurts|hurting|pain|paining|ache|aching|swollen|injured|injury))/gi, '$1 foot')
+        .replace(/\bfood\s+(hurt|hurts|hurting|pain|paining|ache|aching|swollen|injured|injury)\b/gi, 'foot $1');
 
     const dictionary = [
         'what', 'whats', 'who', 'tell', 'about', 'define', 'meaning', 'show',
         'image', 'picture', 'photo', 'look', 'like', 'weather', 'forecast',
         'news', 'shopping', 'grocery', 'itinerary', 'hotel',
         'restaurants', 'transport', 'route', 'translate', 'translator', 'joke',
-        'calendar', 'budget', 'sync'
+        'calendar', 'budget', 'sync', 'chief', 'minister', 'tamil', 'nadu'
     ];
 
-    return raw
+    return targeted
         .split(/(\s+)/)
         .map(token => {
             if (!/^[a-zA-Z']+$/.test(token)) return token;
@@ -4477,6 +4484,7 @@ let showRoutingDebugBadge = false;
             toggleSendButton();
             if (reason === 'manual') showTemporaryMessage('Response stopped.');
         }
+        window.stopActiveGeneration = stopActiveGeneration;
 
         function updateAssistantModeUI() {
             toggleSendButton();
@@ -6985,7 +6993,7 @@ async function sendTextInput(submission = {}) {
                 lastSubmissionTimestamp = now;
 
                 const outgoingText = text;
-                const normalizedOutgoingText = preserveTranscript || isLikelyCodeInput(outgoingText)
+                const normalizedOutgoingText = isLikelyCodeInput(outgoingText)
                     ? outgoingText
                     : normalizeIntentTypos(outgoingText);
                 const turn = createConversationTurn(outgoingText, normalizedOutgoingText, inputSource, {
@@ -14455,7 +14463,7 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
                 selectedHandler: 'handleLiveRetrievalQuery',
                 error: String(answerError?.message || answerError || '')
             });
-            if (answerError?.status === 404 || answerError?.status === 401 || answerError?.status === 402 || answerError?.status === 403 || answerError?.status === 502 || /not configured|not enough credits|quota|billing|payment/i.test(String(answerError?.message || ''))) {
+            if (answerError?.status === 404 || answerError?.status === 401 || answerError?.status === 402 || answerError?.status === 403 || /not configured|not enough credits|quota|billing|payment/i.test(String(answerError?.message || ''))) {
                 const msg = String(answerError.message || 'Live search is unavailable.');
                 addVerifiedAssistantMessage(msg, 'Live search unavailable');
                 saveToHistory(userText, msg);
@@ -18258,8 +18266,7 @@ function showThinkingIndicator(message = 'Thinking') {
         row.id = 'chat-thinking-indicator';
         row.className = 'chat-row flex justify-start fade-in';
         row.innerHTML = `
-            <div class="chat-bubble-assistant assistant-thinking-bubble" role="status" aria-live="polite">
-                <span id="chat-thinking-text" class="assistant-thinking-text">${escapeHtml(statusText)}</span>
+            <div class="chat-bubble-assistant assistant-thinking-bubble" role="status" aria-live="polite" aria-label="${escapeHtml(statusText)}">
                 <span class="assistant-thinking-pulse" aria-hidden="true">
                     <span></span><span></span><span></span>
                 </span>
@@ -18267,8 +18274,8 @@ function showThinkingIndicator(message = 'Thinking') {
         `;
         chatContainer.appendChild(row);
     } else {
-        const text = row.querySelector('#chat-thinking-text');
-        if (text) text.textContent = statusText;
+        const bubble = row.querySelector('.assistant-thinking-bubble');
+        if (bubble) bubble.setAttribute('aria-label', statusText);
     }
     maybeAutoScroll(chatContainer);
 }
