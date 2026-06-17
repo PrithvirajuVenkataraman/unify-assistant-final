@@ -1039,6 +1039,7 @@ function resolveContextualLiveQuery(query, contextTurns) {
     const underspecified = isUnderspecifiedFollowup(current, currentTerms);
 
     if (overlap > 0) return current;
+    if (isClearlyNamedEntityQuery(current)) return current;
     if (isTopicDiversion(current, currentTerms, anchorTerms)) return current;
     if (!underspecified) return current;
 
@@ -1075,11 +1076,30 @@ function buildTopicAnchor(contextTurns) {
     for (let i = userTurns.length - 1; i >= 0; i--) {
         const candidate = userTurns[i];
         const terms = tokenizeTopicTerms(candidate);
-        if (terms.length < 2) continue;
-        if (isUnderspecifiedFollowup(candidate, terms)) continue;
+        const strongSingleTerm = terms.length === 1 && hasStrongSingleTermAnchor(candidate, terms[0]);
+        const explicitTopicIntroduction = terms.length > 0 && hasExplicitTopicIntroduction(candidate);
+        if (!terms.length) continue;
+        if (terms.length < 2 && !strongSingleTerm) continue;
+        if (isUnderspecifiedFollowup(candidate, terms) && !strongSingleTerm && !explicitTopicIntroduction) continue;
         return terms.slice(0, 8).join(' ');
     }
     return '';
+}
+
+function hasExplicitTopicIntroduction(text) {
+    return /^(?:tell me about|explain|define|what is|who is)\s+\S+/i.test(String(text || '').trim());
+}
+
+function hasStrongSingleTermAnchor(text, term) {
+    const raw = String(text || '');
+    const value = String(term || '').trim();
+    if (!value) return false;
+    if (value.length >= 4 && new RegExp(`\\b${escapeRegex(value)}\\b`, 'i').test(raw)) return true;
+    return new RegExp(`\\b${escapeRegex(value.toUpperCase())}\\b`).test(raw);
+}
+
+function escapeRegex(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function tokenizeTopicTerms(text) {
@@ -1130,6 +1150,18 @@ function isUnderspecifiedFollowup(query, pretokenizedTerms) {
     const asksFactWithoutEntity = questionLead && terms.length <= 4;
 
     return referential || veryShort || asksFactWithoutEntity;
+}
+
+function isClearlyNamedEntityQuery(query) {
+    const q = String(query || '').trim();
+    if (!q) return false;
+    if (/^(who|what)\s+(?:is|are|was|were)\s+(?:the\s+)?[A-Z][A-Za-z0-9.'-]+(?:\s+[A-Z][A-Za-z0-9.'-]+){0,5}\??$/i.test(q)) {
+        return true;
+    }
+    if (/^(tell me about|explain|define)\s+[A-Z][A-Za-z0-9.'-]+(?:\s+[A-Z][A-Za-z0-9.'-]+){0,5}\??$/i.test(q)) {
+        return true;
+    }
+    return false;
 }
 
 function isTopicDiversion(query, currentTerms, anchorTerms) {
@@ -1747,7 +1779,8 @@ export const __test = {
     getQualityRiskReasons,
     normalizeChatRequest,
     normalizeCustomSystemPrompt,
-    normalizeResponseStyle
+    normalizeResponseStyle,
+    resolveContextualLiveQuery
 };
 
 function applyResponseLengthPostCheck(parsedResponse, lengthPolicy, message, clientSystemPrompt) {
