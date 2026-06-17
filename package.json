@@ -1,11 +1,17 @@
 {
-    "name":  "unify-assistant",
+    "name":  "jarvis-assistant",
     "private":  true,
     "version":  "1.0.0",
     "type":  "module",
     "scripts": {
-        "lint": "node --check api/index.js && node --check api/chat-groq.js && node --check api/current-facts.js && node --check api/markets.js && node --check api/search.js && node --check api/speech.js && node --check api/vision.js",
-        "check": "npm run lint"
+        "lint": "node --check api/index.js && node --check api/chat-groq.js && node --check api/current-facts.js && node --check api/markets.js && node --check api/search.js && node --check api/security.js && node --check api/vision.js && node --check app/api-client.js && node --check app/bootstrap.js && node --check app/context-engine.js && node --check app/speech-input.js && node --check app/state.js && node --check app/storage.js && node --check tools/crawler/crawler.js && node --check tools/crawler/crawl.mjs && node --check tools/crawler/seed.mjs && node --check tools/crawler/refresh.mjs",
+        "test:inline": "node tests/check-inline-script.mjs",
+        "test:deterministic": "node tests/deterministic-checks.mjs",
+        "test:context": "node tests/context-engine.test.mjs",
+        "test:crawler": "node tests/crawler.test.mjs",
+        "test:speech-input": "node tests/speech-input.test.mjs",
+        "test:api": "node tests/api-contracts.test.mjs",
+        "check": "npm run lint && npm run test:inline && npm run test:deterministic && npm run test:context && npm run test:crawler && npm run test:speech-input && npm run test:api"
     },
     "dependencies":  {},
     "vercel":  {
@@ -22,4 +28,3 @@
                 ]
                }
 }
- 
