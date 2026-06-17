@@ -1,0 +1,4 @@
+{$CRAWLER_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy crawler-search:7700
+}
