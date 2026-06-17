@@ -5564,7 +5564,7 @@ let showRoutingDebugBadge = false;
             if (isUser) {
                 const formattedText = escapeHtml(displayText).replace(/\n/g, '<br>');
                 messageDiv.innerHTML = `
-                    <div class="chat-bubble-user text-white px-4 py-3 max-w-md relative group">
+                    <div class="chat-bubble-user text-white relative group">
                         <p class="text-sm font-medium">${formattedText}</p>
                         <button onclick="editMessage(this)" data-message="${encodeURIComponent(displayText)}" class="hidden group-hover:flex absolute -top-2 -right-2 bg-blue-500 text-white rounded-full w-6 h-6 text-xs hover:bg-blue-600 transition-all shadow-lg items-center justify-center" title="Edit message">&#9998;</button>
                     </div>
