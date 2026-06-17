@@ -4,9 +4,8 @@ import { createHash } from 'node:crypto';
 import { applyApiSecurity } from './security.js';
 
 const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
-const MEILI_INDEX_NAME = 'jarvis_web_pages';
 const SEARCH_TIMEOUT_MS = 8_000;
-const MEILI_SEARCH_TIMEOUT_MS = 4_000;
+const CRAWLER_SEARCH_TIMEOUT_MS = 4_000;
 const MAX_QUERY_LENGTH = 500;
 
 export const LIVE_SEARCH_DISABLED_RESPONSE = Object.freeze({
@@ -94,7 +93,7 @@ export function hasSerperKey() {
 }
 
 export function hasCrawlerIndex() {
-    return Boolean(getMeiliHost() && getMeiliSearchKey());
+    return Boolean(getCrawlerSearchEndpoint());
 }
 
 export function hasLiveSearchProvider() {
@@ -102,37 +101,25 @@ export function hasLiveSearchProvider() {
 }
 
 export async function searchCrawlerIndex(query, options = {}) {
-    const host = getMeiliHost();
-    const key = getMeiliSearchKey();
+    const endpoint = getCrawlerSearchEndpoint();
+    const key = getCrawlerSearchKey();
     const normalizedQuery = normalizeSearchQuery(query);
-    if (!host || !key || !normalizedQuery) return [];
+    if (!endpoint || !normalizedQuery) return [];
 
     const limit = clampInt(options.limit, 8, 1, 20);
-    const index = encodeURIComponent(String(options.indexName || process.env.MEILI_INDEX || MEILI_INDEX_NAME).trim());
     let response;
     try {
-        response = await fetchWithTimeout(`${host}/indexes/${index}/search`, {
+        response = await fetchWithTimeout(`${endpoint}/search`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${key}`
+                ...(key ? { Authorization: `Bearer ${key}` } : {})
             },
             body: JSON.stringify({
-                q: normalizedQuery,
-                limit: Math.max(limit, 8),
-                attributesToRetrieve: [
-                    'title',
-                    'description',
-                    'text',
-                    'url',
-                    'canonicalUrl',
-                    'domain',
-                    'publishedAt',
-                    'fetchedAt',
-                    'trusted'
-                ]
+                query: normalizedQuery,
+                limit: Math.max(limit, 8)
             })
-        }, MEILI_SEARCH_TIMEOUT_MS);
+        }, CRAWLER_SEARCH_TIMEOUT_MS);
     } catch (error) {
         if (error?.name === 'AbortError') {
             throw createSearchError({
@@ -156,7 +143,7 @@ export async function searchCrawlerIndex(query, options = {}) {
     }
 
     const data = await response.json();
-    return normalizeMeiliResults(data, normalizedQuery).slice(0, limit);
+    return normalizeCrawlerServiceResults(data, normalizedQuery).slice(0, limit);
 }
 
 export async function searchSerper(query, options = {}) {
@@ -278,17 +265,17 @@ function normalizeSerperResults(data, query) {
         .filter(item => item.title && item.url);
 }
 
-function normalizeMeiliResults(data, query) {
-    const hits = Array.isArray(data?.hits) ? data.hits : [];
+function normalizeCrawlerServiceResults(data, query) {
+    const hits = Array.isArray(data?.results) ? data.results : [];
     return hits
-        .map((item, index) => normalizeMeiliItem(item, query, index))
+        .map((item, index) => normalizeCrawlerServiceItem(item, query, index))
         .filter(item => item.title && item.url);
 }
 
-function normalizeMeiliItem(item, query, index) {
-    const url = String(item?.canonicalUrl || item?.url || '').trim();
+function normalizeCrawlerServiceItem(item, query, index) {
+    const url = String(item?.url || item?.canonicalUrl || '').trim();
     const domain = String(item?.domain || getDomainFromUrl(url)).toLowerCase().replace(/^www\./, '');
-    const description = String(item?.description || item?.text || '').replace(/\s+/g, ' ').trim();
+    const description = String(item?.description || '').replace(/\s+/g, ' ').trim();
     return {
         title: String(item?.title || domain || url).trim(),
         description: description.slice(0, 320),
@@ -455,12 +442,12 @@ function getSerperApiKey() {
     return String(process.env.SERPER_API_KEY || process.env.SERPER_KEY || '').trim();
 }
 
-function getMeiliHost() {
-    return String(process.env.MEILI_HOST || '').trim().replace(/\/+$/, '');
+function getCrawlerSearchEndpoint() {
+    return String(process.env.CRAWLER_SEARCH_ENDPOINT || '').trim().replace(/\/+$/, '');
 }
 
-function getMeiliSearchKey() {
-    return String(process.env.MEILI_SEARCH_KEY || '').trim();
+function getCrawlerSearchKey() {
+    return String(process.env.CRAWLER_SEARCH_KEY || '').trim();
 }
 
 function getSerperKeyFingerprint() {
@@ -470,7 +457,7 @@ function getSerperKeyFingerprint() {
 }
 
 function clampInt(value, fallback, min, max) {
-    const n = Number.parseInt(value, 10); 
+    const n = Number.parseInt(value, 10);
     if (!Number.isFinite(n)) return fallback;
     return Math.max(min, Math.min(max, n));
 }
@@ -481,7 +468,7 @@ export const __test = {
     createSerperStatusError,
     getSerperKeyFingerprint,
     hasCrawlerIndex,
-    normalizeMeiliResults,
+    normalizeCrawlerServiceResults,
     normalizeSerperResults,
     runVerifiedWebSearch,
     searchCrawlerIndex,
