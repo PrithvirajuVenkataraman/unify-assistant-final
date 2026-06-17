@@ -133,7 +133,7 @@ export function createSpeechInputController(options = {}) {
         restartRequested = false;
         instance.lang = language;
         instance.interimResults = true;
-        instance.continuous = nextMode === 'converse';
+        instance.continuous = true;
         instance.maxAlternatives = 1;
 
         instance.onstart = emitState;
@@ -188,7 +188,6 @@ export function createSpeechInputController(options = {}) {
                 sessionId: session.id,
                 transcriptId
             });
-            stopRecognition('dictation_complete');
         };
         instance.onerror = event => {
             if (activeSession !== session) return;
@@ -386,11 +385,16 @@ export function installSpeechInputUI(options = {}) {
         return controller.toggleDictation();
     };
     globalThis.toggleConverseMode = () => {
+        const wasConverseEnabled = controller.getState().converseEnabled;
         committedText = '';
         input.value = '';
         delete input.dataset.inputSource;
         options.onComposerChanged?.();
-        return toggleConverseController();
+        const toggled = toggleConverseController();
+        if (wasConverseEnabled) {
+            globalThis.stopActiveGeneration?.('converse_stop');
+        }
+        return toggled;
     };
     globalThis.JarvisSpeechInput = controller;
     globalThis.JarvisSpeechInput.toggleConverse = globalThis.toggleConverseMode;
