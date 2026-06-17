@@ -114,6 +114,9 @@ assert.equal(disabledSearch.body.error.code, 'feature_disabled');
 
 process.env.SERPER_API_KEY = 'test-serper-key';
 process.env.LIVE_RETRIEVAL_ENABLED = 'true';
+const keyFingerprint = searchTest.getSerperKeyFingerprint();
+assert.equal(keyFingerprint.length, 10);
+assert.notEqual(keyFingerprint, 'test-serper-key');
 globalThis.fetch = async (url, init) => {
     assert.equal(String(url), 'https://google.serper.dev/search');
     assert.equal(init?.headers?.['X-API-KEY'], 'test-serper-key');
