@@ -3,7 +3,7 @@ import { applyApiSecurity } from './security.js';
 import { runVerifiedWebSearch } from './search.js';
  
 const MODEL_FETCH_TIMEOUT_MS = 18_000;
-const INTERNAL_FETCH_TIMEOUT_MS = 8_000;
+const INTERNAL_FETCH_TIMEOUT_MS = 8_000; 
 const FETCH_RETRIES = 1;
 const CHAT_ROUTER_MODE = String(process.env.CHAT_ROUTER_MODE || 'strict_single_pass').trim().toLowerCase();
 
