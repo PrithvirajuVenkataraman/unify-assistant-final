@@ -1,7 +1,7 @@
 ﻿export const config = { maxDuration: 60 };
 import { applyApiSecurity } from './security.js';
 
-export default async function handler(req, res) {
+export default async function handler(req, res) { 
     try {
         const guard = applyApiSecurity(req, res, {
             methods: ['POST'],
