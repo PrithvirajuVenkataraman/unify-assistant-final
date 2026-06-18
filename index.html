@@ -3691,7 +3691,9 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
     const controller = beginAbortableRequest();
     const hadExistingThinkingIndicator = Boolean(document.getElementById('chat-thinking-indicator'));
     let autoIndicatorShown = false;
+    let requestSettled = false;
     const autoIndicatorTimer = setTimeout(() => {
+        if (requestSettled) return;
         if (hadExistingThinkingIndicator) return;
         showThinkingIndicator('Generating answer...');
         autoIndicatorShown = true;
@@ -3824,6 +3826,7 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
             intent: 'soft_fallback'
         }; 
     } finally {
+        requestSettled = true;
         clearTimeout(autoIndicatorTimer);
         if (autoIndicatorShown && !hadExistingThinkingIndicator) {
             hideThinkingIndicator();
@@ -15121,11 +15124,27 @@ function deleteAllLocalDataNow() {
 
 function detectInputLanguageHint(text) {
     const raw = String(text || '');
-    if (/[\u0B80-\u0BFF]/.test(raw)) return 'Tamil';
-    if (/[\u0C00-\u0C7F]/.test(raw)) return 'Telugu';
-    if (/[\u0C80-\u0CFF]/.test(raw)) return 'Kannada';
-    if (/[\u0D00-\u0D7F]/.test(raw)) return 'Malayalam';
-    if (/[\u0900-\u097F]/.test(raw)) return 'Hindi';
+    const hasEnglish = /\b[a-z]{2,}\b/i.test(raw);
+    const hasSpanish = /\b(hola|gracias|por favor|como|c[oó]mo|que|qu[eé]|porque|necesito|quiero|puedes|ayuda|espa[nñ]ol|amigo|buenos|buenas)\b/i.test(raw);
+    const scriptedLanguages = [
+        { name: 'Tamil', mixed: 'English-Tamil', pattern: /[\u0B80-\u0BFF]/ },
+        { name: 'Telugu', mixed: 'English-Telugu', pattern: /[\u0C00-\u0C7F]/ },
+        { name: 'Kannada', mixed: 'English-Kannada', pattern: /[\u0C80-\u0CFF]/ },
+        { name: 'Malayalam', mixed: 'English-Malayalam', pattern: /[\u0D00-\u0D7F]/ },
+        { name: 'Hindi', mixed: 'English-Hindi', pattern: /[\u0900-\u097F]/ }
+    ];
+    for (const language of scriptedLanguages) {
+        if (language.pattern.test(raw)) {
+            return hasEnglish
+                ? `the user's mixed ${language.mixed} style, preserving code-mixed terms where natural`
+                : language.name;
+        }
+    }
+    if (hasSpanish) {
+        return hasEnglish
+            ? 'the user\'s mixed English-Spanish style, preserving code-mixed terms where natural'
+            : 'Spanish';
+    }
     return '';
 }
 
@@ -18537,13 +18556,16 @@ function showThinkingIndicator(message = 'Thinking') {
 
     let row = document.getElementById('chat-thinking-indicator');
     const statusText = String(message || 'Thinking').replace(/\s+/g, ' ').trim() || 'Thinking';
+    const phase = resolveThinkingPhase(statusText);
+    const visualMode = phase.key === 'searching' ? 'ring' : 'dots';
+    const visualModeClass = visualMode === 'ring' ? 'assistant-thinking-ring-mode' : 'assistant-thinking-dots';
     if (!row) {
         row = document.createElement('div');
         row.id = 'chat-thinking-indicator';
         row.className = 'chat-row flex justify-start fade-in';
         row.innerHTML = `
             <div class="chat-bubble-assistant assistant-thinking-bubble" role="status" aria-live="polite" aria-label="${escapeHtml(statusText)}">
-                <span class="assistant-thinking-pulse" aria-hidden="true">
+                <span class="assistant-thinking-pulse ${visualModeClass}" aria-hidden="true">
                     <span class="assistant-thinking-dot"></span>
                     <span class="assistant-thinking-dot"></span>
                     <span class="assistant-thinking-dot"></span>
@@ -18555,6 +18577,11 @@ function showThinkingIndicator(message = 'Thinking') {
     } else {
         const bubble = row.querySelector('.assistant-thinking-bubble');
         if (bubble) bubble.setAttribute('aria-label', statusText);
+        const pulse = row.querySelector('.assistant-thinking-pulse');
+        if (pulse) {
+            pulse.classList.toggle('assistant-thinking-dots', visualMode === 'dots');
+            pulse.classList.toggle('assistant-thinking-ring-mode', visualMode === 'ring');
+        }
     }
     maybeAutoScroll(chatContainer);
 }
