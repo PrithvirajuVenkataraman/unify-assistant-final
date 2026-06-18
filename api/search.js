@@ -2,7 +2,7 @@ export const config = { maxDuration: 60 };
 
 import { createHash } from 'node:crypto';
 import { applyApiSecurity } from './security.js';
-
+ 
 const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
 const WIKIPEDIA_SEARCH_URL = 'https://en.wikipedia.org/w/api.php';
 const WIKIPEDIA_SUMMARY_URL = 'https://en.wikipedia.org/api/rest_v1/page/summary';
