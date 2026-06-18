@@ -1235,7 +1235,9 @@ body.dark .footer-action-btn-primary:hover {
 .selection-helper-popover {
     position: fixed;
     z-index: var(--z-selection-helper);
-    display: none;
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
     align-items: center;
     gap: 8px;
     padding: 8px 10px;
@@ -1247,7 +1249,9 @@ body.dark .footer-action-btn-primary:hover {
 }
 
 .selection-helper-popover.visible {
-    display: flex;
+    display: flex !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
 }
 
 .selection-helper-chip {
@@ -1470,11 +1474,22 @@ body.dark .help-modal-enhanced .memory-action-btn:active {
 }
 
 body.dark .chat-bubble-assistant {
-    background: rgba(15, 23, 42, 0.5) !important;
-    border: 1px solid rgba(148, 163, 184, 0.38) !important;
+    background: transparent !important;
+    border: none !important;
     box-shadow: none !important;
-    border-radius: 12px !important;
-    padding: 12px !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+}
+
+body .chat-row .chat-bubble-user,
+body .chat-row .chat-bubble-assistant,
+body.dark .chat-row .chat-bubble-user,
+body.dark .chat-row .chat-bubble-assistant {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
 }
 
 body.dark .assistant-avatar,
@@ -1486,7 +1501,7 @@ body.dark .response-action-btn {
     display: none !important;
 }
 
-/* Professional in-chat thinking spinner */
+/* Professional in-chat thinking pulse */
 .assistant-thinking-bubble {
     display: inline-flex;
     align-items: center;
@@ -1497,19 +1512,18 @@ body.dark .response-action-btn {
     border-radius: 999px !important;
     border: 1px solid var(--ui-border) !important;
     background: var(--ui-surface) !important;
-    }
+}
 
 .assistant-thinking-avatar {
     display: none;
 }
 
-.assistant-thinking-spinner {
+.assistant-thinking-pulse {
     width: 16px;
     height: 16px;
     border-radius: 999px;
-    border: 2px solid rgba(255, 255, 255, 0.28);
-    border-top-color: #ffffff;
-    animation: jarvis-spin 0.8s linear infinite;
+    background: #ffffff;
+    animation: jarvis-thinking-pulse 1s ease-in-out infinite;
     flex-shrink: 0;
 }
 
@@ -1541,8 +1555,15 @@ body.dark .response-action-btn {
     display: none !important;
 }
 
-@keyframes jarvis-spin {
-    to { transform: rotate(360deg); }
+@keyframes jarvis-thinking-pulse {
+    0%, 100% {
+        opacity: 0.45;
+        transform: scale(0.82);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 /* Utility */
