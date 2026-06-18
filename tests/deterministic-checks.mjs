@@ -145,6 +145,20 @@ const FEATURE_CONTRACTS = Object.freeze({
     },
     backgroundTripEvents: {
         required: [/detached: true\s*\}\);\s*maybeNotifyTripEvent/]
+    },
+    localClaimRiskFlags: {
+        required: [
+            /function analyzeAnswerRiskFlags\(userMessage, assistantText\)/,
+            /function buildClaimRiskBadgeHtml\(flags = \[\]\)/,
+            /class="claim-risk-badge"/,
+            /Local review flags:\\n\$\{flags\}/
+        ],
+        forbidden: [
+            /custom-autocorrect-input/,
+            /jarvis_custom_autocorrect_rules/,
+            /applyCustomAutocorrectRules/,
+            /Autocorrect dictionary/
+        ]
     }
 });
 
@@ -212,6 +226,9 @@ assert.match(SOURCE.appHtml, /function splitReadableSentences\(text\)/);
 assert.ok(SOURCE.appHtml.includes("char === '.' && /\\d/.test(prev) && /\\d/.test(next)"));
 assert.match(SOURCE.appHtml, /if \(isUser && !rawDisplayText\.trim\(\)\) return/);
 assert.doesNotMatch(SOURCE.appHtml, /rawText\.match\(\s*\/\[\^\.\!\?\]\+\[\.\!\?\]\+\/g/);
+assert.match(SOURCE.appHtml, /const targeted = raw\s*\.replace\(\/\\bcief\\b\/gi, 'chief'\)/);
+assert.match(SOURCE.appHtml, /\.replace\(\/\\brtamilnadu\\b\/gi, 'Tamil Nadu'\)/);
+assert.doesNotMatch(SOURCE.appHtml, /customAutocorrectRules/);
 assert.match(SOURCE.readme, /Standout Feature: Context Copilot/);
 assert.match(SOURCE.readme, /local, deterministic, private, and free-for-life/);
 assert.match(SOURCE.appHtml, /localStorage when memory persistence is enabled/);
@@ -237,7 +254,37 @@ assert.match(SOURCE.visionApi, /pipeline:\s*'fast-math-ocr-solve'/);
 assert.match(SOURCE.visionApi, /pipeline:\s*'planner-critic-solver'/);
 assert.match(SOURCE.speechInput, /try English or another language/);
 
+const riskSandbox = {};
+vm.createContext(riskSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'analyzeAnswerRiskFlags'), riskSandbox);
+const currentFlags = riskSandbox.analyzeAnswerRiskFlags(
+    'Who is the current chief minister of Tamil Nadu?',
+    'The current chief minister of Tamil Nadu is M. K. Stalin.'
+).map(flag => flag.label);
+assert.ok(currentFlags.includes('Current fact'));
+assert.equal(riskSandbox.analyzeAnswerRiskFlags('hello', 'Hi there.').map(flag => flag.label).length, 0);
+const numberFlags = riskSandbox.analyzeAnswerRiskFlags(
+    'Plan my budget',
+    'The total is ₹12000, with 15% for food and 20% for transport.'
+).map(flag => flag.label);
+assert.ok(numberFlags.includes('Numbers'));
+
 console.log('deterministic-checks-ok'); 
+
+function extractFunctionSource(source, name) {
+    const start = source.indexOf(`function ${name}(`);
+    assert.notEqual(start, -1, `missing function ${name}`);
+    const bodyStart = source.indexOf('{', start);
+    assert.notEqual(bodyStart, -1, `missing body for ${name}`);
+    let depth = 0;
+    for (let index = bodyStart; index < source.length; index += 1) {
+        const char = source[index];
+        if (char === '{') depth += 1;
+        if (char === '}') depth -= 1;
+        if (depth === 0) return source.slice(start, index + 1);
+    }
+    throw new Error(`unterminated function ${name}`);
+}
 
 async function callJsonHandler(handler, req) {
     const res = {
