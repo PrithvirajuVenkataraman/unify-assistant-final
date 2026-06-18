@@ -24,7 +24,7 @@ export type WebSearchSource = {
 
 export type WebSearchResponse = {
     success: boolean;
-    query?: string;
+    query?: string; 
     results?: WebSearchSource[];
     sourceCount?: number;
     cached?: boolean;
