@@ -6,6 +6,7 @@ import marketsHandler from '../api/markets.js';
 import searchHandler, { __test as searchTest } from '../api/search.js'; 
 import visionHandler from '../api/vision.js'; 
 import { webSearchHandler, __test as webSearchTest } from '../api/_lib/web-search-core.js';
+import { clearItems, saveItems } from '../api/_lib/latest/latest-cache.js';
 
 const SAMPLE = Object.freeze({
     chatMessage: 'q',
@@ -213,9 +214,23 @@ const wrongMethod = await callHandler(currentFactsHandler, {
 assert.equal(wrongMethod.statusCode, 405);
 assert.equal(wrongMethod.body.error.code, 'method_not_allowed');
 
-const disabledFacts = await callHandler(currentFactsHandler, request('/api/current-facts', { query: SAMPLE.currentQuery }));
-assert.equal(disabledFacts.statusCode, 503);
-assert.equal(disabledFacts.body.error.code, 'feature_disabled');
+clearItems();
+const cacheMissFacts = await callHandler(currentFactsHandler, request('/api/current-facts', { query: SAMPLE.currentQuery }));
+assert.equal(cacheMissFacts.statusCode, 200);
+assert.equal(cacheMissFacts.body.resolved, false);
+assert.equal(cacheMissFacts.body.error.code, 'cache_miss');
+saveItems([{
+    title: 'OpenAI ships a cached update',
+    url: 'https://openai.com/news/cached-update',
+    summary: 'Cached article for current facts.',
+    source: 'OpenAI News',
+    publishedAt: new Date().toISOString()
+}]);
+const cachedFacts = await callHandler(currentFactsHandler, request('/api/current-facts', { query: 'latest OpenAI news' }));
+assert.equal(cachedFacts.statusCode, 200);
+assert.equal(cachedFacts.body.resolved, true);
+assert.equal(cachedFacts.body.sources[0].source, 'OpenAI News');
+clearItems();
 
 globalThis.fetch = async (url) => {
     const href = String(url);
@@ -283,13 +298,32 @@ globalThis.fetch = async (url) => {
     }
     throw new Error(`unexpected URL ${href}`);
 };
-const officialShortcutSearch = await callHandler(searchHandler, request('/api/search', { query: 'latest ISRO news', limit: 5 }));
+const officialShortcutSearch = await callHandler(searchHandler, request('/api/search', { query: 'ISRO official update', limit: 5 }));
 assert.equal(officialShortcutSearch.statusCode, 200);
 assert.equal(officialShortcutSearch.body.success, true);
 assert.equal(officialShortcutSearch.body.provider, 'public_sources');
 assert.ok(officialShortcutSearch.body.results.some(item => item.domain === 'isro.gov.in'));
 assert.ok(officialShortcutSearch.body.results.some(item => item.sourceType === 'official_source'));
 globalThis.fetch = ORIGINAL_FETCH;
+
+clearItems();
+saveItems([{
+    title: 'React 19.2 release notes',
+    url: 'https://react.dev/blog/2026/06/01/react-19-2',
+    summary: 'A cached React release article.',
+    source: 'React Blog',
+    publishedAt: new Date().toISOString()
+}]);
+const cachedLatestSearch = await callHandler(searchHandler, request('/api/search', { query: 'latest React release', limit: 5 }));
+assert.equal(cachedLatestSearch.statusCode, 200);
+assert.equal(cachedLatestSearch.body.success, true);
+assert.equal(cachedLatestSearch.body.provider, 'latest_cache');
+assert.equal(cachedLatestSearch.body.results[0].sourceLabel, 'React Blog');
+clearItems();
+
+const liveRequiredSearch = await callHandler(searchHandler, request('/api/search', { query: 'bitcoin price now', limit: 5 }));
+assert.equal(liveRequiredSearch.statusCode, 503);
+assert.equal(liveRequiredSearch.body.error.code, 'real_time_source_not_connected');
 
 process.env.GEMINI_API_KEY = 'test-gemini-key';
 let geminiCallCount = 0;
@@ -327,7 +361,7 @@ globalThis.fetch = async (url) => {
     }
     throw new Error(`unexpected URL ${href}`);
 };
-const geminiSearch = await callHandler(searchHandler, request('/api/search', { query: 'latest ISRO news', limit: 5 }));
+const geminiSearch = await callHandler(searchHandler, request('/api/search', { query: 'ISRO background', limit: 5 }));
 assert.equal(geminiSearch.statusCode, 200);
 assert.equal(geminiSearch.body.success, true);
 assert.equal(geminiSearch.body.geminiEnhanced, true);
