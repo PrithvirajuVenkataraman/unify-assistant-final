@@ -1536,6 +1536,14 @@ body.dark .response-action-btn {
     animation: jarvis-thinking-pulse 1s ease-in-out infinite;
 }
 
+.assistant-thinking-ring-mode .assistant-thinking-dot {
+    display: none;
+}
+
+.assistant-thinking-dots .assistant-thinking-ring {
+    display: none;
+}
+
 .assistant-thinking-dot:nth-child(2) {
     animation-delay: 0.14s;
 }
