@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import currentFactsHandler, { __test as currentFacts } from '../api/current-facts.js';
-import { routeMessage } from '../api/lib/router.js';
-import { clearItems, saveItems } from '../api/lib/latest-cache.js';
+import { routeMessage } from '../api/_lib/latest/router.js';
+import { clearItems, saveItems } from '../api/_lib/latest/latest-cache.js';
 
 const SOURCE = Object.freeze({ 
     science: fs.readFileSync(new URL('../science-format.js', import.meta.url), 'utf8'), 
@@ -43,7 +43,7 @@ const FEATURE_CONTRACTS = Object.freeze({
         ],
         forbidden: [
             /id="converse-mode-btn"/,
-            /speechSynthesis|SpeechSynthesisUtterance|\/api\/speech/,
+            /\/api\/speech/,
             /minimumThinkMs|new Promise\(resolve => setTimeout\(resolve,\s*250\)\)/
         ]
     },
@@ -133,6 +133,8 @@ const FEATURE_CONTRACTS = Object.freeze({
             /assistant-message-interrupted/,
             /function addFeedbackButtons\(query, response, assistantMessageId = ''\)/,
             /targetMessage\.insertAdjacentElement\('afterend', feedbackDiv\)/,
+            /function speakConverseReply\(text, turn\)/,
+            /new SpeechSynthesisUtterance\(spokenText\)/,
             /return messageId;/
         ]
     },
