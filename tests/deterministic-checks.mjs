@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import currentFactsHandler, { __test as currentFacts } from '../api/current-facts.js';
+import { routeMessage } from '../api/lib/router.js';
+import { clearItems, saveItems } from '../api/lib/latest-cache.js';
 
 const SOURCE = Object.freeze({ 
     science: fs.readFileSync(new URL('../science-format.js', import.meta.url), 'utf8'), 
@@ -126,7 +128,8 @@ const FEATURE_CONTRACTS = Object.freeze({
     },
     interruptionAndFeedback: {
         required: [
-            /stopActiveGeneration\('converse_interruption'\)/,
+            /let converseQueuedSubmissionSequence = 0/,
+            /const queuedSubmissionId = \+\+converseQueuedSubmissionSequence/,
             /assistant-message-interrupted/,
             /function addFeedbackButtons\(query, response, assistantMessageId = ''\)/,
             /targetMessage\.insertAdjacentElement\('afterend', feedbackDiv\)/,
@@ -214,6 +217,14 @@ assert.match(chemText, new RegExp(SAMPLE.relationOut));
 
 assert.equal(currentFacts.liveDisabledResponse.disabled, true);
 assert.equal(currentFacts.liveDisabledResponse.success, false);
+assert.equal(routeMessage('guitar strings').route, 'llm');
+assert.equal(routeMessage('guitar chords').route, 'llm');
+assert.equal(routeMessage('explain transformer attention').route, 'llm');
+assert.equal(routeMessage('latest OpenAI news').route, 'cached_latest');
+assert.equal(routeMessage('latest React release').route, 'cached_latest');
+assert.equal(routeMessage('weather today').route, 'live_required');
+assert.equal(routeMessage('bitcoin price now').route, 'live_required');
+assert.equal(routeMessage('restaurants near me').route, 'live_required');
 assert.match(SOURCE.styles, /\.chat-bubble-user\s*\{[\s\S]*background:\s*transparent !important/);
 assert.match(SOURCE.styles, /\.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important/);
 assert.match(SOURCE.styles, /body\.dark \.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important[\s\S]*border:\s*none !important[\s\S]*padding:\s*0 !important/);
@@ -249,15 +260,25 @@ assert.match(SOURCE.readme, /local, deterministic, private, and free-for-life/);
 assert.match(SOURCE.appHtml, /localStorage when memory persistence is enabled/);
 assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
 
-const disabledApi = await callJsonHandler(currentFactsHandler, {
+clearItems();
+saveItems([{
+    title: 'OpenAI announces a new API update',
+    url: 'https://openai.com/news/example-api-update',
+    summary: 'A cached OpenAI update for freshness checks.',
+    source: 'OpenAI News',
+    publishedAt: new Date().toISOString()
+}]);
+
+const currentFactsApi = await callJsonHandler(currentFactsHandler, {
     method: 'POST',
     url: '/api/current-facts',
     headers: { 'content-type': 'application/json' },
-    body: { query: SAMPLE.liveQuery }
+    body: { query: 'latest OpenAI news' }
 });
-assert.equal(disabledApi.statusCode, 503);
-assert.equal(disabledApi.body.disabled, true);
-assert.equal(disabledApi.body.resolved, false);
+assert.equal(currentFactsApi.statusCode, 200);
+assert.equal(currentFactsApi.body.disabled, false);
+assert.equal(currentFactsApi.body.resolved, true);
+assert.equal(currentFactsApi.body.sources[0].source, 'OpenAI News');
 
 assert.match(SOURCE.appHtml, /let responseStyle = 'balanced'/);
 assert.match(SOURCE.appHtml, /\['balanced', 'witty', 'chatty', 'supportive', 'debate'\]/);
