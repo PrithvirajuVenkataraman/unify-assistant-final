@@ -7,7 +7,7 @@ export const LIVE_DISABLED_RESPONSE = Object.freeze({
     disabled: true,
     resolved: false,
     error: Object.freeze({
-        code: 'feature_disabled',
+        code: 'feature_disabled', 
         message: 'Live search is temporarily disabled.'
     }),
     answer: '',
