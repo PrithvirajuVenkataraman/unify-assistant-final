@@ -1876,7 +1876,7 @@ button:hover {
 
 .noise-level-control {
     display: flex !important;
-    gap: 8px !important;
+    gap: 8px !important; 
     flex-wrap: wrap !important;
     padding-right: 4px !important;
 }
