@@ -4431,6 +4431,7 @@ let showRoutingDebugBadge = false;
         let activeRequestController = null;
         let assistantProcessingDepth = 0;
         let converseQueuedSubmissionSequence = 0;
+        let activeConverseSpeechUtterance = null;
         let activeTypewriterTimeouts = new Set();
         let activeTypewriterRuns = new Set();
         let responseRecoveryTimer = null;
@@ -4474,6 +4475,19 @@ let showRoutingDebugBadge = false;
                 clearTimeout(id);
             }
             activeTypewriterTimeouts.clear();
+        }
+
+        function isConverseSpeechActive() {
+            return Boolean(activeConverseSpeechUtterance) ||
+                Boolean(window.speechSynthesis?.speaking) ||
+                Boolean(window.speechSynthesis?.pending);
+        }
+
+        function stopConverseSpeech() {
+            activeConverseSpeechUtterance = null;
+            try {
+                window.speechSynthesis?.cancel?.();
+            } catch (e) {}
         }
 
         function beginAbortableRequest() {
@@ -4556,7 +4570,8 @@ let showRoutingDebugBadge = false;
         function stopActiveGeneration(reason = 'manual') {
             const hadRequest = !!activeRequestController;
             const hadTypewriter = activeTypewriterRuns.size > 0 || activeTypewriterTimeouts.size > 0;
-            if (!hadRequest && !hadTypewriter) {
+            const hadSpeech = isConverseSpeechActive();
+            if (!hadRequest && !hadTypewriter && !hadSpeech) {
                 return;
             }
             const controller = activeRequestController;
@@ -4568,6 +4583,7 @@ let showRoutingDebugBadge = false;
                 } catch (e) {}
             }
             stopActiveTypewriterAnimations();
+            stopConverseSpeech();
             clearResponseRecoveryPrompt();
             hideThinkingIndicator();
             toggleSendButton();
@@ -5978,6 +5994,7 @@ let showRoutingDebugBadge = false;
                     textElement.classList.remove('is-streaming');
                     textElement.innerHTML = formattedText;
                 }
+                speakConverseReply(plainMessageText, sourceTurn);
                 
                 maybeAutoScroll(chatContainer);
                 chatHistory.push({ text: displayText, isUser });
@@ -6069,6 +6086,40 @@ function normalizeUiTokens(text) {
                 .replace(/\[Taxi\]/g, '\u{1F695}')
                 .replace(/\[Car\]/g, '\u{1F697}')
                 .replace(/\[Metro\]/g, '\u{1F687}');
+        }
+
+        function sanitizeTextForConverseSpeech(text) {
+            return String(text || '')
+                .replace(/```[\s\S]*?```/g, ' code block omitted ')
+                .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '$1')
+                .replace(/https?:\/\/\S+/gi, '')
+                .replace(/(?:^|\n)\s*Sources:\s*[\s\S]*$/i, '')
+                .replace(/[*_`#>~|]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .slice(0, 900);
+        }
+
+        function speakConverseReply(text, turn) {
+            if (String(turn?.source || '').toLowerCase() !== 'converse') return;
+            if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+                return;
+            }
+            const spokenText = sanitizeTextForConverseSpeech(text);
+            if (!spokenText) return;
+            stopConverseSpeech();
+            const utterance = new SpeechSynthesisUtterance(spokenText);
+            utterance.rate = 1;
+            utterance.pitch = 1;
+            utterance.volume = 1;
+            utterance.onend = () => {
+                if (activeConverseSpeechUtterance === utterance) activeConverseSpeechUtterance = null;
+            };
+            utterance.onerror = () => {
+                if (activeConverseSpeechUtterance === utterance) activeConverseSpeechUtterance = null;
+            };
+            activeConverseSpeechUtterance = utterance;
+            window.speechSynthesis.speak(utterance);
         }
 
         function formatVerifiedSourceBadge(label = 'Verified live sources') {
