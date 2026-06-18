@@ -6,7 +6,7 @@ export type SearchWebSource = {
 };
 
 export type SearchWebOptions = {
-    endpoint?: string;
+    endpoint?: string; 
     maxResults?: number;
     timeoutMs?: number;
     textLimit?: number;
