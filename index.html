@@ -670,14 +670,14 @@ Rules:
     }
 }
 
-function normalizeIntentTypos(text) {
-    const raw = String(text || '');
-    if (!raw.trim()) return '';
-    const targeted = applyCustomAutocorrectRules(raw)
-        .replace(/\bcief\b/gi, 'chief')
-        .replace(/\brtamil\s*nadu\b/gi, 'Tamil Nadu')
-        .replace(/\brtamilnadu\b/gi, 'Tamil Nadu')
-        .replace(/\btamilnadu\b/gi, 'Tamil Nadu')
+function normalizeIntentTypos(text) { 
+    const raw = String(text || ''); 
+    if (!raw.trim()) return ''; 
+    const targeted = raw 
+        .replace(/\bcief\b/gi, 'chief') 
+        .replace(/\brtamil\s*nadu\b/gi, 'Tamil Nadu') 
+        .replace(/\brtamilnadu\b/gi, 'Tamil Nadu') 
+        .replace(/\btamilnadu\b/gi, 'Tamil Nadu') 
         .replace(/\b(my|left|right|the)\s+food\b(?=[^?.!]*(?:hurt|hurts|hurting|pain|paining|ache|aching|swollen|injured|injury))/gi, '$1 foot')
         .replace(/\bfood\s+(hurt|hurts|hurting|pain|paining|ache|aching|swollen|injured|injury)\b/gi, 'foot $1');
 
@@ -709,75 +709,11 @@ function normalizeIntentTypos(text) {
 
             const limit = lower.length <= 4 ? 1 : 2;
             return min <= limit ? best : lower;
-        })
-        .join('');
-}
+        }) 
+        .join(''); 
+} 
 
-let customAutocorrectRules = {};
-
-function loadCustomAutocorrectRules() {
-    try {
-        const parsed = JSON.parse(localStorage.getItem('jarvis_custom_autocorrect_rules') || '{}');
-        customAutocorrectRules = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-    } catch (_) {
-        customAutocorrectRules = {};
-    }
-}
-
-function saveCustomAutocorrectRules() {
-    try {
-        localStorage.setItem('jarvis_custom_autocorrect_rules', JSON.stringify(customAutocorrectRules || {}));
-    } catch (_) {}
-}
-
-function applyCustomAutocorrectRules(text) {
-    let out = String(text || '');
-    const entries = Object.entries(customAutocorrectRules || {})
-        .map(([from, to]) => [String(from || '').trim(), String(to || '').trim()])
-        .filter(([from, to]) => from && to && from.length <= 40 && to.length <= 80);
-    for (const [from, to] of entries) {
-        const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        out = out.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), to);
-    }
-    return out;
-}
-
-function parseAutocorrectRulesText(text) {
-    const next = {};
-    String(text || '').split(/\r?\n/).forEach(line => {
-        const clean = line.trim();
-        if (!clean || clean.startsWith('#')) return;
-        const parts = clean.split(/\s*(?:=>|->|=)\s*/);
-        if (parts.length < 2) return;
-        const from = parts[0].trim().toLowerCase();
-        const to = parts.slice(1).join(' ').trim();
-        if (from && to) next[from] = to;
-    });
-    return next;
-}
-
-function formatAutocorrectRulesText() {
-    return Object.entries(customAutocorrectRules || {})
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([from, to]) => `${from} => ${to}`)
-        .join('\n');
-}
-
-function setCustomAutocorrectRules(value) {
-    customAutocorrectRules = parseAutocorrectRulesText(value);
-    saveCustomAutocorrectRules();
-    showTemporaryMessage('Autocorrect dictionary saved.');
-}
-
-function resetCustomAutocorrectRules() {
-    customAutocorrectRules = {};
-    saveCustomAutocorrectRules();
-    const input = document.getElementById('custom-autocorrect-input');
-    if (input) input.value = '';
-    showTemporaryMessage('Autocorrect dictionary reset.');
-}
-
-function buildMemoryInspectorHtml() {
+function buildMemoryInspectorHtml() { 
     const entries = Object.entries(memoryStore || {})
         .filter(([key]) => key !== 'name')
         .slice(0, 30);
@@ -4070,11 +4006,11 @@ let showRoutingDebugBadge = false;
             const raw = String(text || '');
             if (!raw.trim()) return '';
 
-            const targeted = applyCustomAutocorrectRules(raw)
-                .replace(/\bcief\b/gi, 'chief')
-                .replace(/\brtamil\s*nadu\b/gi, 'Tamil Nadu')
-                .replace(/\brtamilnadu\b/gi, 'Tamil Nadu')
-                .replace(/\btamilnadu\b/gi, 'Tamil Nadu')
+            const targeted = raw 
+                .replace(/\bcief\b/gi, 'chief') 
+                .replace(/\brtamil\s*nadu\b/gi, 'Tamil Nadu') 
+                .replace(/\brtamilnadu\b/gi, 'Tamil Nadu') 
+                .replace(/\btamilnadu\b/gi, 'Tamil Nadu') 
                 .replace(/\b(my|left|right|the)\s+food\b(?=[^?.!]*(?:hurt|hurts|hurting|pain|paining|ache|aching|swollen|injured|injury))/gi, '$1 foot')
                 .replace(/\bfood\s+(hurt|hurts|hurting|pain|paining|ache|aching|swollen|injured|injury)\b/gi, 'foot $1');
 
@@ -4180,12 +4116,11 @@ let showRoutingDebugBadge = false;
             return true;
         }
 
-        window.onload = async () => {
-            initZoomLock(); 
-            loadMemoryPersistencePreference(); 
-            loadCustomAutocorrectRules();
-            loadUserData(); 
-            loadAssistantModes();
+        window.onload = async () => { 
+            initZoomLock();  
+            loadMemoryPersistencePreference();  
+            loadUserData();  
+            loadAssistantModes(); 
             enforceDarkMode();
             setupInputHistoryNavigation();
             initChatScrollLock();
@@ -4303,28 +4238,9 @@ let showRoutingDebugBadge = false;
                             </div>
                         </section> 
 
-                        <section class="help-settings-card">
-                            <div class="help-section-heading">
-                                <div>
-                                    <h3 class="font-bold">Autocorrect dictionary</h3>
-                                    <p class="text-xs">One rule per line. Example: cief =&gt; chief</p>
-                                </div>
-                                <button type="button" class="memory-action-btn" onclick="resetCustomAutocorrectRules()">Reset</button>
-                            </div>
-                            <textarea id="custom-autocorrect-input"
-                                class="custom-system-prompt-input"
-                                rows="5"
-                                maxlength="2000"
-                                placeholder="cief => chief&#10;rtamilnadu => Tamil Nadu"
-                                onchange="setCustomAutocorrectRules(this.value)">${escapeHtml(formatAutocorrectRulesText())}</textarea>
-                            <div class="flex flex-wrap gap-2 mt-2">
-                                <button type="button" class="memory-action-btn" onclick="setCustomAutocorrectRules(document.getElementById('custom-autocorrect-input')?.value || '')">Save autocorrect</button>
-                            </div>
-                        </section>
-
-                    </div>  
-                </div>  
-            `;  
+                    </div>   
+                </div>   
+            `;   
 
             document.querySelector('.page-shell')?.setAttribute('aria-hidden', 'true');
             document.body.appendChild(modal); 
@@ -5430,24 +5346,76 @@ let showRoutingDebugBadge = false;
             return assistantMessageMeta.get(String(messageId || '')) || null;
         }
 
-        function stripAssistantHtmlForText(value) {
-            const temp = document.createElement('div');
-            temp.innerHTML = String(value || '');
-            return (temp.textContent || temp.innerText || '').replace(/\s+/g, ' ').trim();
-        }
+        function stripAssistantHtmlForText(value) { 
+            const temp = document.createElement('div'); 
+            temp.innerHTML = String(value || ''); 
+            return (temp.textContent || temp.innerText || '').replace(/\s+/g, ' ').trim(); 
+        } 
+ 
+        function analyzeAnswerRiskFlags(userMessage, assistantText) { 
+            const question = String(userMessage || '').replace(/\s+/g, ' ').trim(); 
+            const answer = String(assistantText || '').replace(/\s+/g, ' ').trim(); 
+            const combined = `${question} ${answer}`.trim(); 
+            if (!answer || answer.length < 24) return []; 
+            const flags = []; 
+            const hasUrl = /https?:\/\/|www\./i.test(answer); 
+            const addFlag = (id, label, reason) => { 
+                if (!flags.some(flag => flag.id === id)) flags.push({ id, label, reason }); 
+            }; 
+ 
+            if (/\b(current|currently|latest|today|now|as of|recent|newest|present|this year|202[4-9]|203\d)\b/i.test(combined) || 
+                /\b(president|prime minister|chief minister|governor|mayor|ceo|cfo|cto|chair(?:man|woman)?|minister|leader|captain|coach)\b/i.test(combined)) { 
+                addFlag('current_fact', 'Current fact', 'This may change over time and should be checked against a current source.'); 
+            } 
+ 
+            if (/(?:[$₹€£]\s?\d|\b\d+(?:\.\d+)?\s?(?:%|percent|crore|lakh|million|billion|trillion|km|kg|mg|gb|mb|hours?|days?|years?)\b|\b\d+\s*[+\-*/]\s*\d+)/i.test(answer)) { 
+                addFlag('numbers', 'Numbers', 'The answer contains figures or calculations worth double-checking.'); 
+            } 
+ 
+            if (/\b(medical|medicine|diagnosis|symptom|dose|dosage|drug|treatment|legal|law|lawyer|contract|court|tax|investment|stock|crypto|insurance|loan|mortgage|financial advice)\b/i.test(combined)) { 
+                addFlag('high_stakes', 'Medical/legal/finance', 'This topic can affect health, legal, or financial decisions.'); 
+            } 
+ 
+            if (!hasUrl && /\b(verified|confirmed|according to|source(?:s)? say|reported|cited|evidence shows|research shows|study found)\b/i.test(answer)) { 
+                addFlag('needs_source', 'Needs source', 'The answer uses source-like wording without a visible citation URL.'); 
+            } 
+ 
+            return flags.slice(0, 4); 
+        } 
+ 
+        function buildClaimRiskBadgeHtml(flags = []) { 
+            if (!Array.isArray(flags) || !flags.length) return ''; 
+            const chips = flags 
+                .map(flag => `<span class="claim-risk-chip">${escapeHtml(flag.label || '')}</span>`) 
+                .join(''); 
+            const details = flags 
+                .map(flag => `<li><strong>${escapeHtml(flag.label || '')}:</strong> ${escapeHtml(flag.reason || '')}</li>`) 
+                .join(''); 
+            return ` 
+                <details class="claim-risk-badge"> 
+                    <summary> 
+                        <span class="claim-risk-dot" aria-hidden="true"></span> 
+                        <span>Review flags</span> 
+                        <span class="claim-risk-chip-list">${chips}</span> 
+                    </summary> 
+                    <ul>${details}</ul> 
+                </details> 
+            `; 
+        } 
 
-        function registerAssistantMessageMeta(messageId, meta) {
-            if (!messageId) return;
-            const clean = {
-                id: messageId,
-                text: String(meta?.text || '').trim(),
+        function registerAssistantMessageMeta(messageId, meta) { 
+            if (!messageId) return; 
+            const clean = { 
+                id: messageId, 
+                text: String(meta?.text || '').trim(), 
                 priorUserPrompt: String(meta?.priorUserPrompt || '').trim(),
                 turnId: String(meta?.turnId || activeResponseRenderContext?.turnId || '').trim(),
-                sourceType: String(meta?.sourceType || 'default').trim(),
-                sourceLabel: String(meta?.sourceLabel || meta?.sourceType || 'Assistant answer').trim(),
-                routing: meta?.routing || null,
-                createdAt: Date.now()
-            };
+                sourceType: String(meta?.sourceType || 'default').trim(), 
+                sourceLabel: String(meta?.sourceLabel || meta?.sourceType || 'Assistant answer').trim(), 
+                routing: meta?.routing || null, 
+                riskFlags: Array.isArray(meta?.riskFlags) ? meta.riskFlags : [], 
+                createdAt: Date.now() 
+            }; 
             assistantMessageMeta.set(messageId, clean);
             const turn = getConversationTurn(clean.turnId);
             if (turn && !turn.assistantMessageIds.includes(messageId)) {
@@ -5750,18 +5718,23 @@ let showRoutingDebugBadge = false;
             void askJarvisAboutSelection('custom');
         }
 
-        function verifyAssistantMessage(messageId) {
-            const meta = getAssistantMessageMeta(messageId);
-            if (!meta?.text) return;
-            const visible = 'Verify this answer';
-            const hidden = [
-                'Check whether this answer is accurate and internally consistent.',
-                'If it uses source links, inspect the cited source text already present in the answer.',
-                'Clearly list any claims that need live verification.',
-                '',
-                `Original user request: ${meta.priorUserPrompt || 'unknown'}`,
-                `Answer to verify:\n${meta.text}`
-            ].join('\n');
+        function verifyAssistantMessage(messageId) { 
+            const meta = getAssistantMessageMeta(messageId); 
+            if (!meta?.text) return; 
+            const visible = 'Verify this answer'; 
+            const flags = Array.isArray(meta.riskFlags) && meta.riskFlags.length 
+                ? meta.riskFlags.map(flag => `${flag.label}: ${flag.reason}`).join('\n') 
+                : 'No local review flags were detected.'; 
+            const hidden = [ 
+                'Check whether this answer is accurate and internally consistent.', 
+                'If it uses source links, inspect the cited source text already present in the answer.', 
+                'Clearly list any claims that need live verification.', 
+                '', 
+                `Local review flags:\n${flags}`, 
+                '', 
+                `Original user request: ${meta.priorUserPrompt || 'unknown'}`, 
+                `Answer to verify:\n${meta.text}` 
+            ].join('\n'); 
             closeAssistantActionMenus();
             void submitProgrammaticUserTurn(visible, hidden);
         }
@@ -5898,17 +5871,20 @@ let showRoutingDebugBadge = false;
                 const sourceTurn = getConversationTurn(messageTurnId);
                 const priorUserPrompt = String(meta?.userMessage || sourceTurn?.rawPrompt || '').trim();
                 const plainMessageText = hasHtmlContent ? stripAssistantHtmlForText(displayText) : String(displayText || '').trim();
-                const sourceLabel = sourceType === 'verified'
-                    ? 'Verified source reply'
-                    : (sourceType === 'model' ? 'Model answer' : (sourceType === 'tool' ? 'Tool-generated reply' : 'Assistant reply'));
-                registerAssistantMessageMeta(messageId, {
-                    text: plainMessageText,
-                    priorUserPrompt,
-                    turnId: messageTurnId,
-                    sourceType,
-                    sourceLabel,
-                    routing: meta?.routing || null
-                });
+                const sourceLabel = sourceType === 'verified' 
+                    ? 'Verified source reply' 
+                    : (sourceType === 'model' ? 'Model answer' : (sourceType === 'tool' ? 'Tool-generated reply' : 'Assistant reply')); 
+                const riskFlags = analyzeAnswerRiskFlags(priorUserPrompt, plainMessageText); 
+                const claimRiskBadgeHtml = buildClaimRiskBadgeHtml(riskFlags); 
+                registerAssistantMessageMeta(messageId, { 
+                    text: plainMessageText, 
+                    priorUserPrompt, 
+                    turnId: messageTurnId, 
+                    sourceType, 
+                    sourceLabel, 
+                    routing: meta?.routing || null, 
+                    riskFlags 
+                }); 
                 messageDiv.dataset.messageId = messageId;
 
                 messageDiv.innerHTML = `
@@ -5916,14 +5892,15 @@ let showRoutingDebugBadge = false;
                         ${routeBadgeHtml}
                         <div class="flex flex-col gap-2">
                         ${avatarHtml}
-                        <div class="min-w-0 flex-1 overflow-hidden ${hasMap ? 'map-message' : ''}">
-                            <div class="${hasMap ? '' : 'chat-bubble-assistant'}">
-                                <div class="assistant-message-text typewriter-text text-sm leading-relaxed text-left" data-message-id="${messageId}"></div>
-                            </div>
-                        </div>
-                        ${buildAssistantActionsHtml(messageId, !!sourceTurn?.rawPrompt)}
-                        </div>
-                    </div>
+                        <div class="min-w-0 flex-1 overflow-hidden ${hasMap ? 'map-message' : ''}"> 
+                            <div class="${hasMap ? '' : 'chat-bubble-assistant'}"> 
+                                <div class="assistant-message-text typewriter-text text-sm leading-relaxed text-left" data-message-id="${messageId}"></div> 
+                            </div> 
+                        </div> 
+                        ${claimRiskBadgeHtml} 
+                        ${buildAssistantActionsHtml(messageId, !!sourceTurn?.rawPrompt)} 
+                        </div> 
+                    </div> 
                 `;
 
                 const replaceMessageId = String(
