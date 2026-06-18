@@ -28,6 +28,7 @@ const ORIGINAL_GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 const ORIGINAL_GEMINI_SEARCH_MODEL = process.env.GEMINI_SEARCH_MODEL; 
 const ORIGINAL_SEARXNG_URL = process.env.SEARXNG_URL;
 const ORIGINAL_REDIS_URL = process.env.REDIS_URL;
+const ORIGINAL_WEB_SEARCH_ENABLED = process.env.WEB_SEARCH_ENABLED;
 const ORIGINAL_FETCH = globalThis.fetch; 
 delete process.env.SERPER_API_KEY;
 delete process.env.SERPER_KEY;
@@ -37,6 +38,7 @@ delete process.env.GOOGLE_API_KEY;
 delete process.env.GEMINI_SEARCH_MODEL; 
 delete process.env.SEARXNG_URL;
 delete process.env.REDIS_URL;
+delete process.env.WEB_SEARCH_ENABLED;
 
 assert.equal(resolveRequestPath({ url: '/api/chat-groq?x=1' }), '/api/chat-groq');
 assert.equal(resolveRequestPath({ url: '/api/chat-groq-extra' }), '/api/chat-groq-extra');
@@ -45,6 +47,11 @@ const notFound = await callHandler(apiHandler, request('/api/chat-groq-extra', {
 assert.equal(notFound.statusCode, 404); 
 assert.equal(notFound.body.error.code, 'route_not_found'); 
 
+const pausedWebSearch = await callHandler(webSearchHandler, request('/api/web-search', { query: 'latest open source search' }));
+assert.equal(pausedWebSearch.statusCode, 503);
+assert.equal(pausedWebSearch.body.disabled, true);
+assert.equal(pausedWebSearch.body.error.code, 'web_search_disabled');
+process.env.WEB_SEARCH_ENABLED = 'true';
 const missingSearxng = await callHandler(webSearchHandler, request('/api/web-search', { query: 'latest open source search' }));
 assert.equal(missingSearxng.statusCode, 503);
 assert.equal(missingSearxng.body.error.code, 'searxng_not_configured');
@@ -86,6 +93,7 @@ assert.equal(webSearchOk.body.results[0].url, 'https://example.com/article');
 assert.doesNotMatch(webSearchOk.body.results[0].text, /menu|footer|bad/);
 globalThis.fetch = ORIGINAL_FETCH;
 delete process.env.SEARXNG_URL;
+delete process.env.WEB_SEARCH_ENABLED;
 
 const invalidChat = await callHandler(chatHandler, request('/api/chat-groq', { message: '' }));
 assert.equal(invalidChat.statusCode, 400);
@@ -456,6 +464,7 @@ restoreEnv('GOOGLE_API_KEY', ORIGINAL_GOOGLE_API_KEY);
 restoreEnv('GEMINI_SEARCH_MODEL', ORIGINAL_GEMINI_SEARCH_MODEL); 
 restoreEnv('SEARXNG_URL', ORIGINAL_SEARXNG_URL);
 restoreEnv('REDIS_URL', ORIGINAL_REDIS_URL);
+restoreEnv('WEB_SEARCH_ENABLED', ORIGINAL_WEB_SEARCH_ENABLED);
 globalThis.fetch = ORIGINAL_FETCH; 
 
 console.log('api-contract-tests-ok');
