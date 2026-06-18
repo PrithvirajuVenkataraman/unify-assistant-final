@@ -3,14 +3,12 @@ import currentFactsHandler from './current-facts.js';
 import marketsHandler from './markets.js';
 import searchHandler from './search.js';
 import visionHandler from './vision.js';
-import webSearchHandler from './web-search.js';
 
 const ROUTES = new Map([
     ['/api/chat-groq', chatGroqHandler],
     ['/api/current-facts', currentFactsHandler],
     ['/api/markets', marketsHandler],
     ['/api/search', searchHandler],
-    ['/api/web-search', webSearchHandler],
     ['/api/vision', visionHandler]
 ]);
 
