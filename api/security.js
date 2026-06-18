@@ -1,7 +1,7 @@
 const DEFAULT_RATE_WINDOW_MS = 60 * 1000;
 const DEFAULT_RATE_MAX = 60;
 const DEFAULT_MAX_BODY_BYTES = 256 * 1024;
-
+ 
 function getRateStore() {
     if (!globalThis.__jarvisRateLimitStore) {
         globalThis.__jarvisRateLimitStore = new Map();
