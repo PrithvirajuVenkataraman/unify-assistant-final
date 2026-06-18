@@ -18544,7 +18544,10 @@ function showThinkingIndicator(message = 'Thinking') {
         row.innerHTML = `
             <div class="chat-bubble-assistant assistant-thinking-bubble" role="status" aria-live="polite" aria-label="${escapeHtml(statusText)}">
                 <span class="assistant-thinking-pulse" aria-hidden="true">
-                    <span></span><span></span><span></span>
+                    <span class="assistant-thinking-dot"></span>
+                    <span class="assistant-thinking-dot"></span>
+                    <span class="assistant-thinking-dot"></span>
+                    <span class="assistant-thinking-ring"></span>
                 </span>
             </div>
         `;
