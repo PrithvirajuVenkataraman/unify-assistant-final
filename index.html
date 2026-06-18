@@ -3872,6 +3872,7 @@ async function handleNameCorrection(text) {
             },
             user: {
                 name: null,
+                preferredAddress: 'sir',
                 email: '',
                 memory: {}
             },
@@ -3892,6 +3893,7 @@ async function handleNameCorrection(text) {
         // (Gradually refactor these out)
         let darkMode = true;
         let userName = AppState.user.name;
+        let preferredAddress = AppState.user.preferredAddress;
         let memoryStore = AppState.user.memory;
         let inputHistory = [];
         let inputHistoryIndex = -1;
@@ -5383,26 +5385,6 @@ let showRoutingDebugBadge = false;
             return flags.slice(0, 4); 
         } 
  
-        function buildClaimRiskBadgeHtml(flags = []) { 
-            if (!Array.isArray(flags) || !flags.length) return ''; 
-            const chips = flags 
-                .map(flag => `<span class="claim-risk-chip">${escapeHtml(flag.label || '')}</span>`) 
-                .join(''); 
-            const details = flags 
-                .map(flag => `<li><strong>${escapeHtml(flag.label || '')}:</strong> ${escapeHtml(flag.reason || '')}</li>`) 
-                .join(''); 
-            return ` 
-                <details class="claim-risk-badge"> 
-                    <summary> 
-                        <span class="claim-risk-dot" aria-hidden="true"></span> 
-                        <span>Review flags</span> 
-                        <span class="claim-risk-chip-list">${chips}</span> 
-                    </summary> 
-                    <ul>${details}</ul> 
-                </details> 
-            `; 
-        } 
-
         function registerAssistantMessageMeta(messageId, meta) { 
             if (!messageId) return; 
             const clean = { 
@@ -5875,7 +5857,6 @@ let showRoutingDebugBadge = false;
                     ? 'Verified source reply' 
                     : (sourceType === 'model' ? 'Model answer' : (sourceType === 'tool' ? 'Tool-generated reply' : 'Assistant reply')); 
                 const riskFlags = analyzeAnswerRiskFlags(priorUserPrompt, plainMessageText); 
-                const claimRiskBadgeHtml = buildClaimRiskBadgeHtml(riskFlags); 
                 registerAssistantMessageMeta(messageId, { 
                     text: plainMessageText, 
                     priorUserPrompt, 
@@ -5897,7 +5878,6 @@ let showRoutingDebugBadge = false;
                                 <div class="assistant-message-text typewriter-text text-sm leading-relaxed text-left" data-message-id="${messageId}"></div> 
                             </div> 
                         </div> 
-                        ${claimRiskBadgeHtml} 
                         ${buildAssistantActionsHtml(messageId, !!sourceTurn?.rawPrompt)} 
                         </div> 
                     </div> 
@@ -15226,6 +15206,46 @@ function detectInputLanguageHint(text) {
             window.JarvisState?.setActiveFeature(null);
         }
 
+        function normalizePreferredAddress(value) {
+            const raw = String(value || '').toLowerCase().replace(/[.!,?;:]+$/g, '').trim();
+            if (/^(?:ma'?am|mam|madam)$/.test(raw)) return 'mam';
+            if (/^sir$/.test(raw)) return 'sir';
+            return '';
+        }
+
+        function extractPreferredAddressRequest(text) {
+            const raw = String(text || '').trim();
+            const match = raw.match(/^(?:please\s+)?(?:call|address)\s+me\s+(?:as\s+)?(sir|ma'?am|mam|madam)[.!?]*$/i);
+            return normalizePreferredAddress(match?.[1] || '');
+        }
+
+        function getPreferredAddress() {
+            return normalizePreferredAddress(preferredAddress) || 'sir';
+        }
+
+        function buildWakeGreeting() {
+            return `Yes ${getPreferredAddress()}, how can I help you with?`;
+        }
+
+        function isWakeGreetingText(text) {
+            const compact = String(text || '').trim();
+            if (!compact) return false;
+            return /^(?:(?:hey|hi|hello|ok|okay)\s+)?jarvis[.!?]*$/i.test(compact) ||
+                /^(hi|hello|hey|yo|sup|hola|vanakkam|namaste|good\s+(morning|afternoon|evening))[.!?]*$/i.test(compact);
+        }
+
+        function handlePreferredAddressRequest(text) {
+            const address = extractPreferredAddressRequest(text);
+            if (!address) return false;
+            preferredAddress = address;
+            AppState.user.preferredAddress = preferredAddress;
+            saveUserData();
+            const response = buildWakeGreeting();
+            addChatMessage(response, false);
+            saveToHistory(text, response);
+            return true;
+        }
+
         async function processCommand(text) {
             syncConversationPendingState();
             const contextResolution = window.JarvisConversation?.resolve({ message: text }) || null;
@@ -15255,8 +15275,12 @@ function detectInputLanguageHint(text) {
             const lower = text.toLowerCase();
             const compact = String(text || '').trim();
 
-            if (/^(hi|hello|hey|yo|sup|hola|vanakkam|namaste|good\s+(morning|afternoon|evening))[.!?]*$/i.test(compact)) {
-                const greet = userName ? `Hi ${userName}, how can I help today?` : 'Hi, how can I help today?';
+            if (handlePreferredAddressRequest(compact)) {
+                return;
+            }
+
+            if (isWakeGreetingText(compact)) {
+                const greet = buildWakeGreeting();
                 addChatMessage(greet, false);
                 saveToHistory(text, greet);
                 return;
@@ -18322,6 +18346,7 @@ function toggleMemoryPersistence(enabled) {
             try {
                 const data = {
                     userName: userName,
+                    preferredAddress: getPreferredAddress(),
                     memoryStore: memoryStore
                 };
                 const storageKey = getUserStorageKey();
@@ -18344,8 +18369,10 @@ function toggleMemoryPersistence(enabled) {
                     const data = JSON.parse(stored);
                     userName = data.userName || null;
                     AppState.user.name = userName;
+                    preferredAddress = normalizePreferredAddress(data.preferredAddress) || 'sir';
+                    AppState.user.preferredAddress = preferredAddress;
                     memoryStore = data.memoryStore || {};
-                    localStorage.setItem(storageKey, JSON.stringify({ userName, memoryStore }));
+                    localStorage.setItem(storageKey, JSON.stringify({ userName, preferredAddress, memoryStore }));
                 }
             } catch (e) { console.error('Failed to load user data:', e); }
         }
