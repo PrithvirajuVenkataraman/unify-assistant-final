@@ -5,7 +5,7 @@ const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'i
 const MAX_IMAGE_BASE64_CHARS = 8 * 1024 * 1024;
 const PROVIDER_TIMEOUT_MS = 20_000;
 
-export default async function handler(req, res) {
+export default async function handler(req, res) { 
     const guard = applyApiSecurity(req, res, {
         methods: ['POST'],
         routeKey: 'vision',
