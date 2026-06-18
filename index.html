@@ -4430,7 +4430,7 @@ let showRoutingDebugBadge = false;
 
         let activeRequestController = null;
         let assistantProcessingDepth = 0;
-        let converseInterruptionSequence = 0;
+        let converseQueuedSubmissionSequence = 0;
         let activeTypewriterTimeouts = new Set();
         let activeTypewriterRuns = new Set();
         let responseRecoveryTimer = null;
@@ -7136,10 +7136,9 @@ async function sendTextInput(submission = {}) {
                     stopActiveGeneration();
                     return;
                 }
-                const interruptionId = ++converseInterruptionSequence;
-                stopActiveGeneration('converse_interruption');
+                const queuedSubmissionId = ++converseQueuedSubmissionSequence;
                 await waitForAssistantIdle();
-                if (interruptionId !== converseInterruptionSequence) return;
+                if (queuedSubmissionId !== converseQueuedSubmissionSequence) return;
             }
             if (text) {
                 if (handleLocalVoiceCommand(text, inputSource)) {
@@ -18563,14 +18562,19 @@ function showThinkingIndicator(message = 'Thinking') {
         row = document.createElement('div');
         row.id = 'chat-thinking-indicator';
         row.className = 'chat-row flex justify-start fade-in';
+        row.dataset.role = 'assistant';
         row.innerHTML = `
-            <div class="chat-bubble-assistant assistant-thinking-bubble" role="status" aria-live="polite" aria-label="${escapeHtml(statusText)}">
-                <span class="assistant-thinking-pulse ${visualModeClass}" aria-hidden="true">
-                    <span class="assistant-thinking-dot"></span>
-                    <span class="assistant-thinking-dot"></span>
-                    <span class="assistant-thinking-dot"></span>
-                    <span class="assistant-thinking-ring"></span>
-                </span>
+            <div class="w-full max-w-3xl">
+                <div class="flex items-start gap-2">
+                    <div class="chat-bubble-assistant assistant-thinking-bubble" role="status" aria-live="polite" aria-label="${escapeHtml(statusText)}">
+                        <span class="assistant-thinking-pulse ${visualModeClass}" aria-hidden="true">
+                            <span class="assistant-thinking-dot"></span>
+                            <span class="assistant-thinking-dot"></span>
+                            <span class="assistant-thinking-dot"></span>
+                            <span class="assistant-thinking-ring"></span>
+                        </span>
+                    </div>
+                </div>
             </div>
         `;
         chatContainer.appendChild(row);
