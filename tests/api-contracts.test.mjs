@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
-import apiHandler, { resolveRequestPath } from '../api/index.js'; 
+import apiHandler, { resolveRequestPath } from '../api/index.js';
 import chatHandler, { __test as chatTest } from '../api/chat-groq.js';
 import currentFactsHandler from '../api/current-facts.js';
 import marketsHandler from '../api/markets.js';
 import searchHandler, { __test as searchTest } from '../api/search.js'; 
 import visionHandler from '../api/vision.js'; 
-import webSearchHandler from '../api/web-search.js';
-import { __test as webSearchTest } from '../api/_lib/web-search-core.js';
+import { webSearchHandler, __test as webSearchTest } from '../api/_lib/web-search-core.js';
 
 const SAMPLE = Object.freeze({
     chatMessage: 'q',
