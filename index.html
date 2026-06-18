@@ -673,7 +673,7 @@ Rules:
 function normalizeIntentTypos(text) {
     const raw = String(text || '');
     if (!raw.trim()) return '';
-    const targeted = raw
+    const targeted = applyCustomAutocorrectRules(raw)
         .replace(/\bcief\b/gi, 'chief')
         .replace(/\brtamil\s*nadu\b/gi, 'Tamil Nadu')
         .replace(/\brtamilnadu\b/gi, 'Tamil Nadu')
@@ -711,6 +711,103 @@ function normalizeIntentTypos(text) {
             return min <= limit ? best : lower;
         })
         .join('');
+}
+
+let customAutocorrectRules = {};
+
+function loadCustomAutocorrectRules() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem('jarvis_custom_autocorrect_rules') || '{}');
+        customAutocorrectRules = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch (_) {
+        customAutocorrectRules = {};
+    }
+}
+
+function saveCustomAutocorrectRules() {
+    try {
+        localStorage.setItem('jarvis_custom_autocorrect_rules', JSON.stringify(customAutocorrectRules || {}));
+    } catch (_) {}
+}
+
+function applyCustomAutocorrectRules(text) {
+    let out = String(text || '');
+    const entries = Object.entries(customAutocorrectRules || {})
+        .map(([from, to]) => [String(from || '').trim(), String(to || '').trim()])
+        .filter(([from, to]) => from && to && from.length <= 40 && to.length <= 80);
+    for (const [from, to] of entries) {
+        const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        out = out.replace(new RegExp(`\\b${escaped}\\b`, 'gi'), to);
+    }
+    return out;
+}
+
+function parseAutocorrectRulesText(text) {
+    const next = {};
+    String(text || '').split(/\r?\n/).forEach(line => {
+        const clean = line.trim();
+        if (!clean || clean.startsWith('#')) return;
+        const parts = clean.split(/\s*(?:=>|->|=)\s*/);
+        if (parts.length < 2) return;
+        const from = parts[0].trim().toLowerCase();
+        const to = parts.slice(1).join(' ').trim();
+        if (from && to) next[from] = to;
+    });
+    return next;
+}
+
+function formatAutocorrectRulesText() {
+    return Object.entries(customAutocorrectRules || {})
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([from, to]) => `${from} => ${to}`)
+        .join('\n');
+}
+
+function setCustomAutocorrectRules(value) {
+    customAutocorrectRules = parseAutocorrectRulesText(value);
+    saveCustomAutocorrectRules();
+    showTemporaryMessage('Autocorrect dictionary saved.');
+}
+
+function resetCustomAutocorrectRules() {
+    customAutocorrectRules = {};
+    saveCustomAutocorrectRules();
+    const input = document.getElementById('custom-autocorrect-input');
+    if (input) input.value = '';
+    showTemporaryMessage('Autocorrect dictionary reset.');
+}
+
+function buildMemoryInspectorHtml() {
+    const entries = Object.entries(memoryStore || {})
+        .filter(([key]) => key !== 'name')
+        .slice(0, 30);
+    if (!entries.length) {
+        return '<p class="text-xs">No saved memory items yet.</p>';
+    }
+    return entries.map(([key, value]) => {
+        const label = escapeHtml(String(key || '').slice(0, 60));
+        const body = escapeHtml(String(typeof value === 'string' ? value : JSON.stringify(value)).slice(0, 140));
+        const encodedKey = encodeURIComponent(key);
+        return `
+            <div class="memory-inspector-item">
+                <div class="min-w-0">
+                    <strong>${label}</strong>
+                    <p>${body}</p>
+                </div>
+                <button type="button" class="memory-action-btn" onclick="deleteMemoryItem('${encodedKey}')">Delete</button>
+            </div>
+        `;
+    }).join('');
+}
+
+function deleteMemoryItem(encodedKey) {
+    const key = decodeURIComponent(String(encodedKey || ''));
+    if (!key || !Object.prototype.hasOwnProperty.call(memoryStore || {}, key)) return;
+    delete memoryStore[key];
+    saveUserData();
+    const list = document.getElementById('memory-inspector-list');
+    if (list) list.innerHTML = buildMemoryInspectorHtml();
+    showTemporaryMessage('Memory item deleted.');
 }
 
 function extractReferenceSubject(text) {
@@ -1497,14 +1594,34 @@ function copyAssistantPlan(button) {
     copyToClipboard(text);
 }
 
-function retryLastRequest() {
+function retryLastRequest() { 
     const last = window.__lastUserMessage;
     if (!last) return;
     const input = document.getElementById('text-input');
     if (!input) return;
     input.value = last;
     toggleSendButton();
-    sendTextInput();
+    sendTextInput(); 
+} 
+
+function showResponseRecoveryCard(userMessage = '') {
+    const chatContainer = document.getElementById('chat-container');
+    if (!chatContainer || document.getElementById('response-recovery-card')) return;
+    const safeMessage = escapeHtml(String(userMessage || window.__lastUserMessage || 'that request').slice(0, 140));
+    const card = document.createElement('div');
+    card.id = 'response-recovery-card';
+    card.className = 'chat-row flex justify-start fade-in';
+    card.innerHTML = `
+        <div class="chat-bubble-assistant assistant-message-text">
+            <p class="assistant-md-p"><strong>Response paused.</strong> ${safeMessage ? `Last request: ${safeMessage}` : ''}</p>
+            <div class="flex flex-wrap gap-2 mt-2">
+                <button type="button" class="memory-action-btn" onclick="retryLastRequest(); document.getElementById('response-recovery-card')?.remove();">Retry</button>
+                <button type="button" class="memory-action-btn" onclick="stopActiveGeneration('manual'); document.getElementById('response-recovery-card')?.remove();">Stop</button>
+            </div>
+        </div>
+    `;
+    chatContainer.appendChild(card);
+    maybeAutoScroll(chatContainer);
 }
 
 function showFailureFallbackCard(userMessage) {
@@ -3953,8 +4070,16 @@ let showRoutingDebugBadge = false;
             const raw = String(text || '');
             if (!raw.trim()) return '';
 
-            return raw
-                .split(/(\s+)/)
+            const targeted = applyCustomAutocorrectRules(raw)
+                .replace(/\bcief\b/gi, 'chief')
+                .replace(/\brtamil\s*nadu\b/gi, 'Tamil Nadu')
+                .replace(/\brtamilnadu\b/gi, 'Tamil Nadu')
+                .replace(/\btamilnadu\b/gi, 'Tamil Nadu')
+                .replace(/\b(my|left|right|the)\s+food\b(?=[^?.!]*(?:hurt|hurts|hurting|pain|paining|ache|aching|swollen|injured|injury))/gi, '$1 foot')
+                .replace(/\bfood\s+(hurt|hurts|hurting|pain|paining|ache|aching|swollen|injured|injury)\b/gi, 'foot $1');
+
+            return targeted 
+                .split(/(\s+)/) 
                 .map(token => {
                     const lower = token.toLowerCase().trim();
                     if (lower.length < 3 || INTENT_DICTIONARY.includes(lower) || !/^[a-z]+$/.test(lower)) return token;
@@ -4056,9 +4181,10 @@ let showRoutingDebugBadge = false;
         }
 
         window.onload = async () => {
-            initZoomLock();
-            loadMemoryPersistencePreference();
-            loadUserData();
+            initZoomLock(); 
+            loadMemoryPersistencePreference(); 
+            loadCustomAutocorrectRules();
+            loadUserData(); 
             loadAssistantModes();
             enforceDarkMode();
             setupInputHistoryNavigation();
@@ -4161,22 +4287,44 @@ let showRoutingDebugBadge = false;
                                 onchange="setCustomSystemPrompt(this.value, true)">${escapeHtml(customSystemPrompt)}</textarea>
                         </section>
 
-                        <section class="help-settings-card"> 
-                            <p class="font-bold mb-2">Memory</p> 
+                        <section class="help-settings-card">  
+                            <p class="font-bold mb-2">Memory</p>  
                             <p class="text-xs mb-3">Manage saved memory and chat history on this device.</p>
                             <label class="memory-persist-row flex items-center justify-between gap-3 mb-3">
                                 <span class="memory-persist-label text-xs font-medium">Persist memory on this device</span>
                                 <input type="checkbox" id="persist-memory-toggle" class="h-4 w-4" ${persistMemoryToDevice ? 'checked' : ''} onchange="toggleMemoryPersistence(this.checked)">
                             </label>
-                            <div class="flex flex-wrap gap-2">
-                                <button onclick="clearSavedMemoryStore()" class="memory-action-btn" title="Clear saved memory">Clear Memory</button>
-                                <button onclick="clearConversationHistoryData()" class="memory-action-btn" title="Clear chat history">Clear Chat History</button>
+                            <div class="flex flex-wrap gap-2"> 
+                                <button onclick="clearSavedMemoryStore()" class="memory-action-btn" title="Clear saved memory">Clear Memory</button> 
+                                <button onclick="clearConversationHistoryData()" class="memory-action-btn" title="Clear chat history">Clear Chat History</button> 
+                            </div> 
+                            <div id="memory-inspector-list" class="mt-3">
+                                ${buildMemoryInspectorHtml()}
+                            </div>
+                        </section> 
+
+                        <section class="help-settings-card">
+                            <div class="help-section-heading">
+                                <div>
+                                    <h3 class="font-bold">Autocorrect dictionary</h3>
+                                    <p class="text-xs">One rule per line. Example: cief =&gt; chief</p>
+                                </div>
+                                <button type="button" class="memory-action-btn" onclick="resetCustomAutocorrectRules()">Reset</button>
+                            </div>
+                            <textarea id="custom-autocorrect-input"
+                                class="custom-system-prompt-input"
+                                rows="5"
+                                maxlength="2000"
+                                placeholder="cief => chief&#10;rtamilnadu => Tamil Nadu"
+                                onchange="setCustomAutocorrectRules(this.value)">${escapeHtml(formatAutocorrectRulesText())}</textarea>
+                            <div class="flex flex-wrap gap-2 mt-2">
+                                <button type="button" class="memory-action-btn" onclick="setCustomAutocorrectRules(document.getElementById('custom-autocorrect-input')?.value || '')">Save autocorrect</button>
                             </div>
                         </section>
 
-                    </div> 
-                </div> 
-            `; 
+                    </div>  
+                </div>  
+            `;  
 
             document.querySelector('.page-shell')?.setAttribute('aria-hidden', 'true');
             document.body.appendChild(modal); 
@@ -4364,6 +4512,7 @@ let showRoutingDebugBadge = false;
         let converseInterruptionSequence = 0;
         let activeTypewriterTimeouts = new Set();
         let activeTypewriterRuns = new Set();
+        let responseRecoveryTimer = null;
 
         function beginAssistantProcessing() {
             assistantProcessingDepth += 1;
@@ -4413,10 +4562,12 @@ let showRoutingDebugBadge = false;
             activeRequestController = controller;
             beginAssistantProcessing();
             setPrimaryActionButtonToStop();
+            scheduleResponseRecoveryPrompt(controller);
             return controller;
         }
 
         function clearActiveRequest(controller) {
+            clearResponseRecoveryPrompt();
             if (controller && activeRequestController !== controller) {
                 endAssistantProcessing();
                 resetPrimaryActionButtonWhenIdle();
@@ -4425,6 +4576,22 @@ let showRoutingDebugBadge = false;
             activeRequestController = null;
             endAssistantProcessing();
             resetPrimaryActionButtonWhenIdle();
+        }
+
+        function scheduleResponseRecoveryPrompt(controller) {
+            clearResponseRecoveryPrompt();
+            responseRecoveryTimer = setTimeout(() => {
+                if (activeRequestController === controller && !controller.signal?.aborted) {
+                    showResponseRecoveryCard(window.__lastUserMessage || '');
+                }
+            }, 30000);
+        }
+
+        function clearResponseRecoveryPrompt() {
+            if (responseRecoveryTimer) {
+                clearTimeout(responseRecoveryTimer);
+                responseRecoveryTimer = null;
+            }
         }
 
         function markTurnInterrupted(turnId) {
@@ -4480,6 +4647,7 @@ let showRoutingDebugBadge = false;
                 } catch (e) {}
             }
             stopActiveTypewriterAnimations();
+            clearResponseRecoveryPrompt();
             hideThinkingIndicator();
             toggleSendButton();
             if (reason === 'manual') showTemporaryMessage('Response stopped.');
@@ -5383,9 +5551,10 @@ let showRoutingDebugBadge = false;
                     <button type="button" class="assistant-action-icon" onclick="regenerateAssistantMessage('${safeId}')" title="Regenerate" aria-label="Regenerate" ${regenAttr}>${getActionIconSvg('retry')}</button>
                     <div class="assistant-action-menu-wrap">
                         <button type="button" class="assistant-action-icon assistant-action-dots" onclick="toggleAssistantActionMenu('${safeId}', this)" title="More" aria-label="More actions" aria-expanded="false">${getActionIconSvg('dots')}</button>
-                        <div id="assistant-action-menu-${safeId}" class="assistant-action-menu hidden" role="menu">
-                            <button type="button" onclick="askJarvisAboutMessage('${safeId}')" role="menuitem">${getActionIconSvg('ask')}<span>Ask JARVIS</span></button>
-                        </div>
+                        <div id="assistant-action-menu-${safeId}" class="assistant-action-menu hidden" role="menu"> 
+                            <button type="button" onclick="askJarvisAboutMessage('${safeId}')" role="menuitem">${getActionIconSvg('ask')}<span>Ask JARVIS</span></button> 
+                            <button type="button" onclick="verifyAssistantMessage('${safeId}')" role="menuitem">${getActionIconSvg('ask')}<span>Verify this</span></button> 
+                        </div> 
                     </div>
                 </div>
             `;
@@ -5579,6 +5748,22 @@ let showRoutingDebugBadge = false;
             selectionHelperState.priorUserPrompt = meta.priorUserPrompt;
             selectionHelperState.sourceLabel = meta.sourceLabel;
             void askJarvisAboutSelection('custom');
+        }
+
+        function verifyAssistantMessage(messageId) {
+            const meta = getAssistantMessageMeta(messageId);
+            if (!meta?.text) return;
+            const visible = 'Verify this answer';
+            const hidden = [
+                'Check whether this answer is accurate and internally consistent.',
+                'If it uses source links, inspect the cited source text already present in the answer.',
+                'Clearly list any claims that need live verification.',
+                '',
+                `Original user request: ${meta.priorUserPrompt || 'unknown'}`,
+                `Answer to verify:\n${meta.text}`
+            ].join('\n');
+            closeAssistantActionMenus();
+            void submitProgrammaticUserTurn(visible, hidden);
         }
 
         async function askJarvisAboutSelection(action = 'custom') {
@@ -6951,6 +7136,35 @@ ${code}
             }
         }
 
+        function handleLocalVoiceCommand(text, inputSource = 'text') {
+            const source = String(inputSource || '').toLowerCase();
+            if (!['vtt', 'converse'].includes(source)) return false;
+            const t = String(text || '').toLowerCase().replace(/[.!?]+$/g, '').trim();
+            if (!t) return false;
+            if (/^(stop|stop generating|cancel|cancel response|pause)$/.test(t)) {
+                stopActiveGeneration('manual');
+                window.JarvisSpeechInput?.stop?.({ disableConverse: source === 'converse' });
+                showTemporaryMessage('Stopped.');
+                return true;
+            }
+            if (/^(retry|try again|regenerate)$/.test(t)) {
+                retryLastRequest();
+                return true;
+            }
+            if (/^(clear chat|clear history|new chat)$/.test(t)) {
+                conversationHistory = [];
+                conversationContext = [];
+                window.JarvisConversation?.reset?.();
+                window.JarvisState?.resetConversationState?.();
+                const chatContainer = document.getElementById('chat-container');
+                if (chatContainer) chatContainer.innerHTML = '';
+                saveConversationHistory();
+                showTemporaryMessage('Chat cleared.');
+                return true;
+            }
+            return false;
+        }
+
 async function sendTextInput(submission = {}) {
             closeComposerActionsMenu();
             const input = document.getElementById('text-input');
@@ -6968,6 +7182,12 @@ async function sendTextInput(submission = {}) {
                 if (interruptionId !== converseInterruptionSequence) return;
             }
             if (text) {
+                if (handleLocalVoiceCommand(text, inputSource)) {
+                    input.value = '';
+                    delete input.dataset.inputSource;
+                    toggleSendButton();
+                    return;
+                }
                 const preserveTranscript = submission?.preserveTranscript === true;
                 const selectionGrounding = pendingSelectionGrounding
                     ? { ...pendingSelectionGrounding }
@@ -7349,6 +7569,32 @@ async function fetchCurrentFactJson(query, options = {}) {
         throw error;
     }
     return data;
+}
+
+function getCurrentFactCacheKey(query) {
+    return `jarvis_current_fact_${String(query || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 120)}`;
+}
+
+function getCachedCurrentFact(query) {
+    try {
+        const raw = localStorage.getItem(getCurrentFactCacheKey(query));
+        if (!raw) return null;
+        const cached = JSON.parse(raw);
+        if (!cached || Date.now() - Number(cached.cachedAt || 0) > 30 * 60 * 1000) return null;
+        return cached.data || null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function setCachedCurrentFact(query, data) {
+    if (!data?.resolved || !data?.answer) return;
+    try {
+        localStorage.setItem(getCurrentFactCacheKey(query), JSON.stringify({
+            cachedAt: Date.now(),
+            data
+        }));
+    } catch (_) {}
 }
 
 function formatCurrentFactAnswer(data = {}) {
@@ -11763,8 +12009,21 @@ const DOMAIN_SOURCE_POLICIES = {
             'whitehouse.gov',
             'parliament.uk',
             'congress.gov',
-            'eci.gov.in',
-            'wikipedia.org',
+            'eci.gov.in', 
+            'india.gov.in',
+            'tn.gov.in',
+            'assembly.tn.gov.in',
+            'cm.tn.gov.in',
+            'mohfw.gov.in',
+            'nhm.gov.in',
+            'nmc.org.in',
+            'ugc.gov.in',
+            'aicte-india.org',
+            'education.gov.in',
+            'sci.gov.in',
+            'main.sci.gov.in',
+            'egazette.nic.in',
+            'wikipedia.org', 
             'britannica.com',
             'reuters.com',
             'apnews.com',
@@ -11785,9 +12044,20 @@ const DOMAIN_SOURCE_POLICIES = {
             'bund.de',
             'gov.br',
             'gob.mx',
-            'whitehouse.gov',
-            'eci.gov.in',
-            'parliament.uk',
+            'whitehouse.gov', 
+            'eci.gov.in', 
+            'india.gov.in',
+            'tn.gov.in',
+            'assembly.tn.gov.in',
+            'cm.tn.gov.in',
+            'mohfw.gov.in',
+            'nhm.gov.in',
+            'ugc.gov.in',
+            'aicte-india.org',
+            'education.gov.in',
+            'sci.gov.in',
+            'egazette.nic.in',
+            'parliament.uk', 
             'congress.gov',
             'wikipedia.org',
             'britannica.com'
@@ -12645,7 +12915,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         ? getOfficialCompanySourceHints(subject).join(' ')
         : '';
     const officialDomainHints = entityIntent.domain === 'politics'
-        ? 'official government source Reuters AP BBC Wikipedia Britannica'
+        ? 'site:india.gov.in OR site:tn.gov.in OR site:assembly.tn.gov.in OR site:eci.gov.in OR official government source Reuters AP BBC Wikipedia Britannica'
         : entityIntent.domain === 'space_science'
             ? 'site:nasa.gov OR site:isro.gov.in OR site:esa.int OR site:jaxa.jp OR Reuters'
             : entityIntent.domain === 'arts_literature'
@@ -14370,14 +14640,16 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
             options
         });
 
-        try {
-            const currentFactData = await fetchCurrentFactJson(query, {
-                signal: controller.signal,
-                debug: true
-            });
-            if (currentFactData?.resolved && currentFactData?.answer) {
-                const finalMsg = formatCurrentFactAnswer(currentFactData);
-                if (finalMsg) {
+        try { 
+            const cachedFactData = getCachedCurrentFact(query);
+            const currentFactData = cachedFactData || await fetchCurrentFactJson(query, { 
+                signal: controller.signal, 
+                debug: true 
+            }); 
+            if (!cachedFactData) setCachedCurrentFact(query, currentFactData);
+            if (currentFactData?.resolved && currentFactData?.answer) { 
+                const finalMsg = formatCurrentFactAnswer(currentFactData); 
+                if (finalMsg) { 
                     logRoutingDebug('handler decision: current_fact_resolver', query, {
                         selectedHandler: 'api/current-facts',
                         liveIntent: intent,
@@ -14389,7 +14661,7 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
                         confidence: currentFactData.confidence,
                         debug: currentFactData.debug || {}
                     });
-                    addVerifiedAssistantMessage(finalMsg, 'Structured current fact');
+                    addVerifiedAssistantMessage(finalMsg, cachedFactData ? 'Cached current fact' : 'Structured current fact'); 
                     await prepareApiReply('live_summary_ready', {}, 'I checked current sources and summarized what I found.');
                     saveToHistory(userText, finalMsg);
                     hideThinkingIndicator();
