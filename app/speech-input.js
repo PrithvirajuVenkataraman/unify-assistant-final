@@ -364,7 +364,7 @@ export function installSpeechInputUI(options = {}) {
                 if (!state.supported) {
                     setStatusText('Voice input is unavailable in this browser.');
                 } else if (state.converseEnabled) {
-                    setStatusText(state.processing ? 'JARVIS is responding. Speak to interrupt.' : 'Converse mode on. Speak naturally; replies remain text-only.');
+                    setStatusText(state.processing ? 'JARVIS is responding. Speak to interrupt.' : 'Converse mode on. Speak naturally.');
                 } else if (state.mode === 'dictation' && state.listening) {
                     setListeningStatus();
                 } else {
