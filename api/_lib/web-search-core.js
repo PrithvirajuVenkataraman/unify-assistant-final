@@ -19,6 +19,18 @@ const MEMORY_CACHE = new Map();
 const RATE_LIMITS = new Map();
 
 export async function webSearchHandler(req, res) {
+    if (!isWebSearchEnabled()) {
+        return res.status(503).json({
+            success: false,
+            disabled: true,
+            error: {
+                code: 'web_search_disabled',
+                message: 'Self-hosted web search is paused. Set WEB_SEARCH_ENABLED=true to enable it.'
+            },
+            results: []
+        });
+    }
+
     if (String(req?.method || 'GET').toUpperCase() !== 'POST') {
         return res.status(405).json({
             success: false,
@@ -68,6 +80,13 @@ export async function webSearchHandler(req, res) {
 }
 
 export async function searchWeb(query, options = {}) {
+    if (!isWebSearchEnabled()) {
+        const error = new Error('Self-hosted web search is paused. Set WEB_SEARCH_ENABLED=true to enable it.');
+        error.code = 'web_search_disabled';
+        error.status = 503;
+        throw error;
+    }
+
     const searxngUrl = getSearxngUrl(options.searxngUrl);
     if (!searxngUrl) {
         const error = new Error('SEARXNG_URL is not configured.');
@@ -533,6 +552,10 @@ function getSearxngUrl(override) {
     }
 }
 
+function isWebSearchEnabled() {
+    return String(process.env.WEB_SEARCH_ENABLED || '').trim().toLowerCase() === 'true';
+}
+
 function normalizeUrl(value) {
     const parsed = safeUrl(value);
     if (!parsed) return '';
@@ -577,7 +600,7 @@ function extractFirst(value, pattern) {
 }
 
 function decodeHtmlEntities(value) {
-    return String(value || '') 
+    return String(value || '')
         .replace(/&nbsp;/gi, ' ')
         .replace(/&amp;/gi, '&')
         .replace(/&quot;/gi, '"')
@@ -598,5 +621,6 @@ export const __test = {
     normalizeSearchRequest,
     robotsAllows,
     rankSearxngResults,
-    isFetchableHttpUrl
+    isFetchableHttpUrl,
+    isWebSearchEnabled
 };
