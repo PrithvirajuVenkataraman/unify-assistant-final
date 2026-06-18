@@ -9,6 +9,7 @@ const SOURCE = Object.freeze({
     appHtml: fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
     styles: fs.readFileSync(new URL('../styles.css', import.meta.url), 'utf8'),
     visionApi: fs.readFileSync(new URL('../api/vision.js', import.meta.url), 'utf8'),
+    chatGroqApi: fs.readFileSync(new URL('../api/chat-groq.js', import.meta.url), 'utf8'),
     speechInput: fs.readFileSync(new URL('../app/speech-input.js', import.meta.url), 'utf8') 
 }); 
 
@@ -149,15 +150,29 @@ const FEATURE_CONTRACTS = Object.freeze({
     localClaimRiskFlags: {
         required: [
             /function analyzeAnswerRiskFlags\(userMessage, assistantText\)/,
-            /function buildClaimRiskBadgeHtml\(flags = \[\]\)/,
-            /class="claim-risk-badge"/,
             /Local review flags:\\n\$\{flags\}/
         ],
         forbidden: [
+            /class="claim-risk-badge"/,
             /custom-autocorrect-input/,
             /jarvis_custom_autocorrect_rules/,
             /applyCustomAutocorrectRules/,
             /Autocorrect dictionary/
+        ]
+    },
+    wakeGreetingAndAddressPreference: {
+        required: [
+            /let preferredAddress = AppState\.user\.preferredAddress/,
+            /function normalizePreferredAddress\(value\)/,
+            /function isWakeGreetingText\(text\)/,
+            /function handlePreferredAddressRequest\(text\)/,
+            /preferredAddress: getPreferredAddress\(\)/,
+            /preferredAddress = normalizePreferredAddress\(data\.preferredAddress\) \|\| 'sir'/,
+            /if \(handlePreferredAddressRequest\(compact\)\)/,
+            /if \(isWakeGreetingText\(compact\)\)/
+        ],
+        forbidden: [
+            /const greet = userName \? `Hi \$\{userName\}, how can I help today\?`/
         ]
     }
 });
@@ -253,6 +268,8 @@ assert.match(SOURCE.visionApi, /function shouldEscalateMathOcrSolve/);
 assert.match(SOURCE.visionApi, /pipeline:\s*'fast-math-ocr-solve'/);
 assert.match(SOURCE.visionApi, /pipeline:\s*'planner-critic-solver'/);
 assert.match(SOURCE.speechInput, /try English or another language/);
+assert.match(SOURCE.chatGroqApi, /forceReview: false/);
+assert.doesNotMatch(SOURCE.chatGroqApi, /forceReview: !isInternalSummary/);
 
 const riskSandbox = {};
 vm.createContext(riskSandbox);
@@ -268,6 +285,18 @@ const numberFlags = riskSandbox.analyzeAnswerRiskFlags(
     'The total is ₹12000, with 15% for food and 20% for transport.'
 ).map(flag => flag.label);
 assert.ok(numberFlags.includes('Numbers'));
+
+const greetingSandbox = {};
+vm.createContext(greetingSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizePreferredAddress'), greetingSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isWakeGreetingText'), greetingSandbox);
+assert.equal(greetingSandbox.normalizePreferredAddress('ma\'am'), 'mam');
+assert.equal(greetingSandbox.normalizePreferredAddress('madam'), 'mam');
+assert.equal(greetingSandbox.normalizePreferredAddress('sir'), 'sir');
+assert.equal(greetingSandbox.isWakeGreetingText('jarvis'), true);
+assert.equal(greetingSandbox.isWakeGreetingText('hey jarvis'), true);
+assert.equal(greetingSandbox.isWakeGreetingText('hello'), true);
+assert.equal(greetingSandbox.isWakeGreetingText('tell me about jarvis'), false);
 
 console.log('deterministic-checks-ok'); 
 
