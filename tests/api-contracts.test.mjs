@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import apiHandler, { resolveRequestPath } from '../api/index.js';
+import apiHandler, { resolveRequestPath } from '../api/index.js'; 
 import chatHandler, { __test as chatTest } from '../api/chat-groq.js';
 import currentFactsHandler from '../api/current-facts.js';
 import marketsHandler from '../api/markets.js';
