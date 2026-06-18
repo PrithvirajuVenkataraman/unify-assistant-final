@@ -577,7 +577,7 @@ function extractFirst(value, pattern) {
 }
 
 function decodeHtmlEntities(value) {
-    return String(value || '')
+    return String(value || '') 
         .replace(/&nbsp;/gi, ' ')
         .replace(/&amp;/gi, '&')
         .replace(/&quot;/gi, '"')
