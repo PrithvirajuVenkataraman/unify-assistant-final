@@ -77,7 +77,7 @@ const FEATURE_CONTRACTS = Object.freeze({
     spinnerOnlyLoading: {
         required: [
             /aria-label="\$\{escapeHtml\(statusText\)\}"/,
-            /class="assistant-thinking-pulse"/
+            /class="assistant-thinking-pulse/
         ],
         forbidden: [
             /id="chat-thinking-phase"/,
@@ -297,6 +297,13 @@ assert.equal(greetingSandbox.isWakeGreetingText('jarvis'), true);
 assert.equal(greetingSandbox.isWakeGreetingText('hey jarvis'), true);
 assert.equal(greetingSandbox.isWakeGreetingText('hello'), true);
 assert.equal(greetingSandbox.isWakeGreetingText('tell me about jarvis'), false);
+
+const languageSandbox = {};
+vm.createContext(languageSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'detectInputLanguageHint'), languageSandbox);
+assert.equal(languageSandbox.detectInputLanguageHint('hola, can you help me?').includes('English-Spanish'), true);
+assert.equal(languageSandbox.detectInputLanguageHint('hello தமிழ் help').includes('English-Tamil'), true);
+assert.equal(languageSandbox.detectInputLanguageHint('தமிழ்'), 'Tamil');
 
 console.log('deterministic-checks-ok'); 
 
