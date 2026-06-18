@@ -1,7 +1,7 @@
 export const config = { maxDuration: 60 };
 import { applyApiSecurity } from './security.js';
 import { runVerifiedWebSearch } from './search.js';
- 
+
 const MODEL_FETCH_TIMEOUT_MS = 18_000;
 const INTERNAL_FETCH_TIMEOUT_MS = 8_000;
 const FETCH_RETRIES = 1;
@@ -158,7 +158,7 @@ export default async function handler(req, res) {
             answer: finalParsed?.response,
             intent,
             contextBlock,
-            forceReview: !isInternalSummary
+            forceReview: false
         });
         if (qualityResult.correctedResponse) {
             finalParsed = { ...finalParsed, response: qualityResult.correctedResponse };
