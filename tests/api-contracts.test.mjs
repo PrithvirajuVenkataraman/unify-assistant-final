@@ -6,6 +6,7 @@ import marketsHandler from '../api/markets.js';
 import searchHandler, { __test as searchTest } from '../api/search.js'; 
 import visionHandler from '../api/vision.js'; 
 import { webSearchHandler, __test as webSearchTest } from '../api/_lib/web-search-core.js';
+import extractUrlHandler, { __test as extractUrlTest } from '../api/extract-url.js';
 import { clearItems, saveItems } from '../api/_lib/latest/latest-cache.js';
 
 const SAMPLE = Object.freeze({
@@ -28,6 +29,8 @@ const ORIGINAL_GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const ORIGINAL_GOOGLE_API_KEY = process.env.GOOGLE_API_KEY; 
 const ORIGINAL_GEMINI_SEARCH_MODEL = process.env.GEMINI_SEARCH_MODEL; 
 const ORIGINAL_SEARXNG_URL = process.env.SEARXNG_URL;
+const ORIGINAL_CRAWL4AI_URL = process.env.CRAWL4AI_URL;
+const ORIGINAL_CRAWL4AI_TOKEN = process.env.CRAWL4AI_TOKEN;
 const ORIGINAL_REDIS_URL = process.env.REDIS_URL;
 const ORIGINAL_WEB_SEARCH_ENABLED = process.env.WEB_SEARCH_ENABLED;
 const ORIGINAL_FETCH = globalThis.fetch; 
@@ -38,6 +41,8 @@ delete process.env.GEMINI_API_KEY;
 delete process.env.GOOGLE_API_KEY; 
 delete process.env.GEMINI_SEARCH_MODEL; 
 delete process.env.SEARXNG_URL;
+delete process.env.CRAWL4AI_URL;
+delete process.env.CRAWL4AI_TOKEN;
 delete process.env.REDIS_URL;
 delete process.env.WEB_SEARCH_ENABLED;
 
@@ -95,6 +100,57 @@ assert.doesNotMatch(webSearchOk.body.results[0].text, /menu|footer|bad/);
 globalThis.fetch = ORIGINAL_FETCH;
 delete process.env.SEARXNG_URL;
 delete process.env.WEB_SEARCH_ENABLED;
+
+const disabledExtract = await callHandler(extractUrlHandler, request('/api/extract-url', { url: 'https://example.com/article' }));
+assert.equal(disabledExtract.statusCode, 503);
+assert.equal(disabledExtract.body.error.code, 'crawl4ai_not_configured');
+const invalidExtract = await callHandler(extractUrlHandler, request('/api/extract-url', { url: 'not a url' }));
+assert.equal(invalidExtract.statusCode, 400);
+assert.equal(invalidExtract.body.error.code, 'invalid_url');
+const privateExtract = await callHandler(extractUrlHandler, request('/api/extract-url', { url: 'http://127.0.0.1:8080/private' }));
+assert.equal(privateExtract.statusCode, 400);
+assert.equal(privateExtract.body.error.code, 'private_url_blocked');
+assert.equal(extractUrlTest.normalizeExtractRequest({ url: 'https://example.com/a#frag' }).value.url, 'https://example.com/a');
+assert.equal(extractUrlTest.buildCrawl4AiEndpoint('https://crawl4ai.example').endsWith('/crawl'), true);
+process.env.CRAWL4AI_URL = 'https://crawl4ai.example';
+process.env.CRAWL4AI_TOKEN = 'test-crawl-token';
+let crawlAuthHeader = '';
+globalThis.fetch = async (url, init) => {
+    assert.equal(String(url), 'https://crawl4ai.example/crawl');
+    crawlAuthHeader = String(init?.headers?.Authorization || '');
+    const body = JSON.parse(String(init?.body || '{}'));
+    assert.equal(body.url, 'https://example.com/article');
+    return okJson({
+        result: {
+            url: 'https://example.com/article',
+            title: 'Example Article',
+            description: 'Clean extracted page.',
+            markdown: '# Example Article\n\nUseful extracted text.'
+        }
+    });
+};
+const extractedUrl = await callHandler(extractUrlHandler, request('/api/extract-url', {
+    url: 'https://example.com/article',
+    query: 'summarize this',
+    textLimit: 2000
+}));
+assert.equal(extractedUrl.statusCode, 200);
+assert.equal(extractedUrl.body.success, true);
+assert.equal(extractedUrl.body.result.sourceType, 'crawl4ai_extract');
+assert.match(extractedUrl.body.result.markdown, /Example Article/);
+assert.equal(crawlAuthHeader, 'Bearer test-crawl-token');
+globalThis.fetch = async () => {
+    throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+};
+const timeoutExtract = await callHandler(extractUrlHandler, request('/api/extract-url', {
+    url: 'https://example.org/slow',
+    timeoutMs: 3000
+}));
+assert.equal(timeoutExtract.statusCode, 504);
+assert.equal(timeoutExtract.body.error.code, 'crawl4ai_timeout');
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.CRAWL4AI_URL;
+delete process.env.CRAWL4AI_TOKEN;
 
 const invalidChat = await callHandler(chatHandler, request('/api/chat-groq', { message: '' }));
 assert.equal(invalidChat.statusCode, 400);
@@ -603,6 +659,8 @@ restoreEnv('GEMINI_API_KEY', ORIGINAL_GEMINI_API_KEY);
 restoreEnv('GOOGLE_API_KEY', ORIGINAL_GOOGLE_API_KEY); 
 restoreEnv('GEMINI_SEARCH_MODEL', ORIGINAL_GEMINI_SEARCH_MODEL); 
 restoreEnv('SEARXNG_URL', ORIGINAL_SEARXNG_URL);
+restoreEnv('CRAWL4AI_URL', ORIGINAL_CRAWL4AI_URL);
+restoreEnv('CRAWL4AI_TOKEN', ORIGINAL_CRAWL4AI_TOKEN);
 restoreEnv('REDIS_URL', ORIGINAL_REDIS_URL);
 restoreEnv('WEB_SEARCH_ENABLED', ORIGINAL_WEB_SEARCH_ENABLED);
 globalThis.fetch = ORIGINAL_FETCH; 
