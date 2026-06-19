@@ -7,6 +7,7 @@ import searchHandler, { __test as searchTest } from '../api/search.js';
 import visionHandler from '../api/vision.js'; 
 import { webSearchHandler, __test as webSearchTest } from '../api/_lib/web-search-core.js';
 import extractUrlHandler, { __test as extractUrlTest } from '../api/extract-url.js';
+import mediaSearchHandler, { __test as mediaSearchTest } from '../api/media-search.js';
 import { clearItems, saveItems } from '../api/_lib/latest/latest-cache.js';
 
 const SAMPLE = Object.freeze({
@@ -628,6 +629,64 @@ assert.equal(quotaError.retryable, false);
 globalThis.fetch = ORIGINAL_FETCH;
 delete process.env.SERPER_API_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
+
+const invalidMediaSearch = await callHandler(mediaSearchHandler, request('/api/media-search', { query: '' }));
+assert.equal(invalidMediaSearch.statusCode, 400);
+assert.equal(invalidMediaSearch.body.error.code, 'invalid_query');
+assert.equal(mediaSearchTest.classifyVisualMediaIntent('tell me about guitar chords').shouldSearch, true);
+assert.equal(mediaSearchTest.classifyVisualMediaIntent('debug this javascript error').shouldSearch, false);
+assert.equal(mediaSearchTest.isSafePublicImageUrl('https://upload.wikimedia.org/example.jpg'), true);
+assert.equal(mediaSearchTest.isSafePublicImageUrl('https://example.com/example.jpg'), false);
+
+globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.startsWith('https://en.wikipedia.org/w/api.php')) {
+        return okJson({
+            query: {
+                pages: {
+                    1: {
+                        title: 'Guitar chord',
+                        fullurl: 'https://en.wikipedia.org/wiki/Guitar_chord',
+                        thumbnail: { source: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Guitar_chord.jpg/900px-Guitar_chord.jpg' }
+                    }
+                }
+            }
+        });
+    }
+    if (value.startsWith('https://commons.wikimedia.org/w/api.php')) {
+        return okJson({
+            query: {
+                pages: {
+                    2: {
+                        title: 'File:Guitar chord diagram.jpg',
+                        fullurl: 'https://commons.wikimedia.org/wiki/File:Guitar_chord_diagram.jpg',
+                        imageinfo: [{
+                            url: 'https://upload.wikimedia.org/wikipedia/commons/b/b0/Guitar_chord_diagram.jpg',
+                            thumburl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Guitar_chord_diagram.jpg/900px-Guitar_chord_diagram.jpg',
+                            mime: 'image/jpeg',
+                            extmetadata: {
+                                LicenseShortName: { value: 'CC BY-SA 4.0' },
+                                Artist: { value: '<span>Example Artist</span>' }
+                            }
+                        }]
+                    }
+                }
+            }
+        });
+    }
+    throw new Error(`Unexpected media fetch ${value}`);
+};
+const mediaSearch = await callHandler(mediaSearchHandler, request('/api/media-search', {
+    query: 'tell me about guitar chords',
+    limit: 3
+}));
+assert.equal(mediaSearch.statusCode, 200);
+assert.equal(mediaSearch.body.success, true);
+assert.equal(mediaSearch.body.sourceType, 'public_media');
+assert.equal(mediaSearch.body.images.length, 2);
+assert.equal(mediaSearch.body.images[1].license, 'CC BY-SA 4.0');
+assert.equal(mediaSearch.body.images[1].attribution, 'Example Artist');
+globalThis.fetch = ORIGINAL_FETCH;
 
 const disabledMarkets = await callHandler(marketsHandler, request('/api/markets', {
     mode: 'markets',
