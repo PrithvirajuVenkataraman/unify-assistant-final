@@ -795,127 +795,85 @@ function shouldTryReferenceImage(userText, assistantText = '') {
     const q = normalizeIntentTypos(String(userText || '')).toLowerCase();
     if (!q.trim()) return false;
 
-    const blockedIntent = /\b(weather|forecast|temperature|news|headlines|shopping|grocery|itinerary|hotel|restaurants?|transport|route|translate|translator|joke|calendar|budget trip|sync)\b/;
+    const blockedIntent = /\b(weather|forecast|temperature|news|headlines|shopping|grocery|itinerary|hotel|restaurants?|transport|route|translate|translator|joke|calendar|budget trip|sync|bitcoin|crypto|price now|stock price)\b/;
     if (blockedIntent.test(q)) return false;
 
-    const explicitImageAsk = /\b(image|picture|photo|show me|looks like|look like)\b/;
-    const placeOrLandmarkAsk = /\b(where is|tell me about|what is|who is)\b[\s\S]{0,80}\b(city|town|village|country|state|temple|church|mosque|palace|fort|museum|landmark|tower|bridge|mountain|lake|river|beach|island)\b/;
-    // Keep this strict to avoid wrong-topic auto images.
-    return explicitImageAsk.test(q) || placeOrLandmarkAsk.test(q);
+    const explicitImageAsk = /\b(image|picture|photo|show me|looks like|look like|diagram|visual)\b/;
+    const visualExplainerAsk = /\b(tell me about|what is|who is|explain)\b[\s\S]{0,90}\b(guitar|chord|city|town|village|country|state|temple|church|mosque|palace|fort|museum|landmark|tower|bridge|mountain|lake|river|beach|island|food|recipe|animal|plant|bird|planet|space|science|person|monument|product)\b/;
+    const assistantLooksEducational = /\b(chord|diagram|located|built|species|image|visual|structure|anatomy|landmark|tourist|ingredient)\b/i.test(String(assistantText || ''));
+    return explicitImageAsk.test(q) || visualExplainerAsk.test(q) || (assistantLooksEducational && extractReferenceSubject(q));
 }
 
-async function fetchWikipediaReferenceImage(subject) {
-    const title = String(subject || '').trim();
-    if (!title) return null;
+async function fetchPublicMediaForTopic(subject) {
+    const query = String(subject || '').trim();
+    if (!query) return [];
+    const response = await fetch('/api/media-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, limit: 3 })
+    });
+    if (!response.ok) return [];
+    const data = await response.json().catch(() => null);
+    return Array.isArray(data?.images) ? data.images.filter(Boolean).slice(0, 3) : [];
+}
 
-    const normalized = title.replace(/\s+/g, ' ').trim();
-    const typoMap = {
-        gujya: 'gujiya',
-        gujhia: 'gujiya',
-        biriyani: 'biryani',
-        hydrabad: 'hyderabad',
-        bengluru: 'bengaluru',
-        tamill: 'tamil',
-        jilebi: 'jalebi',
-        jilabi: 'jalebi',
-        jelabi: 'jalebi'
-    };
-    const normalizedLower = normalized.toLowerCase();
-    const normalizedWithTyposFixed = typoMap[normalizedLower] || normalized;
-    const titleCase = normalizedWithTyposFixed.replace(/\b\w/g, c => c.toUpperCase());
-    const lower = normalizedWithTyposFixed.toLowerCase();
+function buildAssistantMediaStripHtml(images) {
+    const list = Array.isArray(images) ? images.filter(Boolean).slice(0, 3) : [];
+    if (!list.length) return '';
+    const cards = list.map(image => {
+        const title = escapeHtml(String(image.title || 'Reference image'));
+        const src = escapeHtml(String(image.thumbnail || image.url || ''));
+        const href = escapeHtml(String(image.pageUrl || image.url || ''));
+        const source = escapeHtml(String(image.source || 'Wikimedia'));
+        const license = escapeHtml(String(image.license || 'See source page'));
+        if (!src || !href) return '';
+        return `
+            <a href="${href}" target="_blank" rel="noopener noreferrer" class="block overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-900/60">
+                <img src="${src}" alt="${title}" class="w-full h-36 object-cover bg-slate-100 dark:bg-slate-800">
+                <span class="block px-2 py-1.5 text-[11px] leading-tight text-slate-700 dark:text-slate-200">
+                    <strong>${title}</strong><br>
+                    ${source} · ${license}
+                </span>
+            </a>
+        `;
+    }).filter(Boolean).join('');
+    if (!cards) return '';
+    return `
+        <div class="assistant-media-strip mt-3" data-public-media="true">
+            <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Related public images</div>
+            <div class="grid grid-cols-1 sm:grid-cols-${Math.min(list.length, 3)} gap-2">${cards}</div>
+        </div>
+    `;
+}
 
-    function normalizeReferenceTitle(value) {
-        return String(value || '')
-            .toLowerCase()
-            .replace(/\([^)]*\)/g, ' ')
-            .replace(/[^\w\s-]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-    }
-
-    function looksLikeMatchingReference(pageTitle) {
-        const normalizedSubject = normalizeReferenceTitle(normalizedWithTyposFixed);
-        const normalizedTitle = normalizeReferenceTitle(pageTitle);
-        if (!normalizedSubject || !normalizedTitle) return false;
-        if (normalizedTitle === normalizedSubject) return true;
-        if (normalizedTitle.includes(normalizedSubject) || normalizedSubject.includes(normalizedTitle)) return true;
-
-        const subjectTokens = normalizedSubject.split(' ').filter(Boolean);
-        const titleTokens = new Set(normalizedTitle.split(' ').filter(Boolean));
-        const overlap = subjectTokens.filter(token => titleTokens.has(token));
-        return overlap.length >= Math.min(subjectTokens.length, 2);
-    }
-
-    const candidates = [normalizedWithTyposFixed, titleCase];
-    // Common alternate spellings for well-known foods/entities.
-    if (lower === 'gujiya') {
-        candidates.push('Gujhia', 'Gujia');
-    } else if (lower === 'jalebi') {
-        candidates.push('Jalebi', 'Jilebi', 'Zalabia');
-    }
-
-    async function fetchPageImageByTitle(pageTitle) {
-        const url = `https://en.wikipedia.org/w/api.php?action=query&prop=pageimages|info&inprop=url&pithumbsize=900&titles=${encodeURIComponent(pageTitle)}&format=json&origin=*`;
-        const response = await fetch(url);
-        if (!response.ok) return null;
-        const data = await response.json();
-        const pages = data?.query?.pages ? Object.values(data.query.pages) : [];
-        const page = pages.find(p => p && !p.missing);
-        if (!page) return null;
-        const imageUrl = page?.thumbnail?.source || '';
-        if (!imageUrl) return null;
-        if (!looksLikeMatchingReference(page?.title || pageTitle)) return null;
-        return {
-            title: page?.title || pageTitle,
-            imageUrl,
-            sourceUrl: page?.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(page?.title || pageTitle)}`
-        };
-    }
-
-    async function searchFallbackTitle(query) {
-        const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=5&format=json&origin=*`;
-        const response = await fetch(searchUrl);
-        if (!response.ok) return null;
-        const data = await response.json();
-        const hits = Array.isArray(data?.query?.search) ? data.query.search : [];
-        for (const hit of hits) {
-            const card = await fetchPageImageByTitle(hit.title);
-            if (card?.imageUrl) return card;
+async function appendAssistantMediaHtml(assistantMessageId, html) {
+    const id = String(assistantMessageId || '').trim();
+    if (!id || !html) return false;
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+        const target = document.querySelector(`.assistant-message-text[data-message-id="${CSS.escape(id)}"]`);
+        if (!target) return false;
+        if (!target.classList.contains('is-streaming')) {
+            if (!target.querySelector('[data-public-media="true"]')) {
+                target.insertAdjacentHTML('beforeend', html);
+            }
+            return true;
         }
-        return null;
+        await new Promise(resolve => setTimeout(resolve, 160));
     }
-
-    for (const c of candidates) {
-        try {
-            const card = await fetchPageImageByTitle(c);
-            if (card?.imageUrl) return card;
-        } catch (e) {}
-    }
-
-    try {
-        const searched = await searchFallbackTitle(normalizedWithTyposFixed);
-        if (searched?.imageUrl) return searched;
-    } catch (e) {}
-
-    return null;
+    return false;
 }
 
-async function maybeShowReferenceImageForQuery(userText, assistantText = '') {
+async function maybeShowReferenceImageForQuery(userText, assistantText = '', assistantMessageId = '') {
     if (!shouldTryReferenceImage(userText, assistantText)) return;
     const subject = extractReferenceSubject(userText);
     if (!subject) return;
-    if (subject.split(/\s+/).filter(Boolean).length > 5) return;
+    if (subject.split(/\s+/).filter(Boolean).length > 8) return;
 
-    const ref = await fetchWikipediaReferenceImage(subject);
-    if (!ref || !ref.imageUrl) return;
-
-    const card = `
-<div class="p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white/90 dark:bg-slate-900/60">
-  <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2">Reference image: ${escapeHtml(ref.title)}</p>
-  <img src="${ref.imageUrl}" alt="${escapeHtml(ref.title)} reference image" class="w-full h-auto max-h-[70vh] object-contain rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800" />
-</div>`;
-    addChatMessage(card, false, false);
+    const images = await fetchPublicMediaForTopic(subject);
+    const html = sanitizeAssistantMarkup(buildAssistantMediaStripHtml(images));
+    if (!html) return;
+    if (await appendAssistantMediaHtml(assistantMessageId, html)) return;
+    addChatMessage(html, false, false);
 }
 
 // ========== CONTENT MODERATION ==========
@@ -1250,7 +1208,7 @@ Quick recap: ...
         if (!answer) return false;
 
         const assistantMessageId = addModelAssistantMessage(answer, 'Model answer');
-        await maybeShowReferenceImageForQuery(userText, answer);
+        await maybeShowReferenceImageForQuery(userText, answer, assistantMessageId);
         saveToHistory(historyKey || userText, answer);
         suggestQuickReplies(answer);
         addFeedbackButtons(historyKey || userText, answer, assistantMessageId);
@@ -3508,6 +3466,7 @@ async function publishResolvedModelMessage(userMessage, answerText, options = {}
         messageMeta.turnId = options.turnId;
     }
     const assistantMessageId = addModelAssistantMessage(safeText, label, messageMeta);
+    await maybeShowReferenceImageForQuery(userMessage, safeText, assistantMessageId);
     saveToHistory(userMessage, historyText || safeText, {
         recordContext: options?.recordContext !== false
     });
@@ -16921,7 +16880,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 const finalizedResponse = await resolveFinalAssistantAnswer(text, aiResponse?.response || aiResponse?.text || '');
                 const safeResponse = sanitizeHallucinatedTerrain(finalizedResponse, text, inferredLocation);
                 const assistantMessageId = addModelAssistantMessage(safeResponse, 'Model answer', { routing: aiResponse?.routing || null });
-                await maybeShowReferenceImageForQuery(text, safeResponse);
+                await maybeShowReferenceImageForQuery(text, safeResponse, assistantMessageId);
 
 
                 saveToHistory(text, safeResponse);
