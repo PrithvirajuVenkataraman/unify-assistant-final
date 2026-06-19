@@ -763,7 +763,7 @@ async function buildLiveRagContext(message, req, contextTurns = []) {
         if (allResults.length >= 8) break;
     }
 
-    const sources = rankLiveSources(message, allResults).slice(0, 8);
+    const sources = rankLiveSources(message, allResults).filter(isAnswerEvidenceSource).slice(0, 8);
     if (!sources.length) return { ragText: '', sources: [] };
 
     const ragText = sources
@@ -1212,6 +1212,13 @@ function shouldUseAsFinalSource(message, item) {
     if (!isroMissionQuery) return true;
     if (isGenericIsroTitle(title)) return false;
     return /\b(mission|launch|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan|statement|press)\b/.test(hay);
+}
+
+function isAnswerEvidenceSource(item) {
+    const sourceType = String(item?.sourceType || '').trim();
+    if (!sourceType || /^(reference_lookup|archive_lookup|community_discussion)$/.test(sourceType)) return false;
+    const description = String(item?.description || '').trim();
+    return sourceType === 'official_source' || description.length >= 20;
 }
 
 function normalizeLeadTitle(message, lead) {
