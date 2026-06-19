@@ -10,7 +10,7 @@ export class ApiError extends Error {
 }
 
 export async function postJson(path, payload, options = {}) {
-    const timeoutMs = clamp(options.timeoutMs, 18000, 1000, 60000);
+    const timeoutMs = clamp(options.timeoutMs, 30000, 1000, 60000);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const externalSignal = options.signal;
@@ -27,11 +27,12 @@ export async function postJson(path, payload, options = {}) {
         const data = await response.json().catch(() => null);
         if (!response.ok || data?.success === false) {
             const error = data?.error;
+            const code = String(error?.code || data?.code || 'request_failed');
             throw new ApiError(
-                String(error?.message || error || `Request failed with status ${response.status}`),
+                formatApiErrorMessage(response.status, code, error?.message || error),
                 {
                     status: response.status,
-                    code: error?.code || data?.code || 'request_failed',
+                    code,
                     retryable: response.status === 429 || response.status >= 500,
                     details: error?.details || null
                 }
@@ -55,6 +56,13 @@ export async function postJson(path, payload, options = {}) {
         clearTimeout(timeout);
         externalSignal?.removeEventListener?.('abort', abortExternal);
     }
+}
+
+function formatApiErrorMessage(status, code, message) {
+    if (status === 403 && code === 'origin_not_allowed') {
+        return 'This deployment is blocking same-origin API calls. Add the site URL to CORS_ALLOWED_ORIGINS or allow same-origin requests.';
+    }
+    return String(message || `Request failed with status ${status}`);
 }
 
 function clamp(value, fallback, min, max) {
