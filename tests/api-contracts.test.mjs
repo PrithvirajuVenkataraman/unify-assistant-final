@@ -338,11 +338,13 @@ const publicSearch = await callHandler(searchHandler, request('/api/search', { q
 assert.equal(publicSearch.statusCode, 200);
 assert.equal(publicSearch.body.success, true);
 assert.equal(publicSearch.body.provider, 'public_sources');
-assert.equal(publicSearch.body.results.length, 2);
-assert.deepEqual(publicSearch.body.distinctDomains, ['bbc.com', 'en.wikipedia.org']);
-assert.equal(publicSearch.body.trustedCount, 2);
+assert.equal(publicSearch.body.results.length, 4);
+assert.deepEqual(publicSearch.body.distinctDomains, ['bbc.com', 'en.wikipedia.org', 'britannica.com', 'archive.today']);
+assert.equal(publicSearch.body.trustedCount, 3);
 assert.equal(publicSearch.body.geminiEnhanced, false);
 assert.equal(publicSearch.body.results[0].sourceLabel, 'bbc.com via GDELT');
+assert.ok(publicSearch.body.results.some(item => item.sourceType === 'reference_lookup' && item.sourceLabel === 'Britannica'));
+assert.ok(publicSearch.body.results.some(item => item.sourceType === 'archive_lookup' && item.sourceLabel === 'archive.today'));
 globalThis.fetch = ORIGINAL_FETCH;
 
 globalThis.fetch = async (url) => {
@@ -613,8 +615,9 @@ const enabledSearch = await callHandler(searchHandler, request('/api/search', { 
 assert.equal(enabledSearch.statusCode, 200);
 assert.equal(enabledSearch.body.success, true);
 assert.equal(enabledSearch.body.provider, 'public_sources');
-assert.equal(enabledSearch.body.results.length, 0);
-assert.ok(enabledSearch.body.warnings.some(item => /No public-source results/.test(item)));
+assert.equal(enabledSearch.body.results.length, 2);
+assert.ok(enabledSearch.body.results.some(item => item.sourceType === 'reference_lookup'));
+assert.ok(enabledSearch.body.results.some(item => item.sourceType === 'archive_lookup'));
 assert.equal(searchTest.isTrustedLiveSource('https://www.bbc.com/news'), true);
 const authError = searchTest.createSerperStatusError(401, '{"message":"Invalid API key abcdefghijklmnopqrstuvwxyz"}');
 assert.equal(authError.code, 'serper_auth_failed');
