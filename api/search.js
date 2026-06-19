@@ -23,6 +23,12 @@ const MAX_QUERY_LENGTH = 500;
 const LATEST_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 let lastLatestRefreshAt = 0;
 
+const LOOKUP_ONLY_SOURCE_TYPES = new Set([
+    'reference_lookup',
+    'archive_lookup',
+    'community_discussion'
+]);
+
 export const LIVE_SEARCH_DISABLED_RESPONSE = Object.freeze({
     success: false,
     disabled: true,
@@ -75,7 +81,13 @@ const OFFICIAL_SOURCE_SHORTCUTS = Object.freeze([
     { pattern: /\bworld bank\b/i, label: 'World Bank official', url: 'https://www.worldbank.org/', query: 'World Bank latest official update' },
     { pattern: /\bnoaa\b|hurricane|climate|weather alert/i, label: 'NOAA official', url: 'https://www.noaa.gov/', query: 'NOAA latest official update' },
     { pattern: /\busa\.gov|us government|u\.s\. government/i, label: 'USA.gov official', url: 'https://www.usa.gov/', query: 'USA.gov official update' },
-    { pattern: /\bgov\.uk|uk government|british government/i, label: 'GOV.UK official', url: 'https://www.gov.uk/', query: 'GOV.UK official update' }
+    { pattern: /\bgov\.uk|uk government|british government/i, label: 'GOV.UK official', url: 'https://www.gov.uk/', query: 'GOV.UK official update' },
+    {
+        pattern: /\b(?:chief minister|cm)\s+(?:of\s+)?(?:tamil\s*nadu|tamilnadu)|\b(?:tamil\s*nadu|tamilnadu)\s+(?:chief minister|cm)\b/i,
+        label: 'Tamil Nadu Chief Minister official',
+        url: 'https://www.tn.gov.in/profile_form_cm.php?id=Mjg=&back_type=bWVudV9iYWNr',
+        query: 'Chief Minister of Tamil Nadu official site:tn.gov.in OR site:assembly.tn.gov.in'
+    }
 ]);
 
 export default async function handler(req, res) {
@@ -628,6 +640,7 @@ function buildSearchSummary(results, metadata = {}) {
         distinctDomains,
         trustedCount,
         sourceCount: results.length,
+        answerEvidenceCount: results.filter(isAnswerEvidenceResult).length,
         distinctDomainCount: distinctDomains.length,
         provider: metadata.provider || 'public_sources',
         publicSourceCount: Number(metadata.publicSourceCount) || 0,
@@ -812,6 +825,8 @@ function buildSearchWarnings(results, existing = []) {
     const warnings = [...existing];
     if (!Array.isArray(results) || !results.length) {
         warnings.push('No public-source results were found. This is not full-web coverage.');
+    } else if (!results.some(isAnswerEvidenceResult)) {
+        warnings.push('Only lookup or discussion links were found; no answer-bearing public source was available.');
     } else if (results.length < 3) {
         warnings.push('Limited public-source coverage; results may be incomplete.');
     }
@@ -819,6 +834,13 @@ function buildSearchWarnings(results, existing = []) {
         warnings.push('No trusted or official source was found in the public-source result set.');
     }
     return Array.from(new Set(warnings.filter(Boolean)));
+}
+
+function isAnswerEvidenceResult(item) {
+    const sourceType = String(item?.sourceType || '').trim();
+    if (!sourceType || LOOKUP_ONLY_SOURCE_TYPES.has(sourceType)) return false;
+    const description = String(item?.description || '').trim();
+    return sourceType === 'official_source' || description.length >= 20;
 }
 
 function buildGdeltDescription(item, domain, date) {
