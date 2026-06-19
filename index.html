@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en"> 
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
@@ -7464,6 +7464,20 @@ function formatVerifiedSourcesList(sources) {
         .join('\n');
 }
 
+function isAnswerEvidenceSource(item) {
+    const sourceType = String(item?.sourceType || '').trim();
+    if (!sourceType || /^(reference_lookup|archive_lookup|community_discussion)$/.test(sourceType)) return false;
+    const title = String(item?.title || '').trim().toLowerCase();
+    const url = String(item?.url || '').trim().toLowerCase();
+    const domain = String(item?.domain || '').trim().toLowerCase();
+    if (/search:|webcache|\/search(?:[/?#]|$)|[?&]q=/.test(`${title} ${url}`)) return false;
+    if (/archive\.(today|ph|is)|webcache/.test(domain || url)) return false;
+    if (sourceType === 'official_source' && !item?.pageFetched) return false;
+    if (item?.evidenceLevel === 'structured_claim') return true;
+    const description = String(item?.description || '').trim();
+    return sourceType === 'official_source' || description.length >= 20;
+}
+
 async function buildVerifiedSearchSummary(query, options = {}) {
     if (!LIVE_RETRIEVAL_ENABLED) {
         return {
@@ -7484,9 +7498,19 @@ async function buildVerifiedSearchSummary(query, options = {}) {
         });
         const results = Array.isArray(searchData?.results) ? searchData.results.filter(Boolean) : [];
         if (!results.length) return null;
+        const answerResults = results.filter(isAnswerEvidenceSource);
+        if (!answerResults.length) {
+            const sourceLines = formatVerifiedSourcesList(results);
+            return {
+                text: `I found only lookup or discussion links for "${userQuery}", not an answer-bearing public source with the current value.\n\n${buildSourceMetaBlock(results)}\n\nSources:\n${sourceLines}`,
+                summary: 'Live sources were lookup-only for this request.',
+                badge: 'Lookup-only sources',
+                error: true
+            };
+        }
 
         let summaryText = cleanLiveAnswerText(String(searchData?.answer || '').trim());
-        const snippets = results
+        const snippets = answerResults
             .slice(0, 6)
             .map((r, i) => `${i + 1}. ${r.title}\nSnippet: ${r.description}\nURL: ${r.url}`)
             .join('\n\n');
@@ -7518,14 +7542,14 @@ ${snippets}`
         } catch (error) {}
 
         if (!summaryText || isVerificationRefusalText(summaryText)) {
-            const fallbackLines = results
+            const fallbackLines = answerResults
                 .slice(0, 3)
                 .map((r, i) => `${i + 1}. ${r.title}${r.description ? ` - ${r.description}` : ''}`);
             summaryText = `I checked web sources and found these relevant results:\n${fallbackLines.join('\n')}`;
         }
 
-        const sourceLines = formatVerifiedSourcesList(results);
-        const finalText = `${summaryText}\n\n${buildSourceMetaBlock(results)}\n\nSources:\n${sourceLines}`;
+        const sourceLines = formatVerifiedSourcesList(answerResults);
+        const finalText = `${summaryText}\n\n${buildSourceMetaBlock(answerResults)}\n\nSources:\n${sourceLines}`;
         return {
             text: finalText,
             summary: options.summary || 'I checked live sources and summarized the result.',
