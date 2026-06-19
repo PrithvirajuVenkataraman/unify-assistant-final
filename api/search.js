@@ -2,9 +2,10 @@ export const config = { maxDuration: 60 };
 
 import { createHash } from 'node:crypto';
 import { applyApiSecurity } from './security.js';
-import { routeMessage } from './_lib/latest/router.js';
+import { classifyFreeLiveIntent, routeMessage } from './_lib/latest/router.js';
 import { searchItems } from './_lib/latest/latest-cache.js';
 import { ingestLatestSources } from './_lib/latest/latest-ingest.js';
+import { runFreeLiveSearch } from './_lib/free-live/providers.js';
 
 const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
 const WIKIPEDIA_SEARCH_URL = 'https://en.wikipedia.org/w/api.php';
@@ -88,18 +89,38 @@ export default async function handler(req, res) {
 
     try {
         const limit = clampInt(req.body?.limit || req.body?.maxResults, 8, 1, 20);
-        const route = routeMessage(query);
+        const route = classifyFreeLiveIntent(query);
         if (route.route === 'live_required') {
-            return res.status(503).json({
-                success: false,
-                disabled: true,
+            if (route.category === 'government' || route.category === 'news') {
+                const search = await runVerifiedWebSearch(query, { limit });
+                return res.status(200).json({
+                    success: true,
+                    query,
+                    route,
+                    category: route.category,
+                    ...search
+                });
+            }
+            const search = await runFreeLiveSearch(query, route, { limit });
+            const unsupported = Boolean(search.unsupported);
+            return res.status(200).json({
+                success: !unsupported,
+                disabled: false,
                 query,
                 route,
-                error: {
-                    code: 'real_time_source_not_connected',
-                    message: 'A real-time source is not connected for this request.'
-                },
-                results: []
+                error: unsupported
+                    ? {
+                        code: search.category === 'unsupported_free_live' ? 'unsupported_free_live' : 'clarification_required',
+                        message: search.warnings?.[0] || 'No durable permanent-free live source is configured for this request.'
+                    }
+                    : undefined,
+                ...buildSearchSummary(search.results || [], {
+                    provider: search.provider || 'free_public_sources',
+                    publicSourceCount: search.publicSourceCount || 0,
+                    geminiEnhanced: false,
+                    warnings: search.warnings || []
+                }),
+                category: search.category || route.category
             });
         }
         if (route.route === 'cached_latest') {
@@ -298,22 +319,11 @@ export async function runVerifiedWebSearch(query, options = {}) {
         enhanced.warning || ''
     ].filter(Boolean));
 
-    if (enhancedResults.length >= Math.min(3, limit) || !hasSerperKey()) {
-        return buildSearchSummary(enhancedResults, {
-            provider: 'public_sources',
-            publicSourceCount: enhancedResults.length,
-            geminiEnhanced: Boolean(enhanced.enhanced),
-            warnings
-        });
-    }
-
-    const serperResults = await searchSerper(query, { limit: Math.max(limit, 10) });
-    const merged = rankSearchResults(query, dedupeSearchResults([...enhancedResults, ...serperResults])).slice(0, limit);
-    return buildSearchSummary(merged, {
-        provider: enhancedResults.length ? 'public_sources+serper' : 'serper',
+    return buildSearchSummary(enhancedResults, {
+        provider: 'public_sources',
         publicSourceCount: enhancedResults.length,
         geminiEnhanced: Boolean(enhanced.enhanced),
-        warnings: buildSearchWarnings(merged, warnings)
+        warnings
     });
 }
 
