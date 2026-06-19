@@ -258,6 +258,17 @@ assert.match(SOURCE.appHtml, /crawl4ai_url_extract/);
 assert.match(SOURCE.appHtml, /\/api\/media-search/);
 assert.match(SOURCE.appHtml, /Related public images/);
 assert.match(SOURCE.appHtml, /data-public-media="true"/);
+assert.match(SOURCE.appHtml, /function isIntercityRouteRequest\(text\)/);
+assert.match(SOURCE.appHtml, /function parseRouteRequest\(text\)/);
+assert.match(SOURCE.appHtml, /function isPersonalOriginPhrase\(value\)/);
+assert.match(SOURCE.appHtml, /function resolveRouteEndpoint\(value, kind = 'place'\)/);
+assert.match(SOURCE.appHtml, /function fetchOsrmDrivingRoute\(origin, destination\)/);
+assert.match(SOURCE.appHtml, /function buildRouteGuidanceMessage\(routePlan\)/);
+assert.match(SOURCE.appHtml, /\(\?:from\\s\+\)\?my\\s\+location/);
+assert.match(SOURCE.appHtml, /\(\?:from\\s\+\)\?my\\s\+place/);
+assert.match(SOURCE.appHtml, /from\\s\+here/);
+assert.match(SOURCE.appHtml, /where\\s\+i\\s\+am/);
+assert.match(SOURCE.appHtml, /Open Maps for current traffic, train\/bus schedules, and exact route/);
 assert.match(SOURCE.appHtml, /where\\s\+a\\s\+i/);
 assert.match(SOURCE.appHtml, /origin_not_allowed/);
 assert.match(SOURCE.appHtml, /function buildContextCopilotBadgeHtml/);
@@ -344,6 +355,25 @@ vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'detectInputLanguageHint')
 assert.equal(languageSandbox.detectInputLanguageHint('hola, can you help me?').includes('English-Spanish'), true);
 assert.equal(languageSandbox.detectInputLanguageHint('hello தமிழ் help').includes('English-Tamil'), true);
 assert.equal(languageSandbox.detectInputLanguageHint('தமிழ்'), 'Tamil');
+
+const routeSandbox = {
+    normalizeIntentTypos(value) {
+        return String(value || '');
+    }
+};
+vm.createContext(routeSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isPersonalOriginPhrase'), routeSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'cleanRouteEndpoint'), routeSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'parseRouteRequest'), routeSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isIntercityRouteRequest'), routeSandbox);
+const chidambaramRoute = routeSandbox.parseRouteRequest('best route to Bangalore from Chidambaram');
+assert.equal(chidambaramRoute.origin, 'Chidambaram');
+assert.equal(chidambaramRoute.destination, 'Bangalore');
+const personalRoute = routeSandbox.parseRouteRequest('best route to Bangalore from my location');
+assert.equal(personalRoute.originNeedsGps, true);
+assert.equal(personalRoute.destination, 'Bangalore');
+assert.equal(routeSandbox.isIntercityRouteRequest('how to reach Bengaluru from Chidambaram'), true);
+assert.equal(routeSandbox.isPersonalOriginPhrase('from my place'), true);
 
 console.log('deterministic-checks-ok'); 
 
