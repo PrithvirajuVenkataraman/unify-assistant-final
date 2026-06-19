@@ -1,0 +1,140 @@
+﻿export const config = { maxDuration: 60 };
+import { applyApiSecurity } from './_lib/security.js';
+
+export default async function handler(req, res) {
+    try {
+        const guard = applyApiSecurity(req, res, {
+            methods: ['POST'],
+            routeKey: 'market-intel',
+            maxBodyBytes: 64 * 1024,
+            rateLimit: { max: 50, windowMs: 60 * 1000 }
+        });
+        if (guard.handled) return;
+
+        const mode = resolveMode(req.body);
+        if (mode === 'budget_plan') {
+            return await handleBudgetPlanLookup(req, res);
+        }
+        return res.status(503).json({
+            success: false,
+            disabled: true,
+            error: {
+                code: 'feature_disabled',
+                message: 'Live market, news, and exchange-rate retrieval is disabled.'
+            }
+        });
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            error: {
+                code: 'internal_error',
+                message: 'Budget planning failed.'
+            }
+        });
+    }
+}
+
+function resolveMode(body) {
+    const mode = String(body?.mode || body?.service || body?.type || '').trim().toLowerCase();
+    if (
+        mode === 'news' ||
+        mode === 'exchange' ||
+        mode === 'budget_plan' ||
+        mode === 'markets' ||
+        mode === 'market'
+    ) {
+        return mode === 'market' ? 'markets' : mode;
+    }
+
+    const hasExchangeShape = Boolean(body?.from || body?.to || body?.amount || body?.date);
+    if (hasExchangeShape) return 'exchange';
+
+    const hasBudgetShape = typeof body?.query === 'string' &&
+        /\b(budget|trip|travel|itinerary|under|within|days?)\b/i.test(String(body.query || ''));
+    if (hasBudgetShape) return 'budget_plan';
+
+    const hasNewsShape = Boolean(body?.category || body?.city || body?.countryCode);
+    if (hasNewsShape) return 'news';
+
+    return 'markets';
+}
+
+async function handleBudgetPlanLookup(req, res) {
+    const query = String(req.body?.query || '');
+    if (query.length > 1000) {
+        return res.status(413).json({
+            success: false,
+            error: { code: 'payload_too_large', message: 'Query is too long.' }
+        });
+    }
+
+    const parsed = parseBudgetQuery(query);
+    const plan = buildBudgetPlan(parsed);
+    return res.status(200).json({ success: true, plan });
+}
+
+function parseBudgetQuery(text) {
+    const query = String(text || '');
+
+    const budgetPhraseMatch = query.match(/\b(?:under|within|budget\s*(?:of)?|up to|max(?:imum)?(?: of)?)\s*(rs\.?|inr|usd|eur|gbp|\$)?\s*(\d+[\d,]*)\s*(usd|inr|eur|gbp)?\b/i);
+    const dollarMatch = budgetPhraseMatch ? null : query.match(/\$\s*(\d+[\d,]*)/i);
+    const trailingCurrencyMatch = budgetPhraseMatch || dollarMatch ? null : query.match(/\b(\d+[\d,]*)\s*(usd|inr|eur|gbp)\b/i);
+
+    const daysMatch = query.match(/(\d+)\s*(?:day|days|night|nights)/i);
+    const destinationMatch = query.match(/\b(?:to|in)\s+([a-zA-Z][a-zA-Z\s,.-]{1,60}?)(?=\s+(?:for|under|within|budget|up to|max(?:imum)?|\d+\s*(?:day|days|night|nights))\b|$)/i);
+
+    const amountToken = budgetPhraseMatch?.[2] || dollarMatch?.[1] || trailingCurrencyMatch?.[1] || '';
+    const currencyToken = budgetPhraseMatch
+        ? (budgetPhraseMatch[1] === '$' ? 'USD' : (budgetPhraseMatch[1] || budgetPhraseMatch[3] || ''))
+        : (dollarMatch ? 'USD' : trailingCurrencyMatch?.[2]);
+    const budget = amountToken ? Number(String(amountToken).replace(/,/g, '')) : 1200;
+    const currency = normalizeBudgetCurrency(currencyToken || 'USD');
+    const days = daysMatch ? Math.max(1, Number(daysMatch[1])) : 3;
+    const destination = destinationMatch ? destinationMatch[1].trim() : 'your destination';
+
+    return { budget, currency, days, destination };
+}
+
+function normalizeBudgetCurrency(input) {
+    const c = String(input || 'USD').toUpperCase();
+    if (['USD', 'INR', 'EUR', 'GBP'].includes(c)) return c;
+    return 'USD';
+}
+
+function buildBudgetPlan({ budget, currency, days, destination }) {
+    const weights = {
+        lodging: 0.4,
+        food: 0.25,
+        transport: 0.15,
+        activities: 0.15,
+        buffer: 0.05
+    };
+
+    const breakdown = {
+        lodging: roundMoney(budget * weights.lodging),
+        food: roundMoney(budget * weights.food),
+        transport: roundMoney(budget * weights.transport),
+        activities: roundMoney(budget * weights.activities),
+        buffer: roundMoney(budget * weights.buffer)
+    };
+
+    const dailyBudget = roundMoney(budget / days);
+    const tip = `Aim for stays around ${currency} ${roundMoney(breakdown.lodging / days)} per night and keep at least ${currency} ${breakdown.buffer} as emergency buffer.`;
+
+    return {
+        destination,
+        days,
+        currency,
+        totalBudget: roundMoney(budget),
+        breakdown,
+        dailyBudget,
+        createdAt: new Date().toISOString(),
+        title: `${days}-day budget trip to ${destination}`,
+        notes: 'Generated by JARVIS Budget Trip Planner',
+        tip
+    };
+}
+
+function roundMoney(value) {
+    return Math.round(Number(value) || 0);
+}
