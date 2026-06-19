@@ -3371,6 +3371,16 @@ function isLowSignalModelAnswer(text) {
     ].some(pattern => pattern.test(t));
 }
 
+function isUnsupportedRouteDistanceAnswer(userMessage, answerText) {
+    if (!isIntercityRouteRequest(userMessage)) return false;
+    const raw = String(answerText || '');
+    if (!raw.trim()) return false;
+    const hasNumericRouteClaim = /\b\d{2,4}(?:\.\d+)?\s*(?:km|kilometers?|mi|miles?|hours?|hrs?|minutes?|mins?)\b/i.test(raw);
+    if (!hasNumericRouteClaim) return false;
+    const hasGroundedMapSource = /\b(?:OSRM|OpenStreetMap|Google Maps|Driving route:|Transit\/train\/bus view:|Open Maps for current traffic)\b/i.test(raw);
+    return !hasGroundedMapSource;
+}
+
 function sanitizeWeakModelAnswer(answerText, userMessage) {
     const raw = String(answerText || '').trim();
     if (!raw) return '';
@@ -3400,6 +3410,9 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
     const looksLikeWeakExplainerTemplate =
         /follow these steps|quick recap|next thing to learn|to understand (its|the|this) meaning/i.test(raw) ||
         (/(\n|^)\s*1[\).:-]\s+/.test(raw) && /(\n|^)\s*2[\).:-]\s+/.test(raw));
+    if (isUnsupportedRouteDistanceAnswer(userMessage, raw)) {
+        return '';
+    }
     if (directQuery && looksLikeResearchSteps) {
         return '';
     }
@@ -16190,6 +16203,27 @@ Quick recap: ...
                 return;
             }
 
+            if (window.pendingRouteDisambiguation && /^\s*[1-5]\s*$/.test(cleanText)) {
+                const idx = Math.max(0, parseInt(cleanText.trim(), 10) - 1);
+                const pending = window.pendingRouteDisambiguation;
+                const chosen = Array.isArray(pending.options) ? pending.options[idx] : null;
+                if (chosen) {
+                    const resolved = {
+                        lat: Number(chosen.lat),
+                        lon: Number(chosen.lon),
+                        label: [chosen.city, chosen.state, chosen.country].filter(Boolean).join(', ') || chosen.displayName || chosen.input,
+                        input: chosen.displayName || '',
+                        source: 'nominatim'
+                    };
+                    const nextPlan = { ...pending.plan };
+                    if (pending.target === 'origin') nextPlan.originResolved = resolved;
+                    if (pending.target === 'destination') nextPlan.destinationResolved = resolved;
+                    window.pendingRouteDisambiguation = null;
+                    await handleDeterministicRouteRequest(nextPlan.raw || `${nextPlan.origin} to ${nextPlan.destination}`, nextPlan);
+                    return;
+                }
+            }
+
             if (window.pendingLocationDisambiguation && /^\s*[1-5]\s*$/.test(cleanText)) {
                 const idx = Math.max(0, parseInt(cleanText.trim(), 10) - 1);
                 const chosen = window.pendingLocationDisambiguation.options[idx];
@@ -16692,6 +16726,11 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const isRestaurantMatch = cleanText.toLowerCase().match(/\b(restaurants?|eat|eating|dining|meals?|lunch|dinner|breakfast|cafes?|place to eat|places to eat)\b/i);
             const isHotelMatch = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i);
             const isTransportMatch = cleanText.toLowerCase().match(/\b(transport|transportation|bus|train|taxi|uber|ola|auto|rickshaw|metro|subway|getting around|get around|how to reach|how do i get|travel to)\b/i);
+
+            if (isIntercityRouteRequest(text)) {
+                await handleDeterministicRouteRequest(text);
+                return;
+            }
 
             if (isRestaurantMatch || isHotelMatch || isTransportMatch) { 
 
@@ -17672,6 +17711,223 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             const toLon = Number(to?.lon);
             const toLat = Number(to?.lat);
             return `https://router.project-osrm.org/route/v1/driving/${fromLon},${fromLat};${toLon},${toLat}?overview=full&geometries=geojson&steps=false`;
+        }
+
+        function isPersonalOriginPhrase(value) {
+            const raw = String(value || '').trim().toLowerCase();
+            return /^(?:(?:from\s+)?my\s+location|(?:from\s+)?my\s+place|my\s+current\s+location|current\s+location|here|from\s+here|where\s+i\s+am|where\s+am\s+i|my\s+area|near\s+me)$/i.test(raw);
+        }
+
+        function cleanRouteEndpoint(value) {
+            return String(value || '')
+                .replace(/\b(?:please|best|route|directions?|way|travel|go|reach|get|from|to|between)\b/gi, ' ')
+                .replace(/[?.!,;:]+$/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        function parseRouteRequest(text) {
+            const raw = normalizeIntentTypos(String(text || '').trim());
+            if (!raw) return null;
+            const patterns = [
+                { pattern: /\b(?:best\s+)?(?:route|way|directions?)\s+(?:to|for)\s+(.+?)\s+from\s+(.+)$/i, order: 'destination_origin' },
+                { pattern: /\b(?:how\s+(?:to|do\s+i)\s+(?:go|reach|get|travel)\s+(?:to\s+)?)\s*(.+?)\s+from\s+(.+)$/i, order: 'destination_origin' },
+                { pattern: /\b(?:from)\s+(.+?)\s+(?:to)\s+(.+)$/i, order: 'origin_destination' },
+                { pattern: /\b(?:between)\s+(.+?)\s+(?:and)\s+(.+)$/i, order: 'origin_destination' },
+                { pattern: /\b(?:route|directions?)\s+from\s+(.+?)\s+to\s+(.+)$/i, order: 'origin_destination' },
+                { pattern: /\b(?:best\s+way\s+to\s+reach)\s+(.+?)\s+from\s+(.+)$/i, order: 'destination_origin' }
+            ];
+            for (const entry of patterns) {
+                const pattern = entry.pattern;
+                const match = raw.match(pattern);
+                if (!match) continue;
+                let origin = '';
+                let destination = '';
+                if (entry.order === 'origin_destination') {
+                    origin = cleanRouteEndpoint(match[1]);
+                    destination = cleanRouteEndpoint(match[2]);
+                } else {
+                    destination = cleanRouteEndpoint(match[1]);
+                    origin = cleanRouteEndpoint(match[2]);
+                }
+                if (!origin || !destination) continue;
+                const originNeedsGps = isPersonalOriginPhrase(origin);
+                return { origin, destination, originNeedsGps, raw };
+            }
+            return null;
+        }
+
+        function isIntercityRouteRequest(text) {
+            const parsed = parseRouteRequest(text);
+            if (!parsed) return false;
+            return Boolean(parsed.destination && (parsed.origin || parsed.originNeedsGps));
+        }
+
+        async function resolveRouteEndpoint(value, kind = 'place') {
+            const raw = String(value || '').trim();
+            if (kind === 'origin' && isPersonalOriginPhrase(raw)) {
+                const position = await getCurrentPositionAsync({
+                    enableHighAccuracy: true,
+                    timeout: 12000,
+                    maximumAge: 60000
+                });
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                return {
+                    lat,
+                    lon,
+                    label: 'your current location',
+                    input: raw,
+                    source: 'browser_geolocation'
+                };
+            }
+
+            const hasQualifier = /,|\b(india|usa|us|united states|uk|england|canada|australia)\b/i.test(raw);
+            const candidates = await geocodeLocationCandidates(raw, 5);
+            const valid = candidates.filter(item => Number.isFinite(item.lat) && Number.isFinite(item.lon));
+            if (!valid.length) return { unresolved: true, input: raw, kind };
+            const countries = new Set(valid.map(item => item.countryCode).filter(Boolean));
+            if (!hasQualifier && countries.size > 1) {
+                return { needsClarification: true, input: raw, kind, options: valid.slice(0, 5) };
+            }
+            const best = valid[0];
+            return {
+                lat: best.lat,
+                lon: best.lon,
+                label: [best.city, best.state, best.country].filter(Boolean).join(', ') || best.displayName || raw,
+                input: raw,
+                source: 'nominatim'
+            };
+        }
+
+        async function fetchOsrmDrivingRoute(origin, destination) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 7000);
+                const response = await fetch(buildOsrmRouteUrl(origin, destination), {
+                    signal: controller.signal,
+                    headers: { 'Accept': 'application/json' }
+                });
+                clearTimeout(timeoutId);
+                if (!response.ok) return null;
+                const data = await response.json();
+                const route = Array.isArray(data?.routes) ? data.routes[0] : null;
+                const distanceMeters = Number(route?.distance);
+                const durationSeconds = Number(route?.duration);
+                if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) return null;
+                return {
+                    distanceKm: distanceMeters / 1000,
+                    distanceMiles: distanceMeters / 1609.344,
+                    durationMinutes: Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds / 60 : null,
+                    source: 'OSRM public routing'
+                };
+            } catch (error) {
+                return null;
+            }
+        }
+
+        function buildRouteGuidanceMessage(routePlan) {
+            const origin = routePlan?.origin || {};
+            const destination = routePlan?.destination || {};
+            const route = routePlan?.route || null;
+            const originLabel = origin.label || routePlan?.originInput || 'origin';
+            const destinationLabel = destination.label || routePlan?.destinationInput || 'destination';
+            const mapsDrivingUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${origin.lat},${origin.lon}`)}&destination=${encodeURIComponent(`${destination.lat},${destination.lon}`)}&travelmode=driving`;
+            const mapsTransitUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${origin.lat},${origin.lon}`)}&destination=${encodeURIComponent(`${destination.lat},${destination.lon}`)}&travelmode=transit`;
+            const straightMiles = haversineMiles(origin.lat, origin.lon, destination.lat, destination.lon);
+            const lines = [
+                `Best route from ${originLabel} to ${destinationLabel}`,
+                ''
+            ];
+            if (route) {
+                const distanceText = `${route.distanceKm.toFixed(1)} km (${route.distanceMiles.toFixed(1)} miles)`;
+                const etaText = route.durationMinutes ? `; OSRM no-traffic driving estimate: ${Math.round(route.durationMinutes)} min` : '';
+                lines.push(`Approx driving distance from ${route.source}: ${distanceText}${etaText}.`);
+            } else {
+                lines.push(`I could not verify a road distance from OSRM. Straight-line distance only: ${formatDistanceKmWithMiles(straightMiles)}.`);
+            }
+            lines.push(
+                '',
+                'Practical options:',
+                '- Car/taxi: use the driving map link for the exact road route and current traffic.',
+                '- Train/bus: check live schedules before leaving; intercity services change by date and operator.',
+                '- If you need the fastest option, compare the driving and transit links at your departure time.',
+                '',
+                `Driving route: ${mapsDrivingUrl}`,
+                `Transit/train/bus view: ${mapsTransitUrl}`,
+                '',
+                'Open Maps for current traffic, train/bus schedules, and exact route.'
+            );
+            return lines.join('\n');
+        }
+
+        async function handleDeterministicRouteRequest(text, presetPlan = null) {
+            const parsed = presetPlan || parseRouteRequest(text);
+            if (!parsed) return false;
+            showThinkingIndicator('Checking route');
+            try {
+                const origin = parsed.originResolved || await resolveRouteEndpoint(parsed.origin, 'origin');
+                if (origin?.needsClarification) {
+                    window.pendingRouteDisambiguation = { plan: parsed, target: 'origin', options: origin.options };
+                    await deliverApiReply('location_disambiguation', {
+                        rawInput: origin.input,
+                        options: origin.options.map((o, i) => ({
+                            index: i + 1,
+                            label: [o.city, o.state, o.country].filter(Boolean).join(', ')
+                        })),
+                        replyInstruction: 'Reply with the number.'
+                    });
+                    return true;
+                }
+                if (origin?.unresolved) {
+                    addChatMessage(`I could not resolve the starting place "${parsed.origin}". Please include the state/country or use "from my location".`, false);
+                    return true;
+                }
+
+                const destination = parsed.destinationResolved || await resolveRouteEndpoint(parsed.destination, 'destination');
+                if (destination?.needsClarification) {
+                    window.pendingRouteDisambiguation = { plan: { ...parsed, originResolved: origin }, target: 'destination', options: destination.options };
+                    await deliverApiReply('location_disambiguation', {
+                        rawInput: destination.input,
+                        options: destination.options.map((o, i) => ({
+                            index: i + 1,
+                            label: [o.city, o.state, o.country].filter(Boolean).join(', ')
+                        })),
+                        replyInstruction: 'Reply with the number.'
+                    });
+                    return true;
+                }
+                if (destination?.unresolved) {
+                    addChatMessage(`I could not resolve the destination "${parsed.destination}". Please include the state/country.`, false);
+                    return true;
+                }
+
+                const route = await fetchOsrmDrivingRoute(origin, destination);
+                const message = buildRouteGuidanceMessage({
+                    origin,
+                    destination,
+                    route,
+                    originInput: parsed.origin,
+                    destinationInput: parsed.destination
+                });
+                addVerifiedAssistantMessage(message, route ? 'Map-grounded route' : 'Route needs map check');
+                saveToHistory(text, message);
+                return true;
+            } catch (error) {
+                if (parsed.originNeedsGps) {
+                    await deliverApiReply('gps_access_error', {
+                        feature: 'route_origin'
+                    }, {
+                        historyKey: text,
+                        fallbackText: 'I need location permission to use your current place as the route origin. Enable location access or ask with a named starting place, like "from Chidambaram".'
+                    });
+                    return true;
+                }
+                addChatMessage('I could not build that route right now. Please include both origin and destination with state/country if needed.', false);
+                return true;
+            } finally {
+                hideThinkingIndicator();
+            }
         }
 
         function shouldRefreshTripRouteGeometry(from, to, nowMs) {
