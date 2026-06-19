@@ -53,15 +53,18 @@ function applyCors(req, res) {
     const allowedOrigins = parseAllowedOrigins();
     const requestOrigin = String(req?.headers?.origin || '').trim();
     const production = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+    const requestHost = String(req?.headers?.['x-forwarded-host'] || req?.headers?.host || '').trim().toLowerCase();
+    const sameOrigin = isSameOriginRequest(requestOrigin, requestHost);
 
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     if (!allowedOrigins.length) {
-        if (production && requestOrigin) {
+        if (production && requestOrigin && !sameOrigin) {
             return { ok: false };
         }
-        if (!production) res.setHeader('Access-Control-Allow-Origin', '*');
+        if (sameOrigin) res.setHeader('Access-Control-Allow-Origin', requestOrigin);
+        if (!production && !sameOrigin) res.setHeader('Access-Control-Allow-Origin', '*');
         return { ok: true };
     }
 
@@ -77,6 +80,16 @@ function applyCors(req, res) {
     }
 
     return { ok: false };
+}
+
+function isSameOriginRequest(origin, host) {
+    if (!origin || !host) return false;
+    try {
+        const parsed = new URL(origin);
+        return parsed.host.toLowerCase() === host;
+    } catch (_) {
+        return false;
+    }
 }
 
 function applyRateLimit(req, res, options = {}) {
