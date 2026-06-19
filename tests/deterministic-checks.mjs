@@ -253,6 +253,8 @@ assert.match(SOURCE.appHtml, /gemini-2\.5-flash-lite/);
 assert.match(SOURCE.appHtml, /permanent-free public-source routing through Wikipedia, GDELT, RSS\/Atom, official shortcuts/);
 assert.match(SOURCE.appHtml, /Gemini may help planning, ranking, and snippets/);
 assert.match(SOURCE.appHtml, /no Serper, Brave, Tavily, paid API, or crawler is required/);
+assert.match(SOURCE.appHtml, /\/api\/extract-url/);
+assert.match(SOURCE.appHtml, /crawl4ai_url_extract/);
 assert.match(SOURCE.appHtml, /where\\s\+a\\s\+i/);
 assert.match(SOURCE.appHtml, /origin_not_allowed/);
 assert.match(SOURCE.appHtml, /function buildContextCopilotBadgeHtml/);
@@ -268,6 +270,9 @@ assert.match(SOURCE.appHtml, /\.replace\(\/\\brtamilnadu\\b\/gi, 'Tamil Nadu'\)/
 assert.doesNotMatch(SOURCE.appHtml, /customAutocorrectRules/);
 assert.match(SOURCE.readme, /Standout Feature: Context Copilot/);
 assert.match(SOURCE.readme, /local, deterministic, private, and free-for-life/);
+assert.match(SOURCE.readme, /Crawl4AI Shared Docker Extraction/);
+assert.match(SOURCE.readme, /CRAWL4AI_URL/);
+assert.match(SOURCE.readme, /Local Docker only works for you/);
 assert.match(SOURCE.appHtml, /localStorage when memory persistence is enabled/);
 assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
 
