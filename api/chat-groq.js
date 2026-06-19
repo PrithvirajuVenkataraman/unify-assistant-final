@@ -752,6 +752,8 @@ async function buildLiveRagContext(message, req, contextTurns = []) {
                     sourceLabel: String(result?.sourceLabel || result?.source || result?.domain || getHost(url)).trim(),
                     date: String(result?.date || '').trim(),
                     freshness: String(result?.freshness || '').trim(),
+                    evidenceLevel: String(result?.evidenceLevel || '').trim(),
+                    pageFetched: Boolean(result?.pageFetched),
                     qualitySignals: Array.isArray(result?.qualitySignals) ? result.qualitySignals : [],
                     trusted: Boolean(result?.trusted),
                     query: candidateQuery
@@ -1217,6 +1219,13 @@ function shouldUseAsFinalSource(message, item) {
 function isAnswerEvidenceSource(item) {
     const sourceType = String(item?.sourceType || '').trim();
     if (!sourceType || /^(reference_lookup|archive_lookup|community_discussion)$/.test(sourceType)) return false;
+    const title = String(item?.title || '').trim().toLowerCase();
+    const url = String(item?.url || '').trim().toLowerCase();
+    const domain = String(item?.domain || getHost(url)).trim().toLowerCase();
+    if (/search:|webcache|\/search(?:[/?#]|$)|[?&]q=/.test(`${title} ${url}`)) return false;
+    if (/archive\.(today|ph|is)|webcache/.test(domain || url)) return false;
+    if (sourceType === 'official_source' && !item?.pageFetched) return false;
+    if (item?.evidenceLevel === 'structured_claim') return true;
     const description = String(item?.description || '').trim();
     return sourceType === 'official_source' || description.length >= 20;
 }
