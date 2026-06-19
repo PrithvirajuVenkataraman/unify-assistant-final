@@ -11,6 +11,7 @@ const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
 const WIKIPEDIA_SEARCH_URL = 'https://en.wikipedia.org/w/api.php';
 const WIKIPEDIA_SUMMARY_URL = 'https://en.wikipedia.org/api/rest_v1/page/summary';
 const WIKIDATA_SEARCH_URL = 'https://www.wikidata.org/w/api.php';
+const WIKIDATA_SPARQL_URL = 'https://query.wikidata.org/sparql';
 const REDDIT_SEARCH_URL = 'https://www.reddit.com/search.json';
 const BRITANNICA_SEARCH_URL = 'https://www.britannica.com/search';
 const ARCHIVE_TODAY_SEARCH_URL = 'https://archive.today/search/';
@@ -27,6 +28,18 @@ const LOOKUP_ONLY_SOURCE_TYPES = new Set([
     'reference_lookup',
     'archive_lookup',
     'community_discussion'
+]);
+
+const GOVERNMENT_ROLE_ALIASES = Object.freeze([
+    { role: 'prime minister', pattern: /\bprime\s+minister\b|\bpm\b/i, property: 'P6' },
+    { role: 'chief minister', pattern: /\bchief\s+minister\b|\bcm\b/i, property: 'P39' },
+    { role: 'first minister', pattern: /\bfirst\s+minister\b/i, property: 'P39' },
+    { role: 'president', pattern: /\bpresident\b/i, property: 'P35' },
+    { role: 'governor', pattern: /\bgovernor\b/i, property: 'P39' },
+    { role: 'premier', pattern: /\bpremier\b/i, property: 'P39' },
+    { role: 'mayor', pattern: /\bmayor\b/i, property: 'P39' },
+    { role: 'head of government', pattern: /\bhead\s+of\s+government\b/i, property: 'P6' },
+    { role: 'head of state', pattern: /\bhead\s+of\s+state\b/i, property: 'P35' }
 ]);
 
 export const LIVE_SEARCH_DISABLED_RESPONSE = Object.freeze({
@@ -205,6 +218,7 @@ export async function searchPublicSources(query, options = {}) {
     const normalizedQuery = normalizeSearchQuery(query);
     if (!normalizedQuery) return [];
     const limit = clampInt(options.limit, 8, 1, 20);
+    const governmentRoleResults = await searchGovernmentRole(normalizedQuery, { limit: Math.min(3, limit) }).catch(() => []);
     const plannedQueries = Array.isArray(options.plannedQueries) && options.plannedQueries.length
         ? options.plannedQueries
         : [normalizedQuery];
@@ -223,6 +237,7 @@ export async function searchPublicSources(query, options = {}) {
     const referenceLookups = buildReferenceLookupResults(normalizedQuery, official.length);
     return settled
         .flatMap(result => result.status === 'fulfilled' ? result.value : [])
+        .concat(governmentRoleResults)
         .concat(official)
         .concat(referenceLookups)
         .filter(Boolean)
@@ -295,6 +310,54 @@ export async function searchWikidata(query, options = {}) {
     return hits
         .map((item, index) => normalizeWikidataItem(item, query, index))
         .filter(item => item.title && item.url);
+}
+
+export async function searchGovernmentRole(query, options = {}) {
+    const intent = parseGovernmentRoleQuery(query);
+    if (!intent) return [];
+    const limit = clampInt(options.limit, 3, 1, 6);
+    const jurisdiction = await resolveWikidataEntity(intent.jurisdiction);
+    if (!jurisdiction?.id) return [];
+    const sparql = buildGovernmentRoleSparql(intent, jurisdiction.id, limit);
+    const response = await fetchWithTimeout(`${WIKIDATA_SPARQL_URL}?query=${encodeURIComponent(sparql)}&format=json`, {
+        headers: {
+            Accept: 'application/sparql-results+json, application/json',
+            'User-Agent': 'JARVISAssistant/1.0 public-source-search'
+        }
+    }, PUBLIC_SOURCE_TIMEOUT_MS);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return normalizeGovernmentRoleBindings(data, intent, jurisdiction, query).slice(0, limit);
+}
+
+export async function resolveWikidataEntity(label) {
+    const query = normalizeSearchQuery(label);
+    if (!query) return null;
+    const url = new URL(WIKIDATA_SEARCH_URL);
+    url.searchParams.set('action', 'wbsearchentities');
+    url.searchParams.set('search', query);
+    url.searchParams.set('language', 'en');
+    url.searchParams.set('uselang', 'en');
+    url.searchParams.set('limit', '5');
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('origin', '*');
+    const response = await fetchWithTimeout(url.toString(), {
+        headers: { Accept: 'application/json' }
+    }, PUBLIC_SOURCE_TIMEOUT_MS);
+    if (!response.ok) return null;
+    const data = await response.json();
+    const hits = Array.isArray(data?.search) ? data.search : [];
+    const ranked = hits
+        .map((item, index) => ({
+            id: String(item?.id || '').trim(),
+            label: String(item?.label || '').trim(),
+            description: String(item?.description || '').trim(),
+            conceptUri: String(item?.concepturi || '').trim(),
+            score: scoreWikidataEntityCandidate(query, item, index)
+        }))
+        .filter(item => /^Q\d+$/.test(item.id) && item.label)
+        .sort((a, b) => b.score - a.score);
+    return ranked[0] || null;
 }
 
 export async function searchReddit(query, options = {}) {
@@ -500,8 +563,181 @@ function normalizeWikidataItem(item, query, index) {
         position: index + 1,
         trusted: true,
         qualitySignals: ['public_reference', 'structured_entity_data', 'trusted_source'],
+        evidenceLevel: 'reference_summary',
         query
     };
+}
+
+export function parseGovernmentRoleQuery(query) {
+    const raw = normalizeSearchQuery(query);
+    if (!raw) return null;
+    const roleEntry = GOVERNMENT_ROLE_ALIASES.find(item => item.pattern.test(raw));
+    if (!roleEntry) return null;
+
+    const roleTextMatch = raw.match(roleEntry.pattern);
+    const roleText = String(roleTextMatch?.[0] || roleEntry.role).trim();
+    const escapedRoleText = escapeRegex(roleText);
+    const patterns = [
+        new RegExp(`\\b(?:who\\s+is|what\\s+is)?\\s*(?:the\\s+)?(?:current\\s+|latest\\s+)?${escapedRoleText}\\s+(?:of|for|in)\\s+(.+?)[?.!]*$`, 'i'),
+        new RegExp(`\\b(.+?)\\s+(?:current\\s+|latest\\s+)?${escapedRoleText}\\b[?.!]*$`, 'i')
+    ];
+    let jurisdiction = '';
+    for (const pattern of patterns) {
+        const match = raw.match(pattern);
+        if (match?.[1]) {
+            jurisdiction = cleanGovernmentRoleJurisdiction(match[1]);
+            break;
+        }
+    }
+    if (!jurisdiction) {
+        const withoutLead = raw
+            .replace(/^\s*(who|what)\s+is\s+(?:the\s+)?/i, ' ')
+            .replace(/\b(current|latest|present|incumbent)\b/gi, ' ');
+        const parts = withoutLead.split(roleTextMatch?.[0] || roleEntry.role);
+        jurisdiction = cleanGovernmentRoleJurisdiction(parts[1] || parts[0] || '');
+    }
+    if (!jurisdiction || jurisdiction.length < 2) return null;
+    return {
+        role: roleEntry.role,
+        roleText,
+        jurisdiction,
+        property: roleEntry.property
+    };
+}
+
+function cleanGovernmentRoleJurisdiction(value) {
+    return String(value || '')
+        .replace(/\b(current|latest|present|incumbent|official|government|leader|office|holder|name|country|state|province)\b$/gi, ' ')
+        .replace(/^[,:\s]+|[,:\s?!.]+$/g, '')
+        .replace(/\s*,\s*/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function buildGovernmentRoleSparql(intent, jurisdictionId, limit = 3) {
+    const qid = String(jurisdictionId || '').trim();
+    if (!/^Q\d+$/.test(qid)) return '';
+    const roleFilter = escapeSparqlString(intent.role);
+    const directProperty = intent.property === 'P35' || intent.property === 'P6' ? intent.property : '';
+    const directBranch = directProperty
+        ? `{
+  wd:${qid} wdt:${directProperty} ?holder.
+  BIND("${escapeSparqlString(intent.role)}" AS ?officeLabel)
+  BIND("wdt:${directProperty}" AS ?claimType)
+}`
+        : '';
+    const unionPrefix = directBranch ? `${directBranch} UNION ` : '';
+    return `
+SELECT ?holder ?holderLabel ?office ?officeLabel ?start ?article ?claimType WHERE {
+  ${unionPrefix}{
+    ?holder p:P39 ?statement.
+    ?statement ps:P39 ?office.
+    FILTER NOT EXISTS { ?statement pq:P582 ?end. }
+    OPTIONAL { ?statement pq:P580 ?start. }
+    ?office rdfs:label ?officeLabel.
+    FILTER(LANG(?officeLabel) = "en")
+    FILTER(CONTAINS(LCASE(STR(?officeLabel)), "${roleFilter}"))
+    {
+      ?office wdt:P1001 wd:${qid}.
+    } UNION {
+      ?office wdt:P17 wd:${qid}.
+    } UNION {
+      ?holder wdt:P131* wd:${qid}.
+    }
+    BIND("p:P39" AS ?claimType)
+  }
+  OPTIONAL {
+    ?article schema:about ?holder;
+      schema:isPartOf <https://en.wikipedia.org/>.
+  }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}
+ORDER BY DESC(?start)
+LIMIT ${clampInt(limit, 3, 1, 6)}`;
+}
+
+function normalizeGovernmentRoleBindings(data, intent, jurisdiction, query) {
+    const bindings = Array.isArray(data?.results?.bindings) ? data.results.bindings : [];
+    return bindings
+        .map((binding, index) => normalizeGovernmentRoleBinding(binding, intent, jurisdiction, query, index))
+        .filter(item => item.title && item.url);
+}
+
+function normalizeGovernmentRoleBinding(binding, intent, jurisdiction, query, index) {
+    const holderName = bindingValue(binding?.holderLabel);
+    const holderUri = bindingValue(binding?.holder);
+    const holderId = extractWikidataId(holderUri);
+    const officeLabel = bindingValue(binding?.officeLabel) || intent.role;
+    const article = bindingValue(binding?.article);
+    const startDate = normalizeWikidataDate(bindingValue(binding?.start));
+    const url = holderId ? `https://www.wikidata.org/wiki/${holderId}` : holderUri;
+    const description = [
+        holderName && jurisdiction?.label ? `${holderName} is listed by Wikidata as current ${officeLabel} for ${jurisdiction.label}.` : '',
+        startDate ? `Start date: ${startDate}.` : '',
+        article ? `Wikipedia: ${article}` : ''
+    ].filter(Boolean).join(' ');
+    return {
+        title: holderName ? `${holderName} - ${officeLabel}` : officeLabel,
+        description: description || `Structured Wikidata claim for current ${intent.role} of ${jurisdiction?.label || intent.jurisdiction}.`,
+        url,
+        domain: getDomainFromUrl(url),
+        source: 'Wikidata',
+        sourceType: 'structured_reference',
+        sourceLabel: 'Wikidata structured role claim',
+        date: startDate,
+        freshness: 'current_structured_claim',
+        position: index + 1,
+        trusted: true,
+        qualitySignals: ['structured_entity_data', 'current_office_claim', 'trusted_source'],
+        evidenceLevel: 'structured_claim',
+        role: intent.role,
+        jurisdiction: jurisdiction?.label || intent.jurisdiction,
+        holderName,
+        wikidataId: holderId,
+        wikipediaUrl: article || '',
+        startDate,
+        query
+    };
+}
+
+function scoreWikidataEntityCandidate(query, item, index) {
+    const q = String(query || '').toLowerCase();
+    const label = String(item?.label || '').toLowerCase();
+    const description = String(item?.description || '').toLowerCase();
+    let score = Math.max(0, 20 - index);
+    if (label === q) score += 30;
+    if (label.includes(q) || q.includes(label)) score += 12;
+    if (/\b(country|sovereign state|state|province|city|municipality|administrative territorial entity|federal state)\b/.test(description)) {
+        score += 10;
+    }
+    if (/\b(disambiguation|family name|given name|film|song|album|book)\b/.test(description)) {
+        score -= 15;
+    }
+    return score;
+}
+
+function bindingValue(binding) {
+    return String(binding?.value || '').trim();
+}
+
+function extractWikidataId(value) {
+    const match = String(value || '').match(/\bQ\d+\b/);
+    return match ? match[0] : '';
+}
+
+function normalizeWikidataDate(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : raw;
+}
+
+function escapeRegex(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function escapeSparqlString(value) {
+    return String(value || '').toLowerCase().replace(/["\\]/g, '\\$&');
 }
 
 function normalizeRedditItem(item, query, index) {
@@ -804,6 +1040,7 @@ function scoreSearchResult(item, terms) {
     const description = String(item?.description || '').toLowerCase();
     const domain = String(item?.domain || '').toLowerCase();
     let score = 0;
+    if (item?.evidenceLevel === 'structured_claim') score += 45;
     if (item?.sourceType === 'official_source') score += 30;
     if (item?.trusted) score += 12;
     if (item?.sourceType === 'trusted_news') score += 8;
@@ -986,6 +1223,9 @@ export const __test = {
     searchGdeltNews,
     searchWikidata,
     searchReddit,
+    searchGovernmentRole,
+    parseGovernmentRoleQuery,
+    normalizeGovernmentRoleBindings,
     searchPublicSources,
     searchWikipedia,
     buildGeminiSearchPlan,
