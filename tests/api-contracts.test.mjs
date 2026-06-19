@@ -321,9 +321,130 @@ assert.equal(cachedLatestSearch.body.provider, 'latest_cache');
 assert.equal(cachedLatestSearch.body.results[0].sourceLabel, 'React Blog');
 clearItems();
 
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('api.coingecko.com/api/v3/simple/price')) {
+        return okJson({
+            bitcoin: {
+                usd: 65000,
+                inr: 5400000,
+                usd_24h_change: 1.25
+            }
+        });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
 const liveRequiredSearch = await callHandler(searchHandler, request('/api/search', { query: 'bitcoin price now', limit: 5 }));
-assert.equal(liveRequiredSearch.statusCode, 503);
-assert.equal(liveRequiredSearch.body.error.code, 'real_time_source_not_connected');
+assert.equal(liveRequiredSearch.statusCode, 200);
+assert.equal(liveRequiredSearch.body.success, true);
+assert.equal(liveRequiredSearch.body.provider, 'coingecko');
+assert.equal(liveRequiredSearch.body.category, 'crypto');
+assert.equal(liveRequiredSearch.body.results[0].sourceType, 'free_crypto_price');
+globalThis.fetch = ORIGINAL_FETCH;
+
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('geocoding-api.open-meteo.com')) {
+        return okJson({ results: [{ name: 'Chennai', admin1: 'Tamil Nadu', country: 'India', latitude: 13.08, longitude: 80.27 }] });
+    }
+    if (href.includes('api.open-meteo.com/v1/forecast')) {
+        return okJson({
+            current: { temperature_2m: 31, apparent_temperature: 35, relative_humidity_2m: 70, wind_speed_10m: 12 },
+            current_units: { temperature_2m: '°C', apparent_temperature: '°C', relative_humidity_2m: '%', wind_speed_10m: 'km/h' }
+        });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const weatherSearch = await callHandler(searchHandler, request('/api/search', { query: 'weather in Chennai', limit: 5 }));
+assert.equal(weatherSearch.statusCode, 200);
+assert.equal(weatherSearch.body.provider, 'open-meteo');
+assert.equal(weatherSearch.body.category, 'weather');
+assert.equal(weatherSearch.body.results[0].sourceType, 'free_weather');
+globalThis.fetch = ORIGINAL_FETCH;
+
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('eonet.gsfc.nasa.gov')) {
+        return okJson({
+            events: [{
+                title: 'Earthquake event',
+                categories: [{ title: 'Earthquakes' }],
+                geometry: [{ date: '2026-06-18T00:00:00Z' }],
+                sources: [{ url: 'https://eonet.gsfc.nasa.gov/events/example' }]
+            }]
+        });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const disasterSearch = await callHandler(searchHandler, request('/api/search', { query: 'earthquake updates today', limit: 5 }));
+assert.equal(disasterSearch.statusCode, 200);
+assert.equal(disasterSearch.body.provider, 'nasa-eonet');
+assert.equal(disasterSearch.body.category, 'disasters');
+assert.equal(disasterSearch.body.results[0].sourceType, 'free_disaster_event');
+globalThis.fetch = ORIGINAL_FETCH;
+
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('thesportsdb.com')) {
+        return okJson({ teams: [{ strTeam: 'Chennai Super Kings', strLeague: 'Indian Premier League', strWebsite: 'www.chennaisuperkings.com' }] });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const sportsSearch = await callHandler(searchHandler, request('/api/search', { query: 'IPL score now', limit: 5 }));
+assert.equal(sportsSearch.statusCode, 200);
+assert.equal(sportsSearch.body.provider, 'thesportsdb');
+assert.equal(sportsSearch.body.category, 'sports');
+assert.equal(sportsSearch.body.results[0].sourceType, 'free_sports_reference');
+globalThis.fetch = ORIGINAL_FETCH;
+
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('en.wikipedia.org/w/api.php')) {
+        return okJson({ query: { search: [{ title: 'Kochi', snippet: 'Kochi city.' }] } });
+    }
+    if (href.includes('en.wikipedia.org/api/rest_v1/page/summary')) {
+        return okJson({
+            title: 'Kochi',
+            extract: 'Kochi is a port city and tourism destination in Kerala.',
+            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Kochi' } }
+        });
+    }
+    if (href.includes('nominatim.openstreetmap.org/search')) {
+        return okJson([{ name: 'Kochi', display_name: 'Kochi, Kerala, India', osm_type: 'relation', osm_id: 123 }]);
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const tourismSearch = await callHandler(searchHandler, request('/api/search', { query: 'places to visit in Kochi', limit: 5 }));
+assert.equal(tourismSearch.statusCode, 200);
+assert.equal(tourismSearch.body.provider, 'wikimedia+openstreetmap');
+assert.equal(tourismSearch.body.category, 'tourism_food_places');
+assert.ok(tourismSearch.body.results.some(item => item.sourceType === 'free_reference'));
+assert.ok(tourismSearch.body.results.some(item => item.sourceType === 'free_place_data'));
+globalThis.fetch = ORIGINAL_FETCH;
+
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('en.wikipedia.org/w/api.php')) {
+        return okJson({ query: { search: [] } });
+    }
+    if (href.includes('api.gdeltproject.org')) {
+        return okJson({
+            articles: [{
+                title: 'France government update',
+                url: 'https://www.bbc.com/news/world-europe-france-government',
+                domain: 'bbc.com',
+                seendate: '20260618120000'
+            }]
+        });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const governmentSearch = await callHandler(searchHandler, request('/api/search', { query: 'latest government news in France', limit: 5 }));
+assert.equal(governmentSearch.statusCode, 200);
+assert.equal(governmentSearch.body.category, 'government');
+assert.equal(governmentSearch.body.provider, 'public_sources');
+assert.equal(governmentSearch.body.results[0].sourceLabel, 'bbc.com via GDELT');
+globalThis.fetch = ORIGINAL_FETCH;
 
 process.env.GEMINI_API_KEY = 'test-gemini-key';
 let geminiCallCount = 0;
@@ -412,34 +533,19 @@ const keyFingerprint = searchTest.getSerperKeyFingerprint();
 assert.equal(keyFingerprint.length, 10);
 assert.notEqual(keyFingerprint, 'test-serper-key');
 globalThis.fetch = async (url, init) => {
-    assert.equal(String(url), 'https://google.serper.dev/search');
-    assert.equal(init?.headers?.['X-API-KEY'], 'test-serper-key');
+    const href = String(url);
+    assert.doesNotMatch(href, /google\.serper\.dev/);
+    if (href.includes('en.wikipedia.org/w/api.php')) {
+        return okJson({ query: { search: [] } });
+    }
+    if (href.includes('api.gdeltproject.org')) {
+        return okJson({ articles: [] });
+    }
     return {
         ok: true,
         status: 200,
         async json() {
-            return {
-                organic: [
-                    {
-                        title: 'France facts',
-                        link: 'https://www.bbc.com/news/world-europe-17298730?x=1',
-                        snippet: 'France country profile and current background.',
-                        position: 1
-                    },
-                    {
-                        title: 'France facts duplicate',
-                        link: 'https://www.bbc.com/news/world-europe-17298730?x=2',
-                        snippet: 'Duplicate URL after query stripping.',
-                        position: 2
-                    },
-                    {
-                        title: 'Official France',
-                        link: 'https://www.diplomatie.gouv.fr/en/',
-                        snippet: 'Official French foreign ministry.',
-                        position: 3
-                    }
-                ]
-            };
+            return {};
         },
         async text() {
             return '';
@@ -449,9 +555,9 @@ globalThis.fetch = async (url, init) => {
 const enabledSearch = await callHandler(searchHandler, request('/api/search', { query: 'France facts', limit: 5 }));
 assert.equal(enabledSearch.statusCode, 200);
 assert.equal(enabledSearch.body.success, true);
-assert.equal(enabledSearch.body.results.length, 2);
-assert.deepEqual(enabledSearch.body.distinctDomains, ['bbc.com', 'diplomatie.gouv.fr']);
-assert.equal(enabledSearch.body.trustedCount, 1);
+assert.equal(enabledSearch.body.provider, 'public_sources');
+assert.equal(enabledSearch.body.results.length, 0);
+assert.ok(enabledSearch.body.warnings.some(item => /No public-source results/.test(item)));
 assert.equal(searchTest.isTrustedLiveSource('https://www.bbc.com/news'), true);
 const authError = searchTest.createSerperStatusError(401, '{"message":"Invalid API key abcdefghijklmnopqrstuvwxyz"}');
 assert.equal(authError.code, 'serper_auth_failed');
