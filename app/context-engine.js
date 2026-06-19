@@ -6,7 +6,7 @@ const INTENT_TERMS = Object.freeze({
     settingTargets: ['response', 'answer', 'dark', 'light', 'medical', 'support', 'news', 'memory', 'history', 'camera', 'vision', 'ocr', 'translator'],
     featureTargets: ['weather', 'forecast', 'trip', 'itinerary', 'travel', 'translate', 'translator', 'camera', 'ocr', 'scan', 'vision', 'remember', 'memory', 'export', 'delete all data'],
     followUpReferences: ['it', 'its', 'this', 'that', 'they', 'them', 'those', 'these', 'same', 'earlier', 'previous', 'above'],
-    followUpPhrases: [ 
+    followUpPhrases: [
         'more', 'continue', 'continue from earlier', 'explain further', 'tell me more',
         'what about', 'how about', 'then what', 'what next', 'further',
         'compare', 'compare it', 'show examples', 'show me examples', 'examples',
@@ -36,6 +36,7 @@ const EXPLICIT_SWITCH = switchPattern();
 const EXPLICIT_RESUME = containsPhrasePattern(INTENT_TERMS.resumePhrases);
 const SETTINGS_COMMAND = commandTargetPattern(['set', 'change', 'switch', 'turn', 'enable', 'disable'], INTENT_TERMS.settingTargets);
 const FEATURE_COMMAND = containsPhrasePattern(INTENT_TERMS.featureTargets);
+const STANDALONE_LIVE_REQUEST = /\b(?:weather|temperature|forecast|bitcoin|btc|ethereum|eth|crypto|price now|rate now|score now|live score|ipl|nba|nfl|epl|earthquake|wildfire|flood|cyclone|hurricane|tsunami|latest news|breaking news|government news|stock price|restaurants near me|places to visit)\b/i;
 
 const TOKEN_FILTER_WORDS = [
     'a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'than', 'is', 'are', 'am', 'was', 'were',
@@ -92,6 +93,7 @@ export function classifyInput(message, pending = null, activeThread = null) {
     const isCancel = CANCEL_COMMANDS.test(lower);
     const isSetting = SETTINGS_COMMAND.test(lower);
     const isFeatureCommand = FEATURE_COMMAND.test(lower);
+    const isStandaloneLiveRequest = STANDALONE_LIVE_REQUEST.test(originalMessage);
     const isAcknowledgement = ACKNOWLEDGEMENTS.test(lower);
     const isExplicitSwitch = EXPLICIT_SWITCH.test(lower);
     const isCorrection = CORRECTION_SIGNALS.test(originalMessage);
@@ -107,6 +109,7 @@ export function classifyInput(message, pending = null, activeThread = null) {
         (
             isExplicitSwitch ||
             isFeatureCommand ||
+            isStandaloneLiveRequest ||
             (startsClearRequest && !isFollowUp && Boolean(pending)) ||
             (startsClearRequest && !isFollowUp && topicOverlap === 0) ||
             (!pendingMatch && !isFollowUp && topicOverlap === 0)
@@ -119,6 +122,7 @@ export function classifyInput(message, pending = null, activeThread = null) {
         isCancel,
         isSetting,
         isFeatureCommand,
+        isStandaloneLiveRequest,
         isAcknowledgement,
         isExplicitSwitch,
         isFollowUp,
@@ -432,6 +436,7 @@ function shouldResolveAgainstActiveThread(message, classification, activeThread)
     const namedLikeNewTopic = new RegExp(`^(?:${phraseAlternation(INTENT_TERMS.entityQuestionLeads)})\\s+is\\s+[A-Za-z0-9][A-Za-z0-9 .'-]{2,}\\??$`, 'i').test(raw) && overlap === 0;
     const explicitNewObject = hasExplicitNewObject(raw) && overlap === 0 && !containsPhrasePattern(INTENT_TERMS.pronounTargets).test(raw);
 
+    if (classification?.isStandaloneLiveRequest && overlap === 0) return false;
     if (namedLikeNewTopic || bareShortQuestion || explicitNewObject) return false;
     if (overlap > 0) return true;
     if (explicitReference && hasTopicAnchor && tokens.length <= 5) return true;
