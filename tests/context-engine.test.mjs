@@ -4,7 +4,7 @@ import { createConversationEngine } from '../app/context-engine.js';
 function token(index) {
     return String.fromCharCode(97 + index).repeat(4);
 }
- 
+
 function titleToken(index) {
     const value = token(index);
     return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
@@ -196,6 +196,17 @@ copilot = contextCopilotEngine.resolve({ message: 'latest on it' });
 assert.equal(copilot.decisionReason, 'contextual_follow_up');
 assert.match(copilot.resolvedMessage, /\bISRO\b/i);
 recordExchange(contextCopilotEngine, isroThread, copilot.resolvedMessage, 'ISRO latest summary.');
+
+copilot = contextCopilotEngine.resolve({ message: 'Tell me about guitar chords work string' });
+assert.equal(copilot.decisionReason, 'clear_new_intent');
+const guitarThread = copilot.activeThread.id;
+recordExchange(contextCopilotEngine, guitarThread, copilot.resolvedMessage, 'Guitar chords summary.');
+
+copilot = contextCopilotEngine.resolve({ message: 'bitcoin price now' });
+assert.notEqual(copilot.decisionReason, 'contextual_follow_up');
+assertDoesNotUseThread(copilot, guitarThread, 'bitcoin price now must not inherit guitar context');
+assert.equal(copilot.resolvedMessage, 'bitcoin price now');
+assert.doesNotMatch(copilot.resolvedMessage, /\bguitar\b/i);
 
 copilot = contextCopilotEngine.resolve({ message: 'Tell me about NASA' });
 assert.equal(copilot.decisionReason, 'clear_new_intent');
