@@ -10,6 +10,10 @@ import { runFreeLiveSearch } from './_lib/free-live/providers.js';
 const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
 const WIKIPEDIA_SEARCH_URL = 'https://en.wikipedia.org/w/api.php';
 const WIKIPEDIA_SUMMARY_URL = 'https://en.wikipedia.org/api/rest_v1/page/summary';
+const WIKIDATA_SEARCH_URL = 'https://www.wikidata.org/w/api.php';
+const REDDIT_SEARCH_URL = 'https://www.reddit.com/search.json';
+const BRITANNICA_SEARCH_URL = 'https://www.britannica.com/search';
+const ARCHIVE_TODAY_SEARCH_URL = 'https://archive.today/search/';
 const GDELT_DOC_URL = 'https://api.gdeltproject.org/api/v2/doc/doc';
 const GEMINI_GENERATE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const SEARCH_TIMEOUT_MS = 8_000;
@@ -52,7 +56,12 @@ const TRUSTED_SOURCE_HOSTS = Object.freeze([
     'gov.uk',
     'usa.gov',
     'wikipedia.org',
-    'wikidata.org'
+    'wikidata.org',
+    'britannica.com',
+    'reddit.com',
+    'archive.today',
+    'archive.ph',
+    'archive.is'
 ]);
 
 const OFFICIAL_SOURCE_SHORTCUTS = Object.freeze([
@@ -194,12 +203,16 @@ export async function searchPublicSources(query, options = {}) {
     ])).slice(0, 5);
     const settled = await Promise.allSettled(querySet.flatMap(candidate => [
         searchWikipedia(candidate, { limit: Math.min(4, limit) }),
+        searchWikidata(candidate, { limit: Math.min(3, limit) }),
+        searchReddit(candidate, { limit: Math.min(3, limit) }),
         searchGdeltNews(candidate, { limit })
     ]));
     const official = getOfficialSourceShortcuts(normalizedQuery).map((item, index) => normalizeOfficialShortcut(item, normalizedQuery, index));
+    const referenceLookups = buildReferenceLookupResults(normalizedQuery, official.length);
     return settled
         .flatMap(result => result.status === 'fulfilled' ? result.value : [])
         .concat(official)
+        .concat(referenceLookups)
         .filter(Boolean)
         .slice(0, Math.max(limit, 8));
 }
@@ -247,6 +260,50 @@ export async function searchGdeltNews(query, options = {}) {
     const articles = Array.isArray(data?.articles) ? data.articles : [];
     return articles
         .map((item, index) => normalizeGdeltItem(item, query, index))
+        .filter(item => item.title && item.url);
+}
+
+export async function searchWikidata(query, options = {}) {
+    const limit = clampInt(options.limit, 3, 1, 10);
+    const url = new URL(WIKIDATA_SEARCH_URL);
+    url.searchParams.set('action', 'wbsearchentities');
+    url.searchParams.set('search', query);
+    url.searchParams.set('language', 'en');
+    url.searchParams.set('uselang', 'en');
+    url.searchParams.set('limit', String(limit));
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('origin', '*');
+
+    const response = await fetchWithTimeout(url.toString(), {
+        headers: { Accept: 'application/json' }
+    }, PUBLIC_SOURCE_TIMEOUT_MS);
+    if (!response.ok) return [];
+    const data = await response.json();
+    const hits = Array.isArray(data?.search) ? data.search : [];
+    return hits
+        .map((item, index) => normalizeWikidataItem(item, query, index))
+        .filter(item => item.title && item.url);
+}
+
+export async function searchReddit(query, options = {}) {
+    const limit = clampInt(options.limit, 3, 1, 10);
+    const url = new URL(REDDIT_SEARCH_URL);
+    url.searchParams.set('q', query);
+    url.searchParams.set('limit', String(limit));
+    url.searchParams.set('sort', 'relevance');
+    url.searchParams.set('t', 'year');
+
+    const response = await fetchWithTimeout(url.toString(), {
+        headers: {
+            Accept: 'application/json',
+            'User-Agent': 'JARVISAssistant/1.0 public-source-search'
+        }
+    }, PUBLIC_SOURCE_TIMEOUT_MS);
+    if (!response.ok) return [];
+    const data = await response.json();
+    const posts = Array.isArray(data?.data?.children) ? data.data.children : [];
+    return posts
+        .map((entry, index) => normalizeRedditItem(entry?.data || entry, query, index))
         .filter(item => item.title && item.url);
 }
 
@@ -410,6 +467,95 @@ function normalizeGdeltItem(item, query, index) {
         ].filter(Boolean),
         query
     };
+}
+
+function normalizeWikidataItem(item, query, index) {
+    const id = String(item?.id || '').trim();
+    const title = String(item?.label || item?.title || id).trim();
+    const description = String(item?.description || item?.match?.text || '').replace(/\s+/g, ' ').trim();
+    const url = id ? `https://www.wikidata.org/wiki/${encodeURIComponent(id)}` : String(item?.concepturi || '').trim();
+    const domain = getDomainFromUrl(url);
+    return {
+        title,
+        description: description || 'Structured public entity data from Wikidata.',
+        url,
+        domain,
+        source: 'Wikidata',
+        sourceType: 'structured_reference',
+        sourceLabel: 'Wikidata',
+        date: '',
+        freshness: 'reference',
+        position: index + 1,
+        trusted: true,
+        qualitySignals: ['public_reference', 'structured_entity_data', 'trusted_source'],
+        query
+    };
+}
+
+function normalizeRedditItem(item, query, index) {
+    const permalink = String(item?.permalink || '').trim();
+    const url = permalink
+        ? `https://www.reddit.com${permalink}`
+        : String(item?.url || '').trim();
+    const domain = getDomainFromUrl(url);
+    const createdUtc = Number(item?.created_utc);
+    const date = Number.isFinite(createdUtc) && createdUtc > 0
+        ? new Date(createdUtc * 1000).toISOString()
+        : '';
+    const subreddit = String(item?.subreddit_name_prefixed || item?.subreddit || '').trim();
+    return {
+        title: String(item?.title || '').replace(/\s+/g, ' ').trim(),
+        description: [
+            subreddit ? `Community discussion: ${subreddit}` : 'Community discussion on Reddit.',
+            Number.isFinite(Number(item?.score)) ? `Score: ${Number(item.score)}` : '',
+            Number.isFinite(Number(item?.num_comments)) ? `Comments: ${Number(item.num_comments)}` : ''
+        ].filter(Boolean).join(' | '),
+        url,
+        domain,
+        source: subreddit || 'Reddit',
+        sourceType: 'community_discussion',
+        sourceLabel: subreddit ? `${subreddit} on Reddit` : 'Reddit',
+        date,
+        freshness: date ? 'community_dated' : 'community',
+        position: index + 1,
+        trusted: false,
+        qualitySignals: ['public_discussion', 'community_source'],
+        query
+    };
+}
+
+function buildReferenceLookupResults(query, offset = 0) {
+    const cleanQuery = normalizeSearchQuery(query);
+    if (!cleanQuery) return [];
+    const encoded = encodeURIComponent(cleanQuery);
+    return [
+        {
+            title: `Britannica search: ${cleanQuery}`,
+            description: 'Reference lookup on Britannica. Use to cross-check encyclopedia-style background.',
+            url: `${BRITANNICA_SEARCH_URL}?query=${encoded}`,
+            source: 'Britannica',
+            sourceType: 'reference_lookup',
+            sourceLabel: 'Britannica',
+            qualitySignals: ['reference_lookup', 'encyclopedia_cross_check']
+        },
+        {
+            title: `archive.today search: ${cleanQuery}`,
+            description: 'Archive lookup for saved snapshots. Useful when a source page changed or disappeared.',
+            url: `${ARCHIVE_TODAY_SEARCH_URL}?q=${encoded}`,
+            source: 'archive.today',
+            sourceType: 'archive_lookup',
+            sourceLabel: 'archive.today',
+            qualitySignals: ['archive_lookup', 'snapshot_cross_check']
+        }
+    ].map((item, index) => ({
+        ...item,
+        domain: getDomainFromUrl(item.url),
+        date: '',
+        freshness: 'lookup',
+        position: offset + index + 1,
+        trusted: item.source === 'Britannica',
+        query: cleanQuery
+    }));
 }
 
 function normalizeOfficialShortcut(item, query, index) {
@@ -649,6 +795,10 @@ function scoreSearchResult(item, terms) {
     if (item?.trusted) score += 12;
     if (item?.sourceType === 'trusted_news') score += 8;
     if (item?.sourceType === 'encyclopedia') score += 4;
+    if (item?.sourceType === 'structured_reference') score += 3;
+    if (item?.sourceType === 'community_discussion') score -= 6;
+    if (item?.sourceType === 'reference_lookup') score -= 12;
+    if (item?.sourceType === 'archive_lookup') score -= 16;
     for (const term of terms) {
         if (title.includes(term)) score += 5;
         if (domain.includes(term)) score += 4;
@@ -812,6 +962,8 @@ export const __test = {
     normalizeSerperResults,
     runVerifiedWebSearch,
     searchGdeltNews,
+    searchWikidata,
+    searchReddit,
     searchPublicSources,
     searchWikipedia,
     buildGeminiSearchPlan,
