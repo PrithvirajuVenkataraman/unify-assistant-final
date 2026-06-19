@@ -997,7 +997,7 @@ function buildJarvisTechStackReply() {
         '',
         'AI models: Groq is tried first when GROQ_API_KEY is configured, with candidates like openai/gpt-oss-120b, openai/gpt-oss-20b, llama-3.3-70b-versatile, and llama-3.1-8b-instant. Gemini is the fallback when GEMINI_API_KEY or GOOGLE_API_KEY is configured, with candidates like gemini-3.5-flash, gemini-2.5-flash, gemini-2.5-flash-lite, and gemini-2.0-flash.',
         '',
-        'Live facts: permanent-free public-source routing through Wikipedia, GDELT, RSS/Atom, official shortcuts, Open-Meteo, CoinGecko, NASA EONET, Wikimedia, and OpenStreetMap where supported. Gemini may help planning, ranking, and snippets, but no Serper, Brave, Tavily, paid API, or crawler is required.',
+        'Live facts: permanent-free public-source routing through Wikipedia, Wikidata, GDELT, RSS/Atom, official shortcuts, Open-Meteo, CoinGecko, NASA EONET, Wikimedia, OpenStreetMap, Britannica lookup, Reddit discussion lookup, and archive.today snapshot lookup where supported. Gemini may help planning, ranking, and snippets, but no Serper, Brave, Tavily, paid API, or crawler is required.',
         '',
         'Memory: device-local memory and chat history are stored in localStorage when memory persistence is enabled. It remembers simple user facts like where you put things, plus local preferences and history. There is no external database in this repo.',
         '',
@@ -12974,7 +12974,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         ? getOfficialCompanySourceHints(subject).join(' ')
         : '';
     const officialDomainHints = entityIntent.domain === 'politics'
-        ? 'site:india.gov.in OR site:tn.gov.in OR site:assembly.tn.gov.in OR site:eci.gov.in OR official government source Reuters AP BBC Wikipedia Britannica'
+        ? 'site:india.gov.in OR site:tn.gov.in OR site:assembly.tn.gov.in OR site:eci.gov.in OR official government source Reuters AP BBC Wikipedia Wikidata Britannica Reddit archive.today'
         : entityIntent.domain === 'space_science'
             ? 'site:nasa.gov OR site:isro.gov.in OR site:esa.int OR site:jaxa.jp OR Reuters'
             : entityIntent.domain === 'arts_literature'
