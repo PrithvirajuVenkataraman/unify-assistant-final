@@ -3586,6 +3586,74 @@ async function prepareApiReply(intent, data = {}, fallbackText = '') {
     return reply || fallbackText;
 }
 
+function extractFirstHttpUrl(text) {
+    const match = String(text || '').match(/https?:\/\/[^\s<>"')\]]+/i);
+    return match ? match[0].replace(/[.,!?;:]+$/g, '') : '';
+}
+
+function isUrlGroundedExtractionRequest(text) {
+    const url = extractFirstHttpUrl(text);
+    if (!url) return false;
+    return /\b(summarize|summary|explain|verify|check|read|extract|what does|what is this|use this|from this|about this)\b/i.test(text);
+}
+
+async function fetchExtractedUrlContext(userText) {
+    const url = extractFirstHttpUrl(userText);
+    if (!url) return null;
+    const response = await fetch('/api/extract-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            url,
+            query: userText,
+            textLimit: 12000,
+            respectRobots: true
+        })
+    });
+    const data = await parseJsonResponseSafely(response);
+    if (!response.ok || data?.success === false) {
+        const code = String(data?.error?.code || '').trim();
+        if (code === 'crawl4ai_not_configured') return null;
+        throw new Error(String(data?.error?.message || 'URL extraction failed.'));
+    }
+    return data?.result || null;
+}
+
+async function handleUrlGroundedExtractionRequest(userText) {
+    if (!isUrlGroundedExtractionRequest(userText)) return false;
+    let extracted = null;
+    try {
+        showThinkingIndicator('Reading URL');
+        extracted = await fetchExtractedUrlContext(userText);
+    } catch (error) {
+        addChatMessage(String(error?.message || 'I could not extract that URL right now.'), false);
+        saveToHistory(userText, String(error?.message || 'URL extraction failed.'));
+        return true;
+    }
+    if (!extracted) return false;
+
+    const sourceText = String(extracted.markdown || extracted.text || '').trim().slice(0, 12000);
+    if (!sourceText) return false;
+    const result = await askGeminiAI(userText, {
+        intent: 'selection_custom',
+        grounding: {
+            selectedText: sourceText,
+            sourceAnswer: `URL: ${extracted.url}\nTitle: ${extracted.title}\n\n${sourceText}`,
+            originalRequest: userText,
+            customInstruction: `Answer the user's URL-grounded request using only the extracted page content. Cite this source URL: ${extracted.url}`
+        }
+    });
+    if (result?.aborted) return true;
+    const answer = String(result?.response || result?.text || '').trim();
+    if (!answer) return false;
+    const finalAnswer = `${answer}\n\nSource: [${extracted.title || extracted.url}](${extracted.url})`;
+    await publishResolvedModelMessage(userText, finalAnswer, {
+        label: 'URL extraction',
+        routing: result?.routing || null
+    });
+    return true;
+}
+
 function queueApiReply(intent, data = {}, fallbackText = '') {
     void prepareApiReply(intent, data, fallbackText);
 }
@@ -15372,6 +15440,11 @@ function detectInputLanguageHint(text) {
             if (isWordMeaningRequest(compact)) {
                 const handledMeaning = await handleWordMeaningRequest(text);
                 if (handledMeaning) return;
+            }
+
+            if (await handleUrlGroundedExtractionRequest(compact)) {
+                logRoutingDebug('processCommand -> crawl4ai_url_extract', compact, { selectedHandler: 'handleUrlGroundedExtractionRequest' });
+                return;
             }
 
             if (/\b(daily brief|my brief|today brief|morning brief)\b/i.test(compact)) {
