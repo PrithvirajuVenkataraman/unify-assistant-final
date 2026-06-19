@@ -674,6 +674,9 @@ function normalizeIntentTypos(text) {
     const raw = String(text || ''); 
     if (!raw.trim()) return ''; 
     const targeted = raw 
+        .replace(/\bwhere\s+a\s+i\b/gi, 'where am I')
+        .replace(/\bwhere\s+am\b[?.!]*$/gi, 'where am I')
+        .replace(/\bwhere\s+i\s+am\b/gi, 'where am I')
         .replace(/\bcief\b/gi, 'chief') 
         .replace(/\brtamil\s*nadu\b/gi, 'Tamil Nadu') 
         .replace(/\brtamilnadu\b/gi, 'Tamil Nadu') 
@@ -1036,7 +1039,7 @@ function buildJarvisTechStackReply() {
         '',
         'AI models: Groq is tried first when GROQ_API_KEY is configured, with candidates like openai/gpt-oss-120b, openai/gpt-oss-20b, llama-3.3-70b-versatile, and llama-3.1-8b-instant. Gemini is the fallback when GEMINI_API_KEY or GOOGLE_API_KEY is configured, with candidates like gemini-3.5-flash, gemini-2.5-flash, gemini-2.5-flash-lite, and gemini-2.0-flash.',
         '',
-        'Live search: free public-source aggregation through Wikipedia, GDELT, and official shortcuts first, optionally Gemini-assisted for query planning, ranking, and snippets, with optional Serper via SERPER_API_KEY fallback, normalized through /api/search when live retrieval is enabled.',
+        'Live facts: permanent-free public-source routing through Wikipedia, GDELT, RSS/Atom, official shortcuts, Open-Meteo, CoinGecko, NASA EONET, Wikimedia, and OpenStreetMap where supported. Gemini may help planning, ranking, and snippets, but no Serper, Brave, Tavily, paid API, or crawler is required.',
         '',
         'Memory: device-local memory and chat history are stored in localStorage when memory persistence is enabled. It remembers simple user facts like where you put things, plus local preferences and history. There is no external database in this repo.',
         '',
@@ -4012,6 +4015,9 @@ let showRoutingDebugBadge = false;
             if (!raw.trim()) return '';
 
             const targeted = raw 
+                .replace(/\bwhere\s+a\s+i\b/gi, 'where am I')
+                .replace(/\bwhere\s+am\b[?.!]*$/gi, 'where am I')
+                .replace(/\bwhere\s+i\s+am\b/gi, 'where am I')
                 .replace(/\bcief\b/gi, 'chief') 
                 .replace(/\brtamil\s*nadu\b/gi, 'Tamil Nadu') 
                 .replace(/\brtamilnadu\b/gi, 'Tamil Nadu') 
@@ -7508,7 +7514,7 @@ function formatLiveSearchFailureMessage(data = {}, status = 0) {
         return 'Live search is temporarily disabled.';
     }
 
-    const error = String(data?.error || '').trim();
+    const error = String(data?.error?.code || data?.error?.message || data?.error || '').trim();
     const providerError = Array.isArray(data?.providerErrors) && data.providerErrors.length
         ? String(data.providerErrors[0]?.error || '').trim()
         : '';
@@ -7519,7 +7525,10 @@ function formatLiveSearchFailureMessage(data = {}, status = 0) {
         return 'Live search is temporarily disabled.';
     }
     if (status === 404) return 'Live search failed because /api/search was not found in this deployment.';
-    if (status === 401 || status === 403) return 'Live search failed because the search provider rejected the request.';
+    if (status === 403 && /origin_not_allowed/i.test(error || providerError)) {
+        return 'This deployment is blocking same-origin API calls. Add the site URL to CORS_ALLOWED_ORIGINS or allow same-origin requests.';
+    }
+    if (status === 401 || status === 403) return 'Live search failed because the public-source route rejected the request.';
     if (status === 429) return 'Live search is temporarily rate limited. Please retry shortly.';
     if (status >= 500) return `Live search provider failed${providerError || error ? `: ${providerError || error}` : '.'}`;
     if (error || providerError) return `Live search failed: ${providerError || error}`;
