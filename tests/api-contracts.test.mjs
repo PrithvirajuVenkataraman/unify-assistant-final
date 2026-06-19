@@ -341,6 +341,7 @@ assert.equal(publicSearch.body.provider, 'public_sources');
 assert.equal(publicSearch.body.results.length, 4);
 assert.deepEqual(publicSearch.body.distinctDomains, ['bbc.com', 'en.wikipedia.org', 'britannica.com', 'archive.today']);
 assert.equal(publicSearch.body.trustedCount, 3);
+assert.equal(publicSearch.body.answerEvidenceCount, 2);
 assert.equal(publicSearch.body.geminiEnhanced, false);
 assert.equal(publicSearch.body.results[0].sourceLabel, 'bbc.com via GDELT');
 assert.ok(publicSearch.body.results.some(item => item.sourceType === 'reference_lookup' && item.sourceLabel === 'Britannica'));
@@ -363,6 +364,23 @@ assert.equal(officialShortcutSearch.body.success, true);
 assert.equal(officialShortcutSearch.body.provider, 'public_sources');
 assert.ok(officialShortcutSearch.body.results.some(item => item.domain === 'isro.gov.in'));
 assert.ok(officialShortcutSearch.body.results.some(item => item.sourceType === 'official_source'));
+globalThis.fetch = ORIGINAL_FETCH;
+
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('en.wikipedia.org/w/api.php')) {
+        return okJson({ query: { search: [] } });
+    }
+    if (href.includes('api.gdeltproject.org')) {
+        return okJson({ articles: [] });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const tamilNaduCmShortcutSearch = await callHandler(searchHandler, request('/api/search', { query: 'Chief minister of Tamil Nadu, India', limit: 5 }));
+assert.equal(tamilNaduCmShortcutSearch.statusCode, 200);
+assert.equal(tamilNaduCmShortcutSearch.body.success, true);
+assert.ok(tamilNaduCmShortcutSearch.body.results.some(item => item.sourceLabel === 'Tamil Nadu Chief Minister official'));
+assert.ok(tamilNaduCmShortcutSearch.body.results.some(item => item.domain === 'tn.gov.in'));
 globalThis.fetch = ORIGINAL_FETCH;
 
 clearItems();
@@ -616,8 +634,10 @@ assert.equal(enabledSearch.statusCode, 200);
 assert.equal(enabledSearch.body.success, true);
 assert.equal(enabledSearch.body.provider, 'public_sources');
 assert.equal(enabledSearch.body.results.length, 2);
+assert.equal(enabledSearch.body.answerEvidenceCount, 0);
 assert.ok(enabledSearch.body.results.some(item => item.sourceType === 'reference_lookup'));
 assert.ok(enabledSearch.body.results.some(item => item.sourceType === 'archive_lookup'));
+assert.ok(enabledSearch.body.warnings.some(item => /Only lookup or discussion links/.test(item)));
 assert.equal(searchTest.isTrustedLiveSource('https://www.bbc.com/news'), true);
 const authError = searchTest.createSerperStatusError(401, '{"message":"Invalid API key abcdefghijklmnopqrstuvwxyz"}');
 assert.equal(authError.code, 'serper_auth_failed');
