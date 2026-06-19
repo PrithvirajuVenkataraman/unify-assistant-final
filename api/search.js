@@ -30,7 +30,13 @@ const LOOKUP_ONLY_SOURCE_TYPES = new Set([
     'community_discussion'
 ]);
 
+const COMMON_QUERY_TERMS = new Set([
+    'who', 'what', 'when', 'where', 'which', 'current', 'latest', 'present',
+    'the', 'of', 'for', 'in', 'is', 'are', 'and', 'or', 'official', 'source'
+]);
+
 const GOVERNMENT_ROLE_ALIASES = Object.freeze([
+    { role: 'ceo', pattern: /\bceo\b|\bchief\s+executive\s+officer\b/i, property: 'P169', organizationRole: true },
     { role: 'prime minister', pattern: /\bprime\s+minister\b|\bpm\b/i, property: 'P6' },
     { role: 'chief minister', pattern: /\bchief\s+minister\b|\bcm\b/i, property: 'P39' },
     { role: 'first minister', pattern: /\bfirst\s+minister\b/i, property: 'P39' },
@@ -233,7 +239,8 @@ export async function searchPublicSources(query, options = {}) {
         searchReddit(candidate, { limit: Math.min(3, limit) }),
         searchGdeltNews(candidate, { limit })
     ]));
-    const official = getOfficialSourceShortcuts(normalizedQuery).map((item, index) => normalizeOfficialShortcut(item, normalizedQuery, index));
+    const official = await Promise.all(getOfficialSourceShortcuts(normalizedQuery)
+        .map((item, index) => normalizeOfficialShortcut(item, normalizedQuery, index)));
     const referenceLookups = buildReferenceLookupResults(normalizedQuery, official.length);
     return settled
         .flatMap(result => result.status === 'fulfilled' ? result.value : [])
@@ -435,17 +442,18 @@ export async function runVerifiedWebSearch(query, options = {}) {
         queries: [],
         warning: `gemini_query_planning_failed:${String(error?.code || error?.message || 'unknown')}`
     }));
-    const publicResults = rankSearchResults(query, dedupeSearchResults(await searchPublicSources(query, {
+    const publicResults = rankSources(query, dedupeSearchResults(await searchPublicSources(query, {
         limit,
         plannedQueries: planning.queries
-    }))).slice(0, limit);
+    })).filter(item => isValidCitationSource(item, query))).slice(0, limit);
     let warnings = buildSearchWarnings(publicResults, planning.warning ? [planning.warning] : []);
     const enhanced = await enhanceResultsWithGemini(query, publicResults, { limit }).catch(error => ({
         results: publicResults,
         enhanced: false,
         warning: `gemini_enhancement_failed:${String(error?.code || error?.message || 'unknown')}`
     }));
-    const enhancedResults = rankSearchResults(query, dedupeSearchResults(enhanced.results || publicResults)).slice(0, limit);
+    const enhancedResults = rankSources(query, dedupeSearchResults(enhanced.results || publicResults)
+        .filter(item => isValidCitationSource(item, query))).slice(0, limit);
     warnings = buildSearchWarnings(enhancedResults, [
         ...warnings,
         enhanced.warning || ''
@@ -618,7 +626,7 @@ function buildGovernmentRoleSparql(intent, jurisdictionId, limit = 3) {
     const qid = String(jurisdictionId || '').trim();
     if (!/^Q\d+$/.test(qid)) return '';
     const roleFilter = escapeSparqlString(intent.role);
-    const directProperty = intent.property === 'P35' || intent.property === 'P6' ? intent.property : '';
+    const directProperty = ['P35', 'P6', 'P169'].includes(intent.property) ? intent.property : '';
     const directBranch = directProperty
         ? `{
   wd:${qid} wdt:${directProperty} ?holder.
@@ -626,10 +634,7 @@ function buildGovernmentRoleSparql(intent, jurisdictionId, limit = 3) {
   BIND("wdt:${directProperty}" AS ?claimType)
 }`
         : '';
-    const unionPrefix = directBranch ? `${directBranch} UNION ` : '';
-    return `
-SELECT ?holder ?holderLabel ?office ?officeLabel ?start ?article ?claimType WHERE {
-  ${unionPrefix}{
+    const p39Branch = intent.organizationRole ? '' : `{
     ?holder p:P39 ?statement.
     ?statement ps:P39 ?office.
     FILTER NOT EXISTS { ?statement pq:P582 ?end. }
@@ -645,7 +650,11 @@ SELECT ?holder ?holderLabel ?office ?officeLabel ?start ?article ?claimType WHER
       ?holder wdt:P131* wd:${qid}.
     }
     BIND("p:P39" AS ?claimType)
-  }
+  }`;
+    const branches = [directBranch, p39Branch].filter(Boolean).join(' UNION ');
+    return `
+SELECT ?holder ?holderLabel ?office ?officeLabel ?start ?article ?claimType WHERE {
+  ${branches}
   OPTIONAL {
     ?article schema:about ?holder;
       schema:isPartOf <https://en.wikipedia.org/>.
@@ -806,22 +815,44 @@ function buildReferenceLookupResults(query, offset = 0) {
     }));
 }
 
-function normalizeOfficialShortcut(item, query, index) {
+async function normalizeOfficialShortcut(item, query, index) {
     const domain = getDomainFromUrl(item.url);
+    const page = await fetchOfficialPageContent(item.url).catch(() => null);
     return {
-        title: item.label,
-        description: `Official source for ${item.label.replace(/\s+official$/i, '')} updates and primary information.`,
+        title: page?.title || item.label,
+        description: page?.description || `Official source for ${item.label.replace(/\s+official$/i, '')} updates and primary information.`,
         url: item.url,
         domain,
         source: item.label,
         sourceType: 'official_source',
         sourceLabel: item.label,
         date: '',
-        freshness: 'official_homepage',
+        freshness: page?.fetched ? 'official_page_fetched' : 'official_homepage_unverified',
         position: index + 1,
         trusted: true,
-        qualitySignals: ['official_source', 'trusted_domain'],
+        pageFetched: Boolean(page?.fetched),
+        evidenceLevel: page?.fetched ? 'official_page' : 'unverified_link',
+        qualitySignals: ['official_source', 'trusted_domain', page?.fetched ? 'page_fetched' : 'page_not_fetched'].filter(Boolean),
         query
+    };
+}
+
+async function fetchOfficialPageContent(url) {
+    const response = await fetchWithTimeout(url, {
+        headers: {
+            Accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5',
+            'User-Agent': 'JARVISAssistant/1.0 public-source-search'
+        }
+    }, PUBLIC_SOURCE_TIMEOUT_MS);
+    if (!response.ok) return null;
+    const html = await response.text();
+    const title = extractHtmlTitle(html) || getDomainFromUrl(url) || 'Official source';
+    const description = extractHtmlDescription(html) || extractReadableHtmlText(html).slice(0, 320);
+    if (!description || description.length < 20) return null;
+    return {
+        fetched: true,
+        title: title.slice(0, 220),
+        description: description.replace(/\s+/g, ' ').trim().slice(0, 420)
     };
 }
 
@@ -1031,6 +1062,10 @@ function getOfficialSourceShortcuts(query) {
 }
 
 function rankSearchResults(query, results) {
+    return rankSources(query, results);
+}
+
+export function rankSources(query, results) {
     const terms = tokenize(query);
     return [...(Array.isArray(results) ? results : [])].sort((a, b) => scoreSearchResult(b, terms) - scoreSearchResult(a, terms));
 }
@@ -1074,10 +1109,36 @@ function buildSearchWarnings(results, existing = []) {
 }
 
 function isAnswerEvidenceResult(item) {
-    const sourceType = String(item?.sourceType || '').trim();
+    return isValidCitationSource(item, item?.query || '');
+}
+
+export function isValidCitationSource(source, query = '') {
+    const item = source || {};
+    const title = String(item.title || '').trim();
+    const url = String(item.url || '').trim();
+    const description = String(item.description || '').trim();
+    const sourceType = String(item.sourceType || '').trim();
+    const domain = String(item.domain || getDomainFromUrl(url)).toLowerCase();
+    const combined = `${title} ${description} ${url}`.toLowerCase();
+    if (!title || !url) return false;
     if (!sourceType || LOOKUP_ONLY_SOURCE_TYPES.has(sourceType)) return false;
-    const description = String(item?.description || '').trim();
-    return sourceType === 'official_source' || description.length >= 20;
+    if (!description || description.length < 20) return false;
+    if (/search:|webcache|cache\.google|\/search(?:[/?#]|$)|[?&]q=/.test(combined)) return false;
+    if (/archive\.(today|ph|is)|webcache/i.test(domain)) return false;
+    if (sourceType === 'official_source' && !item.pageFetched) return false;
+    if (item.evidenceLevel === 'structured_claim') return true;
+    if (sourceType === 'official_source') return true;
+    if (/^(encyclopedia|structured_reference|trusted_news|public_news|cached_latest|free_)/.test(sourceType)) {
+        return isRelatedToQuery(query, item);
+    }
+    return false;
+}
+
+function isRelatedToQuery(query, item) {
+    const terms = tokenize(query).filter(term => !COMMON_QUERY_TERMS.has(term));
+    if (!terms.length) return true;
+    const hay = `${item?.title || ''} ${item?.description || ''} ${item?.sourceLabel || ''}`.toLowerCase();
+    return terms.some(term => hay.includes(term));
 }
 
 function buildGdeltDescription(item, domain, date) {
@@ -1184,6 +1245,26 @@ function stripHtml(text) {
     return String(text || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
 }
 
+function extractHtmlTitle(html) {
+    const match = String(html || '').match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    return stripHtml(match?.[1] || '').trim();
+}
+
+function extractHtmlDescription(html) {
+    const raw = String(html || '');
+    const meta = raw.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["'][^>]*>/i) ||
+        raw.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["'][^>]*>/i);
+    return stripHtml(meta?.[1] || '').trim();
+}
+
+function extractReadableHtmlText(html) {
+    return stripHtml(String(html || '')
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
+        .replace(/<footer[\s\S]*?<\/footer>/gi, ' '));
+}
+
 function normalizeGdeltDate(value) {
     const raw = String(value || '').trim();
     if (!/^\d{14}$/.test(raw)) return raw;
@@ -1226,6 +1307,8 @@ export const __test = {
     searchGovernmentRole,
     parseGovernmentRoleQuery,
     normalizeGovernmentRoleBindings,
+    isValidCitationSource,
+    rankSources,
     searchPublicSources,
     searchWikipedia,
     buildGeminiSearchPlan,
