@@ -14770,7 +14770,8 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
             });
             const directAnswer = cleanLiveAnswerText(String(answerData?.answer || '').trim());
             const answerResults = Array.isArray(answerData?.results) ? answerData.results.filter(Boolean) : [];
-            if (directAnswer && answerResults.length) {
+            const answerEvidenceCount = Number(answerData?.answerEvidenceCount || 0);
+            if (directAnswer && answerEvidenceCount > 0 && answerResults.length) {
                 const sourceLines = answerResults
                     .slice(0, 5)
                     .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
