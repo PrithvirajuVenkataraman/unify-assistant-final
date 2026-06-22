@@ -991,19 +991,19 @@ function buildJarvisTechStackReply() {
     return [
         'Here is the stack this JARVIS app uses:',
         '',
-        'Frontend: vanilla HTML, CSS, and browser JavaScript in index.html, with small ES modules in app/ for API calls, state, storage, context, and speech input. No React/Vue/Angular dependency is used.',
+        'Frontend: browser-native HTML, CSS, and JavaScript with Tailwind loaded from its CDN. No React, Vue, or Angular dependency is used.',
         '',
-        'Backend: Vercel serverless API routes under api/. The main chat route is /api/chat-groq. Other routes handle search, vision, market/current-fact stubs, and API security.',
+        'Backend: Node runtime serverless functions on Vercel handle chat, search, vision, current facts, market-style utilities, and API security.',
         '',
         'AI models: Groq is tried first when GROQ_API_KEY is configured, with candidates like openai/gpt-oss-120b, openai/gpt-oss-20b, llama-3.3-70b-versatile, and llama-3.1-8b-instant. Gemini is the fallback when GEMINI_API_KEY or GOOGLE_API_KEY is configured, with candidates like gemini-3.5-flash, gemini-2.5-flash, gemini-2.5-flash-lite, and gemini-2.0-flash.',
         '',
-        'Live facts: permanent-free public-source routing through Wikipedia, Wikidata, GDELT, RSS/Atom, official shortcuts, Open-Meteo, CoinGecko, NASA EONET, Wikimedia, OpenStreetMap, Britannica lookup, Reddit discussion lookup, and archive.today snapshot lookup where supported. Gemini may help planning, ranking, and snippets, but no Serper, Brave, Tavily, paid API, or crawler is required.',
+        'Live facts: permanent-free public-source routing through Wikipedia, Wikidata, GDELT, RSS/Atom, official shortcuts, Open-Meteo, CoinGecko, NASA EONET, Wikimedia, OpenStreetMap, Britannica lookup, Reddit discussion lookup, and archive.today snapshot lookup where supported. Crawl4AI can be used as an optional page extractor, and Gemini may help planning, ranking, and snippets. No Serper, Brave, Tavily, paid API, or crawler is required.',
         '',
-        'Memory: device-local memory and chat history are stored in localStorage when memory persistence is enabled. It remembers simple user facts like where you put things, plus local preferences and history. There is no external database in this repo.',
+        'Memory: device-local memory and chat history are stored in localStorage when memory persistence is enabled. It remembers simple user facts like where you put things, plus local preferences and history. There is no external database.',
         '',
-        'Voice and vision: voice input uses the browser Web Speech API. Live Vision uses browser camera APIs and /api/vision for image analysis when configured.',
+        'Voice and vision: voice input uses the browser Web Speech API. Live Vision uses browser camera APIs and server-side image analysis when configured.',
         '',
-        'Hosting: configured for Vercel with static index.html plus serverless functions.'
+        'Hosting: configured for Vercel with a static browser app plus serverless functions.'
     ].join('\n');
 }
 
@@ -13722,6 +13722,18 @@ function buildUniversalFactPipelineContext(userText, liveIntent = null) {
     };
 }
 
+function isCurrentRoleHolderLiveQuery(text, liveIntent = null, entityIntent = null) {
+    const raw = String(text || '').trim();
+    if (!raw) return false;
+    const lower = raw.toLowerCase();
+    const intent = liveIntent || extractLiveQueryIntent(raw);
+    const entity = entityIntent || extractUniversalEntityIntent(raw, intent);
+    const roleFact = String(intent?.factType || '').toLowerCase() === 'role' || entity?.relationType === 'role';
+    const officeSignal = /\b(president|prime minister|pm|chief minister|cm|governor|mayor|minister|ceo|captain|coach|chairman|chairperson|head of|leader of|secretary general|director|director general|dean|chancellor|principal|administrator)\b/.test(lower);
+    const currentSignal = /\b(who is|what is|current|currently|latest|present|incumbent|as of|today|now)\b/.test(lower);
+    return Boolean(roleFact && officeSignal && currentSignal);
+}
+
 function shouldRequireVerifiedSources(classificationOrText, liveIntent = null, entityIntent = null) {
     const classification = (classificationOrText && typeof classificationOrText === 'object' && !Array.isArray(classificationOrText))
         ? classificationOrText
@@ -14700,8 +14712,9 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
         }
         const entityIntent = extractUniversalEntityIntent(query, intent);
         const forceFailClosed = Boolean(options?.forceFailClosed);
+        const roleHolderQuery = isCurrentRoleHolderLiveQuery(query, intent, entityIntent);
         liveRiskLevel = getRiskTierForQuery(query, intent, entityIntent);
-        failClosed = forceFailClosed && shouldRequireVerifiedSources(query, intent, entityIntent);
+        failClosed = roleHolderQuery || (forceFailClosed && shouldRequireVerifiedSources(query, intent, entityIntent));
         const directFactQuery = intent.directFact || isSportsLiveResultQuery(query);
         const conciseFactQuery = isConciseDirectFactQuery(query);
         const queries = buildLiveSearchQueries(query, intent);
@@ -14915,15 +14928,15 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
                     saveToHistory(userText, searchSummary.text);
                     return true;
                 }
+                const bestEffortPublished = await publishBestEffortFromSources({
+                    userText: query,
+                    intent,
+                    entityIntent
+                }, sourcePool, {
+                    summaryText: 'I could not fully verify this, so here is the best-supported answer from available sources.'
+                });
+                if (bestEffortPublished) return true;
             }
-            const bestEffortPublished = await publishBestEffortFromSources({
-                userText: query,
-                intent,
-                entityIntent
-            }, sourcePool, {
-                summaryText: 'I could not fully verify this, so here is the best-supported answer from available sources.'
-            });
-            if (bestEffortPublished) return true;
             return publishStrictVerificationClarification({
                 userText: query,
                 intent,
@@ -14972,6 +14985,18 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
                     return true;
                 }
             }
+        }
+
+        if (roleHolderQuery) {
+            return publishStrictVerificationClarification({
+                userText: query,
+                intent,
+                entityIntent
+            }, {
+                sources: sourcePool,
+                summaryText: 'I could not verify the current office holder from structured current-holder evidence.',
+                badge: 'Current holder not verified'
+            });
         }
 
         const snippets = sourcePool
