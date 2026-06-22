@@ -388,6 +388,24 @@ assert.equal(searchTest.isValidCitationSource({
     sourceType: 'official_source',
     pageFetched: false
 }, 'current office holder'), false);
+assert.equal(searchTest.isValidCitationSource({
+    title: 'WHO official',
+    url: 'https://www.who.int/',
+    description: 'Official World Health Organization updates and public health information.',
+    domain: 'who.int',
+    sourceType: 'official_source',
+    pageFetched: true,
+    exactShortcutMatch: false
+}, 'chief minister tamil nadu'), false);
+assert.equal(searchTest.isValidCitationSource({
+    title: 'Chief Minister | Government of Tamil Nadu',
+    url: 'https://www.tn.gov.in/profile_form_cm.php?id=Mjg=&back_type=bWVudV9iYWNr',
+    description: 'Official Government of Tamil Nadu profile page for the Chief Minister with current public office information.',
+    domain: 'tn.gov.in',
+    sourceType: 'official_source',
+    pageFetched: true,
+    exactShortcutMatch: true
+}, 'chief minister tamil nadu'), true);
 
 globalThis.fetch = async (url) => {
     const href = String(url);
@@ -485,6 +503,44 @@ assert.equal(tamilNaduStructuredSearch.body.results[0].jurisdiction, 'Tamil Nadu
 assert.equal(tamilNaduStructuredSearch.body.results[0].evidenceLevel, 'structured_claim');
 globalThis.fetch = ORIGINAL_FETCH;
 
+let whoShortcutTouched = false;
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('who.int')) {
+        whoShortcutTouched = true;
+        throw new Error(`WHO shortcut should not be used for pronoun query ${href}`);
+    }
+    if (href.includes('www.wikidata.org/w/api.php')) {
+        const search = new URL(href).searchParams.get('search') || '';
+        if (/Tamil Nadu/i.test(search)) {
+            return okJson({ search: [{ id: 'Q1445', label: 'Tamil Nadu', description: 'state of India' }] });
+        }
+        return okJson({ search: [] });
+    }
+    if (href.includes('query.wikidata.org/sparql')) {
+        return okJson(wikidataRolePayload({
+            holder: 'Q999001',
+            holderLabel: 'Example Chief Minister',
+            officeLabel: 'Chief Minister of Tamil Nadu',
+            start: '2026-05-10T00:00:00Z',
+            article: 'https://en.wikipedia.org/wiki/Example_Chief_Minister'
+        }));
+    }
+    if (href.startsWith('https://www.tn.gov.in/profile_form_cm.php')) {
+        return textResponse('<html><head><title>Chief Minister | Government of Tamil Nadu</title><meta name="description" content="Official Government of Tamil Nadu profile page for the Chief Minister with current public office information."></head><body>Official Government of Tamil Nadu Chief Minister profile.</body></html>');
+    }
+    if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
+    if (href.includes('api.gdeltproject.org')) return okJson({ articles: [] });
+    if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
+    throw new Error(`unexpected URL ${href}`);
+};
+const whoPronounRoleSearch = await callHandler(searchHandler, request('/api/search', { query: 'who is the chief minister of Tamil Nadu', limit: 5 }));
+assert.equal(whoPronounRoleSearch.statusCode, 200);
+assert.equal(whoShortcutTouched, false);
+assert.ok(!whoPronounRoleSearch.body.results.some(item => item.domain === 'who.int'));
+assert.equal(whoPronounRoleSearch.body.results[0].holderName, 'Example Chief Minister');
+globalThis.fetch = ORIGINAL_FETCH;
+
 globalThis.fetch = async (url) => {
     const href = String(url);
     if (href.includes('www.wikidata.org/w/api.php')) {
@@ -579,6 +635,54 @@ assert.equal(officialShortcutSearch.body.success, true);
 assert.equal(officialShortcutSearch.body.provider, 'public_sources');
 assert.ok(officialShortcutSearch.body.results.some(item => item.domain === 'isro.gov.in'));
 assert.ok(officialShortcutSearch.body.results.some(item => item.sourceType === 'official_source'));
+globalThis.fetch = ORIGINAL_FETCH;
+
+process.env.CRAWL4AI_URL = 'https://crawl4ai.example';
+let crawlOfficialShortcutUsed = false;
+globalThis.fetch = async (url, init) => {
+    const href = String(url);
+    if (href === 'https://crawl4ai.example/crawl') {
+        crawlOfficialShortcutUsed = true;
+        const body = JSON.parse(String(init?.body || '{}'));
+        assert.equal(body.url, 'https://www.isro.gov.in/');
+        return okJson({
+            result: {
+                url: 'https://www.isro.gov.in/',
+                title: 'ISRO official via Crawl4AI',
+                description: 'Official ISRO source extracted by Crawl4AI for current mission updates and primary information.',
+                markdown: '# ISRO official via Crawl4AI\n\nOfficial ISRO source extracted by Crawl4AI.'
+            }
+        });
+    }
+    assert.notEqual(href, 'https://www.isro.gov.in/');
+    if (href.includes('www.wikidata.org/w/api.php')) return okJson({ search: [] });
+    if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
+    if (href.includes('api.gdeltproject.org')) return okJson({ articles: [] });
+    if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
+    throw new Error(`unexpected URL ${href}`);
+};
+const crawlOfficialShortcutSearch = await callHandler(searchHandler, request('/api/search', { query: 'ISRO official source', limit: 5 }));
+assert.equal(crawlOfficialShortcutSearch.statusCode, 200);
+assert.equal(crawlOfficialShortcutUsed, true);
+assert.ok(crawlOfficialShortcutSearch.body.results.some(item => item.domain === 'isro.gov.in' && item.pageFetched === true));
+assert.ok(crawlOfficialShortcutSearch.body.results.some(item => item.qualitySignals.includes('crawl4ai_extracted')));
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.CRAWL4AI_URL;
+
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href === 'https://www.who.int/') {
+        return textResponse('<html><head><title>WHO official</title><meta name="description" content="Official World Health Organization source for public health updates and primary information."></head><body>Official World Health Organization updates.</body></html>');
+    }
+    if (href.includes('www.wikidata.org/w/api.php')) return okJson({ search: [] });
+    if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
+    if (href.includes('api.gdeltproject.org')) return okJson({ articles: [] });
+    if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
+    throw new Error(`unexpected URL ${href}`);
+};
+const whoOfficialShortcutSearch = await callHandler(searchHandler, request('/api/search', { query: 'WHO official source', limit: 5 }));
+assert.equal(whoOfficialShortcutSearch.statusCode, 200);
+assert.ok(whoOfficialShortcutSearch.body.results.some(item => item.domain === 'who.int'));
 globalThis.fetch = ORIGINAL_FETCH;
 
 globalThis.fetch = async (url) => {
