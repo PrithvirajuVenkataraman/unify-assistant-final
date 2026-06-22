@@ -945,18 +945,62 @@ function buildSearchSummary(results, metadata = {}) {
 }
 
 function buildSourceDerivedAnswer(results) {
-    const structuredRole = (Array.isArray(results) ? results : [])
+    const list = Array.isArray(results) ? results : [];
+    const structuredRole = list
         .find(item => item?.evidenceLevel === 'structured_claim' && item?.holderName && item?.role && item?.jurisdiction);
-    if (!structuredRole) return {};
-    const holder = String(structuredRole.holderName || '').trim();
-    const role = String(structuredRole.role || '').trim();
-    const jurisdiction = String(structuredRole.jurisdiction || '').trim();
-    if (!holder || !role || !jurisdiction) return {};
-    const startDate = String(structuredRole.startDate || '').trim();
-    const startText = startDate ? ` Start date: ${startDate}.` : '';
+    if (structuredRole) {
+        const holder = String(structuredRole.holderName || '').trim();
+        const role = String(structuredRole.role || '').trim();
+        const jurisdiction = String(structuredRole.jurisdiction || '').trim();
+        if (holder && role && jurisdiction) {
+            const startDate = String(structuredRole.startDate || '').trim();
+            const startText = startDate ? ` Start date: ${startDate}.` : '';
+            return {
+                answer: `${holder} is listed by Wikidata as current ${role} for ${jurisdiction}.${startText}`,
+                provider: 'wikidata_structured_claim'
+            };
+        }
+    }
+
+    const top = list.find(isAnswerEvidenceResult);
+    if (!top) return {};
+    const sourceType = String(top.sourceType || '').trim();
+    const title = String(top.title || '').replace(/\s+/g, ' ').trim();
+    const description = String(top.description || '').replace(/\s+/g, ' ').trim();
+    const sourceLabel = String(top.sourceLabel || top.source || top.domain || '').replace(/\s+/g, ' ').trim();
+    if (!title && !description) return {};
+
+    if (sourceType === 'free_weather') {
+        return sourceAnswer(`${title}${description ? `: ${description}` : ''}`, 'open_meteo_source');
+    }
+    if (sourceType === 'free_crypto_price') {
+        return sourceAnswer(`${title}${description ? `: ${description}` : ''}`, 'coingecko_source');
+    }
+    if (sourceType === 'free_disaster_event') {
+        const date = String(top.date || '').trim();
+        return sourceAnswer(`${title}${date ? ` (${date.slice(0, 10)})` : ''}${description ? `: ${description}` : ''}`, 'nasa_eonet_source');
+    }
+    if (sourceType === 'free_reference' || sourceType === 'free_place_data') {
+        return sourceAnswer(`${title}${description ? `: ${description}` : ''}`, 'public_place_source');
+    }
+    if (sourceType === 'free_sports_reference') {
+        return sourceAnswer(`${title}${description ? `: ${description}` : ''}`, 'sports_reference_source');
+    }
+    if (sourceType === 'cached_latest') {
+        return sourceAnswer(`${title}${sourceLabel ? ` (${sourceLabel})` : ''}${description ? `: ${description}` : ''}`, 'latest_cache_source');
+    }
+    if (/^(official_source|trusted_news|public_news|encyclopedia|structured_reference)$/.test(sourceType)) {
+        return sourceAnswer(`${title}${description ? `: ${description}` : ''}`, 'public_source_result');
+    }
+    return {};
+}
+
+function sourceAnswer(text, provider) {
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return {};
     return {
-        answer: `${holder} is listed by Wikidata as current ${role} for ${jurisdiction}.${startText}`,
-        provider: 'wikidata_structured_claim'
+        answer: clean.endsWith('.') ? clean : `${clean}.`,
+        provider
     };
 }
 
