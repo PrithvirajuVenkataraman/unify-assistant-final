@@ -90,6 +90,32 @@ const TRUSTED_SOURCE_HOSTS = Object.freeze([
     'archive.is'
 ]);
 
+const OFFICIAL_GOVERNMENT_DOMAIN_PATTERNS = Object.freeze([
+    /\.gov$/i,
+    /\.gouv(?:\.[a-z]{2})?$/i,
+    /\.go\.[a-z]{2}$/i,
+    /\.gov\.[a-z]{2}$/i,
+    /^gov\.[a-z]{2}$/i,
+    /^gc\.ca$/i,
+    /^europa\.eu$/i,
+    /^un\.org$/i
+]);
+
+const OFFICIAL_GOVERNMENT_PORTALS = Object.freeze([
+    { pattern: /\b(?:united states|usa|u\.s\.|american government)\b/i, label: 'USA.gov official', url: 'https://www.usa.gov/' },
+    { pattern: /\b(?:united kingdom|uk|british government|england|scotland|wales)\b/i, label: 'GOV.UK official', url: 'https://www.gov.uk/' },
+    { pattern: /\b(?:india|indian government|bharat)\b/i, label: 'India.gov.in official', url: 'https://www.india.gov.in/' },
+    { pattern: /\b(?:canada|canadian government)\b/i, label: 'Canada.ca official', url: 'https://www.canada.ca/' },
+    { pattern: /\b(?:australia|australian government)\b/i, label: 'Australia.gov.au official', url: 'https://www.australia.gov.au/' },
+    { pattern: /\b(?:france|french government)\b/i, label: 'Gouvernement.fr official', url: 'https://www.gouvernement.fr/' },
+    { pattern: /\b(?:germany|german government|deutschland)\b/i, label: 'Bundesregierung official', url: 'https://www.bundesregierung.de/' },
+    { pattern: /\b(?:japan|japanese government)\b/i, label: 'Japan government official', url: 'https://www.japan.go.jp/' },
+    { pattern: /\b(?:singapore|singapore government)\b/i, label: 'Singapore government official', url: 'https://www.gov.sg/' },
+    { pattern: /\b(?:south africa|south african government)\b/i, label: 'South African Government official', url: 'https://www.gov.za/' },
+    { pattern: /\b(?:european union|eu commission|eu parliament|eu\b)\b/i, label: 'European Union official', url: 'https://european-union.europa.eu/' },
+    { pattern: /\b(?:united nations|un\b)\b/i, label: 'United Nations official', url: 'https://www.un.org/' }
+]);
+
 const OFFICIAL_SOURCE_SHORTCUTS = Object.freeze([
     { pattern: /\bisro|indian space research/i, label: 'ISRO official', url: 'https://www.isro.gov.in/', query: 'ISRO latest official update' },
     { pattern: /\bnasa\b/i, label: 'NASA official', url: 'https://www.nasa.gov/', query: 'NASA latest official update' },
@@ -236,11 +262,15 @@ export async function searchPublicSources(query, options = {}) {
         searchReddit(candidate, { limit: Math.min(3, limit) }),
         searchGdeltNews(candidate, { limit })
     ]));
-    const official = await Promise.all(getOfficialSourceShortcuts(normalizedQuery)
-        .map((item, index) => normalizeOfficialShortcut(item, normalizedQuery, index)));
+    const discovered = settled.flatMap(result => result.status === 'fulfilled' ? result.value : []);
+    const officialCandidates = await discoverOfficialSourceCandidates(normalizedQuery, {
+        seedResults: discovered,
+        limit: Math.min(5, Math.max(2, limit))
+    });
+    const official = await Promise.all(officialCandidates
+        .map((item, index) => normalizeOfficialSourceCandidate(item, normalizedQuery, index)));
     const referenceLookups = buildReferenceLookupResults(normalizedQuery, official.length);
-    return settled
-        .flatMap(result => result.status === 'fulfilled' ? result.value : [])
+    return discovered
         .concat(governmentRoleResults)
         .concat(official)
         .concat(referenceLookups)
@@ -813,10 +843,12 @@ function buildReferenceLookupResults(query, offset = 0) {
     }));
 }
 
-async function normalizeOfficialShortcut(item, query, index) {
+async function normalizeOfficialSourceCandidate(item, query, index) {
     const domain = getDomainFromUrl(item.url);
     const exactShortcutMatch = Boolean(item.pattern?.test?.(query));
-    const page = await fetchOfficialPageContent(item.url, query).catch(() => null);
+    const allowHtmlFallback = item.discoverySignal === 'official_shortcut';
+    const page = await fetchOfficialPageContent(item.url, query, { allowHtmlFallback }).catch(() => null);
+    const roleEvidence = page?.text ? extractOfficialCurrentRoleEvidence(page.text, query, item.url) : null;
     return {
         title: page?.title || item.label,
         description: page?.description || `Official source for ${item.label.replace(/\s+official$/i, '')} updates and primary information.`,
@@ -831,15 +863,29 @@ async function normalizeOfficialShortcut(item, query, index) {
         trusted: true,
         pageFetched: Boolean(page?.fetched),
         exactShortcutMatch,
-        evidenceLevel: page?.fetched ? 'official_page' : 'unverified_link',
-        qualitySignals: ['official_source', 'trusted_domain', page?.fetched ? 'page_fetched' : 'page_not_fetched', page?.extractor].filter(Boolean),
+        evidenceLevel: roleEvidence ? 'official_current_holder' : (page?.fetched ? 'official_page' : 'unverified_link'),
+        qualitySignals: [
+            'official_source',
+            'trusted_domain',
+            page?.fetched ? 'page_fetched' : 'page_not_fetched',
+            page?.extractor,
+            item.discoverySignal,
+            roleEvidence ? 'current_office_claim' : ''
+        ].filter(Boolean),
+        officialConfidence: item.officialConfidence || inferOfficialConfidence(item.url, item),
+        holderName: roleEvidence?.holderName || '',
+        role: roleEvidence?.role || '',
+        jurisdiction: roleEvidence?.jurisdiction || '',
+        extractedClaim: roleEvidence?.claim || '',
+        extractor: page?.extractor || '',
         query
     };
 }
 
-async function fetchOfficialPageContent(url, query = '') {
+async function fetchOfficialPageContent(url, query = '', options = {}) {
     const crawled = await fetchOfficialPageContentWithCrawl4Ai(url, query).catch(() => null);
     if (crawled) return crawled;
+    if (!options.allowHtmlFallback) return null;
 
     const response = await fetchWithTimeout(url, {
         headers: {
@@ -856,6 +902,7 @@ async function fetchOfficialPageContent(url, query = '') {
         fetched: true,
         title: title.slice(0, 220),
         description: description.replace(/\s+/g, ' ').trim().slice(0, 420),
+        text: extractReadableHtmlText(html).replace(/\s+/g, ' ').trim().slice(0, 4000),
         extractor: 'html_fetched'
     };
 }
@@ -879,6 +926,7 @@ async function fetchOfficialPageContentWithCrawl4Ai(url, query = '') {
         fetched: true,
         title: title.slice(0, 220),
         description: description.slice(0, 420),
+        text: String(result?.text || result?.markdown || description).replace(/\s+/g, ' ').trim().slice(0, 4000),
         extractor: 'crawl4ai_extracted'
     };
 }
@@ -964,6 +1012,20 @@ function buildSourceDerivedAnswer(results, metadata = {}) {
             return {
                 answer: `${holder} is listed by Wikidata as current ${role} for ${jurisdiction}.${startText}`,
                 provider: 'wikidata_structured_claim'
+            };
+        }
+    }
+    const officialRole = list
+        .find(item => item?.evidenceLevel === 'official_current_holder' && item?.holderName && item?.role && item?.jurisdiction && item?.url);
+    if (officialRole) {
+        const holder = String(officialRole.holderName || '').trim();
+        const role = String(officialRole.role || '').trim();
+        const jurisdiction = String(officialRole.jurisdiction || '').trim();
+        const sourceLabel = String(officialRole.sourceLabel || officialRole.domain || 'official source').trim();
+        if (holder && role && jurisdiction) {
+            return {
+                answer: `${holder} is listed by ${sourceLabel} as current ${role} for ${jurisdiction}.`,
+                provider: 'official_crawled_current_holder'
             };
         }
     }
@@ -1153,6 +1215,167 @@ function extractJsonObject(text) {
 
 function getOfficialSourceShortcuts(query) {
     return OFFICIAL_SOURCE_SHORTCUTS.filter(item => item.pattern.test(query));
+}
+
+async function discoverOfficialSourceCandidates(query, options = {}) {
+    const cleanQuery = normalizeSearchQuery(query);
+    if (!cleanQuery) return [];
+    const limit = clampInt(options.limit, 4, 1, 8);
+    const candidates = [];
+    const add = item => {
+        const url = normalizeCandidateUrl(item?.url);
+        if (!url || !isOfficialGovernmentUrl(url)) return;
+        const domain = getDomainFromUrl(url);
+        if (!domain || candidates.some(existing => getDomainFromUrl(existing.url) === domain && normalizeResultKey(existing) === normalizeResultKey({ url }))) {
+            return;
+        }
+        candidates.push({
+            label: String(item?.label || item?.sourceLabel || domain).replace(/\s+/g, ' ').trim(),
+            url,
+            pattern: item?.pattern || null,
+            discoverySignal: item?.discoverySignal || 'official_candidate',
+            officialConfidence: item?.officialConfidence || inferOfficialConfidence(url, item)
+        });
+    };
+
+    for (const shortcut of getOfficialSourceShortcuts(cleanQuery)) {
+        add({ ...shortcut, discoverySignal: 'official_shortcut', officialConfidence: 'high' });
+    }
+    for (const portal of OFFICIAL_GOVERNMENT_PORTALS.filter(item => item.pattern.test(cleanQuery))) {
+        add({ ...portal, discoverySignal: 'official_registry', officialConfidence: 'medium' });
+    }
+
+    const roleIntent = parseGovernmentRoleQuery(cleanQuery);
+    if (roleIntent) {
+        const wikidataOfficial = await discoverWikidataOfficialCandidates(roleIntent.jurisdiction)
+            .catch(() => []);
+        for (const item of wikidataOfficial) add(item);
+    }
+
+    for (const result of Array.isArray(options.seedResults) ? options.seedResults : []) {
+        const url = String(result?.url || '').trim();
+        if (!url || !isOfficialGovernmentUrl(url)) continue;
+        add({
+            label: result.sourceLabel || result.source || result.domain || getDomainFromUrl(url),
+            url,
+            discoverySignal: 'official_result_url',
+            officialConfidence: result.trusted ? 'high' : 'medium'
+        });
+    }
+
+    return candidates.slice(0, limit);
+}
+
+async function discoverWikidataOfficialCandidates(jurisdictionLabel) {
+    const entity = await resolveWikidataEntity(jurisdictionLabel);
+    if (!entity?.id) return [];
+    const urls = await fetchWikidataOfficialUrls(entity.id);
+    return urls.map(url => ({
+        label: `${entity.label} official`,
+        url,
+        discoverySignal: 'wikidata_official_website',
+        officialConfidence: 'high'
+    }));
+}
+
+async function fetchWikidataOfficialUrls(entityId) {
+    const id = String(entityId || '').trim();
+    if (!/^Q\d+$/.test(id)) return [];
+    const url = new URL(WIKIDATA_SEARCH_URL);
+    url.searchParams.set('action', 'wbgetentities');
+    url.searchParams.set('ids', id);
+    url.searchParams.set('props', 'claims');
+    url.searchParams.set('format', 'json');
+    url.searchParams.set('origin', '*');
+    const response = await fetchWithTimeout(url.toString(), {
+        headers: { Accept: 'application/json' }
+    }, PUBLIC_SOURCE_TIMEOUT_MS);
+    if (!response.ok) return [];
+    const data = await response.json();
+    const claims = data?.entities?.[id]?.claims?.P856;
+    if (!Array.isArray(claims)) return [];
+    return Array.from(new Set(claims
+        .map(claim => normalizeCandidateUrl(claim?.mainsnak?.datavalue?.value))
+        .filter(urlValue => urlValue && isOfficialGovernmentUrl(urlValue))));
+}
+
+function normalizeCandidateUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    try {
+        const parsed = new URL(raw);
+        if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+        parsed.hash = '';
+        return parsed.toString();
+    } catch (_) {
+        return '';
+    }
+}
+
+function isOfficialGovernmentUrl(url) {
+    const domain = getDomainFromUrl(url);
+    if (!domain) return false;
+    if (isTrustedLiveSource(domain) && /(?:who\.int|nasa\.gov|isro\.gov\.in|rbi\.org\.in|sec\.gov|imf\.org|worldbank\.org|noaa\.gov|europa\.eu|gov\.uk|usa\.gov)$/i.test(domain)) {
+        return true;
+    }
+    return OFFICIAL_GOVERNMENT_DOMAIN_PATTERNS.some(pattern => pattern.test(domain));
+}
+
+function inferOfficialConfidence(url, item = {}) {
+    const domain = getDomainFromUrl(url);
+    if (!domain) return 'low';
+    if (item?.discoverySignal === 'wikidata_official_website' || item?.discoverySignal === 'official_shortcut') return 'high';
+    if (/(\.gov$|\.gov\.[a-z]{2}$|^gov\.|\.go\.[a-z]{2}$|gc\.ca$|europa\.eu$|un\.org$)/i.test(domain)) return 'medium';
+    return 'low';
+}
+
+function extractOfficialCurrentRoleEvidence(text, query, sourceUrl = '') {
+    const intent = parseGovernmentRoleQuery(query);
+    if (!intent) return null;
+    const role = intent.role;
+    const jurisdiction = intent.jurisdiction;
+    const clean = String(text || '')
+        .replace(/\s+/g, ' ')
+        .replace(/\s+([,.;:!?])/g, '$1')
+        .trim();
+    if (!clean) return null;
+    const sentences = clean.match(/[^.!?]+[.!?]?/g) || [clean];
+    const stalePattern = /\b(?:former|previous|ex-|served\s+until|was\s+the|had\s+been|from\s+\d{4}\s+(?:to|through|-)\s+\d{4}|history|list\s+of|election)\b/i;
+    const holderPatterns = [
+        new RegExp(`\\b(?:current\\s+|present\\s+|incumbent\\s+)?${escapeRegex(role)}\\s+(?:of|for|in)\\s+${escapeRegex(jurisdiction)}\\s+(?:is|:|-)\\s+([A-Z][A-Za-z.'’\\-]+(?:\\s+[A-Z][A-Za-z.'’\\-]+){0,5})`, 'i'),
+        new RegExp(`\\b([A-Z][A-Za-z.'’\\-]+(?:\\s+[A-Z][A-Za-z.'’\\-]+){0,5})\\s+(?:is|serves\\s+as|has\\s+been\\s+appointed\\s+as)\\s+(?:the\\s+)?(?:current\\s+|present\\s+|incumbent\\s+)?${escapeRegex(role)}\\s+(?:of|for|in)\\s+${escapeRegex(jurisdiction)}`, 'i'),
+        new RegExp(`\\b(?:hon'?ble\\s+|honorable\\s+)?(?:shri\\s+|smt\\.?\\s+|mr\\.?\\s+|ms\\.?\\s+|dr\\.?\\s+)?([A-Z][A-Za-z.'’\\-]+(?:\\s+[A-Z][A-Za-z.'’\\-]+){0,5})\\s*,?\\s+(?:${escapeRegex(role)})\\b`, 'i')
+    ];
+    for (const sentence of sentences.slice(0, 80)) {
+        const candidate = sentence.trim();
+        if (!candidate || stalePattern.test(candidate)) continue;
+        if (!new RegExp(escapeRegex(role), 'i').test(candidate)) continue;
+        if (!new RegExp(escapeRegex(jurisdiction), 'i').test(`${candidate} ${sourceUrl}`) && !/\bcurrent|present|incumbent|official\b/i.test(candidate)) continue;
+        for (const pattern of holderPatterns) {
+            const match = candidate.match(pattern);
+            const holderName = cleanHolderName(match?.[1] || '');
+            if (holderName) {
+                return {
+                    holderName,
+                    role,
+                    jurisdiction,
+                    claim: candidate.slice(0, 320)
+                };
+            }
+        }
+    }
+    return null;
+}
+
+function cleanHolderName(value) {
+    const text = String(value || '')
+        .replace(/\b(?:the|current|present|incumbent|hon'?ble|honorable|shri|smt|mr|ms|dr)\b\.?/gi, ' ')
+        .replace(/[,;:].*$/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!text || text.length < 3 || text.length > 90) return '';
+    if (/\b(?:chief|minister|president|governor|mayor|office|government|current|former|served)\b/i.test(text)) return '';
+    return text;
 }
 
 function rankSearchResults(query, results) {
@@ -1406,6 +1629,10 @@ export const __test = {
     parseGovernmentRoleQuery,
     normalizeGovernmentRoleBindings,
     isValidCitationSource,
+    discoverOfficialSourceCandidates,
+    fetchWikidataOfficialUrls,
+    isOfficialGovernmentUrl,
+    extractOfficialCurrentRoleEvidence,
     rankSources,
     searchPublicSources,
     searchWikipedia,
