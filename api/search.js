@@ -150,6 +150,7 @@ export default async function handler(req, res) {
                     }
                     : undefined,
                 ...buildSearchSummary(search.results || [], {
+                    query,
                     provider: search.provider || 'free_public_sources',
                     publicSourceCount: search.publicSourceCount || 0,
                     geminiEnhanced: false,
@@ -199,6 +200,7 @@ export async function runCachedLatestSearch(query, options = {}) {
         results = searchItems(query, { limit });
     }
     return buildSearchSummary(results.map(normalizeLatestCacheResult), {
+        query,
         provider: 'latest_cache',
         publicSourceCount: results.length,
         geminiEnhanced: false,
@@ -455,6 +457,7 @@ export async function runVerifiedWebSearch(query, options = {}) {
     ].filter(Boolean));
 
     return buildSearchSummary(enhancedResults, {
+        query,
         provider: 'public_sources',
         publicSourceCount: enhancedResults.length,
         geminiEnhanced: Boolean(enhanced.enhanced),
@@ -926,7 +929,7 @@ function dedupeSearchResults(results) {
 function buildSearchSummary(results, metadata = {}) {
     const distinctDomains = Array.from(new Set(results.map(item => item.domain).filter(Boolean)));
     const trustedCount = results.filter(item => item.trusted).length;
-    const directAnswer = buildSourceDerivedAnswer(results);
+    const directAnswer = buildSourceDerivedAnswer(results, metadata);
     return {
         results,
         answer: directAnswer.answer || undefined,
@@ -944,15 +947,18 @@ function buildSearchSummary(results, metadata = {}) {
     };
 }
 
-function buildSourceDerivedAnswer(results) {
+function buildSourceDerivedAnswer(results, metadata = {}) {
     const list = Array.isArray(results) ? results : [];
+    const query = String(metadata.query || list.find(item => item?.query)?.query || '').trim();
+    const roleIntent = parseGovernmentRoleQuery(query);
     const structuredRole = list
-        .find(item => item?.evidenceLevel === 'structured_claim' && item?.holderName && item?.role && item?.jurisdiction);
+        .find(item => item?.evidenceLevel === 'structured_claim' && item?.holderName && item?.role && item?.jurisdiction && item?.url);
     if (structuredRole) {
         const holder = String(structuredRole.holderName || '').trim();
         const role = String(structuredRole.role || '').trim();
         const jurisdiction = String(structuredRole.jurisdiction || '').trim();
-        if (holder && role && jurisdiction) {
+        const url = String(structuredRole.url || '').trim();
+        if (holder && role && jurisdiction && url) {
             const startDate = String(structuredRole.startDate || '').trim();
             const startText = startDate ? ` Start date: ${startDate}.` : '';
             return {
@@ -961,6 +967,7 @@ function buildSourceDerivedAnswer(results) {
             };
         }
     }
+    if (roleIntent) return {};
 
     const top = list.find(isAnswerEvidenceResult);
     if (!top) return {};
