@@ -328,7 +328,7 @@ vm.createContext(riskSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'analyzeAnswerRiskFlags'), riskSandbox);
 const currentFlags = riskSandbox.analyzeAnswerRiskFlags(
     'Who is the current chief minister of Tamil Nadu?',
-    'The current chief minister of Tamil Nadu is M. K. Stalin.'
+    'The current chief minister is listed by a retrieved official source.'
 ).map(flag => flag.label);
 assert.ok(currentFlags.includes('Current fact'));
 assert.equal(riskSandbox.analyzeAnswerRiskFlags('hello', 'Hi there.').map(flag => flag.label).length, 0);
