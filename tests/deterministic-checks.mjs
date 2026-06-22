@@ -10,6 +10,7 @@ const SOURCE = Object.freeze({
     readme: fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8'),
     appHtml: fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
     styles: fs.readFileSync(new URL('../styles.css', import.meta.url), 'utf8'),
+    searchApi: fs.readFileSync(new URL('../api/search.js', import.meta.url), 'utf8'),
     visionApi: fs.readFileSync(new URL('../api/vision.js', import.meta.url), 'utf8'),
     chatGroqApi: fs.readFileSync(new URL('../api/chat-groq.js', import.meta.url), 'utf8'),
     speechInput: fs.readFileSync(new URL('../app/speech-input.js', import.meta.url), 'utf8') 
@@ -290,6 +291,8 @@ assert.match(SOURCE.readme, /CRAWL4AI_URL/);
 assert.match(SOURCE.readme, /Local Docker only works for you/);
 assert.match(SOURCE.appHtml, /localStorage when memory persistence is enabled/);
 assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
+assert.doesNotMatch(SOURCE.searchApi, /Tamil Nadu Chief Minister official/);
+assert.doesNotMatch(SOURCE.searchApi, /profile_form_cm/);
 
 clearItems();
 saveItems([{
@@ -326,8 +329,9 @@ assert.doesNotMatch(SOURCE.chatGroqApi, /forceReview: !isInternalSummary/);
 const riskSandbox = {};
 vm.createContext(riskSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'analyzeAnswerRiskFlags'), riskSandbox);
+const currentRoleRiskQuery = ['Who is the current', 'chief minister', 'of', 'Test Territory?'].join(' ');
 const currentFlags = riskSandbox.analyzeAnswerRiskFlags(
-    'Who is the current chief minister of Tamil Nadu?',
+    currentRoleRiskQuery,
     'The current chief minister is listed by a retrieved official source.'
 ).map(flag => flag.label);
 assert.ok(currentFlags.includes('Current fact'));
