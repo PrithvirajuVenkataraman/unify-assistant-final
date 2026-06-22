@@ -6,6 +6,7 @@ import { classifyFreeLiveIntent, routeMessage } from './_lib/latest/router.js';
 import { searchItems } from './_lib/latest/latest-cache.js';
 import { ingestLatestSources } from './_lib/latest/latest-ingest.js';
 import { runFreeLiveSearch } from './_lib/free-live/providers.js';
+import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 
 const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
 const WIKIPEDIA_SEARCH_URL = 'https://en.wikipedia.org/w/api.php';
@@ -92,7 +93,7 @@ const TRUSTED_SOURCE_HOSTS = Object.freeze([
 const OFFICIAL_SOURCE_SHORTCUTS = Object.freeze([
     { pattern: /\bisro|indian space research/i, label: 'ISRO official', url: 'https://www.isro.gov.in/', query: 'ISRO latest official update' },
     { pattern: /\bnasa\b/i, label: 'NASA official', url: 'https://www.nasa.gov/', query: 'NASA latest official update' },
-    { pattern: /\bwho\b|world health organization/i, label: 'WHO official', url: 'https://www.who.int/', query: 'WHO latest official update' },
+    { pattern: /\bWHO\b|[Ww]orld\s+[Hh]ealth\s+[Oo]rganization/, label: 'WHO official', url: 'https://www.who.int/', query: 'WHO latest official update' },
     { pattern: /\bcdc\b|centers for disease control/i, label: 'CDC official', url: 'https://www.cdc.gov/', query: 'CDC latest official update' },
     { pattern: /\brbi\b|reserve bank of india/i, label: 'RBI official', url: 'https://www.rbi.org.in/', query: 'RBI latest official update' },
     { pattern: /\bsec\b|securities and exchange commission/i, label: 'SEC official', url: 'https://www.sec.gov/', query: 'SEC latest official update' },
@@ -817,7 +818,8 @@ function buildReferenceLookupResults(query, offset = 0) {
 
 async function normalizeOfficialShortcut(item, query, index) {
     const domain = getDomainFromUrl(item.url);
-    const page = await fetchOfficialPageContent(item.url).catch(() => null);
+    const exactShortcutMatch = Boolean(item.pattern?.test?.(query));
+    const page = await fetchOfficialPageContent(item.url, query).catch(() => null);
     return {
         title: page?.title || item.label,
         description: page?.description || `Official source for ${item.label.replace(/\s+official$/i, '')} updates and primary information.`,
@@ -831,13 +833,17 @@ async function normalizeOfficialShortcut(item, query, index) {
         position: index + 1,
         trusted: true,
         pageFetched: Boolean(page?.fetched),
+        exactShortcutMatch,
         evidenceLevel: page?.fetched ? 'official_page' : 'unverified_link',
-        qualitySignals: ['official_source', 'trusted_domain', page?.fetched ? 'page_fetched' : 'page_not_fetched'].filter(Boolean),
+        qualitySignals: ['official_source', 'trusted_domain', page?.fetched ? 'page_fetched' : 'page_not_fetched', page?.extractor].filter(Boolean),
         query
     };
 }
 
-async function fetchOfficialPageContent(url) {
+async function fetchOfficialPageContent(url, query = '') {
+    const crawled = await fetchOfficialPageContentWithCrawl4Ai(url, query).catch(() => null);
+    if (crawled) return crawled;
+
     const response = await fetchWithTimeout(url, {
         headers: {
             Accept: 'text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5',
@@ -852,7 +858,31 @@ async function fetchOfficialPageContent(url) {
     return {
         fetched: true,
         title: title.slice(0, 220),
-        description: description.replace(/\s+/g, ' ').trim().slice(0, 420)
+        description: description.replace(/\s+/g, ' ').trim().slice(0, 420),
+        extractor: 'html_fetched'
+    };
+}
+
+async function fetchOfficialPageContentWithCrawl4Ai(url, query = '') {
+    if (!hasCrawl4AiConfig()) return null;
+    const result = await extractWithCrawl4Ai({
+        url,
+        query,
+        textLimit: 4000,
+        timeoutMs: PUBLIC_SOURCE_TIMEOUT_MS,
+        respectRobots: true
+    });
+    const title = String(result?.title || getDomainFromUrl(url) || 'Official source').replace(/\s+/g, ' ').trim();
+    const description = String(result?.description || result?.text || result?.markdown || '')
+        .replace(/[#*_>`~\[\]()]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!description || description.length < 20) return null;
+    return {
+        fetched: true,
+        title: title.slice(0, 220),
+        description: description.slice(0, 420),
+        extractor: 'crawl4ai_extracted'
     };
 }
 
@@ -1127,11 +1157,15 @@ export function isValidCitationSource(source, query = '') {
     if (/archive\.(today|ph|is)|webcache/i.test(domain)) return false;
     if (sourceType === 'official_source' && !item.pageFetched) return false;
     if (item.evidenceLevel === 'structured_claim') return true;
-    if (sourceType === 'official_source') return true;
+    if (sourceType === 'official_source') return Boolean(item.exactShortcutMatch) || isRelatedToQuery(query, item);
     if (/^(encyclopedia|structured_reference|trusted_news|public_news|cached_latest|free_)/.test(sourceType)) {
         return isRelatedToQuery(query, item);
     }
     return false;
+}
+
+function hasCrawl4AiConfig() {
+    return Boolean(String(process.env.CRAWL4AI_URL || '').trim());
 }
 
 function isRelatedToQuery(query, item) {
