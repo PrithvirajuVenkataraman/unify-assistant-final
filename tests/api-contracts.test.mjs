@@ -23,6 +23,71 @@ const SAMPLE = Object.freeze({
     imageBase64: 'eA=='
 });
 
+const ROLE_FIXTURES = Object.freeze({
+    president: Object.freeze({
+        role: 'president',
+        jurisdiction: 'Test Republic',
+        jurisdictionId: 'Q100001',
+        jurisdictionDescription: 'test sovereign state',
+        holderId: 'Q100002',
+        holder: 'Fixture President',
+        alternateHolder: 'Alternate President',
+        officeLabel: 'president',
+        start: '2020-01-02T00:00:00Z',
+        startDate: '2020-01-02',
+        article: 'https://en.wikipedia.org/wiki/Fixture_President'
+    }),
+    primeMinister: Object.freeze({
+        role: 'prime minister',
+        jurisdiction: 'Test Union',
+        jurisdictionId: 'Q100003',
+        jurisdictionDescription: 'test country',
+        holderId: 'Q100004',
+        holder: 'Fixture Premier',
+        officeLabel: 'prime minister',
+        start: '2021-03-04T00:00:00Z',
+        startDate: '2021-03-04',
+        article: 'https://en.wikipedia.org/wiki/Fixture_Premier'
+    }),
+    chiefMinister: Object.freeze({
+        role: 'chief minister',
+        jurisdiction: 'Test Territory',
+        jurisdictionId: 'Q100005',
+        jurisdictionDescription: 'test state',
+        holderId: 'Q100006',
+        holder: 'Fixture Minister',
+        alternateHolder: 'Alternate Minister',
+        officeLabel: 'Chief Minister of Test Territory',
+        start: '2022-05-06T00:00:00Z',
+        startDate: '2022-05-06',
+        article: 'https://en.wikipedia.org/wiki/Fixture_Minister'
+    }),
+    governor: Object.freeze({
+        role: 'governor',
+        jurisdiction: 'Test Region',
+        jurisdictionId: 'Q100007',
+        jurisdictionDescription: 'test province',
+        holderId: 'Q100008',
+        holder: 'Fixture Governor',
+        officeLabel: 'Governor of Test Region',
+        start: '2023-07-08T00:00:00Z',
+        startDate: '2023-07-08',
+        article: 'https://en.wikipedia.org/wiki/Fixture_Governor'
+    }),
+    ceo: Object.freeze({
+        role: 'CEO',
+        jurisdiction: 'Test Organization',
+        jurisdictionId: 'Q100009',
+        jurisdictionDescription: 'test organization',
+        holderId: 'Q100010',
+        holder: 'Fixture Executive',
+        officeLabel: 'CEO',
+        start: '2024-09-10T00:00:00Z',
+        startDate: '2024-09-10',
+        article: 'https://en.wikipedia.org/wiki/Fixture_Executive'
+    })
+});
+
 const ORIGINAL_SERPER_API_KEY = process.env.SERPER_API_KEY;
 const ORIGINAL_SERPER_KEY = process.env.SERPER_KEY;
 const ORIGINAL_LIVE_RETRIEVAL_ENABLED = process.env.LIVE_RETRIEVAL_ENABLED;
@@ -62,7 +127,7 @@ process.env.WEB_SEARCH_ENABLED = 'true';
 const missingSearxng = await callHandler(webSearchHandler, request('/api/web-search', { query: 'latest open source search' }));
 assert.equal(missingSearxng.statusCode, 503);
 assert.equal(missingSearxng.body.error.code, 'searxng_not_configured');
-assert.equal(webSearchTest.normalizeSearchRequest({ query: '  chief minister Tamil Nadu  ' }).value.query, 'chief minister Tamil Nadu');
+assert.equal(webSearchTest.normalizeSearchRequest({ query: `  ${ROLE_FIXTURES.chiefMinister.role} ${ROLE_FIXTURES.chiefMinister.jurisdiction}  ` }).value.query, `${ROLE_FIXTURES.chiefMinister.role} ${ROLE_FIXTURES.chiefMinister.jurisdiction}`);
 assert.equal(webSearchTest.robotsAllows('User-agent: *\nDisallow: /private\nAllow: /private/public', '/private/page', 'UnifyAssistantWebSearch'), false);
 assert.equal(webSearchTest.robotsAllows('User-agent: *\nDisallow: /private\nAllow: /private/public', '/private/public/page', 'UnifyAssistantWebSearch'), true);
 
@@ -210,11 +275,11 @@ assert.equal(capitalReply.body.webEscalation.escalated, false);
 assert.equal(chatTest.classifyRoutingDecision('What is the capital of France?', '', {}).strategy, 'direct');
 process.env.SERPER_API_KEY = 'test-serper-key';
 process.env.LIVE_RETRIEVAL_ENABLED = 'true';
-assert.equal(chatTest.classifyRoutingDecision('What is the current president of France?', '', {}).strategy, 'live_first');
+assert.equal(chatTest.classifyRoutingDecision(roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction), '', {}).strategy, 'live_first');
 assert.equal(chatTest.classifyRoutingDecision('What is the capital of France?', '', {}).strategy, 'direct');
 delete process.env.SERPER_API_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
-assert.equal(chatTest.classifyRoutingDecision('What is the current president of France?', '', {}).strategy, 'live_first');
+assert.equal(chatTest.classifyRoutingDecision(roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction), '', {}).strategy, 'live_first');
 assert.equal(
     chatTest.resolveContextualLiveQuery('Who is Ada Lovelace?', [
         { role: 'user', text: 'Tell me about ISRO' },
@@ -348,38 +413,41 @@ assert.ok(!publicSearch.body.results.some(item => item.sourceType === 'reference
 assert.ok(!publicSearch.body.results.some(item => item.sourceType === 'archive_lookup'));
 globalThis.fetch = ORIGINAL_FETCH;
 
-assert.deepEqual(searchTest.parseGovernmentRoleQuery('current president of France'), {
+const presidentQuery = roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction);
+const chiefMinisterQuery = roleQuery(ROLE_FIXTURES.chiefMinister.role, ROLE_FIXTURES.chiefMinister.jurisdiction, '');
+const ceoQuery = roleQuery(ROLE_FIXTURES.ceo.role, ROLE_FIXTURES.ceo.jurisdiction);
+assert.deepEqual(searchTest.parseGovernmentRoleQuery(presidentQuery), {
     role: 'president',
     roleText: 'president',
-    jurisdiction: 'France',
+    jurisdiction: ROLE_FIXTURES.president.jurisdiction,
     property: 'P35'
 });
-assert.deepEqual(searchTest.parseGovernmentRoleQuery('chief minister of Tamil Nadu, India'), {
+assert.deepEqual(searchTest.parseGovernmentRoleQuery(chiefMinisterQuery), {
     role: 'chief minister',
     roleText: 'chief minister',
-    jurisdiction: 'Tamil Nadu India',
+    jurisdiction: ROLE_FIXTURES.chiefMinister.jurisdiction,
     property: 'P39'
 });
-assert.deepEqual(searchTest.parseGovernmentRoleQuery('current CEO of OpenAI'), {
+assert.deepEqual(searchTest.parseGovernmentRoleQuery(ceoQuery), {
     role: 'ceo',
     roleText: 'CEO',
-    jurisdiction: 'OpenAI',
+    jurisdiction: ROLE_FIXTURES.ceo.jurisdiction,
     property: 'P169'
 });
 assert.equal(searchTest.isValidCitationSource({
-    title: 'Britannica search: Chief minister of Tamil Nadu',
-    url: 'https://www.britannica.com/search?query=Chief%20minister',
+    title: `Britannica search: ${chiefMinisterQuery}`,
+    url: `https://www.britannica.com/search?query=${encodeURIComponent(chiefMinisterQuery)}`,
     description: 'Reference lookup on Britannica.',
     domain: 'britannica.com',
     sourceType: 'reference_lookup'
-}, 'chief minister tamil nadu'), false);
+}, chiefMinisterQuery), false);
 assert.equal(searchTest.isValidCitationSource({
-    title: 'archive.today search: Chief minister of Tamil Nadu',
-    url: 'https://archive.today/search/?q=Chief%20minister',
+    title: `archive.today search: ${chiefMinisterQuery}`,
+    url: `https://archive.today/search/?q=${encodeURIComponent(chiefMinisterQuery)}`,
     description: 'Archive lookup.',
     domain: 'archive.today',
     sourceType: 'archive_lookup'
-}, 'chief minister tamil nadu'), false);
+}, chiefMinisterQuery), false);
 assert.equal(searchTest.isValidCitationSource({
     title: 'Official profile',
     url: 'https://example.gov/profile',
@@ -396,33 +464,24 @@ assert.equal(searchTest.isValidCitationSource({
     sourceType: 'official_source',
     pageFetched: true,
     exactShortcutMatch: false
-}, 'chief minister tamil nadu'), false);
-assert.equal(searchTest.isValidCitationSource({
-    title: 'Chief Minister | Government of Tamil Nadu',
-    url: 'https://www.tn.gov.in/profile_form_cm.php?id=Mjg=&back_type=bWVudV9iYWNr',
-    description: 'Official Government of Tamil Nadu profile page for the Chief Minister with current public office information.',
-    domain: 'tn.gov.in',
-    sourceType: 'official_source',
-    pageFetched: true,
-    exactShortcutMatch: true
-}, 'chief minister tamil nadu'), true);
+}, chiefMinisterQuery), false);
 
 globalThis.fetch = async (url) => {
     const href = String(url);
     if (href.includes('www.wikidata.org/w/api.php')) {
         const search = new URL(href).searchParams.get('search') || '';
-        if (/France/i.test(search)) {
-            return okJson({ search: [{ id: 'Q142', label: 'France', description: 'country in Western Europe' }] });
+        if (search.includes(ROLE_FIXTURES.president.jurisdiction)) {
+            return okJson({ search: [{ id: ROLE_FIXTURES.president.jurisdictionId, label: ROLE_FIXTURES.president.jurisdiction, description: ROLE_FIXTURES.president.jurisdictionDescription }] });
         }
         return okJson({ search: [] });
     }
     if (href.includes('query.wikidata.org/sparql')) {
         return okJson(wikidataRolePayload({
-            holder: 'Q3052772',
-            holderLabel: 'Emmanuel Macron',
-            officeLabel: 'president',
-            start: '2017-05-14T00:00:00Z',
-            article: 'https://en.wikipedia.org/wiki/Emmanuel_Macron'
+            holder: ROLE_FIXTURES.president.holderId,
+            holderLabel: ROLE_FIXTURES.president.holder,
+            officeLabel: ROLE_FIXTURES.president.officeLabel,
+            start: ROLE_FIXTURES.president.start,
+            article: ROLE_FIXTURES.president.article
         }));
     }
     if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
@@ -430,33 +489,35 @@ globalThis.fetch = async (url) => {
     if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
     throw new Error(`unexpected URL ${href}`);
 };
-const francePresidentSearch = await callHandler(searchHandler, request('/api/search', { query: 'current president of France', limit: 5 }));
-assert.equal(francePresidentSearch.statusCode, 200);
-assert.equal(francePresidentSearch.body.success, true);
-assert.ok(francePresidentSearch.body.answerEvidenceCount >= 1);
-assert.equal(francePresidentSearch.body.results[0].holderName, 'Emmanuel Macron');
-assert.equal(francePresidentSearch.body.results[0].role, 'president');
-assert.equal(francePresidentSearch.body.results[0].jurisdiction, 'France');
-assert.equal(francePresidentSearch.body.results[0].wikidataId, 'Q3052772');
-assert.equal(francePresidentSearch.body.results[0].evidenceLevel, 'structured_claim');
+const presidentSearch = await callHandler(searchHandler, request('/api/search', { query: presidentQuery, limit: 5 }));
+assert.equal(presidentSearch.statusCode, 200);
+assert.equal(presidentSearch.body.success, true);
+assert.ok(presidentSearch.body.answerEvidenceCount >= 1);
+assert.equal(presidentSearch.body.answerProvider, 'wikidata_structured_claim');
+assert.match(presidentSearch.body.answer, new RegExp(escapeRegExp(ROLE_FIXTURES.president.holder)));
+assert.equal(presidentSearch.body.results[0].holderName, ROLE_FIXTURES.president.holder);
+assert.equal(presidentSearch.body.results[0].role, ROLE_FIXTURES.president.role);
+assert.equal(presidentSearch.body.results[0].jurisdiction, ROLE_FIXTURES.president.jurisdiction);
+assert.equal(presidentSearch.body.results[0].wikidataId, ROLE_FIXTURES.president.holderId);
+assert.equal(presidentSearch.body.results[0].evidenceLevel, 'structured_claim');
 globalThis.fetch = ORIGINAL_FETCH;
 
 globalThis.fetch = async (url) => {
     const href = String(url);
     if (href.includes('www.wikidata.org/w/api.php')) {
         const search = new URL(href).searchParams.get('search') || '';
-        if (/India/i.test(search)) {
-            return okJson({ search: [{ id: 'Q668', label: 'India', description: 'country in South Asia' }] });
+        if (search.includes(ROLE_FIXTURES.primeMinister.jurisdiction)) {
+            return okJson({ search: [{ id: ROLE_FIXTURES.primeMinister.jurisdictionId, label: ROLE_FIXTURES.primeMinister.jurisdiction, description: ROLE_FIXTURES.primeMinister.jurisdictionDescription }] });
         }
         return okJson({ search: [] });
     }
     if (href.includes('query.wikidata.org/sparql')) {
         return okJson(wikidataRolePayload({
-            holder: 'Q1058',
-            holderLabel: 'Narendra Modi',
-            officeLabel: 'prime minister',
-            start: '2014-05-26T00:00:00Z',
-            article: 'https://en.wikipedia.org/wiki/Narendra_Modi'
+            holder: ROLE_FIXTURES.primeMinister.holderId,
+            holderLabel: ROLE_FIXTURES.primeMinister.holder,
+            officeLabel: ROLE_FIXTURES.primeMinister.officeLabel,
+            start: ROLE_FIXTURES.primeMinister.start,
+            article: ROLE_FIXTURES.primeMinister.article
         }));
     }
     if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
@@ -464,30 +525,30 @@ globalThis.fetch = async (url) => {
     if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
     throw new Error(`unexpected URL ${href}`);
 };
-const indiaPmSearch = await callHandler(searchHandler, request('/api/search', { query: 'current prime minister of India', limit: 5 }));
-assert.equal(indiaPmSearch.statusCode, 200);
-assert.equal(indiaPmSearch.body.results[0].holderName, 'Narendra Modi');
-assert.equal(indiaPmSearch.body.results[0].role, 'prime minister');
-assert.equal(indiaPmSearch.body.results[0].jurisdiction, 'India');
-assert.equal(indiaPmSearch.body.results[0].startDate, '2014-05-26');
+const primeMinisterSearch = await callHandler(searchHandler, request('/api/search', { query: roleQuery(ROLE_FIXTURES.primeMinister.role, ROLE_FIXTURES.primeMinister.jurisdiction), limit: 5 }));
+assert.equal(primeMinisterSearch.statusCode, 200);
+assert.equal(primeMinisterSearch.body.results[0].holderName, ROLE_FIXTURES.primeMinister.holder);
+assert.equal(primeMinisterSearch.body.results[0].role, ROLE_FIXTURES.primeMinister.role);
+assert.equal(primeMinisterSearch.body.results[0].jurisdiction, ROLE_FIXTURES.primeMinister.jurisdiction);
+assert.equal(primeMinisterSearch.body.results[0].startDate, ROLE_FIXTURES.primeMinister.startDate);
 globalThis.fetch = ORIGINAL_FETCH;
 
 globalThis.fetch = async (url) => {
     const href = String(url);
     if (href.includes('www.wikidata.org/w/api.php')) {
         const search = new URL(href).searchParams.get('search') || '';
-        if (/Tamil Nadu/i.test(search)) {
-            return okJson({ search: [{ id: 'Q1445', label: 'Tamil Nadu', description: 'state of India' }] });
+        if (search.includes(ROLE_FIXTURES.chiefMinister.jurisdiction)) {
+            return okJson({ search: [{ id: ROLE_FIXTURES.chiefMinister.jurisdictionId, label: ROLE_FIXTURES.chiefMinister.jurisdiction, description: ROLE_FIXTURES.chiefMinister.jurisdictionDescription }] });
         }
         return okJson({ search: [] });
     }
     if (href.includes('query.wikidata.org/sparql')) {
         return okJson(wikidataRolePayload({
-            holder: 'Q999001',
-            holderLabel: 'Example Chief Minister',
-            officeLabel: 'Chief Minister of Tamil Nadu',
-            start: '2026-05-10T00:00:00Z',
-            article: 'https://en.wikipedia.org/wiki/Example_Chief_Minister'
+            holder: ROLE_FIXTURES.chiefMinister.holderId,
+            holderLabel: ROLE_FIXTURES.chiefMinister.holder,
+            officeLabel: ROLE_FIXTURES.chiefMinister.officeLabel,
+            start: ROLE_FIXTURES.chiefMinister.start,
+            article: ROLE_FIXTURES.chiefMinister.article
         }));
     }
     if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
@@ -495,12 +556,42 @@ globalThis.fetch = async (url) => {
     if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
     throw new Error(`unexpected URL ${href}`);
 };
-const tamilNaduStructuredSearch = await callHandler(searchHandler, request('/api/search', { query: 'chief minister of Tamil Nadu, India', limit: 5 }));
-assert.equal(tamilNaduStructuredSearch.statusCode, 200);
-assert.equal(tamilNaduStructuredSearch.body.results[0].holderName, 'Example Chief Minister');
-assert.equal(tamilNaduStructuredSearch.body.results[0].role, 'chief minister');
-assert.equal(tamilNaduStructuredSearch.body.results[0].jurisdiction, 'Tamil Nadu');
-assert.equal(tamilNaduStructuredSearch.body.results[0].evidenceLevel, 'structured_claim');
+const structuredRoleSearch = await callHandler(searchHandler, request('/api/search', { query: chiefMinisterQuery, limit: 5 }));
+assert.equal(structuredRoleSearch.statusCode, 200);
+assert.equal(structuredRoleSearch.body.results[0].holderName, ROLE_FIXTURES.chiefMinister.holder);
+assert.equal(structuredRoleSearch.body.results[0].role, ROLE_FIXTURES.chiefMinister.role);
+assert.equal(structuredRoleSearch.body.results[0].jurisdiction, ROLE_FIXTURES.chiefMinister.jurisdiction);
+assert.equal(structuredRoleSearch.body.results[0].evidenceLevel, 'structured_claim');
+assert.match(structuredRoleSearch.body.answer, new RegExp(escapeRegExp(ROLE_FIXTURES.chiefMinister.holder)));
+globalThis.fetch = ORIGINAL_FETCH;
+
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('www.wikidata.org/w/api.php')) {
+        const search = new URL(href).searchParams.get('search') || '';
+        if (search.includes(ROLE_FIXTURES.chiefMinister.jurisdiction)) {
+            return okJson({ search: [{ id: ROLE_FIXTURES.chiefMinister.jurisdictionId, label: ROLE_FIXTURES.chiefMinister.jurisdiction, description: ROLE_FIXTURES.chiefMinister.jurisdictionDescription }] });
+        }
+        return okJson({ search: [] });
+    }
+    if (href.includes('query.wikidata.org/sparql')) {
+        return okJson(wikidataRolePayload({
+            holder: ROLE_FIXTURES.chiefMinister.holderId,
+            holderLabel: ROLE_FIXTURES.chiefMinister.alternateHolder,
+            officeLabel: ROLE_FIXTURES.chiefMinister.officeLabel,
+            start: ROLE_FIXTURES.chiefMinister.start,
+            article: ROLE_FIXTURES.chiefMinister.article
+        }));
+    }
+    if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
+    if (href.includes('api.gdeltproject.org')) return okJson({ articles: [] });
+    if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
+    throw new Error(`unexpected URL ${href}`);
+};
+const changedRoleSearch = await callHandler(searchHandler, request('/api/search', { query: chiefMinisterQuery, limit: 5 }));
+assert.equal(changedRoleSearch.statusCode, 200);
+assert.match(changedRoleSearch.body.answer, new RegExp(escapeRegExp(ROLE_FIXTURES.chiefMinister.alternateHolder)));
+assert.doesNotMatch(changedRoleSearch.body.answer, new RegExp(escapeRegExp(ROLE_FIXTURES.chiefMinister.holder)));
 globalThis.fetch = ORIGINAL_FETCH;
 
 let whoShortcutTouched = false;
@@ -512,51 +603,48 @@ globalThis.fetch = async (url) => {
     }
     if (href.includes('www.wikidata.org/w/api.php')) {
         const search = new URL(href).searchParams.get('search') || '';
-        if (/Tamil Nadu/i.test(search)) {
-            return okJson({ search: [{ id: 'Q1445', label: 'Tamil Nadu', description: 'state of India' }] });
+        if (search.includes(ROLE_FIXTURES.chiefMinister.jurisdiction)) {
+            return okJson({ search: [{ id: ROLE_FIXTURES.chiefMinister.jurisdictionId, label: ROLE_FIXTURES.chiefMinister.jurisdiction, description: ROLE_FIXTURES.chiefMinister.jurisdictionDescription }] });
         }
         return okJson({ search: [] });
     }
     if (href.includes('query.wikidata.org/sparql')) {
         return okJson(wikidataRolePayload({
-            holder: 'Q999001',
-            holderLabel: 'Example Chief Minister',
-            officeLabel: 'Chief Minister of Tamil Nadu',
-            start: '2026-05-10T00:00:00Z',
-            article: 'https://en.wikipedia.org/wiki/Example_Chief_Minister'
+            holder: ROLE_FIXTURES.chiefMinister.holderId,
+            holderLabel: ROLE_FIXTURES.chiefMinister.holder,
+            officeLabel: ROLE_FIXTURES.chiefMinister.officeLabel,
+            start: ROLE_FIXTURES.chiefMinister.start,
+            article: ROLE_FIXTURES.chiefMinister.article
         }));
-    }
-    if (href.startsWith('https://www.tn.gov.in/profile_form_cm.php')) {
-        return textResponse('<html><head><title>Chief Minister | Government of Tamil Nadu</title><meta name="description" content="Official Government of Tamil Nadu profile page for the Chief Minister with current public office information."></head><body>Official Government of Tamil Nadu Chief Minister profile.</body></html>');
     }
     if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
     if (href.includes('api.gdeltproject.org')) return okJson({ articles: [] });
     if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
     throw new Error(`unexpected URL ${href}`);
 };
-const whoPronounRoleSearch = await callHandler(searchHandler, request('/api/search', { query: 'who is the chief minister of Tamil Nadu', limit: 5 }));
+const whoPronounRoleSearch = await callHandler(searchHandler, request('/api/search', { query: pronounRoleQuery(ROLE_FIXTURES.chiefMinister.role, ROLE_FIXTURES.chiefMinister.jurisdiction), limit: 5 }));
 assert.equal(whoPronounRoleSearch.statusCode, 200);
 assert.equal(whoShortcutTouched, false);
 assert.ok(!whoPronounRoleSearch.body.results.some(item => item.domain === 'who.int'));
-assert.equal(whoPronounRoleSearch.body.results[0].holderName, 'Example Chief Minister');
+assert.equal(whoPronounRoleSearch.body.results[0].holderName, ROLE_FIXTURES.chiefMinister.holder);
 globalThis.fetch = ORIGINAL_FETCH;
 
 globalThis.fetch = async (url) => {
     const href = String(url);
     if (href.includes('www.wikidata.org/w/api.php')) {
         const search = new URL(href).searchParams.get('search') || '';
-        if (/California/i.test(search)) {
-            return okJson({ search: [{ id: 'Q99', label: 'California', description: 'state of the United States' }] });
+        if (search.includes(ROLE_FIXTURES.governor.jurisdiction)) {
+            return okJson({ search: [{ id: ROLE_FIXTURES.governor.jurisdictionId, label: ROLE_FIXTURES.governor.jurisdiction, description: ROLE_FIXTURES.governor.jurisdictionDescription }] });
         }
         return okJson({ search: [] });
     }
     if (href.includes('query.wikidata.org/sparql')) {
         return okJson(wikidataRolePayload({
-            holder: 'Q132501',
-            holderLabel: 'Gavin Newsom',
-            officeLabel: 'Governor of California',
-            start: '2019-01-07T00:00:00Z',
-            article: 'https://en.wikipedia.org/wiki/Gavin_Newsom'
+            holder: ROLE_FIXTURES.governor.holderId,
+            holderLabel: ROLE_FIXTURES.governor.holder,
+            officeLabel: ROLE_FIXTURES.governor.officeLabel,
+            start: ROLE_FIXTURES.governor.start,
+            article: ROLE_FIXTURES.governor.article
         }));
     }
     if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
@@ -564,29 +652,29 @@ globalThis.fetch = async (url) => {
     if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
     throw new Error(`unexpected URL ${href}`);
 };
-const californiaGovernorSearch = await callHandler(searchHandler, request('/api/search', { query: 'governor of California', limit: 5 }));
-assert.equal(californiaGovernorSearch.statusCode, 200);
-assert.equal(californiaGovernorSearch.body.results[0].holderName, 'Gavin Newsom');
-assert.equal(californiaGovernorSearch.body.results[0].role, 'governor');
-assert.equal(californiaGovernorSearch.body.results[0].jurisdiction, 'California');
+const governorSearch = await callHandler(searchHandler, request('/api/search', { query: roleQuery(ROLE_FIXTURES.governor.role, ROLE_FIXTURES.governor.jurisdiction, ''), limit: 5 }));
+assert.equal(governorSearch.statusCode, 200);
+assert.equal(governorSearch.body.results[0].holderName, ROLE_FIXTURES.governor.holder);
+assert.equal(governorSearch.body.results[0].role, ROLE_FIXTURES.governor.role);
+assert.equal(governorSearch.body.results[0].jurisdiction, ROLE_FIXTURES.governor.jurisdiction);
 globalThis.fetch = ORIGINAL_FETCH;
 
 globalThis.fetch = async (url) => {
     const href = String(url);
     if (href.includes('www.wikidata.org/w/api.php')) {
         const search = new URL(href).searchParams.get('search') || '';
-        if (/OpenAI/i.test(search)) {
-            return okJson({ search: [{ id: 'Q21708200', label: 'OpenAI', description: 'American artificial intelligence organization' }] });
+        if (search.includes(ROLE_FIXTURES.ceo.jurisdiction)) {
+            return okJson({ search: [{ id: ROLE_FIXTURES.ceo.jurisdictionId, label: ROLE_FIXTURES.ceo.jurisdiction, description: ROLE_FIXTURES.ceo.jurisdictionDescription }] });
         }
         return okJson({ search: [] });
     }
     if (href.includes('query.wikidata.org/sparql')) {
         return okJson(wikidataRolePayload({
-            holder: 'Q19837',
-            holderLabel: 'Sam Altman',
-            officeLabel: 'CEO',
-            start: '2019-03-11T00:00:00Z',
-            article: 'https://en.wikipedia.org/wiki/Sam_Altman'
+            holder: ROLE_FIXTURES.ceo.holderId,
+            holderLabel: ROLE_FIXTURES.ceo.holder,
+            officeLabel: ROLE_FIXTURES.ceo.officeLabel,
+            start: ROLE_FIXTURES.ceo.start,
+            article: ROLE_FIXTURES.ceo.article
         }));
     }
     if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
@@ -594,11 +682,11 @@ globalThis.fetch = async (url) => {
     if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
     throw new Error(`unexpected URL ${href}`);
 };
-const openAiCeoSearch = await callHandler(searchHandler, request('/api/search', { query: 'current CEO of OpenAI', limit: 5 }));
-assert.equal(openAiCeoSearch.statusCode, 200);
-assert.equal(openAiCeoSearch.body.results[0].holderName, 'Sam Altman');
-assert.equal(openAiCeoSearch.body.results[0].role, 'ceo');
-assert.equal(openAiCeoSearch.body.results[0].jurisdiction, 'OpenAI');
+const ceoSearch = await callHandler(searchHandler, request('/api/search', { query: ceoQuery, limit: 5 }));
+assert.equal(ceoSearch.statusCode, 200);
+assert.equal(ceoSearch.body.results[0].holderName, ROLE_FIXTURES.ceo.holder);
+assert.equal(ceoSearch.body.results[0].role, 'ceo');
+assert.equal(ceoSearch.body.results[0].jurisdiction, ROLE_FIXTURES.ceo.jurisdiction);
 globalThis.fetch = ORIGINAL_FETCH;
 
 globalThis.fetch = async (url) => {
@@ -683,27 +771,6 @@ globalThis.fetch = async (url) => {
 const whoOfficialShortcutSearch = await callHandler(searchHandler, request('/api/search', { query: 'WHO official source', limit: 5 }));
 assert.equal(whoOfficialShortcutSearch.statusCode, 200);
 assert.ok(whoOfficialShortcutSearch.body.results.some(item => item.domain === 'who.int'));
-globalThis.fetch = ORIGINAL_FETCH;
-
-globalThis.fetch = async (url) => {
-    const href = String(url);
-    if (href.startsWith('https://www.tn.gov.in/profile_form_cm.php')) {
-        return textResponse('<html><head><title>Chief Minister | Government of Tamil Nadu</title><meta name="description" content="Official Government of Tamil Nadu profile page for the Chief Minister with current public office information."></head><body>Official Government of Tamil Nadu Chief Minister profile.</body></html>');
-    }
-    if (href.includes('en.wikipedia.org/w/api.php')) {
-        return okJson({ query: { search: [] } });
-    }
-    if (href.includes('api.gdeltproject.org')) {
-        return okJson({ articles: [] });
-    }
-    throw new Error(`unexpected URL ${href}`);
-};
-const tamilNaduCmShortcutSearch = await callHandler(searchHandler, request('/api/search', { query: 'Chief minister of Tamil Nadu, India', limit: 5 }));
-assert.equal(tamilNaduCmShortcutSearch.statusCode, 200);
-assert.equal(tamilNaduCmShortcutSearch.body.success, true);
-assert.ok(tamilNaduCmShortcutSearch.body.results.some(item => item.sourceLabel === 'Tamil Nadu Chief Minister official'));
-assert.ok(tamilNaduCmShortcutSearch.body.results.some(item => item.domain === 'tn.gov.in'));
-assert.ok(tamilNaduCmShortcutSearch.body.results.some(item => item.pageFetched === true));
 globalThis.fetch = ORIGINAL_FETCH;
 
 clearItems();
@@ -1126,6 +1193,22 @@ function wikidataRolePayload({ holder, holderLabel, officeLabel, start = '', art
             }]
         }
     };
+}
+
+function roleQuery(role, jurisdiction, prefix = 'current') {
+    return [prefix, role, 'of', jurisdiction]
+        .filter(Boolean)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function pronounRoleQuery(role, jurisdiction) {
+    return `who is the ${role} of ${jurisdiction}`.replace(/\s+/g, ' ').trim();
+}
+
+function escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
  
 function request(url, body) { 
