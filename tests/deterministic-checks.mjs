@@ -308,7 +308,11 @@ assert.match(SOURCE.appHtml, /const directAnswer = cleanLiveAnswerText\(String\(
 assert.match(SOURCE.appHtml, /const answerEvidenceCount = Number\(answerData\?\.answerEvidenceCount \|\| 0\)/);
 assert.match(SOURCE.appHtml, /if \(directAnswer && answerEvidenceCount > 0 && answerResults\.length\)/);
 assert.match(SOURCE.appHtml, /function isCurrentRoleHolderLiveQuery\(text, liveIntent = null, entityIntent = null\)/);
+assert.match(SOURCE.appHtml, /function isPublicSourceSearchAllowedWhenLiveDisabled\(text, liveIntent = null, entityIntent = null\)/);
 assert.match(SOURCE.appHtml, /failClosed = roleHolderQuery \|\| \(forceFailClosed && shouldRequireVerifiedSources\(query, intent, entityIntent\)\)/);
+assert.match(SOURCE.appHtml, /const publicSourceAllowed = isPublicSourceSearchAllowedWhenLiveDisabled\(initialQuery, initialIntent, initialEntityIntent\)/);
+assert.match(SOURCE.appHtml, /if \(!LIVE_RETRIEVAL_ENABLED && !publicSourceAllowed\)/);
+assert.doesNotMatch(SOURCE.appHtml, /async function fetchLiveSearchJson\(query, options = \{\}\)\s*\{\s*if \(!LIVE_RETRIEVAL_ENABLED\)/);
 
 const stackSandbox = {};
 vm.createContext(stackSandbox);
