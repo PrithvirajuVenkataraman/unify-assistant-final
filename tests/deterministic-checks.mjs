@@ -264,7 +264,7 @@ assert.match(SOURCE.appHtml, /gemini-2\.5-flash-lite/);
 assert.match(SOURCE.appHtml, /permanent-free public-source routing through Wikipedia, Wikidata, GDELT, RSS\/Atom, official shortcuts/);
 assert.match(SOURCE.appHtml, /Britannica lookup, Reddit discussion lookup, and archive\.today snapshot lookup/);
 assert.match(SOURCE.appHtml, /Gemini may help planning, ranking, and snippets/);
-assert.match(SOURCE.appHtml, /no Serper, Brave, Tavily, paid API, or crawler is required/);
+assert.match(SOURCE.appHtml, /No Serper, Brave, Tavily, paid API, or crawler is required/i);
 assert.match(SOURCE.appHtml, /\/api\/extract-url/);
 assert.match(SOURCE.appHtml, /crawl4ai_url_extract/);
 assert.match(SOURCE.appHtml, /\/api\/media-search/);
@@ -303,10 +303,20 @@ assert.match(SOURCE.appHtml, /localStorage when memory persistence is enabled/);
 assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
 assert.doesNotMatch(SOURCE.searchApi, /Tamil Nadu Chief Minister official/);
 assert.doesNotMatch(SOURCE.searchApi, /profile_form_cm/);
-assert.match(SOURCE.searchApi, /function buildSourceDerivedAnswer\(results\)/);
+assert.match(SOURCE.searchApi, /function buildSourceDerivedAnswer\(results, metadata = \{\}\)/);
 assert.match(SOURCE.appHtml, /const directAnswer = cleanLiveAnswerText\(String\(answerData\?\.answer/);
 assert.match(SOURCE.appHtml, /const answerEvidenceCount = Number\(answerData\?\.answerEvidenceCount \|\| 0\)/);
 assert.match(SOURCE.appHtml, /if \(directAnswer && answerEvidenceCount > 0 && answerResults\.length\)/);
+assert.match(SOURCE.appHtml, /function isCurrentRoleHolderLiveQuery\(text, liveIntent = null, entityIntent = null\)/);
+assert.match(SOURCE.appHtml, /failClosed = roleHolderQuery \|\| \(forceFailClosed && shouldRequireVerifiedSources\(query, intent, entityIntent\)\)/);
+
+const stackSandbox = {};
+vm.createContext(stackSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'buildJarvisTechStackReply'), stackSandbox);
+const stackReply = stackSandbox.buildJarvisTechStackReply();
+assert.doesNotMatch(stackReply, /\b(?:index\.html|package\.json)\b/);
+assert.doesNotMatch(stackReply, /\b(?:app|api)\/|\/api\/[a-z0-9-]+/i);
+assert.doesNotMatch(stackReply, /\.(?:js|mjs|css|html)\b/i);
 
 clearItems();
 saveItems([{
