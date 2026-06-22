@@ -11816,7 +11816,7 @@ const ROUTING_REGRESSION_CASES = [
     },
     {
         name: 'Strict political office',
-        prompt: 'Who is the current prime minister of India?',
+        prompt: 'Who currently holds this public office?',
         expectedPath: 'entity_fact',
         expectedMode: 'verify_first'
     },
@@ -12094,9 +12094,6 @@ const DOMAIN_SOURCE_POLICIES = {
             'congress.gov',
             'eci.gov.in', 
             'india.gov.in',
-            'tn.gov.in',
-            'assembly.tn.gov.in',
-            'cm.tn.gov.in',
             'mohfw.gov.in',
             'nhm.gov.in',
             'nmc.org.in',
@@ -12130,9 +12127,6 @@ const DOMAIN_SOURCE_POLICIES = {
             'whitehouse.gov', 
             'eci.gov.in', 
             'india.gov.in',
-            'tn.gov.in',
-            'assembly.tn.gov.in',
-            'cm.tn.gov.in',
             'mohfw.gov.in',
             'nhm.gov.in',
             'ugc.gov.in',
@@ -12998,7 +12992,7 @@ function buildUniversalEntityQueries(userText, liveIntent = null) {
         ? getOfficialCompanySourceHints(subject).join(' ')
         : '';
     const officialDomainHints = entityIntent.domain === 'politics'
-        ? 'site:india.gov.in OR site:tn.gov.in OR site:assembly.tn.gov.in OR site:eci.gov.in OR official government source Reuters AP BBC Wikipedia Wikidata Britannica Reddit archive.today'
+        ? 'official government source Reuters AP BBC Wikipedia Wikidata Britannica'
         : entityIntent.domain === 'space_science'
             ? 'site:nasa.gov OR site:isro.gov.in OR site:esa.int OR site:jaxa.jp OR Reuters'
             : entityIntent.domain === 'arts_literature'
