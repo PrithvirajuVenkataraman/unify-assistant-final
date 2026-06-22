@@ -7479,15 +7479,6 @@ function isAnswerEvidenceSource(item) {
 }
 
 async function buildVerifiedSearchSummary(query, options = {}) {
-    if (!LIVE_RETRIEVAL_ENABLED) {
-        return {
-            text: LIVE_DISABLED_MESSAGE,
-            summary: LIVE_DISABLED_MESSAGE,
-            badge: 'Live search disabled',
-            error: true
-        };
-    }
-
     const userQuery = String(query || '').trim();
     if (!userQuery) return null;
 
@@ -7574,7 +7565,7 @@ async function parseJsonResponseSafely(response) {
 }
 
 function formatLiveSearchFailureMessage(data = {}, status = 0) {
-    if (!LIVE_RETRIEVAL_ENABLED || data?.disabled) {
+    if (data?.disabled) {
         return 'Live search is temporarily disabled.';
     }
 
@@ -7600,13 +7591,6 @@ function formatLiveSearchFailureMessage(data = {}, status = 0) {
 }
 
 async function fetchLiveSearchJson(query, options = {}) {
-    if (!LIVE_RETRIEVAL_ENABLED) {
-        const error = new Error('Live search is temporarily disabled.');
-        error.status = 503;
-        error.data = { success: false, disabled: true, error: 'Live search is temporarily disabled.', results: [] };
-        throw error;
-    }
-
     const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -13734,6 +13718,20 @@ function isCurrentRoleHolderLiveQuery(text, liveIntent = null, entityIntent = nu
     return Boolean(roleFact && officeSignal && currentSignal);
 }
 
+function isPublicSourceSearchAllowedWhenLiveDisabled(text, liveIntent = null, entityIntent = null) {
+    const raw = String(text || '').trim();
+    if (!raw) return false;
+    if (isCurrentRoleHolderLiveQuery(raw, liveIntent, entityIntent)) return true;
+    const intent = liveIntent || extractLiveQueryIntent(raw);
+    const domain = String(intent?.domain || '').toLowerCase();
+    const factType = String(intent?.factType || '').toLowerCase();
+    if (['politics', 'news', 'space_science'].includes(domain)) return true;
+    if (['role', 'news', 'status'].includes(factType)) return true;
+    if (isWeatherIntentText(raw) || isMarketPriceQuery(raw) || isSportsLiveResultQuery(raw)) return true;
+    if (/\b(earthquake|wildfire|flood|storm|cyclone|hurricane|disaster|places to visit|tourist places|official update|government news)\b/i.test(raw)) return true;
+    return false;
+}
+
 function shouldRequireVerifiedSources(classificationOrText, liveIntent = null, entityIntent = null) {
     const classification = (classificationOrText && typeof classificationOrText === 'object' && !Array.isArray(classificationOrText))
         ? classificationOrText
@@ -14683,7 +14681,11 @@ async function handleSportsFactQuery(userText, intent) {
 }
 
 async function handleLiveRetrievalQuery(userText, options = {}) {
-    if (!LIVE_RETRIEVAL_ENABLED) {
+    const initialQuery = String(userText || '').trim();
+    const initialIntent = extractLiveQueryIntent(initialQuery);
+    const initialEntityIntent = extractUniversalEntityIntent(initialQuery, initialIntent);
+    const publicSourceAllowed = isPublicSourceSearchAllowedWhenLiveDisabled(initialQuery, initialIntent, initialEntityIntent);
+    if (!LIVE_RETRIEVAL_ENABLED && !publicSourceAllowed) {
         return publishLiveDisabledMessage(userText);
     }
 
@@ -14701,8 +14703,8 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
         try { controller.abort(); } catch (_) {}
     }, verificationBudgetMs);
     try {
-        const query = String(userText || '').trim();
-        const intent = extractLiveQueryIntent(query);
+        const query = initialQuery;
+        const intent = initialIntent;
         if (intent.domain === 'sports' && !isSportsLiveResultQuery(query)) {
             intent.domain = 'general';
             if (intent.factType === 'standings' || intent.factType === 'winner' || intent.factType === 'score' || intent.factType === 'qualification' || intent.factType === 'stats') {
