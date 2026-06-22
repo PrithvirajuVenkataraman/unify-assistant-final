@@ -101,13 +101,7 @@ const OFFICIAL_SOURCE_SHORTCUTS = Object.freeze([
     { pattern: /\bworld bank\b/i, label: 'World Bank official', url: 'https://www.worldbank.org/', query: 'World Bank latest official update' },
     { pattern: /\bnoaa\b|hurricane|climate|weather alert/i, label: 'NOAA official', url: 'https://www.noaa.gov/', query: 'NOAA latest official update' },
     { pattern: /\busa\.gov|us government|u\.s\. government/i, label: 'USA.gov official', url: 'https://www.usa.gov/', query: 'USA.gov official update' },
-    { pattern: /\bgov\.uk|uk government|british government/i, label: 'GOV.UK official', url: 'https://www.gov.uk/', query: 'GOV.UK official update' },
-    {
-        pattern: /\b(?:chief minister|cm)\s+(?:of\s+)?(?:tamil\s*nadu|tamilnadu)|\b(?:tamil\s*nadu|tamilnadu)\s+(?:chief minister|cm)\b/i,
-        label: 'Tamil Nadu Chief Minister official',
-        url: 'https://www.tn.gov.in/profile_form_cm.php?id=Mjg=&back_type=bWVudV9iYWNr',
-        query: 'Chief Minister of Tamil Nadu official site:tn.gov.in OR site:assembly.tn.gov.in'
-    }
+    { pattern: /\bgov\.uk|uk government|british government/i, label: 'GOV.UK official', url: 'https://www.gov.uk/', query: 'GOV.UK official update' }
 ]);
 
 export default async function handler(req, res) {
@@ -932,8 +926,11 @@ function dedupeSearchResults(results) {
 function buildSearchSummary(results, metadata = {}) {
     const distinctDomains = Array.from(new Set(results.map(item => item.domain).filter(Boolean)));
     const trustedCount = results.filter(item => item.trusted).length;
+    const directAnswer = buildSourceDerivedAnswer(results);
     return {
         results,
+        answer: directAnswer.answer || undefined,
+        answerProvider: directAnswer.provider || undefined,
         distinctDomains,
         trustedCount,
         sourceCount: results.length,
@@ -944,6 +941,22 @@ function buildSearchSummary(results, metadata = {}) {
         geminiEnhanced: Boolean(metadata.geminiEnhanced),
         warnings: Array.from(new Set((metadata.warnings || []).filter(Boolean))),
         refreshed: Boolean(metadata.refreshed)
+    };
+}
+
+function buildSourceDerivedAnswer(results) {
+    const structuredRole = (Array.isArray(results) ? results : [])
+        .find(item => item?.evidenceLevel === 'structured_claim' && item?.holderName && item?.role && item?.jurisdiction);
+    if (!structuredRole) return {};
+    const holder = String(structuredRole.holderName || '').trim();
+    const role = String(structuredRole.role || '').trim();
+    const jurisdiction = String(structuredRole.jurisdiction || '').trim();
+    if (!holder || !role || !jurisdiction) return {};
+    const startDate = String(structuredRole.startDate || '').trim();
+    const startText = startDate ? ` Start date: ${startDate}.` : '';
+    return {
+        answer: `${holder} is listed by Wikidata as current ${role} for ${jurisdiction}.${startText}`,
+        provider: 'wikidata_structured_claim'
     };
 }
 
