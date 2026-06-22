@@ -32,6 +32,16 @@ const SAMPLE = Object.freeze({
     liveQuery: 'q q'
 });
 
+const LIVE_ROUTE_FIXTURES = Object.freeze({
+    weather: ['weather', 'in', 'Testville'].join(' '),
+    crypto: ['bitcoin', 'price', 'now'].join(' '),
+    government: ['latest', 'government', 'news', 'in', 'Test Republic'].join(' '),
+    disaster: ['earthquake', 'updates', 'today'].join(' '),
+    sports: ['score', 'now', 'in', 'fixture league'].join(' '),
+    places: ['places', 'to', 'visit', 'in', 'Sample Harbor'].join(' '),
+    unsupported: ['restaurants', 'near', 'me', 'open', 'now'].join(' ')
+});
+
 const FEATURE_CONTRACTS = Object.freeze({
     composer: {
         required: [
@@ -225,16 +235,16 @@ assert.equal(routeMessage('guitar chords').route, 'llm');
 assert.equal(routeMessage('explain transformer attention').route, 'llm');
 assert.equal(routeMessage('latest OpenAI news').route, 'cached_latest');
 assert.equal(routeMessage('latest React release').route, 'cached_latest');
-assert.equal(routeMessage('weather today').route, 'live_required');
-assert.equal(routeMessage('bitcoin price now').route, 'live_required');
-assert.equal(routeMessage('restaurants near me').route, 'live_required');
-assert.equal(classifyFreeLiveIntent('weather in Chennai').category, 'weather');
-assert.equal(classifyFreeLiveIntent('bitcoin price now').category, 'crypto');
-assert.equal(classifyFreeLiveIntent('latest government news in France').category, 'government');
-assert.equal(classifyFreeLiveIntent('earthquake updates today').category, 'disasters');
-assert.equal(classifyFreeLiveIntent('IPL score now').category, 'sports');
-assert.equal(classifyFreeLiveIntent('places to visit in Kochi').category, 'tourism_food_places');
-assert.equal(classifyFreeLiveIntent('restaurants near me open now').category, 'unsupported_free_live');
+assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.weather).route, 'live_required');
+assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.crypto).route, 'live_required');
+assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.unsupported).route, 'live_required');
+assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.weather).category, 'weather');
+assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.crypto).category, 'crypto');
+assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.government).category, 'government');
+assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.disaster).category, 'disasters');
+assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.sports).category, 'sports');
+assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.places).category, 'tourism_food_places');
+assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.unsupported).category, 'unsupported_free_live');
 assert.match(SOURCE.styles, /\.chat-bubble-user\s*\{[\s\S]*background:\s*transparent !important/);
 assert.match(SOURCE.styles, /\.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important/);
 assert.match(SOURCE.styles, /body\.dark \.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important[\s\S]*border:\s*none !important[\s\S]*padding:\s*0 !important/);
@@ -293,6 +303,10 @@ assert.match(SOURCE.appHtml, /localStorage when memory persistence is enabled/);
 assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
 assert.doesNotMatch(SOURCE.searchApi, /Tamil Nadu Chief Minister official/);
 assert.doesNotMatch(SOURCE.searchApi, /profile_form_cm/);
+assert.match(SOURCE.searchApi, /function buildSourceDerivedAnswer\(results\)/);
+assert.match(SOURCE.appHtml, /const directAnswer = cleanLiveAnswerText\(String\(answerData\?\.answer/);
+assert.match(SOURCE.appHtml, /const answerEvidenceCount = Number\(answerData\?\.answerEvidenceCount \|\| 0\)/);
+assert.match(SOURCE.appHtml, /if \(directAnswer && answerEvidenceCount > 0 && answerResults\.length\)/);
 
 clearItems();
 saveItems([{
