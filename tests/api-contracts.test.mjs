@@ -638,6 +638,30 @@ assert.match(changedRoleSearch.body.answer, new RegExp(escapeRegExp(ROLE_FIXTURE
 assert.doesNotMatch(changedRoleSearch.body.answer, new RegExp(escapeRegExp(ROLE_FIXTURES.chiefMinister.holder)));
 globalThis.fetch = ORIGINAL_FETCH;
 
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('www.wikidata.org/w/api.php')) return okJson({ search: [] });
+    if (href.includes('en.wikipedia.org/w/api.php')) {
+        return okJson({ query: { search: [{ title: `${ROLE_FIXTURES.chiefMinister.officeLabel}`, snippet: 'Office overview.' }] } });
+    }
+    if (href.includes('en.wikipedia.org/api/rest_v1/page/summary')) {
+        return okJson({
+            title: ROLE_FIXTURES.chiefMinister.officeLabel,
+            extract: `${ROLE_FIXTURES.chiefMinister.officeLabel} is the head of government for ${ROLE_FIXTURES.chiefMinister.jurisdiction}.`,
+            content_urls: { desktop: { page: `https://en.wikipedia.org/wiki/${encodeURIComponent(ROLE_FIXTURES.chiefMinister.officeLabel).replaceAll('%20', '_')}` } }
+        });
+    }
+    if (href.includes('api.gdeltproject.org')) return okJson({ articles: [] });
+    if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
+    throw new Error(`unexpected URL ${href}`);
+};
+const genericRoleDefinitionSearch = await callHandler(searchHandler, request('/api/search', { query: chiefMinisterQuery, limit: 5 }));
+assert.equal(genericRoleDefinitionSearch.statusCode, 200);
+assert.ok(genericRoleDefinitionSearch.body.results.some(item => item.sourceType === 'encyclopedia'));
+assert.equal(genericRoleDefinitionSearch.body.answer, undefined);
+assert.equal(genericRoleDefinitionSearch.body.answerProvider, undefined);
+globalThis.fetch = ORIGINAL_FETCH;
+
 let whoShortcutTouched = false;
 globalThis.fetch = async (url) => {
     const href = String(url);
