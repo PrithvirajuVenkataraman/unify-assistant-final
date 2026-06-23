@@ -467,7 +467,7 @@ async function callJsonHandler(handler, req) {
         headers: {},
         setHeader(name, value) {
             this.headers[name] = value;
-            return this;
+            return this; 
         },
         status(code) {
             this.statusCode = code;
