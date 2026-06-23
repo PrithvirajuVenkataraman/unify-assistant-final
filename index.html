@@ -847,6 +847,7 @@ async function fetchWikipediaTopicImages(query, limit = 3) {
     url.searchParams.set('gsrsearch', query);
     url.searchParams.set('gsrlimit', String(Math.min(limit, 5)));
     url.searchParams.set('prop', 'pageimages|info');
+    url.searchParams.set('piprop', 'thumbnail|name|original');
     url.searchParams.set('pithumbsize', '900');
     url.searchParams.set('inprop', 'url');
     url.searchParams.set('format', 'json');
@@ -854,7 +855,7 @@ async function fetchWikipediaTopicImages(query, limit = 3) {
     const data = await fetch(url.toString(), { headers: { Accept: 'application/json' } }).then(response => response.ok ? response.json() : null);
     return Object.values(data?.query?.pages || {})
         .map(page => normalizePublicMediaImage({
-            title: page?.title,
+            title: formatPublicMediaTitle(page?.pageimage, page?.title),
             url: page?.thumbnail?.source,
             thumbnail: page?.thumbnail?.source,
             pageUrl: page?.fullurl,
@@ -886,7 +887,7 @@ async function fetchCommonsTopicImages(query, limit = 3) {
             if (mime && !mime.startsWith('image/')) return null;
             const metadata = info?.extmetadata || {};
             return normalizePublicMediaImage({
-                title: String(page?.title || '').replace(/^File:/i, ''),
+                title: formatPublicMediaTitle(page?.title, 'Reference image'),
                 url: firstMediaString(info?.url, info?.thumburl),
                 thumbnail: firstMediaString(info?.thumburl, info?.url),
                 pageUrl: page?.fullurl,
@@ -903,7 +904,7 @@ function normalizePublicMediaImage(image) {
     const thumbnail = firstMediaString(image?.thumbnail, image?.url);
     if (!isSafePublicMediaImageUrl(url) || !isSafePublicMediaImageUrl(thumbnail)) return null;
     return {
-        title: String(image?.title || 'Reference image').trim().slice(0, 140),
+        title: formatPublicMediaTitle(image?.title, 'Reference image').slice(0, 140),
         url,
         thumbnail,
         pageUrl: firstMediaString(image?.pageUrl, url),
@@ -912,6 +913,24 @@ function normalizePublicMediaImage(image) {
         attribution: String(image?.attribution || image?.source || 'Wikimedia contributors').trim().slice(0, 200),
         sourceType: 'public_media'
     };
+}
+
+function formatPublicMediaTitle(value, fallback = 'Reference image') {
+    const raw = firstMediaString(value, fallback);
+    const cleaned = String(raw || '')
+        .replace(/^File:/i, '')
+        .replace(/\.(?:jpe?g|png|gif|webp|tiff?|svg)$/i, '')
+        .replace(/_/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return cleaned || String(fallback || 'Reference image').trim() || 'Reference image';
+}
+
+function truncatePublicMediaTitle(value, maxLength = 72) {
+    const title = formatPublicMediaTitle(value);
+    const limit = Math.max(24, Math.min(120, Number(maxLength) || 72));
+    if (title.length <= limit) return title;
+    return `${title.slice(0, limit - 1).replace(/\s+\S*$/g, '').trim()}...`;
 }
 
 function dedupePublicMediaImages(images) {
@@ -958,18 +977,22 @@ function buildAssistantMediaStripHtml(images) {
     const list = Array.isArray(images) ? images.filter(Boolean).slice(0, 3) : [];
     if (!list.length) return '';
     const cards = list.map(image => {
-        const title = escapeHtml(String(image.title || 'Reference image'));
+        const fullTitle = formatPublicMediaTitle(image.title || 'Reference image');
+        const title = escapeHtml(fullTitle);
+        const displayTitle = escapeHtml(truncatePublicMediaTitle(fullTitle, 72));
         const src = escapeHtml(String(image.thumbnail || image.url || ''));
         const href = escapeHtml(String(image.pageUrl || image.url || ''));
         const source = escapeHtml(String(image.source || 'Wikimedia'));
         const license = escapeHtml(String(image.license || 'See source page'));
         if (!src || !href) return '';
         return `
-            <a href="${href}" target="_blank" rel="noopener noreferrer" class="block overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-900/60">
-                <img src="${src}" alt="${title}" class="w-full h-36 object-cover bg-slate-100 dark:bg-slate-800">
-                <span class="block px-2 py-1.5 text-[11px] leading-tight text-slate-700 dark:text-slate-200">
-                    <strong>${title}</strong><br>
-                    ${source} · ${license}
+            <a href="${href}" target="_blank" rel="noopener noreferrer" title="${title}" class="block overflow-hidden rounded-md border border-slate-300 bg-white text-slate-900 shadow-sm transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+                <span class="flex h-32 items-center justify-center bg-slate-100 p-1 dark:bg-black">
+                    <img src="${src}" alt="${title}" class="max-h-full w-full object-contain">
+                </span>
+                <span class="block px-2 py-2 text-[12px] leading-snug">
+                    <strong class="block font-semibold">${displayTitle}</strong>
+                    <span class="mt-0.5 block text-[11px] text-slate-600 dark:text-slate-400">${source} - ${license}</span>
                 </span>
             </a>
         `;
