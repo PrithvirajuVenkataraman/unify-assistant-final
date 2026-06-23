@@ -119,9 +119,11 @@
                         </svg>
                     </button>
                     <div id="composer-actions-menu" class="composer-actions-menu hidden" role="menu" aria-label="Composer actions">
+                        <button type="button" id="upload-file-btn" class="composer-action-item" onclick="handleComposerAction('upload')" role="menuitem">Upload file</button>
                         <button type="button" id="vision-toggle-btn" class="composer-action-item" onclick="handleComposerAction('vision')" role="menuitem">Vision analysis</button>
                         <button type="button" id="help-btn" class="composer-action-item" onclick="handleComposerAction('help')" role="menuitem">Help & options</button>
                     </div>
+                    <input id="document-upload-input" type="file" class="hidden" accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,.md,.markdown,.csv,.json,.docx,image/png,image/jpeg,image/webp,application/pdf,text/plain,text/markdown,text/csv,application/json,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onchange="handleDocumentSelection(event)">
                 </div>
                 <textarea
                     id="text-input"
@@ -6608,7 +6610,12 @@ function normalizeUiTokens(text) {
             closeComposerActionsMenu();
             const key = String(action || '').trim().toLowerCase();
             if (key === 'upload') {
-                showTemporaryMessage('Document upload is turned off. Use Live Vision for camera-based questions.');
+                const input = document.getElementById('document-upload-input');
+                if (!input) {
+                    showTemporaryMessage('File upload control is unavailable.');
+                    return;
+                }
+                input.click();
                 return;
             }
             if (key === 'vision') return toggleContinuousVision();
@@ -6704,9 +6711,80 @@ function normalizeUiTokens(text) {
         }
         async function handleDocumentSelection(event) {
             const input = event?.target;
+            const file = input?.files?.[0] || null;
             if (input) input.value = '';
-            const msg = 'Document upload is turned off. Use Live Vision for camera-based questions.';
-            addChatMessage(msg, false);
+            if (!file) return;
+
+            const maxBytes = 6 * 1024 * 1024;
+            if (file.size > maxBytes) {
+                addChatMessage('That file is too large for OCR. Please upload a file under 6 MB.', false);
+                return;
+            }
+
+            const supported = isSupportedUploadFile(file);
+            if (!supported) {
+                addChatMessage('I can read PNG, JPG, WebP, PDF, TXT, Markdown, CSV, JSON, and DOCX files. Please upload one of those formats.', false);
+                return;
+            }
+
+            beginAssistantProcessing();
+            showThinkingIndicator('Reading your uploaded file...');
+            try {
+                const payload = await prepareFilePayload(file);
+                const response = await fetch('/api/ocr', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fileBase64: payload.fileBase64,
+                        mimeType: payload.mimeType || file.type || '',
+                        fileName: payload.fileName || file.name,
+                        prompt: pendingUploadContext || 'Extract readable text and preserve structure.'
+                    })
+                });
+                const rawBody = await response.text();
+                let data = {};
+                try {
+                    data = rawBody ? JSON.parse(rawBody) : {};
+                } catch (_) {
+                    data = {};
+                }
+                if (!response.ok || !data?.success) {
+                    const message = String(data?.error?.message || 'I could not read that file. Please try a clearer or smaller upload.').trim();
+                    addChatMessage(message, false);
+                    return;
+                }
+
+                const result = data.result || {};
+                const doc = buildUploadedDocumentFromOcrResult(result, {
+                    fileName: payload.fileName || file.name,
+                    mimeType: payload.mimeType || file.type || '',
+                    userContext: pendingUploadContext
+                });
+                rememberUploadedDocument(doc);
+                const card = formatDocumentResultCard(doc);
+                addChatMessage(card, false, false);
+                saveToHistory(`Uploaded file: ${doc.fileName}`, doc.summary || doc.extractedText.slice(0, 1000));
+                pendingUploadContext = '';
+            } catch (error) {
+                console.error('document upload failed:', {
+                    reason: String(error?.message || error || 'unknown_error'),
+                    fileName: String(file?.name || '').slice(0, 120),
+                    size: Number(file?.size || 0),
+                    type: String(file?.type || '').slice(0, 80)
+                });
+                addChatMessage('I could not process that upload right now. Please try a smaller or clearer file.', false);
+            } finally {
+                hideThinkingIndicator();
+                endAssistantProcessing();
+                resetPrimaryActionButtonWhenIdle();
+            }
+        }
+
+        function isSupportedUploadFile(file) {
+            const name = String(file?.name || '').toLowerCase();
+            const type = String(file?.type || '').toLowerCase();
+            return /^(image\/png|image\/jpeg|image\/webp|application\/pdf|text\/plain|text\/markdown|text\/csv|application\/json|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document)$/.test(type) ||
+                /\.(png|jpe?g|webp|pdf|txt|md|markdown|csv|json|docx)$/i.test(name);
         }
         async function prepareFilePayload(file) {
             const lowerName = String(file?.name || '').toLowerCase();
@@ -6817,6 +6895,12 @@ function normalizeUiTokens(text) {
             });
         }
 
+        async function readFileAsBase64(file) {
+            const dataUrl = await readFileAsDataUrl(file);
+            const comma = dataUrl.indexOf(',');
+            return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+        }
+
         function loadImageFromDataUrl(dataUrl) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
@@ -6824,6 +6908,99 @@ function normalizeUiTokens(text) {
                 img.onerror = () => reject(new Error('Image decode failed'));
                 img.src = dataUrl;
             });
+        }
+
+        function buildUploadedDocumentFromOcrResult(result = {}, fallback = {}) {
+            const metadata = result?.metadata && typeof result.metadata === 'object' ? result.metadata : {};
+            const fileName = String(metadata.fileName || fallback.fileName || 'uploaded file').trim();
+            const mimeType = String(metadata.mimeType || fallback.mimeType || '').trim();
+            const extractedText = formatOcrResultTextForStorage(result);
+            const blocks = Array.isArray(result.blocks) ? result.blocks : [];
+            const kind = inferUploadedDocumentKind(fileName, mimeType);
+            const summary = buildOcrUploadSummary(result, fileName);
+            const bill = parseBillFromOcrResult(result);
+            return {
+                success: true,
+                fileName,
+                mimeType,
+                kind,
+                extractionMode: String(metadata.extractionMode || 'ocr').trim(),
+                extractionHint: result.confidence === 'low'
+                    ? 'OCR confidence is low; some text may be inaccurate.'
+                    : 'OCR completed and the extracted text is available for follow-up questions.',
+                extractedText,
+                extractedCharCount: extractedText.length,
+                summary,
+                confidence: String(result.confidence || 'medium'),
+                warnings: Array.isArray(result.warnings) ? result.warnings.map(String).filter(Boolean) : [],
+                blocks,
+                pages: Array.isArray(result.pages) ? result.pages : [],
+                metadata,
+                bill,
+                userContext: String(fallback.userContext || '').trim(),
+                uploadedAt: Date.now()
+            };
+        }
+
+        function inferUploadedDocumentKind(fileName, mimeType) {
+            const lower = `${fileName || ''} ${mimeType || ''}`.toLowerCase();
+            if (/\bpdf\b|\.pdf\b/.test(lower)) return 'pdf';
+            if (/docx|\.docx\b/.test(lower)) return 'docx';
+            if (/image\/|\.png\b|\.jpe?g\b|\.webp\b/.test(lower)) return 'image';
+            if (/csv|\.csv\b/.test(lower)) return 'csv';
+            return 'text';
+        }
+
+        function formatOcrResultTextForStorage(result = {}) {
+            const pages = Array.isArray(result.pages) ? result.pages : [];
+            const pageText = pages
+                .map(page => {
+                    const pageNumber = Number(page?.pageNumber || 0) || 1;
+                    const text = String(page?.text || '').trim();
+                    return text ? `Page ${pageNumber}\n${text}` : '';
+                })
+                .filter(Boolean)
+                .join('\n\n');
+            return String(pageText || result.text || '').trim().slice(0, 120000);
+        }
+
+        function buildOcrUploadSummary(result = {}, fileName = 'uploaded file') {
+            const metadata = result?.metadata && typeof result.metadata === 'object' ? result.metadata : {};
+            const docType = String(metadata.documentType || '').trim();
+            const confidence = String(result.confidence || 'medium').trim();
+            const text = String(result.text || '').replace(/\s+/g, ' ').trim();
+            const firstLine = text.split(/[.!?]\s|\n/).find(Boolean) || text.slice(0, 220);
+            const label = docType ? `${docType} file` : 'uploaded file';
+            const summary = firstLine ? `${label}: ${firstLine.slice(0, 260)}` : `I could not find much readable text in ${fileName}.`;
+            return confidence === 'low' ? `${summary} OCR confidence is low.` : summary;
+        }
+
+        function parseBillFromOcrResult(result = {}) {
+            const blocks = Array.isArray(result.blocks) ? result.blocks : [];
+            const text = String(result.text || '').trim();
+            const lineItems = [];
+            const totals = [];
+            for (const block of blocks) {
+                const type = String(block?.type || '').toLowerCase();
+                if (type === 'table' && Array.isArray(block.rows)) {
+                    for (const row of block.rows.slice(0, 40)) {
+                        const line = Array.isArray(row) ? row.join(' - ') : String(row || '');
+                        if (line.trim()) lineItems.push(line.trim());
+                    }
+                }
+                const blockText = String(block?.text || '').trim();
+                if (/\b(total|subtotal|tax|gst|vat|amount due|grand total)\b/i.test(blockText)) totals.push(blockText);
+            }
+            const details = {
+                fullText: text,
+                bill: {
+                    lineItems: lineItems.slice(0, 30),
+                    totals: totals.slice(0, 12)
+                }
+            };
+            const parsed = parseBillFromVisionDetails(details);
+            if (parsed?.total || parsed?.subtotal || parsed?.tax || parsed?.merchant || parsed?.lineItems?.length) return parsed;
+            return null;
         }
 
         function formatDocumentResultCard(data) {
@@ -7227,7 +7404,6 @@ function normalizeUiTokens(text) {
         }
 
         async function handleUploadedDocumentFollowup(text) {
-            return false;
             const q = String(text || '').trim();
             const targetDoc = resolveDocumentForQuestion(q);
             if (!q || !targetDoc || !isLikelyDocumentQuestion(q, targetDoc)) return false;
@@ -7239,7 +7415,7 @@ function normalizeUiTokens(text) {
 
             if (isDocumentRawTextRequest(lower)) {
                 const answer = extracted
-                    ? `I keep extracted text internal by default. If needed, I can answer questions from it directly.`
+                    ? `Extracted text from ${fileName}:\n\n${extracted.slice(0, 12000)}`
                     : `I do not have extracted raw text available for ${fileName}, but I can still try with the summary.`;
                 addChatMessage(answer, false);
                 saveToHistory(q, answer);
@@ -15775,7 +15951,8 @@ function detectInputLanguageHint(text) {
                 return;
             }
 
-            if (/\b(open|start|launch|enable)\s+(camera|ocr|scan)\b|\b(scan|read)\s+(this|text|document)\b/i.test(lower)) {
+            if (/\b(open|start|launch|enable)\s+(camera|ocr|scan)\b|\b(scan|read)\s+(this|text|document)\b/i.test(lower) &&
+                !isLikelyDocumentQuestion(compact)) {
                 addChatMessage('The camera scanner has been removed. Use Live Vision for camera-based questions.', false);
                 return;
             }
