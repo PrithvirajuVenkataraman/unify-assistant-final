@@ -6,6 +6,7 @@ import currentFactsHandler from '../api/current-facts.js';
 import marketsHandler from '../api/markets.js';
 import searchHandler, { __test as searchTest } from '../api/search.js'; 
 import visionHandler from '../api/vision.js'; 
+import ocrHandler from '../api/ocr.js';
 import { webSearchHandler, __test as webSearchTest } from '../api/_lib/web-search-core.js';
 import extractUrlHandler, { __test as extractUrlTest } from '../api/extract-url.js';
 import mediaSearchHandler, { __test as mediaSearchTest } from '../api/media-search.js';
@@ -138,6 +139,7 @@ const LIVE_FIXTURES = Object.freeze({
 const ORIGINAL_SERPER_API_KEY = process.env.SERPER_API_KEY;
 const ORIGINAL_SERPER_KEY = process.env.SERPER_KEY;
 const ORIGINAL_LIVE_RETRIEVAL_ENABLED = process.env.LIVE_RETRIEVAL_ENABLED;
+const ORIGINAL_GROQ_API_KEY = process.env.GROQ_API_KEY;
 const ORIGINAL_GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
 const ORIGINAL_GOOGLE_API_KEY = process.env.GOOGLE_API_KEY; 
 const ORIGINAL_GEMINI_SEARCH_MODEL = process.env.GEMINI_SEARCH_MODEL; 
@@ -150,6 +152,7 @@ const ORIGINAL_FETCH = globalThis.fetch;
 delete process.env.SERPER_API_KEY;
 delete process.env.SERPER_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
+delete process.env.GROQ_API_KEY;
 delete process.env.GEMINI_API_KEY;
 delete process.env.GOOGLE_API_KEY; 
 delete process.env.GEMINI_SEARCH_MODEL; 
@@ -1427,6 +1430,136 @@ const invalidVisionMime = await callHandler(visionHandler, request('/api/vision'
 assert.equal(invalidVisionMime.statusCode, 415);
 assert.equal(invalidVisionMime.body.error.code, 'unsupported_media_type');
 
+process.env.GROQ_API_KEY = 'test-groq-key';
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('api.groq.com')) {
+        return okJson({
+            choices: [{
+                message: {
+                    content: JSON.stringify({
+                        text: 'Invoice\nTotal: INR 123.45',
+                        pages: [{ pageNumber: 1, text: 'Invoice\nTotal: INR 123.45' }],
+                        blocks: [
+                            { type: 'heading', text: 'Invoice', pageNumber: 1, confidence: 0.95 },
+                            { type: 'key_value', fields: { Total: 'INR 123.45' }, pageNumber: 1, confidence: 0.9 }
+                        ],
+                        confidence: 'high',
+                        warnings: [],
+                        metadata: { documentType: 'invoice' }
+                    })
+                }
+            }]
+        });
+    }
+    throw new Error(`unexpected OCR image URL ${href}`);
+};
+const imageOcr = await callHandler(ocrHandler, request('/api/ocr', {
+    fileName: 'invoice.png',
+    mimeType: 'image/png',
+    fileBase64: SAMPLE.imageBase64
+}));
+assert.equal(imageOcr.statusCode, 200);
+assert.equal(imageOcr.body.success, true);
+assert.match(imageOcr.body.result.text, /Invoice/);
+assert.equal(imageOcr.body.result.confidence, 'high');
+assert.equal(imageOcr.body.result.metadata.extractionMode, 'image_ocr');
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GROQ_API_KEY;
+
+const textPdfOcr = await callHandler(ocrHandler, request('/api/ocr', {
+    fileName: 'sample.pdf',
+    mimeType: 'application/pdf',
+    fileBase64: buildTextPdfBase64('Hello OCR PDF with enough readable embedded text for extraction')
+}));
+assert.equal(textPdfOcr.statusCode, 200);
+assert.equal(textPdfOcr.body.success, true);
+assert.match(textPdfOcr.body.result.text, /Hello OCR PDF/);
+assert.equal(textPdfOcr.body.result.metadata.extractionMode, 'pdf_text');
+
+process.env.GEMINI_API_KEY = 'test-gemini-key';
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('generativelanguage.googleapis.com')) {
+        return okJson({
+            candidates: [{
+                content: {
+                    parts: [{
+                        text: JSON.stringify({
+                            text: 'Scanned PDF OCR text',
+                            pages: [{ pageNumber: 1, text: 'Scanned PDF OCR text' }],
+                            blocks: [{ type: 'paragraph', text: 'Scanned PDF OCR text', pageNumber: 1, confidence: 0.72 }],
+                            confidence: 'medium',
+                            warnings: [],
+                            metadata: { documentType: 'scanned_pdf' }
+                        })
+                    }]
+                }
+            }]
+        });
+    }
+    throw new Error(`unexpected OCR Gemini URL ${href}`);
+};
+const scannedPdfOcr = await callHandler(ocrHandler, request('/api/ocr', {
+    fileName: 'scan.pdf',
+    mimeType: 'application/pdf',
+    fileBase64: buildTextPdfBase64('')
+}));
+assert.equal(scannedPdfOcr.statusCode, 200);
+assert.equal(scannedPdfOcr.body.result.metadata.extractionMode, 'pdf_scanned_ocr');
+assert.match(scannedPdfOcr.body.result.text, /Scanned PDF OCR text/);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GEMINI_API_KEY;
+
+process.env.GROQ_API_KEY = 'test-groq-key';
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('api.groq.com')) {
+        return okJson({
+            choices: [{
+                message: {
+                    content: JSON.stringify({
+                        text: '',
+                        pages: [],
+                        blocks: [],
+                        confidence: 'low',
+                        warnings: ['No readable text found.'],
+                        metadata: {}
+                    })
+                }
+            }]
+        });
+    }
+    throw new Error(`unexpected unreadable OCR URL ${href}`);
+};
+const unreadableOcr = await callHandler(ocrHandler, request('/api/ocr', {
+    fileName: 'blank.jpg',
+    mimeType: 'image/jpeg',
+    fileBase64: SAMPLE.imageBase64
+}));
+assert.equal(unreadableOcr.statusCode, 200);
+assert.equal(unreadableOcr.body.result.confidence, 'low');
+assert.ok(unreadableOcr.body.result.warnings.length >= 1);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GROQ_API_KEY;
+
+const unsupportedOcr = await callHandler(ocrHandler, request('/api/ocr', {
+    fileName: 'slides.ppt',
+    mimeType: 'application/vnd.ms-powerpoint',
+    fileBase64: SAMPLE.imageBase64
+}));
+assert.equal(unsupportedOcr.statusCode, 415);
+assert.equal(unsupportedOcr.body.error.code, 'unsupported_file_type');
+
+const largeOcr = await callHandler(ocrHandler, request('/api/ocr', {
+    fileName: 'large.txt',
+    mimeType: 'text/plain',
+    fileBase64: Buffer.alloc((6 * 1024 * 1024) + 1).toString('base64')
+}));
+assert.equal(largeOcr.statusCode, 413);
+assert.ok(['file_too_large', 'request_too_large'].includes(largeOcr.body.error.code));
+
+restoreEnv('GROQ_API_KEY', ORIGINAL_GROQ_API_KEY);
 restoreEnv('SERPER_API_KEY', ORIGINAL_SERPER_API_KEY);
 restoreEnv('SERPER_KEY', ORIGINAL_SERPER_KEY);
 restoreEnv('LIVE_RETRIEVAL_ENABLED', ORIGINAL_LIVE_RETRIEVAL_ENABLED);
@@ -1509,6 +1642,34 @@ function pronounRoleQuery(role, jurisdiction) {
 
 function escapeRegExp(value) {
     return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildTextPdfBase64(text) {
+    const safeText = String(text || '').replace(/[()\\]/g, '');
+    const stream = safeText
+        ? `BT /F1 24 Tf 72 720 Td (${safeText}) Tj ET`
+        : 'BT ET';
+    const objects = [
+        '<< /Type /Catalog /Pages 2 0 R >>',
+        '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+        `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+    ];
+    let pdf = '%PDF-1.1\n';
+    const offsets = [0];
+    objects.forEach((body, index) => {
+        offsets.push(Buffer.byteLength(pdf, 'latin1'));
+        pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+    });
+    const xrefAt = Buffer.byteLength(pdf, 'latin1');
+    pdf += `xref\n0 ${objects.length + 1}\n`;
+    pdf += '0000000000 65535 f \n';
+    for (const offset of offsets.slice(1)) {
+        pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+    }
+    pdf += `trailer\n<< /Root 1 0 R /Size ${objects.length + 1} >>\nstartxref\n${xrefAt}\n%%EOF`;
+    return Buffer.from(pdf, 'latin1').toString('base64');
 }
  
 function request(url, body) { 
