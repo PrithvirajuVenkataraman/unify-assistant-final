@@ -6709,15 +6709,24 @@ function normalizeUiTokens(text) {
             }
             ctx.restore();
         }
+        const OCR_HOSTED_MAX_FILE_BYTES = 3 * 1024 * 1024;
+        const OCR_HOSTED_MAX_BODY_BYTES = Math.floor(4.5 * 1024 * 1024);
+        const OCR_UPLOAD_JSON_MARGIN_BYTES = 2048;
+
         async function handleDocumentSelection(event) {
             const input = event?.target;
             const file = input?.files?.[0] || null;
             if (input) input.value = '';
             if (!file) return;
 
-            const maxBytes = 6 * 1024 * 1024;
+            const maxBytes = OCR_HOSTED_MAX_FILE_BYTES;
             if (file.size > maxBytes) {
-                addChatMessage('That file is too large for OCR. Please upload a file under 6 MB.', false);
+                addChatMessage(`That file is too large for hosted OCR. Please upload a file under ${formatUploadBytesForUser(maxBytes)} or compress the PDF.`, false);
+                return;
+            }
+
+            if (estimateOcrUploadBodyBytes(file.size) > OCR_HOSTED_MAX_BODY_BYTES) {
+                addChatMessage(`That upload is too large for the hosted OCR endpoint after encoding. Try a file under ${formatUploadBytesForUser(maxBytes)} or a compressed PDF.`, false);
                 return;
             }
 
@@ -6731,15 +6740,20 @@ function normalizeUiTokens(text) {
             showThinkingIndicator('Reading your uploaded file...');
             try {
                 const payload = await prepareFilePayload(file);
+                const requestBody = JSON.stringify({
+                    fileBase64: payload.fileBase64,
+                    mimeType: payload.mimeType || file.type || '',
+                    fileName: payload.fileName || file.name,
+                    prompt: pendingUploadContext || 'Extract readable text and preserve structure.'
+                });
+                if (getUtf8ByteLength(requestBody) > OCR_HOSTED_MAX_BODY_BYTES) {
+                    addChatMessage(`That upload is too large for the hosted OCR endpoint after encoding. Try a file under ${formatUploadBytesForUser(maxBytes)} or a compressed PDF.`, false);
+                    return;
+                }
                 const response = await fetch('/api/ocr', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        fileBase64: payload.fileBase64,
-                        mimeType: payload.mimeType || file.type || '',
-                        fileName: payload.fileName || file.name,
-                        prompt: pendingUploadContext || 'Extract readable text and preserve structure.'
-                    })
+                    body: requestBody
                 });
                 const rawBody = await response.text();
                 let data = {};
@@ -6796,6 +6810,19 @@ function normalizeUiTokens(text) {
             return /^(image\/png|image\/jpeg|image\/webp|application\/pdf|text\/plain|text\/markdown|text\/csv|application\/json|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document)$/.test(type) ||
                 /\.(png|jpe?g|webp|pdf|txt|md|markdown|csv|json|docx)$/i.test(name);
         }
+        function estimateOcrUploadBodyBytes(fileBytes) {
+            const encodedBytes = Math.ceil((Number(fileBytes || 0) * 4) / 3);
+            return encodedBytes + OCR_UPLOAD_JSON_MARGIN_BYTES;
+        }
+        function getUtf8ByteLength(value) {
+            const text = String(value || '');
+            if (window.TextEncoder) return new TextEncoder().encode(text).length;
+            return unescape(encodeURIComponent(text)).length;
+        }
+        function formatUploadBytesForUser(bytes) {
+            const mb = Number(bytes || 0) / (1024 * 1024);
+            return `${Number.isInteger(mb) ? mb.toFixed(0) : mb.toFixed(1)} MB`;
+        }
         function buildOcrUploadErrorMessage(response, data = {}, rawBody = '', parsedJson = false) {
             const apiMessage = String(data?.error?.message || '').trim();
             if (apiMessage) return apiMessage;
@@ -6804,7 +6831,7 @@ function normalizeUiTokens(text) {
             if (status === 413) return 'OCR upload failed with HTTP 413. Please upload a smaller file.';
             if (status === 415) return 'OCR upload failed with HTTP 415. Please upload a supported file type.';
             if (status === 404) return 'OCR upload failed with HTTP 404. The OCR endpoint is not available on this deployment.';
-            if (status >= 500) return `OCR upload failed with HTTP ${status}. Please try again in a moment.`;
+            if (status >= 500) return `OCR upload failed with HTTP ${status}. This upload may be too large for the hosted OCR endpoint. Try a file under ${formatUploadBytesForUser(OCR_HOSTED_MAX_FILE_BYTES)} or a compressed PDF.`;
             if (status >= 400) return `OCR upload failed with HTTP ${status}. Please check the file and try again.`;
             if (!parsedJson && String(rawBody || '').trim()) return 'OCR upload failed because the server returned an unreadable response.';
             return 'I could not read that file. Please try a clearer or smaller upload.';
