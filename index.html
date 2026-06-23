@@ -5388,6 +5388,7 @@ let showRoutingDebugBadge = false;
                 id: turnId,
                 rawPrompt: cleanRawPrompt,
                 processingPrompt: String(processingPrompt || rawPrompt || '').trim(),
+                displayProcessingPrompt: String(options?.displayProcessingPrompt || processingPrompt || rawPrompt || '').trim(),
                 source: String(source || 'text'),
                 topicLabel: String(options?.topicLabel || detectPrimaryTopicLabel(cleanRawPrompt)).trim(),
                 controlKind: String(options?.controlKind || 'substantive').trim(),
@@ -5516,7 +5517,9 @@ let showRoutingDebugBadge = false;
 
         function getContextCopilotSummary(context = {}) {
             const reason = String(context.contextDecisionReason || '');
+            const action = String(context.programmaticAction || '');
             const topic = getContextCopilotTopic(context);
+            if (action === 'verify_answer') return 'Verifying answer';
             if (reason === 'conversation_repair') return topic ? `Correction applied: ${topic}` : 'Correction applied';
             if (reason === 'explicit_thread_resume') return topic ? `Returned to earlier topic: ${topic}` : 'Returned to earlier topic';
             if (reason === 'pending_clarification_answer') return 'Clarification answer understood';
@@ -5533,6 +5536,8 @@ let showRoutingDebugBadge = false;
             const confidence = Math.round((Number(context.contextConfidence) || 0) * 100);
             const original = String(context.originalUserText || '').trim();
             const resolved = String(context.resolvedUserText || '').trim();
+            const compactOriginal = original.length > 220 ? `${original.slice(0, 220).trim()}...` : original;
+            const compactResolved = resolved.length > 220 ? `${resolved.slice(0, 220).trim()}...` : resolved;
             return `
                 <details class="context-copilot-badge">
                     <summary>
@@ -5540,8 +5545,8 @@ let showRoutingDebugBadge = false;
                         <span>${escapeHtml(summary)}</span>
                     </summary>
                     <div class="context-copilot-details">
-                        ${original ? `<div><strong>Original:</strong> ${escapeHtml(original)}</div>` : ''}
-                        ${resolved ? `<div><strong>Understood as:</strong> ${escapeHtml(resolved)}</div>` : ''}
+                        ${compactOriginal ? `<div><strong>Original:</strong> ${escapeHtml(compactOriginal)}</div>` : ''}
+                        ${compactResolved ? `<div><strong>Understood as:</strong> ${escapeHtml(compactResolved)}</div>` : ''}
                         <div><strong>Reason:</strong> ${escapeHtml(reason)}</div>
                         ${confidence ? `<div><strong>Confidence:</strong> ${confidence}%</div>` : ''}
                     </div>
@@ -5743,7 +5748,7 @@ let showRoutingDebugBadge = false;
             }
         }
 
-        async function submitProgrammaticUserTurn(visibleText, hiddenText) {
+        async function submitProgrammaticUserTurn(visibleText, hiddenText, options = {}) {
             const visible = String(visibleText || '').trim();
             const actual = String(hiddenText || visibleText || '').trim();
             if (!actual) return;
@@ -5754,7 +5759,11 @@ let showRoutingDebugBadge = false;
             closeAssistantActionMenus();
             hideSelectionHelperPopover();
             window.__lastUserMessage = actual;
-            const turn = createConversationTurn(visible || actual, actual, 'programmatic');
+            const turn = createConversationTurn(visible || actual, actual, 'programmatic', {
+                displayProcessingPrompt: String(options?.displayProcessingPrompt || visible || actual).trim(),
+                topicLabel: String(options?.topicLabel || visible || '').trim(),
+                sourceContext: options?.sourceContext || {}
+            });
             const previousRenderContext = beginResponseRenderContext(turn);
             addChatMessage(visible || actual, true, null, { turnId: turn.id });
             beginAssistantProcessing();
@@ -5799,6 +5808,8 @@ let showRoutingDebugBadge = false;
             const flags = Array.isArray(meta.riskFlags) && meta.riskFlags.length 
                 ? meta.riskFlags.map(flag => `${flag.label}: ${flag.reason}`).join('\n') 
                 : 'No local review flags were detected.'; 
+            const originalQuestion = String(meta.priorUserPrompt || 'the previous question').replace(/\s+/g, ' ').trim();
+            const displayPrompt = `Verify the previous answer for: ${originalQuestion.slice(0, 120)}${originalQuestion.length > 120 ? '...' : ''}`;
             const hidden = [ 
                 'Check whether this answer is accurate and internally consistent.', 
                 'If it uses source links, inspect the cited source text already present in the answer.', 
@@ -5810,7 +5821,13 @@ let showRoutingDebugBadge = false;
                 `Answer to verify:\n${meta.text}` 
             ].join('\n'); 
             closeAssistantActionMenus();
-            void submitProgrammaticUserTurn(visible, hidden);
+            void submitProgrammaticUserTurn(visible, hidden, {
+                displayProcessingPrompt: displayPrompt,
+                topicLabel: 'Verify answer',
+                sourceContext: {
+                    programmaticAction: 'verify_answer'
+                }
+            });
         }
 
         async function askJarvisAboutSelection(action = 'custom') {
@@ -15483,10 +15500,12 @@ function detectInputLanguageHint(text) {
             const contextResolution = window.JarvisConversation?.resolve({ message: text }) || null;
             const activeTurnForResolution = getConversationTurn(activeResponseRenderContext?.turnId);
             if (activeTurnForResolution && contextResolution) {
+                const contextDisplayText = String(activeTurnForResolution.displayProcessingPrompt || activeTurnForResolution.rawPrompt || text || '');
+                const useDisplayForContext = activeTurnForResolution.source === 'programmatic';
                 activeTurnForResolution.sourceContext = {
                     ...(activeTurnForResolution.sourceContext || {}),
-                    originalUserText: String(contextResolution.originalMessage || text || ''),
-                    resolvedUserText: String(contextResolution.resolvedMessage || text || ''),
+                    originalUserText: String(useDisplayForContext ? contextDisplayText : (contextResolution.originalMessage || contextDisplayText || '')),
+                    resolvedUserText: String(contextDisplayText || contextResolution.resolvedMessage || text || ''),
                     contextDecisionReason: String(contextResolution.decisionReason || ''),
                     contextConfidence: Number(contextResolution.confidence) || 0,
                     activeThreadTopic: String(contextResolution.activeThread?.topic || ''),
