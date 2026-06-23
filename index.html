@@ -9113,12 +9113,27 @@ function isHighRiskMentalHealth(text) {
 
 function isMedicalAdviceIntent(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(symptom|symptoms|fever|cold|cough|headache|migraine|stomach ache|stomach pain|vomit|vomiting|nausea|diarrhea|constipation|rash|allergy|pain|sore throat|flu|infection|medicine|medication|dose|dosage|tablet|capsule|paracetamol|acetaminophen|ibuprofen|doctor|clinic|urgent care|blood pressure|diabetes|blood sugar|sprain|cut|burn|injury|first aid|medical advice|health advice)\b/.test(t);
+    return /\b(symptom|symptoms|patient|er doc|er doctor|emergency room|fever|cold|cough|headache|migraine|stomach ache|stomach pain|vomit|vomiting|nausea|diarrhea|constipation|rash|allergy|pain|sore throat|flu|infection|medicine|medication|dose|dosage|tablet|capsule|antidepressants?|maoi|monoamine oxidase inhibitor|tyramine|aged cheese|drug interaction|hypertensive crisis|nitroprusside|flushing|sweating|blood pressure|paracetamol|acetaminophen|ibuprofen|doctor|clinic|urgent care|diabetes|blood sugar|sprain|cut|burn|injury|first aid|medical advice|health advice)\b/.test(t);
 }
 
 function isMedicalEmergencyIntent(text) {
     const t = String(text || '').toLowerCase();
     return /\b(chest pain|trouble breathing|difficulty breathing|shortness of breath|stroke|face drooping|slurred speech|seizure|passed out|fainted|unconscious|heavy bleeding|severe bleeding|severe burn|poison|overdose|anaphylaxis|allergic reaction.*breath|cannot breathe|can't breathe|heart attack)\b/.test(t);
+}
+
+function isRestaurantLookupIntent(text) {
+    const t = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!t) return false;
+    if (isMedicalEmergencyIntent(t) || isMedicalAdviceIntent(t) || isRecipeRequest(t)) return false;
+
+    if (/\b(restaurants?|cafes?|coffee shops?|dining|places? to eat|where (?:can|should) i eat|where to eat)\b/.test(t)) {
+        return true;
+    }
+
+    const mealSignal = /\b(breakfast|lunch|dinner|meal|meals)\b/.test(t);
+    const lookupSignal = /\b(near me|nearby|near|around|open now|best|top|recommend|suggest|find|search|where can i|where should i)\b/.test(t) ||
+        /\b(?:in|at|around|near)\s+[a-z][a-z\s,.'-]{1,80}\b/i.test(t);
+    return mealSignal && lookupSignal;
 }
 
 function buildMedicalGuidancePrompt(text) {
@@ -11940,9 +11955,11 @@ function decideAnswerPath(classification) {
     if (!classification || !classification.raw) return 'default_model';
 
     const flags = classification.flags || {};
-    const medicalModeEnabled = typeof window !== 'undefined' ? !!window.medicalMode : false;
 
     if (flags.inappropriate) return 'moderation';
+    if (flags.highRiskMentalHealth) return 'high_risk_mental_health'; 
+    if (flags.medicalEmergency) return 'medical_emergency';
+    if (flags.medicalAdvice) return 'medical_advice';
     if (flags.artistSong) return 'artist_song'; 
     if (flags.explicitWebSearch) return 'default_model';
     if (flags.universalEntityFact) return 'default_model';
@@ -11964,13 +11981,10 @@ function decideAnswerPath(classification) {
     if (flags.classicSongs) return 'classic_songs'; 
     if (flags.screenSuggestions) return 'screen_suggestions';
  
-    if (flags.highRiskMentalHealth) return 'high_risk_mental_health'; 
     if (flags.motivationStory) return 'motivation_story';
     if (flags.supportExit) return 'support_exit'; 
     if (flags.supportRequest) return 'support_intro'; 
-    if (flags.medicalEmergency) return 'medical_emergency';
     if (flags.supportContinuation) return 'support_continue';
-    if (flags.medicalAdvice && medicalModeEnabled) return 'medical_advice';
     if (flags.mentalHealth) return 'mental_health';
     if (flags.debate) return 'debate';
 
@@ -17059,7 +17073,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             }
             
             // Hotel/Restaurant/Transport queries
-            const isRestaurantMatch = cleanText.toLowerCase().match(/\b(restaurants?|eat|eating|dining|meals?|lunch|dinner|breakfast|cafes?|place to eat|places to eat)\b/i);
+            const isRestaurantMatch = isRestaurantLookupIntent(cleanText);
             const isHotelMatch = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i);
             const isTransportMatch = cleanText.toLowerCase().match(/\b(transport|transportation|bus|train|taxi|uber|ola|auto|rickshaw|metro|subway|getting around|get around|how to reach|how do i get|travel to)\b/i);
 
