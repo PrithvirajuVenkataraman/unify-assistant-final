@@ -385,6 +385,30 @@ assert.match(SOURCE.appHtml, /url\.searchParams\.set\('piprop',\s*'thumbnail\|na
 assert.match(SOURCE.appHtml, /function formatPublicMediaTitle/);
 assert.match(SOURCE.appHtml, /object-contain/);
 assert.doesNotMatch(SOURCE.appHtml, /Â·/);
+assert.match(SOURCE.appHtml, /function getStableBrowserFactAnswer/);
+assert.match(SOURCE.appHtml, /function shouldSuppressDuplicateAssistantMessage/);
+assert.match(SOURCE.appHtml, /normalizeDuplicateAnswerFingerprint/);
+assert.match(SOURCE.searchApi, /function parseDiscoveryFactQuery/);
+assert.match(SOURCE.searchApi, /stable_historical_fact/);
+assert.match(SOURCE.chatGroqApi, /function isPenicillinDiscoveryQuestion/);
+
+const duplicateSandbox = {
+    Date,
+    window: { __lastUserMessage: 'Founder of penicillin' },
+    activeResponseRenderContext: { turnId: 'turn-1' },
+    getConversationTurn() {
+        return { rawPrompt: 'Founder of penicillin' };
+    }
+};
+vm.createContext(duplicateSandbox);
+vm.runInContext("let lastAssistantPromptFingerprint = ''; let lastAssistantAnswerFingerprint = ''; let lastAssistantAnswerTimestamp = 0;", duplicateSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getStableBrowserFactAnswer'), duplicateSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeDuplicatePromptFingerprint'), duplicateSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeDuplicateAnswerFingerprint'), duplicateSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'shouldSuppressDuplicateAssistantMessage'), duplicateSandbox);
+assert.match(duplicateSandbox.getStableBrowserFactAnswer('Founder of penicillin'), /Alexander Fleming/);
+assert.equal(duplicateSandbox.shouldSuppressDuplicateAssistantMessage('Alexander Fleming discovered penicillin.\n\nSources:\n1. A', {}), false);
+assert.equal(duplicateSandbox.shouldSuppressDuplicateAssistantMessage('Alexander Fleming discovered penicillin.\n\nSources:\n1. B', {}), true);
 
 const mediaHelperSandbox = {
     normalizeIntentTypos(value) {
