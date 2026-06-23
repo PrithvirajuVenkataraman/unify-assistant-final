@@ -1970,7 +1970,7 @@
 
     function trimToWordCount(text, target) {
         if (!target || target < 1) return '';
-        const tokens = String(text || '').trim().split(/\s+/).filter(Boolean);
+        const tokens = String(text || '').trim().split(/\s+/).filter(Boolean); 
         if (tokens.length <= target) return String(text || '').trim();
         const trimmed = tokens.slice(0, target).join(' ').replace(/[,\s]+$/g, '').trim();
         return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
