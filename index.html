@@ -749,29 +749,37 @@ function deleteMemoryItem(encodedKey) {
     showTemporaryMessage('Memory item deleted.');
 }
 
-function extractReferenceSubject(text) {
+function cleanReferenceSubject(value) {
+    return String(value || '')
+        .replace(/\b(?:please|with pictures?|with images?|picture would be great|pictures would be great|image would be great|images would be great|show pictures?|show images?)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/[^\w\s-]/g, '')
+        .trim()
+        .slice(0, 80);
+}
+
+function extractReferenceSubject(text, assistantText = '') {
     const raw = normalizeIntentTypos(String(text || '').trim());
-    if (!raw) return '';
+    const answer = normalizeIntentTypos(String(assistantText || '').trim());
+    if (!raw && !answer) return '';
 
     const patterns = [
         /^\s*(?:what\s+is|what's|define|meaning\s+of)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
         /^\s*(?:explain)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
         /^\s*(?:tell\s+me\s+about)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
         /^\s*(?:who\s+is|who's)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
+        /^\s*(?:who\s+discovered|who\s+invented|who\s+founded|who\s+created)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
         /^\s*(?:show\s+me)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
         /^\s*(?:image|picture|photo)\s+(?:of)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
         /^\s*(?:what\s+does)\s+(?:a|an|the)?\s*([^?.!]+?)\s+(?:look\s+like)\s*\??\s*$/i,
-        /^\s*(?:what\s+is|explain)\s+([^?.!]+?)\s+reaction\s*\??\s*$/i
+        /^\s*(?:what\s+is|explain)\s+([^?.!]+?)\s+reaction\s*\??\s*$/i,
+        /^\s*(?:show|find|get)\s+(?:me\s+)?(?:some\s+)?(?:pictures?|images?|photos?|diagrams?)\s+(?:of|for)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i
     ];
 
     for (const p of patterns) {
         const m = raw.match(p);
         if (m && m[1]) {
-            return m[1]
-                .replace(/\s+/g, ' ')
-                .replace(/[^\w\s-]/g, '')
-                .trim()
-                .slice(0, 80);
+            return cleanReferenceSubject(m[1]);
         }
     }
 
@@ -788,6 +796,11 @@ function extractReferenceSubject(text) {
         }
     }
 
+    if (answer) {
+        const lead = answer.match(/^\s*([A-Z][A-Za-z0-9'-]+(?:\s+[A-Z][A-Za-z0-9'-]+){0,3})\s+(?:is|was|are|were|refers\s+to|means)\b/);
+        if (lead?.[1]) return cleanReferenceSubject(lead[1]);
+    }
+
     return '';
 }
 
@@ -795,13 +808,16 @@ function shouldTryReferenceImage(userText, assistantText = '') {
     const q = normalizeIntentTypos(String(userText || '')).toLowerCase();
     if (!q.trim()) return false;
 
-    const blockedIntent = /\b(weather|forecast|temperature|news|headlines|shopping|grocery|itinerary|hotel|restaurants?|transport|route|translate|translator|joke|calendar|budget trip|sync|bitcoin|crypto|price now|stock price)\b/;
+    if (q.split(/\s+/).filter(Boolean).length > 18) return false;
+
+    const blockedIntent = /\b(weather|forecast|temperature|news|headlines|shopping|grocery|itinerary|hotel|restaurants?|transport|route|translate|translator|joke|calendar|budget trip|sync|bitcoin|crypto|price now|stock price|code|debug|error|calculate|equation|math|proof|ocr|uploaded file|document)\b/;
     if (blockedIntent.test(q)) return false;
 
-    const explicitImageAsk = /\b(image|picture|photo|show me|looks like|look like|diagram|visual)\b/;
+    const explicitImageAsk = /\b(image|images|picture|pictures|photo|photos|show me|looks like|look like|diagram|visual|pictures would be great|images would be great)\b/;
     const visualExplainerAsk = /\b(tell me about|what is|who is|explain)\b[\s\S]{0,90}\b(guitar|chord|city|town|village|country|state|temple|church|mosque|palace|fort|museum|landmark|tower|bridge|mountain|lake|river|beach|island|food|recipe|animal|plant|bird|planet|space|science|person|monument|product)\b/;
-    const assistantLooksEducational = /\b(chord|diagram|located|built|species|image|visual|structure|anatomy|landmark|tourist|ingredient)\b/i.test(String(assistantText || ''));
-    return explicitImageAsk.test(q) || visualExplainerAsk.test(q) || (assistantLooksEducational && extractReferenceSubject(q));
+    const factualAsk = /\b(who|what|where|which|tell me about|explain|define|discovered|invented|founded|created|capital|city|country|person|place|object|species|plant|animal|planet|monument|landmark|food|recipe)\b/.test(q);
+    const assistantLooksEducational = /\b(chord|diagram|located|built|species|image|visual|structure|anatomy|landmark|tourist|ingredient|discovered|invented|founded|known as|located in)\b/i.test(String(assistantText || ''));
+    return explicitImageAsk.test(q) || visualExplainerAsk.test(q) || ((factualAsk || assistantLooksEducational) && Boolean(extractReferenceSubject(q, assistantText)));
 }
 
 async function fetchPublicMediaForTopic(subject) {
@@ -865,7 +881,7 @@ async function appendAssistantMediaHtml(assistantMessageId, html) {
 
 async function maybeShowReferenceImageForQuery(userText, assistantText = '', assistantMessageId = '') {
     if (!shouldTryReferenceImage(userText, assistantText)) return;
-    const subject = extractReferenceSubject(userText);
+    const subject = extractReferenceSubject(userText, assistantText);
     if (!subject) return;
     if (subject.split(/\s+/).filter(Boolean).length > 8) return;
 
@@ -5765,6 +5781,17 @@ let showRoutingDebugBadge = false;
             void askJarvisAboutSelection('custom');
         }
 
+        function buildVerificationResponseInstructions(scope = 'answer') {
+            return [
+                'Return a clear verification report with these exact sections:',
+                'Verdict: likely accurate, partly accurate, unsupported, or incorrect.',
+                `Evidence used: summarize the ${scope} text, any source links already present, local review flags, and retrieved context supplied in this request.`,
+                'How checked: give a concise rationale for the verdict without revealing hidden chain-of-thought.',
+                'Claims needing live/source verification: list claims that cannot be verified from the supplied evidence.',
+                'Corrected answer: include only if the original is wrong or incomplete.'
+            ].join('\n');
+        }
+
         function verifyAssistantMessage(messageId) { 
             const meta = getAssistantMessageMeta(messageId); 
             if (!meta?.text) return; 
@@ -5775,7 +5802,7 @@ let showRoutingDebugBadge = false;
             const hidden = [ 
                 'Check whether this answer is accurate and internally consistent.', 
                 'If it uses source links, inspect the cited source text already present in the answer.', 
-                'Clearly list any claims that need live verification.', 
+                buildVerificationResponseInstructions('answer'),
                 '', 
                 `Local review flags:\n${flags}`, 
                 '', 
@@ -5792,7 +5819,7 @@ let showRoutingDebugBadge = false;
             const normalizedAction = ['explain', 'verify', 'rewrite', 'translate', 'custom'].includes(action) ? action : 'custom';
             const defaultInstructions = {
                 explain: 'Explain this selection.',
-                verify: 'Check whether this selection is accurate.',
+                verify: `Check whether this selection is accurate.\n${buildVerificationResponseInstructions('selected/source answer')}`,
                 rewrite: 'Rewrite this selection more clearly.',
                 translate: 'Translate this selection to English.'
             };
@@ -5844,6 +5871,7 @@ let showRoutingDebugBadge = false;
                 const messageId = addModelAssistantMessage(answer, 'Selection answer', {
                     routing: result?.routing || null
                 });
+                await maybeShowReferenceImageForQuery(`${visibleText} ${selected}`, answer, messageId);
                 saveToHistory(visibleText, answer, { recordContext: false });
                 addFeedbackButtons(visibleText, answer, messageId);
             } catch (error) {
