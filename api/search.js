@@ -1679,7 +1679,7 @@ export const __test = {
     runVerifiedWebSearch,
     searchGdeltNews,
     searchWikidata,
-    searchReddit,
+    searchReddit, 
     searchGovernmentRole,
     parseGovernmentRoleQuery,
     normalizeGovernmentRoleBindings,
