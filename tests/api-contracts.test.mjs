@@ -372,6 +372,154 @@ for (const scenario of [
     );
 }
 
+assert.equal(
+    chatTest.resolveRouteEscalation(
+        { strategy: 'direct', reason: 'stable_factual_query' },
+        'Who discovered penicillin?',
+        'Alexander Fleming discovered penicillin.',
+        { strictMode: true }
+    ).escalate,
+    false
+);
+assert.equal(
+    chatTest.resolveRouteEscalation(
+        { strategy: 'direct', reason: 'stable_factual_query' },
+        'Who discovered penicillin?',
+        'I am not sure. You can check Google or a website.',
+        { strictMode: true }
+    ).reason,
+    'unknown_general_knowledge_answer'
+);
+assert.equal(chatTest.isCrawl4AiFallbackCandidate({ url: 'https://en.wikipedia.org/wiki/Penicillin' }), true);
+assert.equal(chatTest.isCrawl4AiFallbackCandidate({ url: 'https://example.com/file.pdf' }), false);
+
+process.env.GROQ_API_KEY = 'test-groq-key';
+process.env.LIVE_RETRIEVAL_ENABLED = 'true';
+process.env.CHAT_ROUTER_MODE = 'strict_single_pass';
+let confidentSearchCalls = 0;
+globalThis.fetch = async (url, init) => {
+    const href = String(url);
+    if (href.includes('api.groq.com')) {
+        const body = JSON.parse(String(init?.body || '{}'));
+        const prompt = String(body?.messages?.[0]?.content || '');
+        if (prompt.includes('Classify the user message')) {
+            return okJson({ choices: [{ message: { content: '{"blocked":false,"reason":"safe","safe_response":""}' } }] });
+        }
+        if (prompt.includes('Review this candidate answer')) {
+            return okJson({ choices: [{ message: { content: '{"verdict":"pass","issues":[],"correctedResponse":""}' } }] });
+        }
+        return okJson({ choices: [{ message: { content: 'Alexander Fleming discovered penicillin.' } }] });
+    }
+    confidentSearchCalls += 1;
+    throw new Error(`unexpected URL ${href}`);
+};
+const confidentStableChat = await callHandler(chatHandler, request('/api/chat-groq', { message: 'Who discovered penicillin?' }));
+assert.equal(confidentStableChat.statusCode, 200);
+assert.equal(confidentStableChat.body.webEscalation.escalated, false);
+assert.equal(confidentStableChat.body.webEscalation.reason, 'strict_single_pass_no_second_pass');
+assert.equal(confidentStableChat.body.response, 'Alexander Fleming discovered penicillin.');
+assert.equal(confidentSearchCalls, 0);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GROQ_API_KEY;
+delete process.env.LIVE_RETRIEVAL_ENABLED;
+delete process.env.CHAT_ROUTER_MODE;
+
+process.env.GROQ_API_KEY = 'test-groq-key';
+process.env.LIVE_RETRIEVAL_ENABLED = 'true';
+process.env.CHAT_ROUTER_MODE = 'strict_single_pass';
+process.env.CRAWL4AI_URL = 'https://crawl4ai.example';
+let uncertainModelCalls = 0;
+let fallbackCrawlCalls = 0;
+globalThis.fetch = async (url, init) => {
+    const href = String(url);
+    if (href.includes('api.groq.com')) {
+        const body = JSON.parse(String(init?.body || '{}'));
+        const prompt = String(body?.messages?.[0]?.content || '');
+        if (prompt.includes('Classify the user message')) {
+            return okJson({ choices: [{ message: { content: '{"blocked":false,"reason":"safe","safe_response":""}' } }] });
+        }
+        if (prompt.includes('Review this candidate answer')) {
+            return okJson({ choices: [{ message: { content: '{"verdict":"pass","issues":[],"correctedResponse":""}' } }] });
+        }
+        uncertainModelCalls += 1;
+        if (prompt.includes('Retrieved context (RAG):')) {
+            return okJson({ choices: [{ message: { content: 'Penicillin was discovered by Alexander Fleming, based on the extracted public source.' } }] });
+        }
+        return okJson({ choices: [{ message: { content: 'I am not sure. You can check Google or a reliable website.' } }] });
+    }
+    if (href.includes('en.wikipedia.org/w/api.php')) {
+        return okJson({ query: { search: [{ title: 'Penicillin', snippet: 'Penicillin discovery and history.' }] } });
+    }
+    if (href.includes('en.wikipedia.org/api/rest_v1/page/summary')) {
+        return okJson({
+            title: 'Penicillin',
+            extract: 'Penicillin was discovered in 1928 by Scottish scientist Alexander Fleming.',
+            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Penicillin' } }
+        });
+    }
+    if (href.includes('www.wikidata.org/w/api.php')) return okJson({ search: [] });
+    if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
+    if (href.includes('api.gdeltproject.org')) return okJson({ articles: [] });
+    if (href === 'https://crawl4ai.example/crawl') {
+        fallbackCrawlCalls += 1;
+        return okJson({
+            result: {
+                url: 'https://en.wikipedia.org/wiki/Penicillin',
+                title: 'Penicillin',
+                description: 'Penicillin discovery history.',
+                text: 'Penicillin was discovered in 1928 by Scottish scientist Alexander Fleming after observing antibacterial mold activity.'
+            }
+        });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const uncertainStableChat = await callHandler(chatHandler, request('/api/chat-groq', { message: 'Who discovered penicillin?' }));
+assert.equal(uncertainStableChat.statusCode, 200);
+assert.equal(uncertainStableChat.body.webEscalation.escalated, true);
+assert.equal(uncertainStableChat.body.webEscalation.reason, 'crawl4ai_grounding_used');
+assert.equal(uncertainStableChat.body.webEscalation.extractor, 'crawl4ai');
+assert.equal(uncertainStableChat.body.webEscalation.sourceCount, 1);
+assert.ok(fallbackCrawlCalls > 0 && fallbackCrawlCalls <= 3);
+assert.equal(uncertainModelCalls, 2);
+assert.match(uncertainStableChat.body.response, /Alexander Fleming/);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GROQ_API_KEY;
+delete process.env.LIVE_RETRIEVAL_ENABLED;
+delete process.env.CHAT_ROUTER_MODE;
+delete process.env.CRAWL4AI_URL;
+
+process.env.GROQ_API_KEY = 'test-groq-key';
+process.env.LIVE_RETRIEVAL_ENABLED = 'true';
+process.env.CHAT_ROUTER_MODE = 'strict_single_pass';
+let unavailableModelCalls = 0;
+globalThis.fetch = async (url, init) => {
+    const href = String(url);
+    if (href.includes('api.groq.com')) {
+        const body = JSON.parse(String(init?.body || '{}'));
+        const prompt = String(body?.messages?.[0]?.content || '');
+        if (prompt.includes('Classify the user message')) {
+            return okJson({ choices: [{ message: { content: '{"blocked":false,"reason":"safe","safe_response":""}' } }] });
+        }
+        if (prompt.includes('Review this candidate answer')) {
+            return okJson({ choices: [{ message: { content: '{"verdict":"pass","issues":[],"correctedResponse":""}' } }] });
+        }
+        unavailableModelCalls += 1;
+        return okJson({ choices: [{ message: { content: 'I am not sure. You can check Google or a reliable website.' } }] });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const unavailableFallbackChat = await callHandler(chatHandler, request('/api/chat-groq', { message: 'Who discovered penicillin?' }));
+assert.equal(unavailableFallbackChat.statusCode, 200);
+assert.equal(unavailableFallbackChat.body.webEscalation.escalated, false);
+assert.equal(unavailableFallbackChat.body.webEscalation.reason, 'crawl4ai_unavailable');
+assert.equal(unavailableFallbackChat.body.webEscalation.extractor, 'crawl4ai');
+assert.equal(unavailableFallbackChat.body.response, 'I am not sure. You can check Google or a reliable website.');
+assert.equal(unavailableModelCalls, 1);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GROQ_API_KEY;
+delete process.env.LIVE_RETRIEVAL_ENABLED;
+delete process.env.CHAT_ROUTER_MODE;
+
 const wrongMethod = await callHandler(currentFactsHandler, {
     ...request('/api/current-facts', {}),
     method: 'GET',
