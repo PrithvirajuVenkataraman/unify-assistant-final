@@ -296,9 +296,11 @@ assert.match(SOURCE.appHtml, /\.replace\(\/\\brtamilnadu\\b\/gi, 'Tamil Nadu'\)/
 assert.doesNotMatch(SOURCE.appHtml, /customAutocorrectRules/);
 assert.match(SOURCE.readme, /Standout Feature: Context Copilot/);
 assert.match(SOURCE.readme, /local, deterministic, private, and free-for-life/);
-assert.match(SOURCE.readme, /Crawl4AI Shared Docker Extraction/);
-assert.match(SOURCE.readme, /CRAWL4AI_URL/);
-assert.match(SOURCE.readme, /Local Docker only works for you/);
+assert.match(SOURCE.readme, /Exact Features/);
+assert.match(SOURCE.readme, /Crawl4AI fallback/);
+assert.match(SOURCE.readme, /Public Images/);
+assert.match(SOURCE.readme, /Verification/);
+assert.doesNotMatch(SOURCE.readme, /Environment Variables|Local Testing|npm run dev|CRAWL4AI_URL/);
 assert.match(SOURCE.appHtml, /localStorage when memory persistence is enabled/);
 assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
 assert.doesNotMatch(SOURCE.searchApi, /Tamil Nadu Chief Minister official/);
@@ -363,6 +365,29 @@ assert.match(SOURCE.chatGroqApi, /async function buildCrawl4AiFallbackContext/);
 assert.match(SOURCE.chatGroqApi, /\.slice\(0,\s*3\)/);
 assert.match(SOURCE.chatGroqApi, /runVerifiedWebSearch\(query,\s*\{\s*limit:\s*6\s*\}\)/);
 assert.match(SOURCE.chatGroqApi, /extractWithCrawl4Ai\(\{/);
+assert.match(SOURCE.appHtml, /function buildVerificationResponseInstructions/);
+assert.match(SOURCE.appHtml, /Verdict: likely accurate, partly accurate, unsupported, or incorrect/);
+assert.match(SOURCE.appHtml, /Evidence used:/);
+assert.match(SOURCE.appHtml, /How checked:/);
+assert.match(SOURCE.appHtml, /Claims needing live\/source verification:/);
+assert.match(SOURCE.appHtml, /Corrected answer:/);
+assert.match(SOURCE.appHtml, /await maybeShowReferenceImageForQuery\(`\$\{visibleText\} \$\{selected\}`,\s*answer,\s*messageId\)/);
+assert.match(SOURCE.appHtml, /body:\s*JSON\.stringify\(\{\s*query,\s*limit:\s*3\s*\}\)/);
+
+const mediaHelperSandbox = {
+    normalizeIntentTypos(value) {
+        return String(value || '');
+    }
+};
+vm.createContext(mediaHelperSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'cleanReferenceSubject'), mediaHelperSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'extractReferenceSubject'), mediaHelperSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'shouldTryReferenceImage'), mediaHelperSandbox);
+assert.equal(mediaHelperSandbox.extractReferenceSubject('who discovered penicillin'), 'penicillin');
+assert.equal(mediaHelperSandbox.extractReferenceSubject('explain photosynthesis'), 'photosynthesis');
+assert.equal(mediaHelperSandbox.shouldTryReferenceImage('who discovered penicillin', 'Alexander Fleming discovered penicillin.'), true);
+assert.equal(mediaHelperSandbox.shouldTryReferenceImage('debug this javascript error', 'Use console output.'), false);
+assert.equal(mediaHelperSandbox.shouldTryReferenceImage('calculate 2 + 2', 'The answer is 4.'), false);
 
 const riskSandbox = {};
 vm.createContext(riskSandbox);
