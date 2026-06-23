@@ -110,6 +110,9 @@ export function classifyVisualMediaIntent(query) {
         return { shouldSearch: true, reason: 'visual_topic' };
     }
     const tokenCount = text.split(/\s+/).filter(Boolean).length;
+    if (tokenCount === 1 && /^[\p{L}\p{N}'-]{4,}$/u.test(text) && !/^(help|hello|thanks|weather|news|code|math|joke|translate)$/i.test(text)) {
+        return { shouldSearch: true, reason: 'compact_topic' };
+    }
     return {
         shouldSearch: tokenCount >= 2 && tokenCount <= 8,
         reason: tokenCount >= 2 && tokenCount <= 8 ? 'compact_topic' : 'low_visual_confidence'
