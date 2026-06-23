@@ -90,40 +90,6 @@ RATE_LIMIT_MAX=60
 LIVE_RETRIEVAL_ENABLED=false
 ```
 
-## Local Testing
-
-Install and verify:
-
-```bash
-npm ci
-npm run check
-```
-
-Run locally:
-
-```bash
-npm run dev
-```
-
-Open:
-
-```text
-http://127.0.0.1:3000
-```
-
-Useful prompts:
-
-```text
-bitcoin price now
-weather in Chennai today
-best route to Bangalore from Chidambaram
-route from my location to Bangalore
-tell me about guitar chords
-summarize https://example.com
-```
-
-## File Purpose Map
-
 ### Root Files
 
 | File | Purpose |
