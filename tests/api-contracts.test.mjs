@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import apiHandler, { resolveRequestPath } from '../api/index.js';
-import chatHandler, { __test as chatTest } from '../api/chat-groq.js';
+import chatHandler, { __test as chatTest } from '../api/chat-groq.js'; 
 import currentFactsHandler from '../api/current-facts.js';
 import marketsHandler from '../api/markets.js';
 import searchHandler, { __test as searchTest } from '../api/search.js'; 
