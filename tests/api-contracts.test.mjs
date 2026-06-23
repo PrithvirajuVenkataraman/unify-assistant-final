@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import apiHandler, { resolveRequestPath } from '../api/index.js';
 import chatHandler, { __test as chatTest } from '../api/chat-groq.js';
 import currentFactsHandler from '../api/current-facts.js';
@@ -9,6 +10,8 @@ import { webSearchHandler, __test as webSearchTest } from '../api/_lib/web-searc
 import extractUrlHandler, { __test as extractUrlTest } from '../api/extract-url.js';
 import mediaSearchHandler, { __test as mediaSearchTest } from '../api/media-search.js';
 import { clearItems, saveItems } from '../api/_lib/latest/latest-cache.js';
+
+const APP_HTML_SOURCE = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 const SAMPLE = Object.freeze({
     chatMessage: 'q',
@@ -304,6 +307,24 @@ const grounded = chatTest.buildGroundedUserMessage(
 );
 assert.match(grounded, /Do not treat source code.*generic code review/i);
 assert.doesNotMatch(grounded, /What this code does/);
+const verifyGrounded = chatTest.buildGroundedUserMessage(
+    'Check whether this selection is accurate.',
+    'selection_verify',
+    validSelection.value.grounding
+);
+assert.match(verifyGrounded, /Verdict: likely accurate, partly accurate, unsupported, or incorrect/i);
+assert.match(verifyGrounded, /Evidence used:/i);
+assert.match(verifyGrounded, /How checked:/i);
+assert.match(verifyGrounded, /Claims needing live\/source verification:/i);
+assert.match(verifyGrounded, /Corrected answer:/i);
+assert.match(APP_HTML_SOURCE, /function buildVerificationResponseInstructions/);
+assert.match(APP_HTML_SOURCE, /Evidence used:/);
+assert.match(APP_HTML_SOURCE, /How checked:/);
+assert.match(APP_HTML_SOURCE, /Claims needing live\/source verification:/);
+assert.match(APP_HTML_SOURCE, /Corrected answer:/);
+assert.match(APP_HTML_SOURCE, /await maybeShowReferenceImageForQuery\(`\$\{visibleText\} \$\{selected\}`,\s*answer,\s*messageId\)/);
+assert.match(APP_HTML_SOURCE, /const factualAsk = /);
+assert.match(APP_HTML_SOURCE, /pictures would be great/);
 assert.deepEqual(
     ['balanced', 'witty', 'chatty', 'supportive', 'debate'].map(chatTest.normalizeResponseStyle),
     ['balanced', 'witty', 'chatty', 'supportive', 'debate']
@@ -1315,6 +1336,8 @@ const invalidMediaSearch = await callHandler(mediaSearchHandler, request('/api/m
 assert.equal(invalidMediaSearch.statusCode, 400);
 assert.equal(invalidMediaSearch.body.error.code, 'invalid_query');
 assert.equal(mediaSearchTest.classifyVisualMediaIntent('tell me about guitar chords').shouldSearch, true);
+assert.equal(mediaSearchTest.classifyVisualMediaIntent('who discovered penicillin').shouldSearch, true);
+assert.equal(mediaSearchTest.classifyVisualMediaIntent('explain photosynthesis').shouldSearch, true);
 assert.equal(mediaSearchTest.classifyVisualMediaIntent('debug this javascript error').shouldSearch, false);
 assert.equal(mediaSearchTest.isSafePublicImageUrl('https://upload.wikimedia.org/example.jpg'), true);
 assert.equal(mediaSearchTest.isSafePublicImageUrl('https://example.com/example.jpg'), false);
