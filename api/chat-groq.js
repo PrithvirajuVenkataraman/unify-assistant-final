@@ -1,6 +1,7 @@
 export const config = { maxDuration: 60 };
 import { applyApiSecurity } from './_lib/security.js';
 import { runVerifiedWebSearch } from './search.js';
+import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 
 const MODEL_FETCH_TIMEOUT_MS = 18_000;
 const INTERNAL_FETCH_TIMEOUT_MS = 8_000;
@@ -132,10 +133,18 @@ export default async function handler(req, res) {
         const escalation = resolveRouteEscalation(routeDecision, effectiveMessage, firstPass.parsedResponse?.response || '', {
             strictMode: isStrictSinglePassRouter()
         });
+        let webEscalationReason = escalation.reason;
+        let webEscalationExtractor = '';
 
         // Pass 2: do live search only when strategy allows second-pass escalation.
         if (escalation.escalate) {
-            liveRag = await buildLiveRagContext(effectiveMessage, req, context);
+            liveRag = escalation.reason === 'unknown_general_knowledge_answer'
+                ? await buildCrawl4AiFallbackContext(effectiveMessage, context)
+                : await buildLiveRagContext(effectiveMessage, req, context);
+            if (liveRag.extractor) {
+                webEscalationExtractor = liveRag.extractor;
+                webEscalationReason = liveRag.ragText ? 'crawl4ai_grounding_used' : 'crawl4ai_unavailable';
+            }
             if (liveRag.ragText) {
                 const secondPrompt = composeFinalPrompt(
                     systemPrompt,
@@ -179,10 +188,11 @@ export default async function handler(req, res) {
             },
             webEscalation: {
                 considered: isWebCheckCandidateQuery(effectiveMessage),
-                escalated: escalation.escalate,
-                reason: escalation.reason,
+                escalated: Boolean(escalation.escalate && liveRag.ragText),
+                reason: webEscalationReason,
                 sourceCount: Array.isArray(liveRag.sources) ? liveRag.sources.length : 0,
-                requestType: isInternalSummary ? 'internal_summary' : 'user_query'
+                requestType: isInternalSummary ? 'internal_summary' : 'user_query',
+                extractor: webEscalationExtractor || undefined
             },
             quality: qualityResult.metadata
         });
@@ -668,16 +678,41 @@ function classifyRoutingDecision(message, clientSystemPrompt, options = {}) {
 function resolveRouteEscalation(routeDecision, message, firstAnswer, options = {}) {
     const strictMode = Boolean(options?.strictMode);
     const strategy = String(routeDecision?.strategy || 'direct');
+    const reason = String(routeDecision?.reason || '');
     if (strategy === 'live_first') {
         return { escalate: false, reason: 'live_preloaded_first_pass' };
     }
     if (strictMode) {
+        if (strategy === 'direct' && reason === 'stable_factual_query') {
+            return getUnknownGeneralKnowledgeEscalationDecision(firstAnswer);
+        }
         return { escalate: false, reason: 'strict_single_pass_no_second_pass' };
     }
     if (strategy === 'direct_then_live_if_needed') {
         return getWebEscalationDecision(message, firstAnswer);
     }
     return { escalate: false, reason: 'strategy_direct' };
+}
+
+function getUnknownGeneralKnowledgeEscalationDecision(firstAnswer) {
+    const answer = String(firstAnswer || '').trim();
+    if (!answer) return { escalate: true, reason: 'unknown_general_knowledge_answer', trigger: 'empty_answer' };
+    if (asksUserToProvideSources(answer)) {
+        return { escalate: true, reason: 'unknown_general_knowledge_answer', trigger: 'model_requested_sources_from_user' };
+    }
+
+    const genericAdvice = /\b(check|visit|see|refer|search|google)\b[\s\S]{0,120}\b(official website|website|site|source|sources|search|google|news websites?)\b/i.test(answer) ||
+        /\b(steps you can follow|you can check|try searching|search online|look it up)\b/i.test(answer);
+    if (genericAdvice) {
+        return { escalate: true, reason: 'unknown_general_knowledge_answer', trigger: 'generic_advice_answer' };
+    }
+
+    const uncertain = /\b(i\s+(?:don'?t|do not)\s+know|i\s+(?:don'?t|do not)\s+have\s+(?:enough\s+)?(?:information|context|live|real[- ]?time)|not sure|cannot verify|can't verify|cannot confirm|can't confirm|might be outdated|may be outdated|i(?:'m| am)\s+unable\s+to\s+verify|i(?:'m| am)\s+not\s+certain)\b/i.test(answer);
+    if (uncertain) {
+        return { escalate: true, reason: 'unknown_general_knowledge_answer', trigger: 'uncertain_or_evasive_answer' };
+    }
+
+    return { escalate: false, reason: 'strict_single_pass_no_second_pass' };
 }
 
 function isMutableEntityFactQuery(text) {
@@ -781,6 +816,89 @@ async function buildLiveRagContext(message, req, contextTurns = []) {
         .join('\n\n');
 
     return { ragText, sources };
+}
+
+async function buildCrawl4AiFallbackContext(message, contextTurns = []) {
+    if (!isLiveRetrievalConfigured() || !hasCrawl4AiConfigForChat()) {
+        return { ragText: '', sources: [], extractor: 'crawl4ai' };
+    }
+
+    const query = resolveContextualLiveQuery(message, contextTurns);
+    let discovered = [];
+    try {
+        const search = await runVerifiedWebSearch(query, { limit: 6 });
+        discovered = Array.isArray(search?.results) ? search.results : [];
+    } catch (_) {
+        return { ragText: '', sources: [], extractor: 'crawl4ai' };
+    }
+
+    const candidates = rankLiveSources(message, discovered)
+        .filter(isAnswerEvidenceSource)
+        .filter(item => isCrawl4AiFallbackCandidate(item))
+        .slice(0, 3);
+    if (!candidates.length) return { ragText: '', sources: [], extractor: 'crawl4ai' };
+
+    const extracted = [];
+    for (const item of candidates) {
+        try {
+            const result = await extractWithCrawl4Ai({
+                url: item.url,
+                query,
+                textLimit: 5000,
+                timeoutMs: 6000,
+                respectRobots: true
+            });
+            const text = String(result?.text || result?.markdown || '').replace(/\s+/g, ' ').trim();
+            if (!text || text.length < 80) continue;
+            extracted.push({
+                title: String(result?.title || item.title || '').trim(),
+                description: String(result?.description || item.description || text.slice(0, 240)).replace(/\s+/g, ' ').trim(),
+                url: String(result?.url || item.url || '').trim(),
+                domain: getHost(result?.url || item.url),
+                sourceType: 'crawl4ai_grounded_source',
+                sourceLabel: item.sourceLabel || item.source || item.domain || getHost(item.url),
+                freshness: item.freshness || 'extracted_public_source',
+                date: item.date || '',
+                trusted: Boolean(item.trusted),
+                extractor: 'crawl4ai',
+                text: text.slice(0, 5000),
+                query
+            });
+        } catch (_) {
+            // Crawl4AI is an optional fallback. A failed page should not block other candidates.
+        }
+    }
+
+    if (!extracted.length) return { ragText: '', sources: [], extractor: 'crawl4ai' };
+    const ragText = extracted
+        .map((item, index) => [
+            `[${index + 1}] ${item.title}`,
+            item.description ? `Summary: ${item.description}` : '',
+            item.sourceLabel ? `Source label: ${item.sourceLabel}` : '',
+            `Source type: ${item.sourceType}`,
+            item.date ? `Date: ${item.date}` : '',
+            `Source: ${item.url}`,
+            `Extracted text: ${item.text}`
+        ].filter(Boolean).join('\n'))
+        .join('\n\n');
+
+    return { ragText, sources: extracted, extractor: 'crawl4ai' };
+}
+
+function hasCrawl4AiConfigForChat() {
+    return Boolean(String(process.env.CRAWL4AI_URL || '').trim());
+}
+
+function isCrawl4AiFallbackCandidate(item) {
+    const url = String(item?.url || '').trim();
+    const domain = getHost(url);
+    if (!url || !domain) return false;
+    if (!/^https?:\/\//i.test(url)) return false;
+    if (isGoogleNewsRedirect(url)) return false;
+    if (/\.pdf(?:$|[?#])/i.test(url)) return false;
+    if (/archive\.(?:today|ph|is)|webcache/i.test(domain || url)) return false;
+    if (/\/search(?:[/?#]|$)|[?&]q=/.test(url.toLowerCase())) return false;
+    return true;
 }
 
 function hasLiveSearchConfiguredForChat() {
@@ -1793,10 +1911,13 @@ export const __test = {
     classifyRoutingDecision,
     getStableFactAnswer,
     getQualityRiskReasons,
+    getUnknownGeneralKnowledgeEscalationDecision,
     normalizeChatRequest,
     normalizeCustomSystemPrompt,
     normalizeResponseStyle,
-    resolveContextualLiveQuery
+    resolveContextualLiveQuery,
+    resolveRouteEscalation,
+    isCrawl4AiFallbackCandidate
 };
 
 function applyResponseLengthPostCheck(parsedResponse, lengthPolicy, message, clientSystemPrompt) {
