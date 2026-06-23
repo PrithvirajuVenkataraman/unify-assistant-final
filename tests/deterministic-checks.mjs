@@ -268,7 +268,9 @@ assert.match(SOURCE.appHtml, /Gemini may help planning, ranking, and snippets/);
 assert.match(SOURCE.appHtml, /No Serper, Brave, Tavily, paid API, or crawler is required/i);
 assert.match(SOURCE.appHtml, /\/api\/extract-url/);
 assert.match(SOURCE.appHtml, /crawl4ai_url_extract/);
-assert.match(SOURCE.appHtml, /\/api\/media-search/);
+assert.match(SOURCE.appHtml, /fetchPublicMediaFromWikimedia/);
+assert.match(SOURCE.appHtml, /https:\/\/en\.wikipedia\.org\/w\/api\.php/);
+assert.match(SOURCE.appHtml, /https:\/\/commons\.wikimedia\.org\/w\/api\.php/);
 assert.match(SOURCE.appHtml, /Related public images/);
 assert.match(SOURCE.appHtml, /data-public-media="true"/);
 assert.match(SOURCE.appHtml, /function isIntercityRouteRequest\(text\)/);
@@ -377,7 +379,8 @@ assert.match(SOURCE.appHtml, /programmaticAction: 'verify_answer'/);
 assert.match(SOURCE.appHtml, /Verifying answer/);
 assert.match(SOURCE.appHtml, /Verify the previous answer for:/);
 assert.match(SOURCE.appHtml, /await maybeShowReferenceImageForQuery\(`\$\{visibleText\} \$\{selected\}`,\s*answer,\s*messageId\)/);
-assert.match(SOURCE.appHtml, /body:\s*JSON\.stringify\(\{\s*query,\s*limit:\s*3\s*\}\)/);
+assert.match(SOURCE.appHtml, /fetchPublicMediaFromWikimedia\(query,\s*3\)/);
+assert.match(SOURCE.appHtml, /dedupePublicMediaImages/);
 
 const mediaHelperSandbox = {
     normalizeIntentTypos(value) {
