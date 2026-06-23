@@ -7,6 +7,7 @@ const ERROR_MESSAGES = {
 }; 
 const enqueueMicrotask = globalThis.queueMicrotask || (callback => Promise.resolve().then(callback)); 
 const TEXT_ONLY_LANGUAGE_NOTICE = 'Non-English languages are supported by text translation only. Voice input uses English transcription.';
+const CONVERSE_DUPLICATE_WINDOW_MS = 8000;
 
 function normalizeVoiceInputLanguage(language = '') {
     const value = String(language || '').trim();
@@ -71,7 +72,7 @@ export function createSpeechInputController(options = {}) {
         if (!normalized) return false;
         const now = Date.now();
         for (const [key, createdAt] of recentConverseSubmissions) {
-            if (now - createdAt > 1800) recentConverseSubmissions.delete(key);
+            if (now - createdAt > CONVERSE_DUPLICATE_WINDOW_MS) recentConverseSubmissions.delete(key);
         }
         const key = `${normalized}:${String(transcriptId || '')}`;
         if (recentConverseSubmissions.has(key) || recentConverseSubmissions.has(normalized)) return false;
