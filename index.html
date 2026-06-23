@@ -6743,13 +6743,23 @@ function normalizeUiTokens(text) {
                 });
                 const rawBody = await response.text();
                 let data = {};
+                let parsedJson = false;
                 try {
                     data = rawBody ? JSON.parse(rawBody) : {};
+                    parsedJson = true;
                 } catch (_) {
                     data = {};
                 }
                 if (!response.ok || !data?.success) {
-                    const message = String(data?.error?.message || 'I could not read that file. Please try a clearer or smaller upload.').trim();
+                    const message = buildOcrUploadErrorMessage(response, data, rawBody, parsedJson);
+                    console.warn('document upload OCR failed:', {
+                        status: Number(response?.status || 0),
+                        parsedJson,
+                        errorCode: String(data?.error?.code || '').slice(0, 80),
+                        fileName: String(file?.name || '').slice(0, 120),
+                        size: Number(file?.size || 0),
+                        type: String(file?.type || '').slice(0, 80)
+                    });
                     addChatMessage(message, false);
                     return;
                 }
@@ -6785,6 +6795,19 @@ function normalizeUiTokens(text) {
             const type = String(file?.type || '').toLowerCase();
             return /^(image\/png|image\/jpeg|image\/webp|application\/pdf|text\/plain|text\/markdown|text\/csv|application\/json|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document)$/.test(type) ||
                 /\.(png|jpe?g|webp|pdf|txt|md|markdown|csv|json|docx)$/i.test(name);
+        }
+        function buildOcrUploadErrorMessage(response, data = {}, rawBody = '', parsedJson = false) {
+            const apiMessage = String(data?.error?.message || '').trim();
+            if (apiMessage) return apiMessage;
+
+            const status = Number(response?.status || 0);
+            if (status === 413) return 'OCR upload failed with HTTP 413. Please upload a smaller file.';
+            if (status === 415) return 'OCR upload failed with HTTP 415. Please upload a supported file type.';
+            if (status === 404) return 'OCR upload failed with HTTP 404. The OCR endpoint is not available on this deployment.';
+            if (status >= 500) return `OCR upload failed with HTTP ${status}. Please try again in a moment.`;
+            if (status >= 400) return `OCR upload failed with HTTP ${status}. Please check the file and try again.`;
+            if (!parsedJson && String(rawBody || '').trim()) return 'OCR upload failed because the server returned an unreadable response.';
+            return 'I could not read that file. Please try a clearer or smaller upload.';
         }
         async function prepareFilePayload(file) {
             const lowerName = String(file?.name || '').toLowerCase();
