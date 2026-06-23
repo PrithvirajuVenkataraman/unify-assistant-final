@@ -252,6 +252,8 @@ assert.match(SOURCE.styles, /body\.dark \.chat-bubble-assistant\s*\{[\s\S]*backg
 assert.match(SOURCE.styles, /body \.chat-row \.chat-bubble-user,\s*body \.chat-row \.chat-bubble-assistant,[\s\S]*border:\s*none !important[\s\S]*border-radius:\s*0 !important/);
 assert.match(SOURCE.styles, /\.selection-helper-popover\s*\{[\s\S]*display:\s*none !important[\s\S]*visibility:\s*hidden !important[\s\S]*pointer-events:\s*none !important/);
 assert.match(SOURCE.styles, /\.selection-helper-popover\.visible\s*\{[\s\S]*display:\s*flex !important[\s\S]*visibility:\s*visible !important/);
+assert.match(SOURCE.styles, /Selection helper readability after the global monochrome override/);
+assert.match(SOURCE.styles, /\.selection-helper-btn,\s*\.selection-helper-btn:hover,[\s\S]*background:\s*#000000 !important[\s\S]*color:\s*#ffffff !important/);
 assert.match(SOURCE.styles, /\.assistant-thinking-pulse\s*\{/);
 assert.match(SOURCE.styles, /@keyframes jarvis-thinking-pulse/);
 assert.doesNotMatch(SOURCE.styles, /assistant-thinking-spinner/);
