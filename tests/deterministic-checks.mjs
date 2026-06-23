@@ -357,6 +357,12 @@ assert.match(SOURCE.visionApi, /pipeline:\s*'planner-critic-solver'/);
 assert.match(SOURCE.speechInput, /try English or another language/);
 assert.match(SOURCE.chatGroqApi, /forceReview: false/);
 assert.doesNotMatch(SOURCE.chatGroqApi, /forceReview: !isInternalSummary/);
+assert.match(SOURCE.chatGroqApi, /reason === 'stable_factual_query'/);
+assert.match(SOURCE.chatGroqApi, /unknown_general_knowledge_answer/);
+assert.match(SOURCE.chatGroqApi, /async function buildCrawl4AiFallbackContext/);
+assert.match(SOURCE.chatGroqApi, /\.slice\(0,\s*3\)/);
+assert.match(SOURCE.chatGroqApi, /runVerifiedWebSearch\(query,\s*\{\s*limit:\s*6\s*\}\)/);
+assert.match(SOURCE.chatGroqApi, /extractWithCrawl4Ai\(\{/);
 
 const riskSandbox = {};
 vm.createContext(riskSandbox);
