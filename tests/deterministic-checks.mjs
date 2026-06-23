@@ -311,6 +311,8 @@ assert.match(SOURCE.appHtml, /id="upload-file-btn"/);
 assert.match(SOURCE.appHtml, /id="document-upload-input"/);
 assert.match(SOURCE.appHtml, /fetch\('\/api\/ocr'/);
 assert.match(SOURCE.appHtml, /function buildUploadedDocumentFromOcrResult/);
+assert.match(SOURCE.appHtml, /function buildOcrUploadErrorMessage/);
+assert.match(SOURCE.appHtml, /OCR upload failed with HTTP 413/);
 assert.doesNotMatch(SOURCE.appHtml, /Document upload is turned off/);
 assert.doesNotMatch(SOURCE.appHtml, /async function handleUploadedDocumentFollowup\(text\)\s*\{\s*return false/);
 assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
