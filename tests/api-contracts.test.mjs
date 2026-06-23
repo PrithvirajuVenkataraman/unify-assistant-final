@@ -1487,6 +1487,14 @@ assert.equal(nearLimitTextOcr.statusCode, 200);
 assert.equal(nearLimitTextOcr.body.success, true);
 assert.equal(nearLimitTextOcr.body.result.metadata.extractionMode, 'plain_text');
 
+const largeBodyOcr = await callHandler(ocrHandler, request('/api/ocr', {
+    fileName: 'large-body.txt',
+    mimeType: 'text/plain',
+    fileBase64: Buffer.alloc(OCR_LIMITS.maxFileBytes + (128 * 1024), 65).toString('base64')
+}));
+assert.equal(largeBodyOcr.statusCode, 413);
+assert.equal(largeBodyOcr.body.error.code, 'request_too_large');
+
 delete process.env.GEMINI_API_KEY;
 delete process.env.GOOGLE_API_KEY;
 const scannedPdfNoProvider = await callHandler(ocrHandler, request('/api/ocr', {
