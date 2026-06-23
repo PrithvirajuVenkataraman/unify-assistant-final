@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import apiHandler, { resolveRequestPath } from '../api/index.js';
-import chatHandler, { __test as chatTest } from '../api/chat-groq.js'; 
+import chatHandler, { __test as chatTest } from '../api/chat-groq.js';
 import currentFactsHandler from '../api/current-facts.js';
 import marketsHandler from '../api/markets.js';
 import searchHandler, { __test as searchTest } from '../api/search.js'; 
@@ -437,8 +437,8 @@ globalThis.fetch = async (url, init) => {
 const confidentStableChat = await callHandler(chatHandler, request('/api/chat-groq', { message: 'Who discovered penicillin?' }));
 assert.equal(confidentStableChat.statusCode, 200);
 assert.equal(confidentStableChat.body.webEscalation.escalated, false);
-assert.equal(confidentStableChat.body.webEscalation.reason, 'strict_single_pass_no_second_pass');
-assert.equal(confidentStableChat.body.response, 'Alexander Fleming discovered penicillin.');
+assert.equal(confidentStableChat.body.webEscalation.reason, 'stable_fact_answered_directly');
+assert.match(confidentStableChat.body.response, /Alexander Fleming discovered penicillin/);
 assert.equal(confidentSearchCalls, 0);
 globalThis.fetch = ORIGINAL_FETCH;
 delete process.env.GROQ_API_KEY;
@@ -464,18 +464,18 @@ globalThis.fetch = async (url, init) => {
         }
         uncertainModelCalls += 1;
         if (prompt.includes('Retrieved context (RAG):')) {
-            return okJson({ choices: [{ message: { content: 'Penicillin was discovered by Alexander Fleming, based on the extracted public source.' } }] });
+            return okJson({ choices: [{ message: { content: 'Aspirin history is commonly linked to Felix Hoffmann and Bayer chemists, based on the extracted public source.' } }] });
         }
         return okJson({ choices: [{ message: { content: 'I am not sure. You can check Google or a reliable website.' } }] });
     }
     if (href.includes('en.wikipedia.org/w/api.php')) {
-        return okJson({ query: { search: [{ title: 'Penicillin', snippet: 'Penicillin discovery and history.' }] } });
+        return okJson({ query: { search: [{ title: 'Aspirin', snippet: 'Aspirin discovery and history.' }] } });
     }
     if (href.includes('en.wikipedia.org/api/rest_v1/page/summary')) {
         return okJson({
-            title: 'Penicillin',
-            extract: 'Penicillin was discovered in 1928 by Scottish scientist Alexander Fleming.',
-            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Penicillin' } }
+            title: 'Aspirin',
+            extract: 'Aspirin history includes the work of Felix Hoffmann and Bayer chemists.',
+            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Aspirin' } }
         });
     }
     if (href.includes('www.wikidata.org/w/api.php')) return okJson({ search: [] });
@@ -485,16 +485,16 @@ globalThis.fetch = async (url, init) => {
         fallbackCrawlCalls += 1;
         return okJson({
             result: {
-                url: 'https://en.wikipedia.org/wiki/Penicillin',
-                title: 'Penicillin',
-                description: 'Penicillin discovery history.',
-                text: 'Penicillin was discovered in 1928 by Scottish scientist Alexander Fleming after observing antibacterial mold activity.'
+                url: 'https://en.wikipedia.org/wiki/Aspirin',
+                title: 'Aspirin',
+                description: 'Aspirin discovery history.',
+                text: 'Aspirin history includes the work of Felix Hoffmann and Bayer chemists in the late nineteenth century.'
             }
         });
     }
     throw new Error(`unexpected URL ${href}`);
 };
-const uncertainStableChat = await callHandler(chatHandler, request('/api/chat-groq', { message: 'Who discovered penicillin?' }));
+const uncertainStableChat = await callHandler(chatHandler, request('/api/chat-groq', { message: 'Who discovered aspirin?' }));
 assert.equal(uncertainStableChat.statusCode, 200);
 assert.equal(uncertainStableChat.body.webEscalation.escalated, true);
 assert.equal(uncertainStableChat.body.webEscalation.reason, 'crawl4ai_grounding_used');
@@ -502,7 +502,7 @@ assert.equal(uncertainStableChat.body.webEscalation.extractor, 'crawl4ai');
 assert.equal(uncertainStableChat.body.webEscalation.sourceCount, 1);
 assert.ok(fallbackCrawlCalls > 0 && fallbackCrawlCalls <= 3);
 assert.equal(uncertainModelCalls, 2);
-assert.match(uncertainStableChat.body.response, /Alexander Fleming/);
+assert.match(uncertainStableChat.body.response, /Felix Hoffmann|extracted public source/);
 globalThis.fetch = ORIGINAL_FETCH;
 delete process.env.GROQ_API_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
@@ -529,7 +529,7 @@ globalThis.fetch = async (url, init) => {
     }
     throw new Error(`unexpected URL ${href}`);
 };
-const unavailableFallbackChat = await callHandler(chatHandler, request('/api/chat-groq', { message: 'Who discovered penicillin?' }));
+const unavailableFallbackChat = await callHandler(chatHandler, request('/api/chat-groq', { message: 'Who discovered aspirin?' }));
 assert.equal(unavailableFallbackChat.statusCode, 200);
 assert.equal(unavailableFallbackChat.body.webEscalation.escalated, false);
 assert.equal(unavailableFallbackChat.body.webEscalation.reason, 'crawl4ai_unavailable');
@@ -678,6 +678,18 @@ assert.equal(searchTest.isValidCitationSource({
     pageFetched: true,
     exactShortcutMatch: false
 }, chiefMinisterQuery), false);
+assert.deepEqual(searchTest.parseDiscoveryFactQuery('Founder of penicillin'), {
+    subject: 'penicillin',
+    relation: 'discovery'
+});
+assert.equal(searchTest.isDiscoveryAnswerSource(searchTest.parseDiscoveryFactQuery('Founder of penicillin'), {
+    title: 'Al Capone',
+    description: 'Al Capone was treated with penicillin late in his life.',
+    sourceType: 'encyclopedia'
+}), false);
+const penicillinAnswer = searchTest.buildSourceDerivedAnswer([], { query: 'Founder of penicillin' });
+assert.match(penicillinAnswer.answer, /Alexander Fleming discovered penicillin/i);
+assert.doesNotMatch(penicillinAnswer.answer, /^Ernst Chain/i);
 
 globalThis.fetch = async (url) => {
     const href = String(url);
