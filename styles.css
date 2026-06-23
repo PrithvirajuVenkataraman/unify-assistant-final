@@ -1899,6 +1899,58 @@ button:hover {
     border-color: rgba(255, 255, 255, 0.72) !important;
 }
 
+/* Selection helper readability after the global monochrome override. */
+.selection-helper-popover {
+    max-width: min(620px, calc(100vw - 18px)) !important;
+    padding: 7px 9px !important;
+    gap: 7px !important;
+    border: 1px solid rgba(255, 255, 255, 0.42) !important;
+    border-radius: 12px !important;
+    background: #000000 !important;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5) !important;
+}
+
+.selection-helper-chip {
+    max-width: min(180px, 32vw) !important;
+    border: 1px solid rgba(255, 255, 255, 0.32) !important;
+    background: #000000 !important;
+    color: rgba(255, 255, 255, 0.86) !important;
+}
+
+.selection-helper-actions {
+    min-width: 0 !important;
+    flex-wrap: wrap !important;
+}
+
+.selection-helper-btn,
+.selection-helper-btn:hover,
+.selection-helper-btn:focus,
+.selection-helper-btn:focus-visible {
+    min-height: 30px !important;
+    border: 1px solid rgba(255, 255, 255, 0.36) !important;
+    border-radius: 999px !important;
+    background: #000000 !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+    white-space: nowrap !important;
+}
+
+.selection-helper-btn:hover,
+.selection-helper-btn:focus-visible {
+    border-color: rgba(255, 255, 255, 0.82) !important;
+    background: rgba(255, 255, 255, 0.12) !important;
+}
+
+@media (max-width: 640px) {
+    .selection-helper-popover {
+        max-width: calc(100vw - 16px) !important;
+    }
+
+    .selection-helper-chip {
+        max-width: min(260px, 78vw) !important;
+    }
+}
+
 .assistant-message-text .science-value,
 .assistant-message-text .science-value-chem,
 .assistant-message-text .science-value-isotope,
