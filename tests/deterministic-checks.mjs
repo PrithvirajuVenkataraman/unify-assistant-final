@@ -5,7 +5,7 @@ import currentFactsHandler, { __test as currentFacts } from '../api/current-fact
 import { classifyFreeLiveIntent, routeMessage } from '../api/_lib/latest/router.js';
 import { clearItems, saveItems } from '../api/_lib/latest/latest-cache.js';
 
-const SOURCE = Object.freeze({ 
+const SOURCE = Object.freeze({  
     science: fs.readFileSync(new URL('../science-format.js', import.meta.url), 'utf8'), 
     readme: fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8'),
     appHtml: fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
