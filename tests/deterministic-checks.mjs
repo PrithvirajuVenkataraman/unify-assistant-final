@@ -66,7 +66,8 @@ const FEATURE_CONTRACTS = Object.freeze({
             /window\.__lastUserMessage = previousLastUserMessage/,
             /JarvisConversation\?\.resolve/,
             /clearSupersededConversationState/,
-            /originalUserText:\s*String\(contextResolution\.originalMessage/,
+            /displayProcessingPrompt/,
+            /useDisplayForContext/,
             /contextSnapshot:\s*Array\.isArray\(conversationContext\)/
         ]
     },
@@ -371,6 +372,10 @@ assert.match(SOURCE.appHtml, /Evidence used:/);
 assert.match(SOURCE.appHtml, /How checked:/);
 assert.match(SOURCE.appHtml, /Claims needing live\/source verification:/);
 assert.match(SOURCE.appHtml, /Corrected answer:/);
+assert.match(SOURCE.appHtml, /displayProcessingPrompt/);
+assert.match(SOURCE.appHtml, /programmaticAction: 'verify_answer'/);
+assert.match(SOURCE.appHtml, /Verifying answer/);
+assert.match(SOURCE.appHtml, /Verify the previous answer for:/);
 assert.match(SOURCE.appHtml, /await maybeShowReferenceImageForQuery\(`\$\{visibleText\} \$\{selected\}`,\s*answer,\s*messageId\)/);
 assert.match(SOURCE.appHtml, /body:\s*JSON\.stringify\(\{\s*query,\s*limit:\s*3\s*\}\)/);
 
@@ -467,7 +472,7 @@ async function callJsonHandler(handler, req) {
         headers: {},
         setHeader(name, value) {
             this.headers[name] = value;
-            return this; 
+            return this;
         },
         status(code) {
             this.statusCode = code;
