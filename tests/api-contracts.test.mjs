@@ -7,6 +7,7 @@ import marketsHandler from '../api/markets.js';
 import searchHandler, { __test as searchTest } from '../api/search.js'; 
 import visionHandler from '../api/vision.js'; 
 import ocrHandler from '../api/ocr.js';
+import { OCR_LIMITS } from '../api/_lib/ocr.js';
 import { webSearchHandler, __test as webSearchTest } from '../api/_lib/web-search-core.js';
 import extractUrlHandler, { __test as extractUrlTest } from '../api/extract-url.js';
 import mediaSearchHandler, { __test as mediaSearchTest } from '../api/media-search.js';
@@ -1477,6 +1478,26 @@ assert.equal(textPdfOcr.body.success, true);
 assert.match(textPdfOcr.body.result.text, /Hello OCR PDF/);
 assert.equal(textPdfOcr.body.result.metadata.extractionMode, 'pdf_text');
 
+const nearLimitTextOcr = await callHandler(ocrHandler, request('/api/ocr', {
+    fileName: 'near-limit.txt',
+    mimeType: 'text/plain',
+    fileBase64: Buffer.alloc(OCR_LIMITS.maxFileBytes, 65).toString('base64')
+}));
+assert.equal(nearLimitTextOcr.statusCode, 200);
+assert.equal(nearLimitTextOcr.body.success, true);
+assert.equal(nearLimitTextOcr.body.result.metadata.extractionMode, 'plain_text');
+
+delete process.env.GEMINI_API_KEY;
+delete process.env.GOOGLE_API_KEY;
+const scannedPdfNoProvider = await callHandler(ocrHandler, request('/api/ocr', {
+    fileName: 'scan.pdf',
+    mimeType: 'application/pdf',
+    fileBase64: buildTextPdfBase64('')
+}));
+assert.equal(scannedPdfNoProvider.statusCode, 503);
+assert.equal(scannedPdfNoProvider.body.error.code, 'provider_unavailable');
+assert.match(scannedPdfNoProvider.body.error.message, /Scanned PDF OCR needs GEMINI_API_KEY or GOOGLE_API_KEY/);
+
 process.env.GEMINI_API_KEY = 'test-gemini-key';
 globalThis.fetch = async (url) => {
     const href = String(url);
@@ -1554,10 +1575,10 @@ assert.equal(unsupportedOcr.body.error.code, 'unsupported_file_type');
 const largeOcr = await callHandler(ocrHandler, request('/api/ocr', {
     fileName: 'large.txt',
     mimeType: 'text/plain',
-    fileBase64: Buffer.alloc((6 * 1024 * 1024) + 1).toString('base64')
+    fileBase64: Buffer.alloc(OCR_LIMITS.maxFileBytes + 1).toString('base64')
 }));
 assert.equal(largeOcr.statusCode, 413);
-assert.ok(['file_too_large', 'request_too_large'].includes(largeOcr.body.error.code));
+assert.equal(largeOcr.body.error.code, 'file_too_large');
 
 restoreEnv('GROQ_API_KEY', ORIGINAL_GROQ_API_KEY);
 restoreEnv('SERPER_API_KEY', ORIGINAL_SERPER_API_KEY);
