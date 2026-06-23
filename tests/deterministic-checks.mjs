@@ -5,7 +5,7 @@ import currentFactsHandler, { __test as currentFacts } from '../api/current-fact
 import { classifyFreeLiveIntent, routeMessage } from '../api/_lib/latest/router.js';
 import { clearItems, saveItems } from '../api/_lib/latest/latest-cache.js';
 
-const SOURCE = Object.freeze({  
+const SOURCE = Object.freeze({ 
     science: fs.readFileSync(new URL('../science-format.js', import.meta.url), 'utf8'), 
     readme: fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8'),
     appHtml: fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
@@ -381,6 +381,10 @@ assert.match(SOURCE.appHtml, /Verify the previous answer for:/);
 assert.match(SOURCE.appHtml, /await maybeShowReferenceImageForQuery\(`\$\{visibleText\} \$\{selected\}`,\s*answer,\s*messageId\)/);
 assert.match(SOURCE.appHtml, /fetchPublicMediaFromWikimedia\(query,\s*3\)/);
 assert.match(SOURCE.appHtml, /dedupePublicMediaImages/);
+assert.match(SOURCE.appHtml, /url\.searchParams\.set\('piprop',\s*'thumbnail\|name\|original'\)/);
+assert.match(SOURCE.appHtml, /function formatPublicMediaTitle/);
+assert.match(SOURCE.appHtml, /object-contain/);
+assert.doesNotMatch(SOURCE.appHtml, /Â·/);
 
 const mediaHelperSandbox = {
     normalizeIntentTypos(value) {
@@ -388,9 +392,13 @@ const mediaHelperSandbox = {
     }
 };
 vm.createContext(mediaHelperSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'firstMediaString'), mediaHelperSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'formatPublicMediaTitle'), mediaHelperSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'cleanReferenceSubject'), mediaHelperSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'extractReferenceSubject'), mediaHelperSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'shouldTryReferenceImage'), mediaHelperSandbox);
+assert.equal(mediaHelperSandbox.formatPublicMediaTitle('File:Glass_vial_of_British_Standard_penicillin.jpg'), 'Glass vial of British Standard penicillin');
+assert.equal(mediaHelperSandbox.formatPublicMediaTitle('', 'History of penicillin'), 'History of penicillin');
 assert.equal(mediaHelperSandbox.extractReferenceSubject('who discovered penicillin'), 'penicillin');
 assert.equal(mediaHelperSandbox.extractReferenceSubject('explain photosynthesis'), 'photosynthesis');
 assert.equal(mediaHelperSandbox.shouldTryReferenceImage('who discovered penicillin', 'Alexander Fleming discovered penicillin.'), true);
