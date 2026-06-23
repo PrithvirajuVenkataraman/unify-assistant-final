@@ -331,6 +331,34 @@ assert.doesNotMatch(stackReply, /\b(?:index\.html|package\.json)\b/);
 assert.doesNotMatch(stackReply, /\b(?:app|api)\/|\/api\/[a-z0-9-]+/i);
 assert.doesNotMatch(stackReply, /\.(?:js|mjs|css|html)\b/i);
 
+const routingSandbox = {
+    window: { medicalMode: false },
+    isRecipeRequest() {
+        return false;
+    }
+};
+vm.createContext(routingSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isMedicalAdviceIntent'), routingSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isMedicalEmergencyIntent'), routingSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isRestaurantLookupIntent'), routingSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'decideAnswerPath'), routingSandbox);
+const clinicalPrompt = 'A patient on antidepressants eats aged cheese for dinner. Two hours later: pounding headache, flushing, sweating, blood pressure 220/120. The ER doc reaches for nitroprusside... then stops. Why?';
+assert.equal(routingSandbox.isMedicalAdviceIntent(clinicalPrompt), true);
+assert.equal(routingSandbox.isRestaurantLookupIntent(clinicalPrompt), false);
+assert.equal(routingSandbox.decideAnswerPath({
+    raw: clinicalPrompt,
+    flags: {
+        medicalAdvice: true,
+        broadFactualWeb: true,
+        currentInfo: true
+    }
+}), 'medical_advice');
+assert.equal(routingSandbox.isMedicalAdviceIntent('Could this be a drug interaction or hypertensive crisis?'), true);
+assert.equal(routingSandbox.isRestaurantLookupIntent('dinner near me'), true);
+assert.equal(routingSandbox.isRestaurantLookupIntent('best restaurants in Chennai'), true);
+assert.equal(routingSandbox.isRestaurantLookupIntent('places to eat in Kyoto'), true);
+assert.equal(routingSandbox.isRestaurantLookupIntent('I ate dinner and got a headache'), false);
+
 clearItems();
 saveItems([{
     title: 'OpenAI announces a new API update',
