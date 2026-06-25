@@ -139,7 +139,6 @@ const GEMINI_MODEL_FALLBACKS = [
     'gemini-flash-latest'
 ];
 const GROQ_VISION_MODEL_FALLBACKS = [
-    'meta-llama/llama-4-scout-17b-16e-instruct',
     'llama-3.2-90b-vision-preview',
     'llama-3.2-11b-vision-preview'
 ];
@@ -161,6 +160,18 @@ function getVisionProviders() {
 }
 
 async function callVisionText({ providers, systemPrompt, mimeType, imageBase64 }) {
+    if (providers?.geminiApiKey) {
+        const payload = await callGeminiVision({
+            apiKey: providers.geminiApiKey,
+            configuredModel: providers.geminiModel,
+            systemPrompt,
+            mimeType,
+            imageBase64
+        });
+        const text = extractGeminiText(payload);
+        if (text) return text;
+    }
+
     if (providers?.groqApiKey) {
         const text = await callGroqVisionText({
             apiKey: providers.groqApiKey,
@@ -170,17 +181,6 @@ async function callVisionText({ providers, systemPrompt, mimeType, imageBase64 }
             imageBase64
         });
         if (text) return text;
-    }
-
-    if (providers?.geminiApiKey) {
-        const payload = await callGeminiVision({
-            apiKey: providers.geminiApiKey,
-            configuredModel: providers.geminiModel,
-            systemPrompt,
-            mimeType,
-            imageBase64
-        });
-        return extractGeminiText(payload);
     }
 
     return '';
