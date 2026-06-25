@@ -39,10 +39,6 @@ Supported categories include:
 
 Unsupported live requests should be answered honestly instead of guessed.
 
-## Public Media Enrichment
-
-Visual topics can call `/api/media-search` to attach relevant public images inside assistant answers. Images come from Wikipedia/Wikimedia public APIs, not Google Images scraping.
-
 Examples:
 
 - `tell me about guitar chords`
@@ -50,45 +46,6 @@ Examples:
 - `what does jalebi look like`
 - `explain the Eiffel Tower`
 - `tell me about Mars`
-
-Each image keeps a source page, source name, license, and attribution when available.
-
-## Crawl4AI Shared Docker Extraction
-
-Crawl4AI is optional shared URL extraction, not the default search system. Normal questions and live facts still use `/api/search`. Crawl4AI is used only when a user provides a specific URL and asks JARVIS to summarize, explain, verify, read, or extract from that URL.
-
-Local Docker only works for you unless you expose it securely. A public VPS/cloud Docker deployment can serve every app user through the Vercel app.
-
-Optional settings:
-
-```bash
-CRAWL4AI_URL=https://your-crawl4ai-service.example.com
-CRAWL4AI_TOKEN=optional-shared-token
-```
-
-When `CRAWL4AI_URL` is missing, `/api/extract-url` clearly reports that URL extraction is unavailable.
-
-## Environment Variables
-
-AI chat needs at least one configured model provider:
-
-```bash
-GROQ_API_KEY=...
-# or
-GEMINI_API_KEY=...
-```
-
-Useful optional settings:
-
-```bash
-GROQ_MODEL=...
-GEMINI_MODEL=...
-GEMINI_SEARCH_MODEL=...
-CORS_ALLOWED_ORIGINS=https://your-site.example.com
-RATE_LIMIT_WINDOW_MS=60000
-RATE_LIMIT_MAX=60
-LIVE_RETRIEVAL_ENABLED=false
-```
 
 ### Root Files
 
@@ -167,7 +124,7 @@ LIVE_RETRIEVAL_ENABLED=false
 | `tests/speech-input.test.mjs` | Unit tests for speech input behavior and language fallback messages. |
 | `tests/api-contracts.test.mjs` | API contract tests for route dispatch, search, Crawl4AI extraction, media search, live providers, current facts, markets, and vision request validation. |
 
-### Tools 
+### Tools
 
 | File | Purpose |
 | --- | --- |
