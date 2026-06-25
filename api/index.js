@@ -3,9 +3,7 @@ import currentFactsHandler from './current-facts.js';
 import marketsHandler from './markets.js';
 import searchHandler from './search.js';
 import visionHandler from './vision.js';
-import ocrHandler from './ocr.js';
 import extractUrlHandler from './extract-url.js';
-import mediaSearchHandler from './media-search.js';
 
 const ROUTES = new Map([
     ['/api/chat-groq', chatGroqHandler],
@@ -13,9 +11,7 @@ const ROUTES = new Map([
     ['/api/markets', marketsHandler],
     ['/api/search', searchHandler],
     ['/api/extract-url', extractUrlHandler],
-    ['/api/media-search', mediaSearchHandler],
-    ['/api/vision', visionHandler],
-    ['/api/ocr', ocrHandler]
+    ['/api/vision', visionHandler]
 ]);
 
 const RETIRED_ROUTES = new Map([
@@ -64,7 +60,7 @@ export function resolveRequestPath(req) {
     const candidates = [
         req?.url,
         req?.headers?.['x-original-uri'],
-        req?.headers?.['x-rewrite-url'], 
+        req?.headers?.['x-rewrite-url'],
         req?.headers?.['x-forwarded-uri'],
         req?.headers?.['x-invoke-path']
     ]
