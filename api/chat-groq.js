@@ -1966,11 +1966,11 @@
     function countWords(text) {
         const words = String(text || '').match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g);
         return Array.isArray(words) ? words.length : 0;
-    }
+    } 
 
     function trimToWordCount(text, target) {
         if (!target || target < 1) return '';
-        const tokens = String(text || '').trim().split(/\s+/).filter(Boolean); 
+        const tokens = String(text || '').trim().split(/\s+/).filter(Boolean);
         if (tokens.length <= target) return String(text || '').trim();
         const trimmed = tokens.slice(0, target).join(' ').replace(/[,\s]+$/g, '').trim();
         return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
