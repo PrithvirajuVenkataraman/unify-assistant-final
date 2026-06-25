@@ -417,6 +417,13 @@ assert.match(SOURCE.appHtml, /Evidence used:/);
 assert.match(SOURCE.appHtml, /How checked:/);
 assert.match(SOURCE.appHtml, /Claims needing live\/source verification:/);
 assert.match(SOURCE.appHtml, /Corrected answer:/);
+assert.match(SOURCE.appHtml, /Sources: include every usable retrieved source as a markdown link/);
+assert.match(SOURCE.appHtml, /async function buildVerificationEvidenceBundle\(originalQuestion\)/);
+assert.match(SOURCE.appHtml, /fetchLiveSearchJson\(query,\s*\{[\s\S]*maxResults:\s*5[\s\S]*answer:\s*false/);
+assert.match(SOURCE.appHtml, /Promise\.all\(extractionCandidates\.map\(item => fetchVerificationExtract\(item\.url,\s*query\)\)\)/);
+assert.match(SOURCE.appHtml, /intent:\s*'verify_answer'/);
+assert.match(SOURCE.appHtml, /evidenceSources:\s*evidenceBundle\.sources/);
+assert.match(SOURCE.appHtml, /addChatMessage\(finalText,\s*false,\s*true/);
 assert.match(SOURCE.appHtml, /displayProcessingPrompt/);
 assert.match(SOURCE.appHtml, /programmaticAction: 'verify_answer'/);
 assert.match(SOURCE.appHtml, /Verifying answer/);
@@ -434,6 +441,11 @@ assert.match(SOURCE.appHtml, /normalizeDuplicateAnswerFingerprint/);
 assert.match(SOURCE.searchApi, /function parseDiscoveryFactQuery/);
 assert.match(SOURCE.searchApi, /stable_historical_fact/);
 assert.match(SOURCE.chatGroqApi, /function isPenicillinDiscoveryQuestion/);
+assert.match(SOURCE.chatGroqApi, /async function handleVerifyAnswerRequest/);
+assert.match(SOURCE.chatGroqApi, /intent === 'verify_answer'/);
+assert.match(SOURCE.chatGroqApi, /strategy:\s*'verify_answer_fast_path'/);
+assert.match(SOURCE.chatGroqApi, /function normalizeVerifyGrounding/);
+assert.match(SOURCE.chatGroqApi, /function ensureVerificationSourcesSection/);
 
 const duplicateSandbox = {
     Date,
