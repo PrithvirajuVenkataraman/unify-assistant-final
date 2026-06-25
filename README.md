@@ -167,7 +167,7 @@ LIVE_RETRIEVAL_ENABLED=false
 | `tests/speech-input.test.mjs` | Unit tests for speech input behavior and language fallback messages. |
 | `tests/api-contracts.test.mjs` | API contract tests for route dispatch, search, Crawl4AI extraction, media search, live providers, current facts, markets, and vision request validation. |
 
-### Tools
+### Tools 
 
 | File | Purpose |
 | --- | --- |
