@@ -119,11 +119,9 @@
                         </svg>
                     </button>
                     <div id="composer-actions-menu" class="composer-actions-menu hidden" role="menu" aria-label="Composer actions">
-                        <button type="button" id="upload-file-btn" class="composer-action-item" onclick="handleComposerAction('upload')" role="menuitem">Upload file</button>
                         <button type="button" id="vision-toggle-btn" class="composer-action-item" onclick="handleComposerAction('vision')" role="menuitem">Vision analysis</button>
                         <button type="button" id="help-btn" class="composer-action-item" onclick="handleComposerAction('help')" role="menuitem">Help & options</button>
                     </div>
-                    <input id="document-upload-input" type="file" class="hidden" accept=".png,.jpg,.jpeg,.webp,.pdf,.txt,.md,.markdown,.csv,.json,.docx,image/png,image/jpeg,image/webp,application/pdf,text/plain,text/markdown,text/csv,application/json,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onchange="handleDocumentSelection(event)">
                 </div>
                 <textarea
                     id="text-input"
@@ -281,7 +279,6 @@ function detectTeachingDepth(text) {
 function getUserIntent(text) {
   return {
     wantsHotels: /hotel|stay|accommodation/i.test(text),
-    wantsRestaurants: /restaurant|food|eat|biryani|curry|lunch|dinner/i.test(text),
     wantsItinerary: /itinerary|plan|schedule|day in/i.test(text)
   };
 }
@@ -751,293 +748,6 @@ function deleteMemoryItem(encodedKey) {
     showTemporaryMessage('Memory item deleted.');
 }
 
-function cleanReferenceSubject(value) {
-    return String(value || '')
-        .replace(/\b(?:please|with pictures?|with images?|picture would be great|pictures would be great|image would be great|images would be great|show pictures?|show images?)\b/gi, ' ')
-        .replace(/\s+/g, ' ')
-        .replace(/[^\w\s-]/g, '')
-        .trim()
-        .slice(0, 80);
-}
-
-function extractReferenceSubject(text, assistantText = '') {
-    const raw = normalizeIntentTypos(String(text || '').trim());
-    const answer = normalizeIntentTypos(String(assistantText || '').trim());
-    if (!raw && !answer) return '';
-
-    const patterns = [
-        /^\s*(?:what\s+is|what's|define|meaning\s+of)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
-        /^\s*(?:explain)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
-        /^\s*(?:tell\s+me\s+about)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
-        /^\s*(?:who\s+is|who's)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
-        /^\s*(?:who\s+discovered|who\s+invented|who\s+founded|who\s+created)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
-        /^\s*(?:show\s+me)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
-        /^\s*(?:image|picture|photo)\s+(?:of)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i,
-        /^\s*(?:what\s+does)\s+(?:a|an|the)?\s*([^?.!]+?)\s+(?:look\s+like)\s*\??\s*$/i,
-        /^\s*(?:what\s+is|explain)\s+([^?.!]+?)\s+reaction\s*\??\s*$/i,
-        /^\s*(?:show|find|get)\s+(?:me\s+)?(?:some\s+)?(?:pictures?|images?|photos?|diagrams?)\s+(?:of|for)\s+(?:a|an|the)?\s*([^?.!]+)\s*$/i
-    ];
-
-    for (const p of patterns) {
-        const m = raw.match(p);
-        if (m && m[1]) {
-            return cleanReferenceSubject(m[1]);
-        }
-    }
-
-    const compact = raw
-        .toLowerCase()
-        .replace(/[^\w\s-]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-    const blocked = /^(hi|hello|hey|thanks|thank you|weather|news|shopping|translate|joke|help)$/i;
-    if (compact && !blocked.test(compact)) {
-        const words = compact.split(' ').filter(Boolean);
-        if (words.length >= 1 && words.length <= 4) {
-            return compact.slice(0, 80);
-        }
-    }
-
-    if (answer) {
-        const lead = answer.match(/^\s*([A-Z][A-Za-z0-9'-]+(?:\s+[A-Z][A-Za-z0-9'-]+){0,3})\s+(?:is|was|are|were|refers\s+to|means)\b/);
-        if (lead?.[1]) return cleanReferenceSubject(lead[1]);
-    }
-
-    return '';
-}
-
-function shouldTryReferenceImage(userText, assistantText = '') {
-    const q = normalizeIntentTypos(String(userText || '')).toLowerCase();
-    if (!q.trim()) return false;
-
-    if (q.split(/\s+/).filter(Boolean).length > 18) return false;
-
-    const blockedIntent = /\b(weather|forecast|temperature|news|headlines|shopping|grocery|itinerary|hotel|restaurants?|transport|route|translate|translator|joke|calendar|budget trip|sync|bitcoin|crypto|price now|stock price|code|debug|error|calculate|equation|math|proof|ocr|uploaded file|document)\b/;
-    if (blockedIntent.test(q)) return false;
-
-    const explicitImageAsk = /\b(image|images|picture|pictures|photo|photos|show me|looks like|look like|diagram|visual|pictures would be great|images would be great)\b/;
-    const visualExplainerAsk = /\b(tell me about|what is|who is|explain)\b[\s\S]{0,90}\b(guitar|chord|city|town|village|country|state|temple|church|mosque|palace|fort|museum|landmark|tower|bridge|mountain|lake|river|beach|island|food|recipe|animal|plant|bird|planet|space|science|person|monument|product)\b/;
-    const factualAsk = /\b(who|what|where|which|tell me about|explain|define|discovered|invented|founded|created|capital|city|country|person|place|object|species|plant|animal|planet|monument|landmark|food|recipe)\b/.test(q);
-    const assistantLooksEducational = /\b(chord|diagram|located|built|species|image|visual|structure|anatomy|landmark|tourist|ingredient|discovered|invented|founded|known as|located in)\b/i.test(String(assistantText || ''));
-    return explicitImageAsk.test(q) || visualExplainerAsk.test(q) || ((factualAsk || assistantLooksEducational) && Boolean(extractReferenceSubject(q, assistantText)));
-}
-
-async function fetchPublicMediaForTopic(subject) {
-    const query = String(subject || '').trim();
-    if (!query) return [];
-    return await fetchPublicMediaFromWikimedia(query, 3).catch(() => []);
-}
-
-async function fetchPublicMediaFromWikimedia(query, limit = 3) {
-    const safeQuery = String(query || '').replace(/\s+/g, ' ').trim().slice(0, 120);
-    if (!safeQuery) return [];
-    const maxImages = Math.max(1, Math.min(3, Number(limit) || 3));
-    const [wikipedia, commons] = await Promise.allSettled([
-        fetchWikipediaTopicImages(safeQuery, maxImages),
-        fetchCommonsTopicImages(safeQuery, maxImages)
-    ]);
-    return dedupePublicMediaImages([
-        ...(wikipedia.status === 'fulfilled' ? wikipedia.value : []),
-        ...(commons.status === 'fulfilled' ? commons.value : [])
-    ]).slice(0, maxImages);
-}
-
-async function fetchWikipediaTopicImages(query, limit = 3) {
-    const url = new URL('https://en.wikipedia.org/w/api.php');
-    url.searchParams.set('action', 'query');
-    url.searchParams.set('generator', 'search');
-    url.searchParams.set('gsrsearch', query);
-    url.searchParams.set('gsrlimit', String(Math.min(limit, 5)));
-    url.searchParams.set('prop', 'pageimages|info');
-    url.searchParams.set('piprop', 'thumbnail|name|original');
-    url.searchParams.set('pithumbsize', '900');
-    url.searchParams.set('inprop', 'url');
-    url.searchParams.set('format', 'json');
-    url.searchParams.set('origin', '*');
-    const data = await fetch(url.toString(), { headers: { Accept: 'application/json' } }).then(response => response.ok ? response.json() : null);
-    return Object.values(data?.query?.pages || {})
-        .map(page => normalizePublicMediaImage({
-            title: formatPublicMediaTitle(page?.pageimage, page?.title),
-            url: page?.thumbnail?.source,
-            thumbnail: page?.thumbnail?.source,
-            pageUrl: page?.fullurl,
-            source: 'Wikipedia',
-            license: 'See source page',
-            attribution: 'Wikipedia contributors'
-        }))
-        .filter(Boolean);
-}
-
-async function fetchCommonsTopicImages(query, limit = 3) {
-    const url = new URL('https://commons.wikimedia.org/w/api.php');
-    url.searchParams.set('action', 'query');
-    url.searchParams.set('generator', 'search');
-    url.searchParams.set('gsrnamespace', '6');
-    url.searchParams.set('gsrsearch', `${query} filetype:bitmap`);
-    url.searchParams.set('gsrlimit', String(Math.min(limit, 6)));
-    url.searchParams.set('prop', 'imageinfo|info');
-    url.searchParams.set('iiprop', 'url|mime|extmetadata');
-    url.searchParams.set('iiurlwidth', '900');
-    url.searchParams.set('inprop', 'url');
-    url.searchParams.set('format', 'json');
-    url.searchParams.set('origin', '*');
-    const data = await fetch(url.toString(), { headers: { Accept: 'application/json' } }).then(response => response.ok ? response.json() : null);
-    return Object.values(data?.query?.pages || {})
-        .map(page => {
-            const info = Array.isArray(page?.imageinfo) ? page.imageinfo[0] : null;
-            const mime = String(info?.mime || '').toLowerCase();
-            if (mime && !mime.startsWith('image/')) return null;
-            const metadata = info?.extmetadata || {};
-            return normalizePublicMediaImage({
-                title: formatPublicMediaTitle(page?.title, 'Reference image'),
-                url: firstMediaString(info?.url, info?.thumburl),
-                thumbnail: firstMediaString(info?.thumburl, info?.url),
-                pageUrl: page?.fullurl,
-                source: 'Wikimedia Commons',
-                license: stripMediaHtml(firstMediaString(metadata?.LicenseShortName?.value, metadata?.License?.value, 'See source page')),
-                attribution: stripMediaHtml(firstMediaString(metadata?.Artist?.value, metadata?.Credit?.value, 'Wikimedia Commons contributors'))
-            });
-        })
-        .filter(Boolean);
-}
-
-function normalizePublicMediaImage(image) {
-    const url = firstMediaString(image?.url, image?.thumbnail);
-    const thumbnail = firstMediaString(image?.thumbnail, image?.url);
-    if (!isSafePublicMediaImageUrl(url) || !isSafePublicMediaImageUrl(thumbnail)) return null;
-    return {
-        title: formatPublicMediaTitle(image?.title, 'Reference image').slice(0, 140),
-        url,
-        thumbnail,
-        pageUrl: firstMediaString(image?.pageUrl, url),
-        source: String(image?.source || 'Wikimedia').trim(),
-        license: String(image?.license || 'See source page').trim().slice(0, 120),
-        attribution: String(image?.attribution || image?.source || 'Wikimedia contributors').trim().slice(0, 200),
-        sourceType: 'public_media'
-    };
-}
-
-function formatPublicMediaTitle(value, fallback = 'Reference image') {
-    const raw = firstMediaString(value, fallback);
-    const cleaned = String(raw || '')
-        .replace(/^File:/i, '')
-        .replace(/\.(?:jpe?g|png|gif|webp|tiff?|svg)$/i, '')
-        .replace(/_/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-    return cleaned || String(fallback || 'Reference image').trim() || 'Reference image';
-}
-
-function truncatePublicMediaTitle(value, maxLength = 72) {
-    const title = formatPublicMediaTitle(value);
-    const limit = Math.max(24, Math.min(120, Number(maxLength) || 72));
-    if (title.length <= limit) return title;
-    return `${title.slice(0, limit - 1).replace(/\s+\S*$/g, '').trim()}...`;
-}
-
-function dedupePublicMediaImages(images) {
-    const seen = new Set();
-    const out = [];
-    for (const image of Array.isArray(images) ? images : []) {
-        const key = String(image?.url || '').replace(/\?.*$/, '').toLowerCase();
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        out.push(image);
-    }
-    return out;
-}
-
-function isSafePublicMediaImageUrl(value) {
-    try {
-        const url = new URL(String(value || ''));
-        return url.protocol === 'https:' && /(^|\.)wikimedia\.org$|(^|\.)wikipedia\.org$/i.test(url.hostname);
-    } catch (_) {
-        return false;
-    }
-}
-
-function stripMediaHtml(value) {
-    return String(value || '')
-        .replace(/<[^>]*>/g, ' ')
-        .replace(/&nbsp;/gi, ' ')
-        .replace(/&amp;/gi, '&')
-        .replace(/&quot;/gi, '"')
-        .replace(/&#39;/gi, "'")
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function firstMediaString(...values) {
-    for (const value of values) {
-        const text = String(value || '').trim();
-        if (text) return text;
-    }
-    return '';
-}
-
-function buildAssistantMediaStripHtml(images) {
-    const list = Array.isArray(images) ? images.filter(Boolean).slice(0, 3) : [];
-    if (!list.length) return '';
-    const cards = list.map(image => {
-        const fullTitle = formatPublicMediaTitle(image.title || 'Reference image');
-        const title = escapeHtml(fullTitle);
-        const displayTitle = escapeHtml(truncatePublicMediaTitle(fullTitle, 72));
-        const src = escapeHtml(String(image.thumbnail || image.url || ''));
-        const href = escapeHtml(String(image.pageUrl || image.url || ''));
-        const source = escapeHtml(String(image.source || 'Wikimedia'));
-        const license = escapeHtml(String(image.license || 'See source page'));
-        if (!src || !href) return '';
-        return `
-            <a href="${href}" target="_blank" rel="noopener noreferrer" title="${title}" class="block overflow-hidden rounded-md border border-slate-300 bg-white text-slate-900 shadow-sm transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
-                <span class="flex h-32 items-center justify-center bg-slate-100 p-1 dark:bg-black">
-                    <img src="${src}" alt="${title}" class="max-h-full w-full object-contain">
-                </span>
-                <span class="block px-2 py-2 text-[12px] leading-snug">
-                    <strong class="block font-semibold">${displayTitle}</strong>
-                    <span class="mt-0.5 block text-[11px] text-slate-600 dark:text-slate-400">${source} - ${license}</span>
-                </span>
-            </a>
-        `;
-    }).filter(Boolean).join('');
-    if (!cards) return '';
-    return `
-        <div class="assistant-media-strip mt-3" data-public-media="true">
-            <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Related public images</div>
-            <div class="grid grid-cols-1 sm:grid-cols-${Math.min(list.length, 3)} gap-2">${cards}</div>
-        </div>
-    `;
-}
-
-async function appendAssistantMediaHtml(assistantMessageId, html) {
-    const id = String(assistantMessageId || '').trim();
-    if (!id || !html) return false;
-    for (let attempt = 0; attempt < 25; attempt += 1) {
-        const target = document.querySelector(`.assistant-message-text[data-message-id="${CSS.escape(id)}"]`);
-        if (!target) return false;
-        if (!target.classList.contains('is-streaming')) {
-            if (!target.querySelector('[data-public-media="true"]')) {
-                target.insertAdjacentHTML('beforeend', html);
-            }
-            return true;
-        }
-        await new Promise(resolve => setTimeout(resolve, 160));
-    }
-    return false;
-}
-
-async function maybeShowReferenceImageForQuery(userText, assistantText = '', assistantMessageId = '') {
-    if (!shouldTryReferenceImage(userText, assistantText)) return;
-    const subject = extractReferenceSubject(userText, assistantText);
-    if (!subject) return;
-    if (subject.split(/\s+/).filter(Boolean).length > 8) return;
-
-    const images = await fetchPublicMediaForTopic(subject);
-    const html = sanitizeAssistantMarkup(buildAssistantMediaStripHtml(images));
-    if (!html) return;
-    if (await appendAssistantMediaHtml(assistantMessageId, html)) return;
-    addChatMessage(html, false, false);
-}
-
 // ========== CONTENT MODERATION ==========
 function isInappropriateContent(text) {
     const lower = text.toLowerCase();
@@ -1103,7 +813,7 @@ function isInappropriateContent(text) {
 // ========== VERIFIED PLACES + BUDGET + CALENDAR FEATURES ==========
 function isVerifiedPlacesRequest(text) {
     const t = text.toLowerCase();
-    return (t.includes('verified') && (t.includes('hotel') || t.includes('restaurant') || t.includes('place'))) ||
+    return (t.includes('verified') && (t.includes('hotel') || t.includes('place'))) ||
            t.includes('verified places') ||
            t.includes('trusted places near');
 }
@@ -1370,7 +1080,6 @@ Quick recap: ...
         if (!answer) return false;
 
         const assistantMessageId = addModelAssistantMessage(answer, 'Model answer');
-        await maybeShowReferenceImageForQuery(userText, answer, assistantMessageId);
         saveToHistory(historyKey || userText, answer);
         suggestQuickReplies(answer);
         addFeedbackButtons(historyKey || userText, answer, assistantMessageId);
@@ -1386,7 +1095,7 @@ Quick recap: ...
 }
 
 async function handleVerifiedPlacesMode(text) {
-    const type = text.toLowerCase().includes('restaurant') ? 'restaurants' : 'hotels';
+    const type = 'hotels';
     const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(type + ' near me')}`;
     const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(type + ' near me')}`;
     await deliverApiReply('verified_places_disabled', {
@@ -1530,23 +1239,6 @@ function isHotelListing(text) {
     return matchCount >= 2;
 }
 
-// Helper function to detect if response is actually a restaurant listing
-function isRestaurantListing(text) {
-    const restaurantIndicators = [
-        /\d+\.\s*[A-Z].*?(Restaurant|Cafe|Bistro|Diner|Eatery|Kitchen)/i,  // Numbered list with restaurant type
-        /Must Try:/i,        // Must try dishes
-        /Cuisine:/i,         // Cuisine type
-        /Speciality:/i,      // Speciality dishes
-        /\$\$|\$\$\$/,       // Price range symbols
-        /Rating:/i,          // Rating mention
-        /Hours:/i,           // Opening hours
-        /Signature dish/i,   // Signature dish
-    ];
-
-    const matchCount = restaurantIndicators.filter(pattern => pattern.test(text)).length;
-    return matchCount >= 2;
-}
-
 function isStructuredItineraryResponse(text) {
     const t = String(text || '');
     const lower = t.toLowerCase();
@@ -1568,9 +1260,6 @@ function suggestQuickReplies(context) {
         return;
     }
 
-    if (isRestaurantListing(context)) {
-        addShareButton(context, 'restaurants');
-    }
 }
 
 function addShareButton(content, type) {
@@ -3641,7 +3330,6 @@ async function publishResolvedModelMessage(userMessage, answerText, options = {}
         messageMeta.turnId = options.turnId;
     }
     const assistantMessageId = addModelAssistantMessage(safeText, label, messageMeta);
-    await maybeShowReferenceImageForQuery(userMessage, safeText, assistantMessageId);
     saveToHistory(userMessage, historyText || safeText, {
         recordContext: options?.recordContext !== false
     });
@@ -3914,11 +3602,9 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
         const intent = getUserIntent(normalizedUserMessage); 
         window.__intentContext = { 
           allowHotels: intent.wantsHotels,
-          allowRestaurants: intent.wantsRestaurants,
           itineraryOnly:
             intent.wantsItinerary &&
-            !intent.wantsHotels &&
-            !intent.wantsRestaurants, 
+            !intent.wantsHotels, 
           __retried: false };
 
         window.__lastUserMessage = normalizedUserMessage;  
@@ -4111,9 +3797,6 @@ async function handleNameCorrection(text) {
         let lastAssistantAnswerFingerprint = '';
         let lastAssistantAnswerTimestamp = 0;
         let chatHistory = [];
-        let lastUploadedDocument = null;
-        let uploadedDocumentHistory = [];
-        let pendingUploadContext = '';
         let pendingScreenSuggestionRequest = null;
         let songMoodGameState = null;
         let translatorMode = false;
@@ -6037,7 +5720,6 @@ let showRoutingDebugBadge = false;
                 const messageId = addModelAssistantMessage(answer, 'Selection answer', {
                     routing: result?.routing || null
                 });
-                await maybeShowReferenceImageForQuery(`${visibleText} ${selected}`, answer, messageId);
                 saveToHistory(visibleText, answer, { recordContext: false });
                 addFeedbackButtons(visibleText, answer, messageId);
             } catch (error) {
@@ -6296,65 +5978,6 @@ let showRoutingDebugBadge = false;
             return '';
         }
 
-        function formatFileSize(bytes) {
-            const size = Number(bytes || 0);
-            if (!Number.isFinite(size) || size <= 0) return '0 B';
-            const units = ['B', 'KB', 'MB', 'GB'];
-            const exp = Math.min(Math.floor(Math.log(size) / Math.log(1024)), units.length - 1);
-            const value = size / Math.pow(1024, exp);
-            return `${value >= 10 || exp === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[exp]}`;
-        }
-
-        function addUserFileAttachmentMessage(file) {
-            const chatContainer = document.getElementById('chat-container');
-            if (!chatContainer) return;
-            const name = String(file?.name || 'uploaded-file');
-            const mime = String(file?.type || '').trim();
-            const sizeLabel = formatFileSize(file?.size || 0);
-            const ext = String(name.split('.').pop() || '').trim().toUpperCase();
-            const mimeTail = mime.includes('/') ? mime.split('/').pop() : '';
-            const typeBadge = (ext || mimeTail || 'FILE').replace(/[^A-Z0-9+.-]/gi, '').slice(0, 8) || 'FILE';
-            const metaParts = [sizeLabel];
-            if (mime) metaParts.push(mime);
-            const meta = metaParts.join(' - ');
-
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'flex justify-end items-start gap-3';
-            messageDiv.dataset.role = 'user';
-            messageDiv.innerHTML = `
-                <div class="user-file-chip px-3 py-2 relative">
-                    <div class="flex items-center gap-2">
-                        <span class="user-file-chip-badge">${escapeHtml(typeBadge)}</span>
-                        <div class="min-w-0">
-                            <p class="text-sm font-semibold truncate">${escapeHtml(name)}</p>
-                            <p class="text-xs opacity-80 truncate">${escapeHtml(meta)}</p>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            chatContainer.appendChild(messageDiv);
-            maybeAutoScroll(chatContainer);
-            chatHistory.push({ text: `Uploaded file: ${name}`, isUser: true });
-        }
-
-        function sanitizeDocumentSummaryText(text) {
-            let cleaned = String(text || '').trim();
-            if (!cleaned) return '';
-            cleaned = cleaned
-                .replace(/\b(?:ocr|extracted text|extraction mode|parser|char(?:acter)? count|vision fallback)\b.*?(?:\n|$)/gi, '')
-                .replace(/\n{3,}/g, '\n\n')
-                .trim();
-            return cleaned;
-        }
-
-        function buildShortDocumentSummary(summaryText, maxLength = 320) {
-            const normalized = sanitizeDocumentSummaryText(summaryText).replace(/\s+/g, ' ').trim();
-            if (!normalized) return 'I reviewed the file. Ask if you want a deeper breakdown.';
-            if (normalized.length <= maxLength) return normalized;
-            return `${normalized.slice(0, maxLength - 1).trimEnd()}...`;
-        }
-
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
@@ -6609,15 +6232,6 @@ function normalizeUiTokens(text) {
         function handleComposerAction(action) {
             closeComposerActionsMenu();
             const key = String(action || '').trim().toLowerCase();
-            if (key === 'upload') {
-                const input = document.getElementById('document-upload-input');
-                if (!input) {
-                    showTemporaryMessage('File upload control is unavailable.');
-                    return;
-                }
-                input.click();
-                return;
-            }
             if (key === 'vision') return toggleContinuousVision();
             if (key === 'help') return showHelpModal();
         }
@@ -6709,552 +6323,6 @@ function normalizeUiTokens(text) {
             }
             ctx.restore();
         }
-        const OCR_HOSTED_MAX_FILE_BYTES = 3 * 1024 * 1024;
-        const OCR_HOSTED_MAX_BODY_BYTES = Math.floor(4.5 * 1024 * 1024);
-        const OCR_UPLOAD_JSON_MARGIN_BYTES = 2048;
-
-        async function handleDocumentSelection(event) {
-            const input = event?.target;
-            const file = input?.files?.[0] || null;
-            if (input) input.value = '';
-            if (!file) return;
-
-            const maxBytes = OCR_HOSTED_MAX_FILE_BYTES;
-            if (file.size > maxBytes) {
-                addChatMessage(`That file is too large for hosted OCR. Please upload a file under ${formatUploadBytesForUser(maxBytes)} or compress the PDF.`, false);
-                return;
-            }
-
-            if (estimateOcrUploadBodyBytes(file.size) > OCR_HOSTED_MAX_BODY_BYTES) {
-                addChatMessage(`That upload is too large for the hosted OCR endpoint after encoding. Try a file under ${formatUploadBytesForUser(maxBytes)} or a compressed PDF.`, false);
-                return;
-            }
-
-            const supported = isSupportedUploadFile(file);
-            if (!supported) {
-                addChatMessage('I can read PNG, JPG, WebP, PDF, TXT, Markdown, CSV, JSON, and DOCX files. Please upload one of those formats.', false);
-                return;
-            }
-
-            beginAssistantProcessing();
-            showThinkingIndicator('Reading your uploaded file...');
-            try {
-                const payload = await prepareFilePayload(file);
-                const requestBody = JSON.stringify({
-                    fileBase64: payload.fileBase64,
-                    mimeType: payload.mimeType || file.type || '',
-                    fileName: payload.fileName || file.name,
-                    prompt: pendingUploadContext || 'Extract readable text and preserve structure.'
-                });
-                if (getUtf8ByteLength(requestBody) > OCR_HOSTED_MAX_BODY_BYTES) {
-                    addChatMessage(`That upload is too large for the hosted OCR endpoint after encoding. Try a file under ${formatUploadBytesForUser(maxBytes)} or a compressed PDF.`, false);
-                    return;
-                }
-                const response = await fetch('/api/ocr', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: requestBody
-                });
-                const rawBody = await response.text();
-                let data = {};
-                let parsedJson = false;
-                try {
-                    data = rawBody ? JSON.parse(rawBody) : {};
-                    parsedJson = true;
-                } catch (_) {
-                    data = {};
-                }
-                if (!response.ok || !data?.success) {
-                    const message = buildOcrUploadErrorMessage(response, data, rawBody, parsedJson);
-                    console.warn('document upload OCR failed:', {
-                        status: Number(response?.status || 0),
-                        parsedJson,
-                        errorCode: String(data?.error?.code || '').slice(0, 80),
-                        fileName: String(file?.name || '').slice(0, 120),
-                        size: Number(file?.size || 0),
-                        type: String(file?.type || '').slice(0, 80)
-                    });
-                    addChatMessage(message, false);
-                    return;
-                }
-
-                const result = data.result || {};
-                const doc = buildUploadedDocumentFromOcrResult(result, {
-                    fileName: payload.fileName || file.name,
-                    mimeType: payload.mimeType || file.type || '',
-                    userContext: pendingUploadContext
-                });
-                rememberUploadedDocument(doc);
-                const card = formatDocumentResultCard(doc);
-                addChatMessage(card, false, false);
-                saveToHistory(`Uploaded file: ${doc.fileName}`, doc.summary || doc.extractedText.slice(0, 1000));
-                pendingUploadContext = '';
-            } catch (error) {
-                console.error('document upload failed:', {
-                    reason: String(error?.message || error || 'unknown_error'),
-                    fileName: String(file?.name || '').slice(0, 120),
-                    size: Number(file?.size || 0),
-                    type: String(file?.type || '').slice(0, 80)
-                });
-                addChatMessage('I could not process that upload right now. Please try a smaller or clearer file.', false);
-            } finally {
-                hideThinkingIndicator();
-                endAssistantProcessing();
-                resetPrimaryActionButtonWhenIdle();
-            }
-        }
-
-        function isSupportedUploadFile(file) {
-            const name = String(file?.name || '').toLowerCase();
-            const type = String(file?.type || '').toLowerCase();
-            return /^(image\/png|image\/jpeg|image\/webp|application\/pdf|text\/plain|text\/markdown|text\/csv|application\/json|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document)$/.test(type) ||
-                /\.(png|jpe?g|webp|pdf|txt|md|markdown|csv|json|docx)$/i.test(name);
-        }
-        function estimateOcrUploadBodyBytes(fileBytes) {
-            const encodedBytes = Math.ceil((Number(fileBytes || 0) * 4) / 3);
-            return encodedBytes + OCR_UPLOAD_JSON_MARGIN_BYTES;
-        }
-        function getUtf8ByteLength(value) {
-            const text = String(value || '');
-            if (window.TextEncoder) return new TextEncoder().encode(text).length;
-            return unescape(encodeURIComponent(text)).length;
-        }
-        function formatUploadBytesForUser(bytes) {
-            const mb = Number(bytes || 0) / (1024 * 1024);
-            return `${Number.isInteger(mb) ? mb.toFixed(0) : mb.toFixed(1)} MB`;
-        }
-        function buildOcrUploadErrorMessage(response, data = {}, rawBody = '', parsedJson = false) {
-            const apiMessage = String(data?.error?.message || '').trim();
-            if (apiMessage) return apiMessage;
-
-            const status = Number(response?.status || 0);
-            if (status === 413) return 'OCR upload failed with HTTP 413. Please upload a smaller file.';
-            if (status === 415) return 'OCR upload failed with HTTP 415. Please upload a supported file type.';
-            if (status === 404) return 'OCR upload failed with HTTP 404. The OCR endpoint is not available on this deployment.';
-            if (status >= 500) return `OCR upload failed with HTTP ${status}. This upload may be too large for the hosted OCR endpoint. Try a file under ${formatUploadBytesForUser(OCR_HOSTED_MAX_FILE_BYTES)} or a compressed PDF.`;
-            if (status >= 400) return `OCR upload failed with HTTP ${status}. Please check the file and try again.`;
-            if (!parsedJson && String(rawBody || '').trim()) return 'OCR upload failed because the server returned an unreadable response.';
-            return 'I could not read that file. Please try a clearer or smaller upload.';
-        }
-        async function prepareFilePayload(file) {
-            const lowerName = String(file?.name || '').toLowerCase();
-            const mimeType = String(file?.type || '').toLowerCase();
-            const isAvif = mimeType === 'image/avif' || lowerName.endsWith('.avif');
-
-            if (isAvif) {
-                const converted = await convertImageFileToJpegBase64(file);
-                if (converted?.fileBase64) {
-                    return {
-                        fileBase64: converted.fileBase64,
-                        mimeType: 'image/jpeg',
-                        fileName: lowerName.endsWith('.avif')
-                            ? `${file.name.replace(/\.avif$/i, '')}.jpg`
-                            : `${file.name}.jpg`
-                    };
-                }
-            }
-
-            return {
-                fileBase64: await readFileAsBase64(file),
-                mimeType: file.type || '',
-                fileName: file.name
-            };
-        }
-
-        function isImageLikeMimeOrName(mimeType, fileName) {
-            const mt = String(mimeType || '').toLowerCase();
-            const fn = String(fileName || '').toLowerCase();
-            return mt.startsWith('image/') || /\.(png|jpg|jpeg|webp|bmp|gif|avif)$/i.test(fn);
-        }
-
-        async function fallbackImageIngestWithVision({ fileBase64, mimeType, fileName, intent }) {
-            try {
-                const isBill = String(intent || '').toLowerCase() === 'bill' || /\b(bill|receipt|invoice|expense)\b/i.test(String(fileName || ''));
-                const response = await fetch('/api/vision', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        task: isBill ? 'bill_summary' : 'text_extract',
-                        prompt: isBill
-                            ? 'Analyze this bill/receipt image. Extract visible text, totals, tax, merchant clues, and describe any logos, branding, or distinct objects present in the image.'
-                            : 'Analyze this image thoroughly. 1) Extract all readable text. 2) Describe the main objects, people, scenery, or colors. 3) Identify any structural elements like tables, charts, or handwriting.',
-                        mimeType: mimeType || 'image/jpeg',
-                        imageBase64: fileBase64
-                    })
-                });
-                const rawBody = await response.text();
-                let data = {};
-                try {
-                    data = rawBody ? JSON.parse(rawBody) : {};
-                } catch (_) {
-                    data = {};
-                }
-                if (!response.ok || !data?.success) return null;
-
-                const details = data?.details && typeof data.details === 'object' ? data.details : {};
-                const textDetected = Array.isArray(details.textDetected)
-                    ? details.textDetected.map(v => String(v || '').trim()).filter(Boolean)
-                    : [];
-                const responseText = String(data?.response || '').trim();
-                const fullText = String(details?.fullText || '').trim();
-                const extractedText = (fullText || textDetected.join('\n') || responseText).slice(0, 22000).trim();
-                if (!extractedText) return null;
-                const summary = String(details?.summary || responseText || 'Image analyzed.').slice(0, 4000).trim();
-                const extractionHint = 'Used /api/vision fallback because /api/document-ingest was unavailable.';
-
-                return {
-                    success: true,
-                    fileName: fileName || 'image.jpg',
-                    mimeType: mimeType || 'image/jpeg',
-                    kind: 'image',
-                    extractionMode: 'vision-fallback',
-                    extractionHint,
-                    extractedText,
-                    extractedCharCount: extractedText.length,
-                    summary,
-                    bill: isBill ? parseBillFromVisionDetails(details) : null
-                };
-            } catch (_) {
-                return null;
-            }
-        }
-
-        async function convertImageFileToJpegBase64(file) {
-            const dataUrl = await readFileAsDataUrl(file);
-            const img = await loadImageFromDataUrl(dataUrl);
-            const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth || img.width || 1;
-            canvas.height = img.naturalHeight || img.height || 1;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return null;
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0);
-            const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.92);
-            const comma = jpegDataUrl.indexOf(',');
-            if (comma < 0) return null;
-            return { fileBase64: jpegDataUrl.slice(comma + 1) };
-        }
-
-        function readFileAsDataUrl(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(String(reader.result || ''));
-                reader.onerror = () => reject(new Error('File read failed'));
-                reader.readAsDataURL(file);
-            });
-        }
-
-        async function readFileAsBase64(file) {
-            const dataUrl = await readFileAsDataUrl(file);
-            const comma = dataUrl.indexOf(',');
-            return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
-        }
-
-        function loadImageFromDataUrl(dataUrl) {
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                img.onload = () => resolve(img);
-                img.onerror = () => reject(new Error('Image decode failed'));
-                img.src = dataUrl;
-            });
-        }
-
-        function buildUploadedDocumentFromOcrResult(result = {}, fallback = {}) {
-            const metadata = result?.metadata && typeof result.metadata === 'object' ? result.metadata : {};
-            const fileName = String(metadata.fileName || fallback.fileName || 'uploaded file').trim();
-            const mimeType = String(metadata.mimeType || fallback.mimeType || '').trim();
-            const extractedText = formatOcrResultTextForStorage(result);
-            const blocks = Array.isArray(result.blocks) ? result.blocks : [];
-            const kind = inferUploadedDocumentKind(fileName, mimeType);
-            const summary = buildOcrUploadSummary(result, fileName);
-            const bill = parseBillFromOcrResult(result);
-            return {
-                success: true,
-                fileName,
-                mimeType,
-                kind,
-                extractionMode: String(metadata.extractionMode || 'ocr').trim(),
-                extractionHint: result.confidence === 'low'
-                    ? 'OCR confidence is low; some text may be inaccurate.'
-                    : 'OCR completed and the extracted text is available for follow-up questions.',
-                extractedText,
-                extractedCharCount: extractedText.length,
-                summary,
-                confidence: String(result.confidence || 'medium'),
-                warnings: Array.isArray(result.warnings) ? result.warnings.map(String).filter(Boolean) : [],
-                blocks,
-                pages: Array.isArray(result.pages) ? result.pages : [],
-                metadata,
-                bill,
-                userContext: String(fallback.userContext || '').trim(),
-                uploadedAt: Date.now()
-            };
-        }
-
-        function inferUploadedDocumentKind(fileName, mimeType) {
-            const lower = `${fileName || ''} ${mimeType || ''}`.toLowerCase();
-            if (/\bpdf\b|\.pdf\b/.test(lower)) return 'pdf';
-            if (/docx|\.docx\b/.test(lower)) return 'docx';
-            if (/image\/|\.png\b|\.jpe?g\b|\.webp\b/.test(lower)) return 'image';
-            if (/csv|\.csv\b/.test(lower)) return 'csv';
-            return 'text';
-        }
-
-        function formatOcrResultTextForStorage(result = {}) {
-            const pages = Array.isArray(result.pages) ? result.pages : [];
-            const pageText = pages
-                .map(page => {
-                    const pageNumber = Number(page?.pageNumber || 0) || 1;
-                    const text = String(page?.text || '').trim();
-                    return text ? `Page ${pageNumber}\n${text}` : '';
-                })
-                .filter(Boolean)
-                .join('\n\n');
-            return String(pageText || result.text || '').trim().slice(0, 120000);
-        }
-
-        function buildOcrUploadSummary(result = {}, fileName = 'uploaded file') {
-            const metadata = result?.metadata && typeof result.metadata === 'object' ? result.metadata : {};
-            const docType = String(metadata.documentType || '').trim();
-            const confidence = String(result.confidence || 'medium').trim();
-            const text = String(result.text || '').replace(/\s+/g, ' ').trim();
-            const firstLine = text.split(/[.!?]\s|\n/).find(Boolean) || text.slice(0, 220);
-            const label = docType ? `${docType} file` : 'uploaded file';
-            const summary = firstLine ? `${label}: ${firstLine.slice(0, 260)}` : `I could not find much readable text in ${fileName}.`;
-            return confidence === 'low' ? `${summary} OCR confidence is low.` : summary;
-        }
-
-        function parseBillFromOcrResult(result = {}) {
-            const blocks = Array.isArray(result.blocks) ? result.blocks : [];
-            const text = String(result.text || '').trim();
-            const lineItems = [];
-            const totals = [];
-            for (const block of blocks) {
-                const type = String(block?.type || '').toLowerCase();
-                if (type === 'table' && Array.isArray(block.rows)) {
-                    for (const row of block.rows.slice(0, 40)) {
-                        const line = Array.isArray(row) ? row.join(' - ') : String(row || '');
-                        if (line.trim()) lineItems.push(line.trim());
-                    }
-                }
-                const blockText = String(block?.text || '').trim();
-                if (/\b(total|subtotal|tax|gst|vat|amount due|grand total)\b/i.test(blockText)) totals.push(blockText);
-            }
-            const details = {
-                fullText: text,
-                bill: {
-                    lineItems: lineItems.slice(0, 30),
-                    totals: totals.slice(0, 12)
-                }
-            };
-            const parsed = parseBillFromVisionDetails(details);
-            if (parsed?.total || parsed?.subtotal || parsed?.tax || parsed?.merchant || parsed?.lineItems?.length) return parsed;
-            return null;
-        }
-
-        function formatDocumentResultCard(data) {
-            const fileName = escapeHtml(String(data?.fileName || 'document'));
-            const oneLiner = escapeHtml(buildUploadedDocumentOneLiner(data));
-            const userContext = String(data?.userContext || '').trim();
-            return `
-<div class="p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white/90 dark:bg-slate-900/70">
-  <p class="text-xs font-semibold text-slate-500 dark:text-slate-300 mb-1">Uploaded file</p>
-  <p class="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-2">${fileName}</p>
-  ${userContext ? `<p class="text-xs text-slate-600 dark:text-slate-300 mb-2"><strong>Context:</strong> ${escapeHtml(userContext)}</p>` : ''}
-  <p class="text-sm text-slate-700 dark:text-slate-200">${oneLiner}</p>
-  <div class="mt-3 flex flex-wrap gap-2">
-    <button type="button" onclick="runDocumentQuickAction('summary','${encodeURIComponent(String(data?.fileName || ''))}')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">Summarize</button>
-    <button type="button" onclick="runDocumentQuickAction('totals','${encodeURIComponent(String(data?.fileName || ''))}')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">Extract totals</button>
-    <button type="button" onclick="runDocumentQuickAction('dates','${encodeURIComponent(String(data?.fileName || ''))}')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">Key dates</button>
-    <button type="button" onclick="runDocumentQuickAction('todo','${encodeURIComponent(String(data?.fileName || ''))}')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600">Create to-do</button>
-  </div>
-</div>`;
-        }
-
-        function askOptionalUploadContext(fileName) {
-            const input = document.getElementById('upload-context-input');
-            if (!input) return '';
-            return String(input.value || '').trim().slice(0, 500);
-        }
-
-        function rememberUploadedDocument(doc) {
-            if (!doc || typeof doc !== 'object') return;
-            uploadedDocumentHistory = [doc, ...uploadedDocumentHistory
-                .filter(item => String(item?.fileName || '').toLowerCase() !== String(doc.fileName || '').toLowerCase())]
-                .slice(0, 6);
-            lastUploadedDocument = doc;
-        }
-
-        function resolveDocumentForQuestion(text) {
-            const q = String(text || '').toLowerCase();
-            if (!q) return lastUploadedDocument;
-            const byName = uploadedDocumentHistory.find(doc => {
-                const file = String(doc?.fileName || '').toLowerCase();
-                if (!file) return false;
-                return q.includes(file) || q.includes(file.replace(/\.[a-z0-9]+$/i, ''));
-            });
-            if (byName) return byName;
-            const ranked = rankDocumentsByRelevance(q, uploadedDocumentHistory);
-            return ranked[0] || lastUploadedDocument;
-        }
-
-        function rankDocumentsByRelevance(query, docs = []) {
-            const q = String(query || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
-            const qTokens = q.split(/\s+/).filter(t => t.length > 2);
-            if (!qTokens.length) return Array.isArray(docs) ? docs : [];
-            return (Array.isArray(docs) ? docs : [])
-                .map(doc => {
-                    const file = String(doc?.fileName || '').toLowerCase();
-                    const summary = String(doc?.summary || '').toLowerCase();
-                    const text = String(doc?.extractedText || '').toLowerCase().slice(0, 6000);
-                    const hay = `${file} ${summary} ${text}`;
-                    let score = 0;
-                    for (const token of qTokens) {
-                        if (file.includes(token)) score += 4;
-                        if (summary.includes(token)) score += 3;
-                        if (text.includes(token)) score += 1;
-                    }
-                    return { doc, score };
-                })
-                .sort((a, b) => b.score - a.score)
-                .map(x => x.doc);
-        }
-
-        async function runDocumentQuickAction(action, encodedFileName) {
-            const fileName = decodeURIComponent(String(encodedFileName || ''));
-            const doc = resolveDocumentForQuestion(fileName || '');
-            if (!doc) {
-                addChatMessage('No uploaded document available yet.', false);
-                return;
-            }
-            const promptMap = {
-                summary: `Give a concise summary for ${doc.fileName}.`,
-                totals: `Extract totals, subtotal, tax, and due amount from ${doc.fileName}.`,
-                dates: `List key dates mentioned in ${doc.fileName}.`,
-                todo: `Create a practical to-do checklist from ${doc.fileName}.`
-            };
-            const q = promptMap[action] || `Summarize ${doc.fileName}.`;
-            const handled = await handleUploadedDocumentFollowup(q);
-            if (!handled) {
-                addChatMessage('I could not run that action right now. Try asking directly about the uploaded file.', false);
-            }
-        }
-
-        function buildUploadedDocumentOneLiner(data) {
-            const kind = String(data?.kind || '').trim().toLowerCase();
-            const summary = String(data?.summary || '').trim();
-
-            if (kind === 'image') {
-                return `It is a picture of ${summary || 'an object'}.`;
-            } else {
-                let docType = 'document';
-                if (kind === 'pdf') docType = 'PDF';
-                else if (kind === 'docx' || kind === 'doc' || kind === 'text') docType = 'doc';
-                else if (kind === 'pptx' || kind === 'ppt') docType = 'presentation';
-                
-                return `This is a ${docType} about the topic. One liner summary: ${summary || 'Not available.'}`;
-            }
-        }
-
-        function isDocumentRawTextRequest(lowerText) {
-            return /\b(show|give|send|print|dump|display)\b/.test(lowerText) &&
-                /\b(extracted text|raw text|ocr text|full text|verbatim text)\b/.test(lowerText);
-        }
-
-        function isLikelyDocumentQuestion(q, doc = lastUploadedDocument) {
-            if (!doc) return false;
-            const lower = String(q || '').toLowerCase().trim();
-            if (!lower) return false;
-
-            const hasDocWords = /\b(file|document|upload|uploaded|pdf|doc|docx|ppt|pptx|image|picture|pic|photo|bill|receipt|invoice|notes|chapter|material|paragraph|page|line|text|summary)\b/.test(lower);
-            const asksSummary = /\b(summary|summarize|gist|tldr|brief|short)\b/.test(lower);
-            const asksAboutBill = /\b(total|amount|subtotal|tax|gst|vat|merchant|vendor|store|shop|date|payment|paid|spend|spent|cost|charge|charged|due)\b/.test(lower);
-            const asksQuestion = /\b(what|why|how|which|when|where|who|explain|teach|define|difference|compare|solve)\b/.test(lower) || /\?$/.test(lower);
-            
-            // Tighter check for unrelated intents
-            const clearlyOtherIntent = /\b(weather|forecast|news|headline|route|directions|map|near me|restaurant|hotel|translate|joke|who is|who was|who won|latest|upcoming|current|play|youtube|spotify)\b/.test(lower);
-
-            if (clearlyOtherIntent && !hasDocWords) return false;
-            if (hasDocWords || asksSummary || isDocumentRawTextRequest(lower)) return true;
-            if (doc.bill && asksAboutBill) return true;
-            if (doc.bill && /\b(how much|what did i spend|what i spent|how much did i pay|bill amount|final amount|how much was it)\b/.test(lower)) return true;
-
-            // Prevent hijacking generic questions unless they contain pronouns or summary overlap
-            const hasPronoun = /\b(it|this|that|these|those|they)\b/.test(lower);
-            const summaryTokens = String(doc.summary || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 4);
-            const queryTokens = lower.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 4);
-            const hasOverlap = queryTokens.some(t => summaryTokens.includes(t));
-
-            const uploadedAt = Number(doc.uploadedAt || 0);
-            const recentlyUploaded = uploadedAt > 0 && (Date.now() - uploadedAt) <= (45 * 60 * 1000);
-            return recentlyUploaded && asksQuestion && (hasPronoun || hasOverlap);
-        }
-
-        function buildBillQuickAnswer(queryLower, bill, fileName) {
-            if (!bill || typeof bill !== 'object') return '';
-            const merchant = String(bill.merchant || '').trim();
-            const date = String(bill.date || '').trim();
-            const currency = String(bill.currency || '').trim();
-            const subtotal = Number.isFinite(Number(bill.subtotal)) ? Number(bill.subtotal).toFixed(2) : '';
-            const tax = Number.isFinite(Number(bill.tax)) ? Number(bill.tax).toFixed(2) : '';
-            const total = Number.isFinite(Number(bill.total)) ? Number(bill.total).toFixed(2) : '';
-
-            if (/\b(total|amount due|final amount|how much did i spend|what did i spend|how much was it|bill amount|how much did i pay)\b/.test(queryLower) && total) return `Total in ${fileName}: ${currency ? `${currency} ` : ''}${total}`;
-            if (/\bsubtotal\b/.test(queryLower) && subtotal) return `Subtotal in ${fileName}: ${currency ? `${currency} ` : ''}${subtotal}`;
-            if (/\btax|gst|vat\b/.test(queryLower) && tax) return `Tax in ${fileName}: ${currency ? `${currency} ` : ''}${tax}`;
-            if (/\bmerchant|vendor|store|shop\b/.test(queryLower) && merchant) return `Merchant in ${fileName}: ${merchant}`;
-            if (/\bdate\b/.test(queryLower) && date) return `Bill date in ${fileName}: ${date}`;
-            return '';
-        }
-
-        function parseBillAmount(rawAmount) {
-            const val = Number(String(rawAmount ?? '').replace(/[^0-9.\-]/g, ''));
-            return Number.isFinite(val) ? val : null;
-        }
-
-        function parseBillFromVisionDetails(details = {}) {
-            const billRaw = details?.bill && typeof details.bill === 'object' ? details.bill : null;
-            if (!billRaw) return null;
-
-            const rawItems = Array.isArray(billRaw.lineItems) ? billRaw.lineItems : [];
-            const lineItems = rawItems
-                .map(row => String(row || '').trim())
-                .filter(Boolean)
-                .slice(0, 30)
-                .map(row => {
-                    const match = row.match(/(.+?)\s*[-:]\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/);
-                    if (!match) return { name: row, amount: null };
-                    return { name: String(match[1] || '').trim(), amount: parseBillAmount(match[2]) };
-                });
-
-            const totalsRaw = Array.isArray(billRaw.totals) ? billRaw.totals.map(v => String(v || '')).join('\n') : '';
-            const fullText = String(details?.fullText || '').trim();
-            const sourceText = `${totalsRaw}\n${fullText}`;
-            const detectField = (regex) => {
-                const m = sourceText.match(regex);
-                if (!m) return null;
-                const candidate = m[m.length - 1];
-                return parseBillAmount(candidate);
-            };
-
-            const currency = /\b(inr|rs\.?)\b/i.test(sourceText) || /\u20B9/.test(sourceText)
-                ? 'INR'
-                : (/\b(usd)\b/i.test(sourceText) || /\$/.test(sourceText) ? 'USD' : '');
-            const merchant = String(sourceText.split('\n').map(s => s.trim()).find(Boolean) || '').slice(0, 120);
-            const dateMatch = sourceText.match(/\b(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})\b/);
-
-            return {
-                merchant: merchant || '',
-                date: dateMatch ? dateMatch[1] : '',
-                currency,
-                lineItems,
-                subtotal: detectField(/\bsubtotal\b[^\d]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i),
-                tax: detectField(/\b(gst|tax|vat)\b[^\d]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i) ?? detectField(/\btax\b[^\d]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i),
-                total: detectField(/\b(total|amount due|grand total|final amount)\b[^\d]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i) ?? detectField(/\btotal\b[^\d]*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i)
-            };
-        }
-
         function isSplitwiseExpenseIntent(text) {
             const t = String(text || '').toLowerCase();
             if (!t.trim()) return false;
@@ -7416,8 +6484,7 @@ function normalizeUiTokens(text) {
 
         async function handleSplitwiseExpenseRequest(text) {
             if (!isSplitwiseExpenseIntent(text)) return false;
-            const doc = resolveDocumentForQuestion(text) || lastUploadedDocument;
-            const payload = parseSplitwisePayload(text, doc?.bill || null);
+            const payload = parseSplitwisePayload(text, null);
             if (!payload) {
                 return false;
             }
@@ -7426,85 +6493,6 @@ function normalizeUiTokens(text) {
             addChatMessage(result, false);
             saveToHistory(text, result);
             return true;
-        }
-
-        async function answerFromUploadedDocument(question, doc) {
-            const summary = String(doc?.summary || '').trim();
-            const extractedText = String(doc?.extractedText || '').trim();
-            const billData = doc?.bill && typeof doc.bill === 'object' ? doc.bill : null;
-            const fileName = String(doc?.fileName || 'uploaded file');
-            const userContext = String(doc?.userContext || '').trim();
-            const contentBlock = [summary, extractedText].filter(Boolean).join('\n\n').slice(0, 12000);
-            const grounding = contentBlock.slice(0, 14000);
-            if (!grounding && !billData) {
-                return `I could not read enough content from ${fileName}. Please upload a clearer file.`;
-            }
-
-            const response = await fetch('/api/chat-groq', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: `Question about uploaded file "${fileName}": "${question}"\n\nUser context for this file (if any): ${userContext || 'None'}\n\nDocument summary/content:\n${grounding}\n\nBill data (if present):\n${billData ? JSON.stringify(billData, null, 2) : 'None'}\n\nRules:\n- Do not expose raw OCR dumps.\n- Give a direct answer in plain language.\n- If asked to teach/explain, teach clearly with short steps based on the document.\n- If the user asks outside this file scope, clearly say it is outside uploaded-file context.\n- If unsure, say "Not found in the uploaded file."`
-                })
-            });
-            if (!response.ok) throw new Error(`document_qa_failed_${response.status}`);
-            const data = await response.json();
-            const answer = postProcessAssistantResponse(String(data?.response || data?.text || '').trim(), question);
-            return answer || `I could not find that detail in ${fileName}.`;
-        }
-
-        async function handleUploadedDocumentFollowup(text) {
-            const q = String(text || '').trim();
-            const targetDoc = resolveDocumentForQuestion(q);
-            if (!q || !targetDoc || !isLikelyDocumentQuestion(q, targetDoc)) return false;
-
-            const fileName = String(targetDoc.fileName || 'uploaded file');
-            const lower = q.toLowerCase();
-            const summary = String(targetDoc.summary || '').trim();
-            const extracted = String(targetDoc.extractedText || '').trim();
-
-            if (isDocumentRawTextRequest(lower)) {
-                const answer = extracted
-                    ? `Extracted text from ${fileName}:\n\n${extracted.slice(0, 12000)}`
-                    : `I do not have extracted raw text available for ${fileName}, but I can still try with the summary.`;
-                addChatMessage(answer, false);
-                saveToHistory(q, answer);
-                return true;
-            }
-
-            const asksSummary = /\b(summary|summarize|gist|tldr|brief|short)\b/.test(lower);
-            if (asksSummary) {
-                const answer = summary
-                    ? `Summary for ${fileName}:\n${summary}`
-                    : `I could not generate a clear summary for ${fileName} yet. Ask a specific question and I will answer from the file.`;
-                addChatMessage(answer, false);
-                saveToHistory(q, answer);
-                return true;
-            }
-
-            const billQuickAnswer = buildBillQuickAnswer(lower, targetDoc.bill, fileName);
-            if (billQuickAnswer) {
-                addChatMessage(billQuickAnswer, false);
-                saveToHistory(q, billQuickAnswer);
-                return true;
-            }
-
-            showThinkingIndicator('Reading your uploaded file...');
-            try {
-                const answer = await answerFromUploadedDocument(q, targetDoc);
-                addChatMessage(answer, false);
-                saveToHistory(q, answer);
-                return true;
-            } catch (_) {
-                const fallback = summary
-                    ? `I could not complete document Q&A right now. Here is what I have from ${fileName}:\n${summary}`
-                    : `I could not answer from ${fileName} right now. Please ask again in a moment.`;
-                addChatMessage(fallback, false);
-                saveToHistory(q, fallback);
-                return true;
-            } finally {
-                hideThinkingIndicator();
-            }
         }
 
         function isLikelyCodeInput(text) {
@@ -8330,112 +7318,6 @@ async function handleMarketLookup(text) {
     }
 }
 
-        
-        function showFastFoodBox() {
-            const chatContainer = document.getElementById('chat-container');
-            
-            
-            let region = 'international'; 
-            
-            if (userLocation) {
-                const country = userLocation.country?.toLowerCase() || '';
-                const state = userLocation.state?.toLowerCase() || '';
-                
-                
-                if (country.includes('india') && (
-                    state.includes('tamil nadu') || state.includes('karnataka') || 
-                    state.includes('kerala') || state.includes('andhra') || 
-                    state.includes('telangana') || state.includes('pondicherry')
-                )) {
-                    region = 'south-india';
-                }
-                
-                else if (country.includes('india')) {
-                    region = 'north-india';
-                }
-                
-                else if (country.includes('united states') || country.includes('usa')) {
-                    region = 'usa';
-                }
-                
-                else if (country.includes('united kingdom') || country.includes('uk') || country.includes('england')) {
-                    region = 'uk';
-                }
-                
-                else if (country.includes('uae') || country.includes('saudi') || country.includes('qatar') || country.includes('kuwait')) {
-                    region = 'middle-east';
-                }
-            }
-            
-            
-            const regionalButtons = {
-                'south-india': [
-                    { emoji: '[Burger]', title: 'Fast Food', query: 'fast food near me' },
-                    { emoji: '[Biryani]', title: 'Biryani', query: 'biryani near me' },
-                    { emoji: '[Coffee]', title: 'Filter Coffee', query: 'filter coffee near me' }
-                ],
-                'north-india': [
-                    { emoji: '[Burger]', title: 'Fast Food', query: 'fast food near me' },
-                    { emoji: '[Biryani]', title: 'Biryani', query: 'biryani near me' },
-                    { emoji: '[Burger]', title: 'Dhaba', query: 'dhaba near me' }
-                ],
-                'usa': [
-                    { emoji: '[Coffee]', title: 'Coffee Shops', query: 'coffee shops near me' },
-                    { emoji: '[Burger]', title: 'Fast Food', query: 'fast food near me' },
-                    { emoji: '[Pizza]', title: 'Pizza', query: 'pizza near me' }
-                ],
-                'uk': [
-                    { emoji: '[Coffee]', title: 'Coffee', query: 'coffee shops near me' },
-                    { emoji: '[Burger]', title: 'Fast Food', query: 'fast food near me' },
-                    { emoji: '[Fish]', title: 'Fish & Chips', query: 'fish and chips near me' }
-                ],
-                'middle-east': [
-                    { emoji: '[Shawarma]', title: 'Shawarma', query: 'shawarma near me' },
-                    { emoji: '[Coffee]', title: 'Coffee', query: 'coffee shops near me' },
-                    { emoji: '[Burger]', title: 'Fast Food', query: 'fast food near me' }
-                ],
-                'international': [
-                    { emoji: '[Burger]', title: 'Fast Food', query: 'fast food near me' },
-                    { emoji: '[Coffee]', title: 'Coffee', query: 'coffee shops near me' },
-                    { emoji: '[Pizza]', title: 'Pizza', query: 'pizza near me' }
-                ]
-            };
-            
-            const buttons = regionalButtons[region] || regionalButtons['international'];
-            
-            const boxDiv = document.createElement('div');
-            boxDiv.className = 'flex flex-wrap justify-center gap-4 my-6 px-4 fade-in';
-            
-            let buttonsHTML = '';
-            buttons.forEach(btn => {
-                buttonsHTML += `
-                    <a href="https://www.google.com/search?q=${encodeURIComponent(btn.query)}" target="_blank" rel="noopener noreferrer"
-                       class="flex items-center gap-3 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white px-6 py-3 rounded-xl shadow-lg transition-all transform hover:scale-105 min-w-[160px]">
-                        <span class="text-2xl">${btn.emoji}</span>
-                        <div class="text-left">
-                            <div class="font-bold text-sm">${btn.title}</div>
-                            <div class="text-xs opacity-80">Search nearby</div>
-                        </div>
-                    </a>
-                `;
-            });
-            
-            boxDiv.innerHTML = `
-                <div class="w-full text-center mb-3 mt-4">
-                    <span class="text-sm font-medium text-gray-600 dark:text-gray-400">Quick Access</span>
-                </div>
-                <div class="flex flex-wrap justify-center gap-4">
-                    ${buttonsHTML}
-                </div>
-                <div class="w-full text-center mt-2">
-                    <span class="text-xs text-gray-400">Click to search on Google Maps</span>
-                </div>
-            `;
-            
-            chatContainer.appendChild(boxDiv);
-            maybeAutoScroll(chatContainer);
-        }
-
         let isProcessing = false; 
 function extractDisplayModeCommand(text) {
     const normalized = String(text || '')
@@ -8535,15 +7417,14 @@ async function buildTopPlaceSuggestions(type, location, userText = '') {
     if (!LIVE_RETRIEVAL_ENABLED) return null;
 
     const kind = String(type || '').toLowerCase();
+    if (kind !== 'hotel') return null;
     const loc = String(location || '').trim();
     if (!loc) return null;
 
     const queryMap = {
-        hotel: `best hotels in ${loc}`,
-        restaurant: `best restaurants in ${loc}`,
-        food: `best local food and must-try dishes in ${loc}`
+        hotel: `best hotels in ${loc}`
     };
-    const searchQuery = queryMap[kind] || `best places in ${loc}`;
+    const searchQuery = queryMap[kind];
     const web = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -8555,11 +7436,7 @@ async function buildTopPlaceSuggestions(type, location, userText = '') {
     if (!results.length) return null;
 
     const lines = [];
-    const heading = kind === 'hotel'
-        ? `[Hotel] Top hotel suggestions in ${loc}`
-        : kind === 'restaurant'
-            ? `[Food] Top restaurant suggestions in ${loc}`
-            : `[Food] Local food suggestions in ${loc}`;
+    const heading = `[Hotel] Top hotel suggestions in ${loc}`;
     lines.push(heading, '');
 
     results.slice(0, 5).forEach((item, idx) => {
@@ -8572,8 +7449,7 @@ async function buildTopPlaceSuggestions(type, location, userText = '') {
         lines.push(`${idx + 1}. ${title}${shortDesc}${sourceLine}`);
     });
 
-    const mapsBase = kind === 'hotel' ? 'hotels' : 'restaurants';
-    const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(`${mapsBase} in ${loc}`)}`;
+    const mapsUrl = `https://www.google.com/maps/search/${encodeURIComponent(`hotels in ${loc}`)}`;
     lines.push('', `Map view: ${mapsUrl}`);
     return lines.join('\n');
 }
@@ -9345,21 +8221,6 @@ function isMedicalAdviceIntent(text) {
 function isMedicalEmergencyIntent(text) {
     const t = String(text || '').toLowerCase();
     return /\b(chest pain|trouble breathing|difficulty breathing|shortness of breath|stroke|face drooping|slurred speech|seizure|passed out|fainted|unconscious|heavy bleeding|severe bleeding|severe burn|poison|overdose|anaphylaxis|allergic reaction.*breath|cannot breathe|can't breathe|heart attack)\b/.test(t);
-}
-
-function isRestaurantLookupIntent(text) {
-    const t = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    if (!t) return false;
-    if (isMedicalEmergencyIntent(t) || isMedicalAdviceIntent(t) || isRecipeRequest(t)) return false;
-
-    if (/\b(restaurants?|cafes?|coffee shops?|dining|places? to eat|where (?:can|should) i eat|where to eat)\b/.test(t)) {
-        return true;
-    }
-
-    const mealSignal = /\b(breakfast|lunch|dinner|meal|meals)\b/.test(t);
-    const lookupSignal = /\b(near me|nearby|near|around|open now|best|top|recommend|suggest|find|search|where can i|where should i)\b/.test(t) ||
-        /\b(?:in|at|around|near)\s+[a-z][a-z\s,.'-]{1,80}\b/i.test(t);
-    return mealSignal && lookupSignal;
 }
 
 function buildMedicalGuidancePrompt(text) {
@@ -15768,21 +14629,19 @@ function cleanExistingConversationHistory() {
     }
 }
 
-function deleteAllLocalDataNow() {
-    try {
-        const keys = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const k = localStorage.key(i);
-            if (k && (k.startsWith('unify_') || k.startsWith('jarvis_'))) keys.push(k);
-        }
-        keys.forEach(k => localStorage.removeItem(k));
-        conversationHistory = [];
-        memoryStore = {};
-        lastUploadedDocument = null;
-        uploadedDocumentHistory = [];
-        showTemporaryMessage('All local app data deleted.');
-    } catch (_) {
-        showTemporaryMessage('Could not delete local data.');
+        function deleteAllLocalDataNow() {
+            try {
+                const keys = [];
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && (k.startsWith('unify_') || k.startsWith('jarvis_'))) keys.push(k);
+                }
+                keys.forEach(k => localStorage.removeItem(k));
+                conversationHistory = [];
+                memoryStore = {};
+                showTemporaryMessage('All local app data deleted.');
+            } catch (_) {
+                showTemporaryMessage('Could not delete local data.');
     }
 }
 
@@ -16001,8 +14860,7 @@ function detectInputLanguageHint(text) {
                 return;
             }
 
-            if (/\b(open|start|launch|enable)\s+(camera|ocr|scan)\b|\b(scan|read)\s+(this|text|document)\b/i.test(lower) &&
-                !isLikelyDocumentQuestion(compact)) {
+            if (/\b(open|start|launch|enable)\s+(camera|scan)\b|\b(scan|read)\s+(this|text|document)\b/i.test(lower)) {
                 addChatMessage('The camera scanner has been removed. Use Live Vision for camera-based questions.', false);
                 return;
             }
@@ -16060,10 +14918,6 @@ function detectInputLanguageHint(text) {
             }
 
             if (await handleSplitwiseExpenseRequest(text)) {
-                return;
-            }
-
-            if (await handleUploadedDocumentFollowup(text)) {
                 return;
             }
 
@@ -16131,7 +14985,6 @@ function detectInputLanguageHint(text) {
             const stableFactAnswer = getStableBrowserFactAnswer(cleanText);
             if (stableFactAnswer) {
                 const assistantMessageId = addModelAssistantMessage(stableFactAnswer, 'Model answer');
-                await maybeShowReferenceImageForQuery(cleanText, stableFactAnswer, assistantMessageId);
                 saveToHistory(text, stableFactAnswer);
                 addFeedbackButtons(text, stableFactAnswer, assistantMessageId);
                 return;
@@ -16815,9 +15668,6 @@ Quick recap: ...
                         addChatMessage(transportMsg, false);
                         return;
                     }
-                    if (window.pendingLocationQueryType === 'food') {
-                        cleanText = `restaurants in ${locationName}`;
-                    }
                 }
             }
 
@@ -17299,8 +16149,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 return; 
             }
             
-            // Hotel/Restaurant/Transport queries
-            const isRestaurantMatch = isRestaurantLookupIntent(cleanText);
+            // Hotel/Transport queries
             const isHotelMatch = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i);
             const isTransportMatch = cleanText.toLowerCase().match(/\b(transport|transportation|bus|train|taxi|uber|ola|auto|rickshaw|metro|subway|getting around|get around|how to reach|how do i get|travel to)\b/i);
 
@@ -17309,9 +16158,9 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 return;
             }
 
-            if (isRestaurantMatch || isHotelMatch || isTransportMatch) { 
+            if (isHotelMatch || isTransportMatch) { 
 
-                    const queryType = isHotelMatch ? 'hotel' : (isTransportMatch ? 'transport' : 'food'); 
+                    const queryType = isHotelMatch ? 'hotel' : 'transport'; 
                 
                 // Extract location
                 let cityName = '';
@@ -17345,7 +16194,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                                     .slice(-8) 
                                     .map(m => m.text || '') 
                                     .join(' '); 
-                                const contextMatch = contextText.match(/(?:hotels?|restaurants?|trip|itinerary|visit)\s+(?:in|to|at|near)\s+([A-Za-z][a-z]+(?:[\s,]+[A-Za-z][a-z]+)*)/i) ||
+                                const contextMatch = contextText.match(/(?:hotels?|trip|itinerary|visit)\s+(?:in|to|at|near)\s+([A-Za-z][a-z]+(?:[\s,]+[A-Za-z][a-z]+)*)/i) ||
                                                      contextText.match(/\b(?:in|at|near|to)\s+([A-Za-z][a-z]+(?:,\s*[A-Za-z][a-z]+)*)/i);
                                 if (contextMatch) {
                                     cityName = contextMatch[1].split(',')[0].trim();
@@ -17379,7 +16228,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                             });
                             window.waitingForTransportLocation = true;
                         } else {
-                            await deliverApiReply(queryType === 'hotel' ? 'hotel_city_prompt' : 'restaurant_city_prompt', {
+                            await deliverApiReply('hotel_city_prompt', {
                                 reason: 'missing_city'
                             });
                         }
@@ -17399,7 +16248,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         setLastResolvedTravelLocation(resolvedHotelLocation);
                         saveToHistory(text, `Hotel search for ${cityName}`);
                         await askTransportSuggestionFor(cityName);
-                        showFastFoodBox();
                         return;
                     }
                     
@@ -17431,59 +16279,13 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                         return;
                     }
 
-                    // Restaurant query - map embed + explicit sources
-                    const resolved = await resolveLocationForTravel(fullLocation || cityName);
-                    if (resolved?.needsClarification && Array.isArray(resolved.options) && resolved.options.length) {
-                        window.pendingLocationDisambiguation = { options: resolved.options };
-                        window.pendingLocationQueryType = 'food';
-                        await deliverApiReply('location_disambiguation', {
-                            rawInput: resolved.rawInput,
-                            options: resolved.options.map((o, i) => ({
-                                index: i + 1,
-                                label: [o.city, o.state, o.country].filter(Boolean).join(', ')
-                            })),
-                            replyInstruction: 'Reply with the number.'
-                        });
-                        return;
-                    }
-
-                    const finalLocation = resolved?.fullLocation || fullLocation || cityName; 
-                    const locationCity = resolved?.cityName || cityName; 
-                    setLastResolvedTravelLocation(finalLocation || locationCity);
-
-                    const restaurantSuggestions = await buildTopPlaceSuggestions('restaurant', finalLocation, text);
-                    if (restaurantSuggestions) {
-                        addVerifiedAssistantMessage(restaurantSuggestions, 'Verified live sources');
-                    } else {
-                        const mapsSearchUrl = `https://www.google.com/maps/search/${encodeURIComponent(`restaurants in ${finalLocation}`)}`;
-                        addChatMessage(`[Food] I could not fetch ranked restaurant suggestions right now.\nTry this live map list:\n${mapsSearchUrl}`, false);
-                    }
-                    saveToHistory(text, `Restaurant search for ${finalLocation}`);
-                    await askTransportSuggestionFor(locationCity);
-                    return;
                 } catch (error) {
                     hideThinkingIndicator();
-                    // If anything fails, show search links
-                    const mapsQuery = encodeURIComponent(`restaurants in ${cityName || 'your area'}`);
-                    const googleQuery = encodeURIComponent(`best restaurants in ${cityName || 'your area'}`);
-                    const tripadvisorQuery = encodeURIComponent(`${cityName || 'your area'} restaurants tripadvisor`);
-                    const mapsSearchUrl = `https://www.google.com/maps/search/${mapsQuery}`; 
-                    const googleSearchUrl = `https://www.google.com/search?q=${googleQuery}`; 
-                    const tripadvisorSearchUrl = `https://www.google.com/search?q=${tripadvisorQuery}`; 
-                    const sourceLinksBlock = formatSourceLinksWithIcons([ 
-                        mapsSearchUrl, 
-                        googleSearchUrl, 
-                        tripadvisorSearchUrl 
-                    ]); 
- 
-                    await deliverApiReply('restaurant_search_fallback', {
-                        cityName: cityName || 'your area',
-                        mapsSearchUrl,
-                        googleSearchUrl,
-                        tripadvisorSearchUrl,
-                        sourceLinksBlock
-                    }, { historyKey: text });
-                    askTransportSuggestionFor(cityName || 'this place');
+                    const fallback = queryType === 'hotel'
+                        ? `I could not fetch hotel suggestions for ${cityName || 'that place'} right now.`
+                        : `I could not fetch transport guidance for ${cityName || 'that place'} right now.`;
+                    addChatMessage(fallback, false);
+                    saveToHistory(text, fallback);
                     return;
                 }
             }
@@ -17496,7 +16298,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 const finalizedResponse = await resolveFinalAssistantAnswer(text, aiResponse?.response || aiResponse?.text || '');
                 const safeResponse = sanitizeHallucinatedTerrain(finalizedResponse, text, inferredLocation);
                 const assistantMessageId = addModelAssistantMessage(safeResponse, 'Model answer', { routing: aiResponse?.routing || null });
-                await maybeShowReferenceImageForQuery(text, safeResponse, assistantMessageId);
 
 
                 saveToHistory(text, safeResponse);
