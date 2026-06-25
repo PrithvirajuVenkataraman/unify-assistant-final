@@ -1373,6 +1373,64 @@ const invalidVisionMime = await callHandler(visionHandler, request('/api/vision'
 assert.equal(invalidVisionMime.statusCode, 415);
 assert.equal(invalidVisionMime.body.error.code, 'unsupported_media_type');
 
+process.env.GROQ_API_KEY = 'test-groq-key';
+process.env.LIVE_RETRIEVAL_ENABLED = 'true';
+process.env.CRAWL4AI_URL = 'https://crawl4ai.example';
+let verifyModelCalls = 0;
+let verifyUnexpectedNetworkCalls = 0;
+globalThis.fetch = async (url, init) => {
+    const href = String(url);
+    if (href.includes('api.groq.com')) {
+        verifyModelCalls += 1;
+        const body = JSON.parse(String(init?.body || '{}'));
+        const prompt = String(body?.messages?.[0]?.content || '');
+        assert.match(prompt, /Required source links:/);
+        assert.match(prompt, /\[Test Source\]\(https:\/\/example\.com\/fact\)/);
+        assert.doesNotMatch(prompt, /Retrieved context \(RAG\):/);
+        return okJson({
+            choices: [{
+                message: {
+                    content: 'Verdict: likely accurate.\nEvidence used: The supplied source supports the answer.\nHow checked: Compared the answer with retrieved evidence.\nClaims needing live/source verification: None.\nCorrected answer: Not needed.\nSources:\n1. [Test Source](https://example.com/fact)'
+                }
+            }]
+        });
+    }
+    verifyUnexpectedNetworkCalls += 1;
+    throw new Error(`unexpected verify URL ${href}`);
+};
+const verifyAnswerChat = await callHandler(chatHandler, request('/api/chat-groq', {
+    message: 'Verify this answer using the supplied evidence.',
+    intent: 'verify_answer',
+    grounding: {
+        originalRequest: 'Who discovered test fact?',
+        sourceAnswer: 'Test Person discovered test fact.',
+        localReviewFlags: 'No local review flags were detected.',
+        evidenceSources: [{
+            title: 'Test Source',
+            url: 'https://example.com/fact',
+            description: 'Test Person discovered test fact.',
+            text: 'The source says Test Person discovered test fact.'
+        }]
+    }
+}));
+assert.equal(verifyAnswerChat.statusCode, 200);
+assert.equal(verifyAnswerChat.body.intent, 'verify_answer');
+assert.equal(verifyAnswerChat.body.routing.strategy, 'verify_answer_fast_path');
+assert.equal(verifyAnswerChat.body.webEscalation.reason, 'verify_answer_fast_path');
+assert.equal(verifyAnswerChat.body.quality.performed, false);
+assert.match(verifyAnswerChat.body.response, /\[Test Source\]\(https:\/\/example\.com\/fact\)/);
+assert.equal(verifyModelCalls, 1);
+assert.equal(verifyUnexpectedNetworkCalls, 0);
+assert.equal(chatTest.normalizeVerifyGrounding({
+    sourceAnswer: 'A',
+    evidenceSources: [{ title: 'Bad', url: 'javascript:alert(1)' }]
+}).evidenceSources.length, 0);
+assert.match(chatTest.ensureVerificationSourcesSection('Verdict: unsupported.', ['1. [A](https://example.com/a)']), /Sources:\n1\. \[A\]\(https:\/\/example\.com\/a\)/);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GROQ_API_KEY;
+delete process.env.LIVE_RETRIEVAL_ENABLED;
+delete process.env.CRAWL4AI_URL;
+
 restoreEnv('GROQ_API_KEY', ORIGINAL_GROQ_API_KEY);
 restoreEnv('SERPER_API_KEY', ORIGINAL_SERPER_API_KEY);
 restoreEnv('SERPER_KEY', ORIGINAL_SERPER_KEY);
