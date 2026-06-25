@@ -5629,22 +5629,136 @@ let showRoutingDebugBadge = false;
                 `Evidence used: summarize the ${scope} text, any source links already present, local review flags, and retrieved context supplied in this request.`,
                 'How checked: give a concise rationale for the verdict without revealing hidden chain-of-thought.',
                 'Claims needing live/source verification: list claims that cannot be verified from the supplied evidence.',
-                'Corrected answer: include only if the original is wrong or incomplete.'
+                'Corrected answer: include only if the original is wrong or incomplete.',
+                'Sources: include every usable retrieved source as a markdown link in the form 1. [Title](https://example.com).'
             ].join('\n');
         }
 
-        function verifyAssistantMessage(messageId) { 
+        function isUsableVerificationSource(item) {
+            const url = String(item?.url || '').trim();
+            const title = String(item?.title || '').trim();
+            if (!url || !/^https?:\/\//i.test(url) || !title) return false;
+            const sourceType = String(item?.sourceType || '').trim();
+            if (/^(reference_lookup|archive_lookup|community_discussion)$/i.test(sourceType)) return false;
+            const description = String(item?.description || '').trim();
+            return Boolean(description || sourceType === 'official_source' || item?.evidenceLevel === 'structured_claim');
+        }
+
+        function normalizeVerificationSource(item, extracted = null) {
+            return {
+                title: String(extracted?.title || item?.title || 'Source').replace(/\s+/g, ' ').trim().slice(0, 180),
+                url: String(extracted?.url || item?.url || '').trim(),
+                description: String(extracted?.description || item?.description || '').replace(/\s+/g, ' ').trim().slice(0, 420),
+                text: String(extracted?.text || extracted?.markdown || item?.description || '').replace(/\s+/g, ' ').trim().slice(0, 3500),
+                sourceType: String(extracted?.sourceType || item?.sourceType || '').trim(),
+                sourceLabel: String(item?.sourceLabel || item?.source || item?.domain || '').trim(),
+                date: String(item?.date || item?.publishedAt || '').trim(),
+                extractor: String(extracted?.extractor || extracted?.sourceType || '').trim()
+            };
+        }
+
+        async function fetchVerificationExtract(url, query) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 3500);
+            try {
+                const response = await fetch('/api/extract-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        url,
+                        query,
+                        textLimit: 5000,
+                        timeoutMs: 3000,
+                        respectRobots: true
+                    })
+                });
+                const data = await parseJsonResponseSafely(response);
+                if (!response.ok || data?.success === false) return null;
+                return data?.result || null;
+            } catch (_) {
+                return null;
+            } finally {
+                clearTimeout(timeout);
+            }
+        }
+
+        async function buildVerificationEvidenceBundle(originalQuestion) {
+            const query = String(originalQuestion || '').replace(/\s+/g, ' ').trim();
+            if (!query || query === 'the previous question') {
+                return { query, sources: [], warning: 'No original user question was available for source lookup.' };
+            }
+            let results = [];
+            try {
+                const searchData = await fetchLiveSearchJson(query, {
+                    maxResults: 5,
+                    answer: false
+                });
+                results = (Array.isArray(searchData?.results) ? searchData.results : [])
+                    .filter(isUsableVerificationSource)
+                    .slice(0, 5);
+            } catch (error) {
+                return {
+                    query,
+                    sources: [],
+                    warning: String(error?.message || 'Source lookup failed before usable results were returned.')
+                };
+            }
+
+            const extractionCandidates = results.slice(0, 3);
+            const extracted = await Promise.all(extractionCandidates.map(item => fetchVerificationExtract(item.url, query)));
+            const extractedByUrl = new Map();
+            extractionCandidates.forEach((item, index) => {
+                const result = extracted[index];
+                if (result) extractedByUrl.set(String(item.url || '').trim(), result);
+            });
+
+            const sources = results
+                .map(item => normalizeVerificationSource(item, extractedByUrl.get(String(item.url || '').trim()) || null))
+                .filter(item => item.url && item.title)
+                .slice(0, 5);
+
+            return {
+                query,
+                sources,
+                warning: sources.length ? '' : 'No answer-bearing public source was found for this verification.'
+            };
+        }
+
+        function formatVerificationEvidenceForPrompt(bundle) {
+            const sources = Array.isArray(bundle?.sources) ? bundle.sources : [];
+            if (!sources.length) {
+                return `Retrieved source evidence: unavailable.\nReason: ${bundle?.warning || 'No usable source evidence was retrieved.'}`;
+            }
+            return sources.map((item, index) => [
+                `[${index + 1}] ${item.title}`,
+                item.description ? `Snippet: ${item.description}` : '',
+                item.text ? `Extracted text: ${item.text}` : '',
+                item.sourceLabel ? `Source label: ${item.sourceLabel}` : '',
+                item.sourceType ? `Source type: ${item.sourceType}` : '',
+                item.date ? `Date: ${item.date}` : '',
+                `URL: ${item.url}`
+            ].filter(Boolean).join('\n')).join('\n\n');
+        }
+
+        async function verifyAssistantMessage(messageId) { 
             const meta = getAssistantMessageMeta(messageId); 
             if (!meta?.text) return; 
+            if (regenerationInProgress || activeRequestController || isProcessing || isAssistantProcessing()) {
+                showTemporaryMessage('Wait for the current response to finish before verifying an answer.');
+                return;
+            }
             const visible = 'Verify this answer'; 
             const flags = Array.isArray(meta.riskFlags) && meta.riskFlags.length 
                 ? meta.riskFlags.map(flag => `${flag.label}: ${flag.reason}`).join('\n') 
                 : 'No local review flags were detected.'; 
             const originalQuestion = String(meta.priorUserPrompt || 'the previous question').replace(/\s+/g, ' ').trim();
             const displayPrompt = `Verify the previous answer for: ${originalQuestion.slice(0, 120)}${originalQuestion.length > 120 ? '...' : ''}`;
-            const hidden = [ 
+            closeAssistantActionMenus();
+            hideSelectionHelperPopover();
+            const hidden = [
                 'Check whether this answer is accurate and internally consistent.', 
-                'If it uses source links, inspect the cited source text already present in the answer.', 
+                'Use the retrieved source evidence supplied below. Do not ask the user for links.',
                 buildVerificationResponseInstructions('answer'),
                 '', 
                 `Local review flags:\n${flags}`, 
@@ -5652,14 +5766,58 @@ let showRoutingDebugBadge = false;
                 `Original user request: ${meta.priorUserPrompt || 'unknown'}`, 
                 `Answer to verify:\n${meta.text}` 
             ].join('\n'); 
-            closeAssistantActionMenus();
-            void submitProgrammaticUserTurn(visible, hidden, {
+            const turn = createConversationTurn(visible, hidden, 'programmatic', {
                 displayProcessingPrompt: displayPrompt,
                 topicLabel: 'Verify answer',
                 sourceContext: {
                     programmaticAction: 'verify_answer'
                 }
             });
+            const previousRenderContext = beginResponseRenderContext(turn);
+            addChatMessage(visible, true, null, { turnId: turn.id });
+            beginAssistantProcessing();
+            try {
+                showThinkingIndicator('Checking sources...');
+                const evidenceBundle = await buildVerificationEvidenceBundle(originalQuestion);
+                const evidenceBlock = formatVerificationEvidenceForPrompt(evidenceBundle);
+                const verificationPrompt = [
+                    hidden,
+                    '',
+                    evidenceBlock,
+                    '',
+                    'Return the Sources section using only URLs from the retrieved source evidence. If no retrieved source evidence is available, write "Sources: Source verification unavailable."'
+                ].join('\n');
+                showThinkingIndicator('Verifying answer...');
+                const response = await askGeminiAI(verificationPrompt, {
+                    intent: 'verify_answer',
+                    grounding: {
+                        originalRequest: originalQuestion,
+                        sourceAnswer: meta.text,
+                        selectedText: meta.text,
+                        localReviewFlags: flags,
+                        evidenceSources: evidenceBundle.sources,
+                        evidenceWarning: evidenceBundle.warning
+                    }
+                });
+                if (response?.aborted) return;
+                const finalText = String(response?.response || response?.text || '').trim() || 'I could not complete verification this time.';
+                addChatMessage(finalText, false, true, {
+                    turnId: turn.id,
+                    sourceType: 'verified',
+                    userMessage: originalQuestion
+                });
+                saveToHistory(visible, finalText);
+            } catch (error) {
+                console.error('verify answer failed:', error);
+                hideThinkingIndicator();
+                addChatMessage('I could not complete source verification right now. Please try again.', false, true, {
+                    turnId: turn.id
+                });
+            } finally {
+                restoreResponseRenderContext(previousRenderContext);
+                endAssistantProcessing();
+                resetPrimaryActionButtonWhenIdle();
+            }
         }
 
         async function askJarvisAboutSelection(action = 'custom') {
