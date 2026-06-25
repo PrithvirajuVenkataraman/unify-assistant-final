@@ -6,11 +6,8 @@ import currentFactsHandler from '../api/current-facts.js';
 import marketsHandler from '../api/markets.js';
 import searchHandler, { __test as searchTest } from '../api/search.js'; 
 import visionHandler from '../api/vision.js'; 
-import ocrHandler from '../api/ocr.js';
-import { OCR_LIMITS } from '../api/_lib/ocr.js';
 import { webSearchHandler, __test as webSearchTest } from '../api/_lib/web-search-core.js';
 import extractUrlHandler, { __test as extractUrlTest } from '../api/extract-url.js';
-import mediaSearchHandler, { __test as mediaSearchTest } from '../api/media-search.js';
 import { clearItems, saveItems } from '../api/_lib/latest/latest-cache.js';
 
 const APP_HTML_SOURCE = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -169,6 +166,12 @@ assert.equal(resolveRequestPath({ url: '/api/chat-groq-extra' }), '/api/chat-gro
 const notFound = await callHandler(apiHandler, request('/api/chat-groq-extra', {})); 
 assert.equal(notFound.statusCode, 404); 
 assert.equal(notFound.body.error.code, 'route_not_found'); 
+const retiredOcrRoute = await callHandler(apiHandler, request('/api/ocr', {}));
+assert.equal(retiredOcrRoute.statusCode, 404);
+assert.equal(retiredOcrRoute.body.error.code, 'route_not_found');
+const retiredMediaRoute = await callHandler(apiHandler, request('/api/media-search', {}));
+assert.equal(retiredMediaRoute.statusCode, 404);
+assert.equal(retiredMediaRoute.body.error.code, 'route_not_found');
 
 const pausedWebSearch = await callHandler(webSearchHandler, request('/api/web-search', { query: 'latest open source search' }));
 assert.equal(pausedWebSearch.statusCode, 503);
@@ -326,9 +329,9 @@ assert.match(APP_HTML_SOURCE, /Evidence used:/);
 assert.match(APP_HTML_SOURCE, /How checked:/);
 assert.match(APP_HTML_SOURCE, /Claims needing live\/source verification:/);
 assert.match(APP_HTML_SOURCE, /Corrected answer:/);
-assert.match(APP_HTML_SOURCE, /await maybeShowReferenceImageForQuery\(`\$\{visibleText\} \$\{selected\}`,\s*answer,\s*messageId\)/);
-assert.match(APP_HTML_SOURCE, /const factualAsk = /);
-assert.match(APP_HTML_SOURCE, /pictures would be great/);
+assert.doesNotMatch(APP_HTML_SOURCE, /maybeShowReferenceImageForQuery/);
+assert.doesNotMatch(APP_HTML_SOURCE, /fetchPublicMediaFromWikimedia/);
+assert.doesNotMatch(APP_HTML_SOURCE, /isRestaurantLookupIntent/);
 assert.deepEqual(
     ['balanced', 'witty', 'chatty', 'supportive', 'debate'].map(chatTest.normalizeResponseStyle),
     ['balanced', 'witty', 'chatty', 'supportive', 'debate']
@@ -1211,9 +1214,8 @@ globalThis.fetch = ORIGINAL_FETCH;
 
 const unsupportedLiveSearch = await callHandler(searchHandler, request('/api/search', { query: LIVE_FIXTURES.unsupported.query, limit: 5 }));
 assert.equal(unsupportedLiveSearch.statusCode, 200);
-assert.equal(unsupportedLiveSearch.body.success, false);
-assert.equal(unsupportedLiveSearch.body.error.code, 'unsupported_free_live');
-assert.equal(unsupportedLiveSearch.body.answer, undefined);
+assert.notEqual(unsupportedLiveSearch.body.category, 'unsupported_free_live');
+assert.notEqual(unsupportedLiveSearch.body.category, 'tourism_food_places');
 
 process.env.GEMINI_API_KEY = 'test-gemini-key';
 let geminiCallCount = 0;
@@ -1348,66 +1350,6 @@ globalThis.fetch = ORIGINAL_FETCH;
 delete process.env.SERPER_API_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
 
-const invalidMediaSearch = await callHandler(mediaSearchHandler, request('/api/media-search', { query: '' }));
-assert.equal(invalidMediaSearch.statusCode, 400);
-assert.equal(invalidMediaSearch.body.error.code, 'invalid_query');
-assert.equal(mediaSearchTest.classifyVisualMediaIntent('tell me about guitar chords').shouldSearch, true);
-assert.equal(mediaSearchTest.classifyVisualMediaIntent('who discovered penicillin').shouldSearch, true);
-assert.equal(mediaSearchTest.classifyVisualMediaIntent('explain photosynthesis').shouldSearch, true);
-assert.equal(mediaSearchTest.classifyVisualMediaIntent('debug this javascript error').shouldSearch, false);
-assert.equal(mediaSearchTest.isSafePublicImageUrl('https://upload.wikimedia.org/example.jpg'), true);
-assert.equal(mediaSearchTest.isSafePublicImageUrl('https://example.com/example.jpg'), false);
-
-globalThis.fetch = async url => {
-    const value = String(url);
-    if (value.startsWith('https://en.wikipedia.org/w/api.php')) {
-        return okJson({
-            query: {
-                pages: {
-                    1: {
-                        title: 'Guitar chord',
-                        fullurl: 'https://en.wikipedia.org/wiki/Guitar_chord',
-                        thumbnail: { source: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Guitar_chord.jpg/900px-Guitar_chord.jpg' }
-                    }
-                }
-            }
-        });
-    }
-    if (value.startsWith('https://commons.wikimedia.org/w/api.php')) {
-        return okJson({
-            query: {
-                pages: {
-                    2: {
-                        title: 'File:Guitar chord diagram.jpg',
-                        fullurl: 'https://commons.wikimedia.org/wiki/File:Guitar_chord_diagram.jpg',
-                        imageinfo: [{
-                            url: 'https://upload.wikimedia.org/wikipedia/commons/b/b0/Guitar_chord_diagram.jpg',
-                            thumburl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Guitar_chord_diagram.jpg/900px-Guitar_chord_diagram.jpg',
-                            mime: 'image/jpeg',
-                            extmetadata: {
-                                LicenseShortName: { value: 'CC BY-SA 4.0' },
-                                Artist: { value: '<span>Example Artist</span>' }
-                            }
-                        }]
-                    }
-                }
-            }
-        });
-    }
-    throw new Error(`Unexpected media fetch ${value}`);
-};
-const mediaSearch = await callHandler(mediaSearchHandler, request('/api/media-search', {
-    query: 'tell me about guitar chords',
-    limit: 3
-}));
-assert.equal(mediaSearch.statusCode, 200);
-assert.equal(mediaSearch.body.success, true);
-assert.equal(mediaSearch.body.sourceType, 'public_media');
-assert.equal(mediaSearch.body.images.length, 2);
-assert.equal(mediaSearch.body.images[1].license, 'CC BY-SA 4.0');
-assert.equal(mediaSearch.body.images[1].attribution, 'Example Artist');
-globalThis.fetch = ORIGINAL_FETCH;
-
 const disabledMarkets = await callHandler(marketsHandler, request('/api/markets', {
     mode: 'markets',
     query: SAMPLE.marketQuery
@@ -1430,163 +1372,6 @@ const invalidVisionMime = await callHandler(visionHandler, request('/api/vision'
 }));
 assert.equal(invalidVisionMime.statusCode, 415);
 assert.equal(invalidVisionMime.body.error.code, 'unsupported_media_type');
-
-process.env.GROQ_API_KEY = 'test-groq-key';
-globalThis.fetch = async (url) => {
-    const href = String(url);
-    if (href.includes('api.groq.com')) {
-        return okJson({
-            choices: [{
-                message: {
-                    content: JSON.stringify({
-                        text: 'Invoice\nTotal: INR 123.45',
-                        pages: [{ pageNumber: 1, text: 'Invoice\nTotal: INR 123.45' }],
-                        blocks: [
-                            { type: 'heading', text: 'Invoice', pageNumber: 1, confidence: 0.95 },
-                            { type: 'key_value', fields: { Total: 'INR 123.45' }, pageNumber: 1, confidence: 0.9 }
-                        ],
-                        confidence: 'high',
-                        warnings: [],
-                        metadata: { documentType: 'invoice' }
-                    })
-                }
-            }]
-        });
-    }
-    throw new Error(`unexpected OCR image URL ${href}`);
-};
-const imageOcr = await callHandler(ocrHandler, request('/api/ocr', {
-    fileName: 'invoice.png',
-    mimeType: 'image/png',
-    fileBase64: SAMPLE.imageBase64
-}));
-assert.equal(imageOcr.statusCode, 200);
-assert.equal(imageOcr.body.success, true);
-assert.match(imageOcr.body.result.text, /Invoice/);
-assert.equal(imageOcr.body.result.confidence, 'high');
-assert.equal(imageOcr.body.result.metadata.extractionMode, 'image_ocr');
-globalThis.fetch = ORIGINAL_FETCH;
-delete process.env.GROQ_API_KEY;
-
-const textPdfOcr = await callHandler(ocrHandler, request('/api/ocr', {
-    fileName: 'sample.pdf',
-    mimeType: 'application/pdf',
-    fileBase64: buildTextPdfBase64('Hello OCR PDF with enough readable embedded text for extraction')
-}));
-assert.equal(textPdfOcr.statusCode, 200);
-assert.equal(textPdfOcr.body.success, true);
-assert.match(textPdfOcr.body.result.text, /Hello OCR PDF/);
-assert.equal(textPdfOcr.body.result.metadata.extractionMode, 'pdf_text');
-
-const nearLimitTextOcr = await callHandler(ocrHandler, request('/api/ocr', {
-    fileName: 'near-limit.txt',
-    mimeType: 'text/plain',
-    fileBase64: Buffer.alloc(OCR_LIMITS.maxFileBytes, 65).toString('base64')
-}));
-assert.equal(nearLimitTextOcr.statusCode, 200);
-assert.equal(nearLimitTextOcr.body.success, true);
-assert.equal(nearLimitTextOcr.body.result.metadata.extractionMode, 'plain_text');
-
-const largeBodyOcr = await callHandler(ocrHandler, request('/api/ocr', {
-    fileName: 'large-body.txt',
-    mimeType: 'text/plain',
-    fileBase64: Buffer.alloc(OCR_LIMITS.maxFileBytes + (128 * 1024), 65).toString('base64')
-}));
-assert.equal(largeBodyOcr.statusCode, 413);
-assert.equal(largeBodyOcr.body.error.code, 'request_too_large');
-
-delete process.env.GEMINI_API_KEY;
-delete process.env.GOOGLE_API_KEY;
-const scannedPdfNoProvider = await callHandler(ocrHandler, request('/api/ocr', {
-    fileName: 'scan.pdf',
-    mimeType: 'application/pdf',
-    fileBase64: buildTextPdfBase64('')
-}));
-assert.equal(scannedPdfNoProvider.statusCode, 503);
-assert.equal(scannedPdfNoProvider.body.error.code, 'provider_unavailable');
-assert.match(scannedPdfNoProvider.body.error.message, /Scanned PDF OCR needs GEMINI_API_KEY or GOOGLE_API_KEY/);
-
-process.env.GEMINI_API_KEY = 'test-gemini-key';
-globalThis.fetch = async (url) => {
-    const href = String(url);
-    if (href.includes('generativelanguage.googleapis.com')) {
-        return okJson({
-            candidates: [{
-                content: {
-                    parts: [{
-                        text: JSON.stringify({
-                            text: 'Scanned PDF OCR text',
-                            pages: [{ pageNumber: 1, text: 'Scanned PDF OCR text' }],
-                            blocks: [{ type: 'paragraph', text: 'Scanned PDF OCR text', pageNumber: 1, confidence: 0.72 }],
-                            confidence: 'medium',
-                            warnings: [],
-                            metadata: { documentType: 'scanned_pdf' }
-                        })
-                    }]
-                }
-            }]
-        });
-    }
-    throw new Error(`unexpected OCR Gemini URL ${href}`);
-};
-const scannedPdfOcr = await callHandler(ocrHandler, request('/api/ocr', {
-    fileName: 'scan.pdf',
-    mimeType: 'application/pdf',
-    fileBase64: buildTextPdfBase64('')
-}));
-assert.equal(scannedPdfOcr.statusCode, 200);
-assert.equal(scannedPdfOcr.body.result.metadata.extractionMode, 'pdf_scanned_ocr');
-assert.match(scannedPdfOcr.body.result.text, /Scanned PDF OCR text/);
-globalThis.fetch = ORIGINAL_FETCH;
-delete process.env.GEMINI_API_KEY;
-
-process.env.GROQ_API_KEY = 'test-groq-key';
-globalThis.fetch = async (url) => {
-    const href = String(url);
-    if (href.includes('api.groq.com')) {
-        return okJson({
-            choices: [{
-                message: {
-                    content: JSON.stringify({
-                        text: '',
-                        pages: [],
-                        blocks: [],
-                        confidence: 'low',
-                        warnings: ['No readable text found.'],
-                        metadata: {}
-                    })
-                }
-            }]
-        });
-    }
-    throw new Error(`unexpected unreadable OCR URL ${href}`);
-};
-const unreadableOcr = await callHandler(ocrHandler, request('/api/ocr', {
-    fileName: 'blank.jpg',
-    mimeType: 'image/jpeg',
-    fileBase64: SAMPLE.imageBase64
-}));
-assert.equal(unreadableOcr.statusCode, 200);
-assert.equal(unreadableOcr.body.result.confidence, 'low');
-assert.ok(unreadableOcr.body.result.warnings.length >= 1);
-globalThis.fetch = ORIGINAL_FETCH;
-delete process.env.GROQ_API_KEY;
-
-const unsupportedOcr = await callHandler(ocrHandler, request('/api/ocr', {
-    fileName: 'slides.ppt',
-    mimeType: 'application/vnd.ms-powerpoint',
-    fileBase64: SAMPLE.imageBase64
-}));
-assert.equal(unsupportedOcr.statusCode, 415);
-assert.equal(unsupportedOcr.body.error.code, 'unsupported_file_type');
-
-const largeOcr = await callHandler(ocrHandler, request('/api/ocr', {
-    fileName: 'large.txt',
-    mimeType: 'text/plain',
-    fileBase64: Buffer.alloc(OCR_LIMITS.maxFileBytes + 1).toString('base64')
-}));
-assert.equal(largeOcr.statusCode, 413);
-assert.equal(largeOcr.body.error.code, 'file_too_large');
 
 restoreEnv('GROQ_API_KEY', ORIGINAL_GROQ_API_KEY);
 restoreEnv('SERPER_API_KEY', ORIGINAL_SERPER_API_KEY);
@@ -1673,34 +1458,6 @@ function escapeRegExp(value) {
     return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function buildTextPdfBase64(text) {
-    const safeText = String(text || '').replace(/[()\\]/g, '');
-    const stream = safeText
-        ? `BT /F1 24 Tf 72 720 Td (${safeText}) Tj ET`
-        : 'BT ET';
-    const objects = [
-        '<< /Type /Catalog /Pages 2 0 R >>',
-        '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
-        `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
-        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
-    ];
-    let pdf = '%PDF-1.1\n';
-    const offsets = [0];
-    objects.forEach((body, index) => {
-        offsets.push(Buffer.byteLength(pdf, 'latin1'));
-        pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
-    });
-    const xrefAt = Buffer.byteLength(pdf, 'latin1');
-    pdf += `xref\n0 ${objects.length + 1}\n`;
-    pdf += '0000000000 65535 f \n';
-    for (const offset of offsets.slice(1)) {
-        pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
-    }
-    pdf += `trailer\n<< /Root 1 0 R /Size ${objects.length + 1} >>\nstartxref\n${xrefAt}\n%%EOF`;
-    return Buffer.from(pdf, 'latin1').toString('base64');
-}
- 
 function request(url, body) { 
     return {
         method: 'POST',
