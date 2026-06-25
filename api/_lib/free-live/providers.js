@@ -188,7 +188,7 @@ export async function searchSports(query, options = {}) {
 export async function searchTourismFoodPlaces(query, options = {}) {
     const topic = extractPlaceTopic(query);
     if (!topic) {
-        return unsupportedFreeLive(query, 'tourism_food_places', 'Place, food, or tourism lookup needs a place or topic.');
+        return unsupportedFreeLive(query, 'tourism_food_places', 'Place or tourism lookup needs a place or topic.');
     }
     const [wiki, osm] = await Promise.allSettled([
         searchWikipediaTopic(topic, query, options),
@@ -333,7 +333,7 @@ function inferCategory(query) {
     if (/\bbitcoin|btc|ethereum|eth|crypto\b/.test(t)) return 'crypto';
     if (/\bsports?|score|fixture|standings|ipl|nba|nfl|epl\b/.test(t)) return 'sports';
     if (/\bearthquake|wildfire|flood|cyclone|hurricane|tsunami|volcano\b/.test(t)) return 'disasters';
-    if (/\btourism|travel|restaurant|food|hotel|where am i|near me\b/.test(t)) return 'tourism_food_places';
+    if (/\btourism|tourist|travel|places to visit|attractions?|temple|museum|hotel|where am i|where i am\b/.test(t)) return 'tourism_food_places';
     return 'unsupported_free_live';
 }
 
