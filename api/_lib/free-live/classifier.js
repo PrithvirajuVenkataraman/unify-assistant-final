@@ -35,7 +35,7 @@ const CATEGORY_PATTERNS = Object.freeze([
         category: 'tourism_food_places',
         route: 'live_required',
         reason: 'place_or_travel_request_needs_location_source',
-        pattern: /\b(tourism|tourist|travel|places to visit|attractions?|temple|museum|restaurant|cafe|food|recipe|hotel|near me|open now|where am i|where i am)\b/i
+        pattern: /\b(tourism|tourist|travel|places to visit|attractions?|temple|museum|hotel|where am i|where i am)\b/i
     },
     {
         category: 'news',
@@ -54,8 +54,8 @@ const LLM_PATTERNS = Object.freeze([
 ]);
 
 const UNSUPPORTED_FREE_LIVE_PATTERNS = Object.freeze([
-    /\b(open now|available now|in stock)\b/i,
-    /\b(restaurants?|cafes?|hotels?|pharmacy|gas station|store)\b.*\b(near me|open now|best|reviews?|rating)\b/i,
+    /\b(available now|in stock)\b/i,
+    /\b(hotels?|pharmacy|gas station|store)\b.*\b(near me|open now|best|reviews?|rating)\b/i,
     /\b(stock|share price|ticker|market price|quote)\b.*\b(now|today|live|current|exact)\b/i
 ]);
 
