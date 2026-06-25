@@ -1966,7 +1966,7 @@
     function countWords(text) {
         const words = String(text || '').match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g);
         return Array.isArray(words) ? words.length : 0;
-    } 
+    }
 
     function trimToWordCount(text, target) {
         if (!target || target < 1) return '';
