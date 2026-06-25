@@ -10,6 +10,7 @@ const SOURCE = Object.freeze({
     readme: fs.readFileSync(new URL('../README.md', import.meta.url), 'utf8'),
     appHtml: fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
     styles: fs.readFileSync(new URL('../styles.css', import.meta.url), 'utf8'),
+    apiIndex: fs.readFileSync(new URL('../api/index.js', import.meta.url), 'utf8'),
     searchApi: fs.readFileSync(new URL('../api/search.js', import.meta.url), 'utf8'),
     visionApi: fs.readFileSync(new URL('../api/vision.js', import.meta.url), 'utf8'),
     chatGroqApi: fs.readFileSync(new URL('../api/chat-groq.js', import.meta.url), 'utf8'),
@@ -238,14 +239,14 @@ assert.equal(routeMessage('latest OpenAI news').route, 'cached_latest');
 assert.equal(routeMessage('latest React release').route, 'cached_latest');
 assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.weather).route, 'live_required');
 assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.crypto).route, 'live_required');
-assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.unsupported).route, 'live_required');
+assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.unsupported).route, 'llm');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.weather).category, 'weather');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.crypto).category, 'crypto');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.government).category, 'government');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.disaster).category, 'disasters');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.sports).category, 'sports');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.places).category, 'tourism_food_places');
-assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.unsupported).category, 'unsupported_free_live');
+assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.unsupported).category, 'stable_knowledge');
 assert.match(SOURCE.styles, /\.chat-bubble-user\s*\{[\s\S]*background:\s*transparent !important/);
 assert.match(SOURCE.styles, /\.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important/);
 assert.match(SOURCE.styles, /body\.dark \.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important[\s\S]*border:\s*none !important[\s\S]*padding:\s*0 !important/);
@@ -270,11 +271,10 @@ assert.match(SOURCE.appHtml, /Gemini may help planning, ranking, and snippets/);
 assert.match(SOURCE.appHtml, /No Serper, Brave, Tavily, paid API, or crawler is required/i);
 assert.match(SOURCE.appHtml, /\/api\/extract-url/);
 assert.match(SOURCE.appHtml, /crawl4ai_url_extract/);
-assert.match(SOURCE.appHtml, /fetchPublicMediaFromWikimedia/);
-assert.match(SOURCE.appHtml, /https:\/\/en\.wikipedia\.org\/w\/api\.php/);
-assert.match(SOURCE.appHtml, /https:\/\/commons\.wikimedia\.org\/w\/api\.php/);
-assert.match(SOURCE.appHtml, /Related public images/);
-assert.match(SOURCE.appHtml, /data-public-media="true"/);
+assert.doesNotMatch(SOURCE.appHtml, /fetchPublicMediaFromWikimedia/);
+assert.doesNotMatch(SOURCE.appHtml, /https:\/\/commons\.wikimedia\.org\/w\/api\.php/);
+assert.doesNotMatch(SOURCE.appHtml, /Related public images/);
+assert.doesNotMatch(SOURCE.appHtml, /data-public-media="true"/);
 assert.match(SOURCE.appHtml, /function isIntercityRouteRequest\(text\)/);
 assert.match(SOURCE.appHtml, /function parseRouteRequest\(text\)/);
 assert.match(SOURCE.appHtml, /function isPersonalOriginPhrase\(value\)/);
@@ -303,25 +303,26 @@ assert.match(SOURCE.readme, /Standout Feature: Context Copilot/);
 assert.match(SOURCE.readme, /local, deterministic, private, and free-for-life/);
 assert.match(SOURCE.readme, /Exact Features/);
 assert.match(SOURCE.readme, /Crawl4AI fallback/);
-assert.match(SOURCE.readme, /Public Images/);
+assert.doesNotMatch(SOURCE.readme, /Public Images/);
 assert.match(SOURCE.readme, /Verification/);
-assert.match(SOURCE.readme, /OCR Uploads/);
-assert.match(SOURCE.readme, /OCR_MAX_FILE_BYTES/);
-assert.match(SOURCE.readme, /Vercel-safe 3 MB decoded file limit/);
+assert.doesNotMatch(SOURCE.readme, /OCR Uploads/);
+assert.doesNotMatch(SOURCE.readme, /OCR_MAX_FILE_BYTES/);
+assert.doesNotMatch(SOURCE.readme, /Vercel-safe 3 MB decoded file limit/);
 assert.doesNotMatch(SOURCE.readme, /Environment Variables|Local Testing|npm run dev|CRAWL4AI_URL/);
 assert.match(SOURCE.appHtml, /localStorage when memory persistence is enabled/);
-assert.match(SOURCE.appHtml, /id="upload-file-btn"/);
-assert.match(SOURCE.appHtml, /id="document-upload-input"/);
-assert.match(SOURCE.appHtml, /fetch\('\/api\/ocr'/);
-assert.match(SOURCE.appHtml, /function buildUploadedDocumentFromOcrResult/);
-assert.match(SOURCE.appHtml, /function buildOcrUploadErrorMessage/);
-assert.match(SOURCE.appHtml, /OCR_HOSTED_MAX_FILE_BYTES = 3 \* 1024 \* 1024/);
-assert.match(SOURCE.appHtml, /function estimateOcrUploadBodyBytes/);
-assert.match(SOURCE.appHtml, /This upload may be too large for the hosted OCR endpoint/);
-assert.match(SOURCE.appHtml, /OCR upload failed with HTTP 413/);
-assert.doesNotMatch(SOURCE.appHtml, /Document upload is turned off/);
-assert.doesNotMatch(SOURCE.appHtml, /async function handleUploadedDocumentFollowup\(text\)\s*\{\s*return false/);
+assert.doesNotMatch(SOURCE.appHtml, /id="upload-file-btn"/);
+assert.doesNotMatch(SOURCE.appHtml, /id="document-upload-input"/);
+assert.doesNotMatch(SOURCE.appHtml, /fetch\('\/api\/ocr'/);
+assert.doesNotMatch(SOURCE.appHtml, /function buildUploadedDocumentFromOcrResult/);
+assert.doesNotMatch(SOURCE.appHtml, /function buildOcrUploadErrorMessage/);
+assert.doesNotMatch(SOURCE.appHtml, /OCR_HOSTED_MAX_FILE_BYTES/);
+assert.doesNotMatch(SOURCE.appHtml, /function estimateOcrUploadBodyBytes/);
+assert.doesNotMatch(SOURCE.appHtml, /This upload may be too large for the hosted OCR endpoint/);
+assert.doesNotMatch(SOURCE.appHtml, /OCR upload failed with HTTP 413/);
+assert.doesNotMatch(SOURCE.appHtml, /async function handleUploadedDocumentFollowup/);
 assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
+assert.doesNotMatch(SOURCE.apiIndex, /\/api\/ocr/);
+assert.doesNotMatch(SOURCE.apiIndex, /\/api\/media-search/);
 assert.doesNotMatch(SOURCE.searchApi, /Tamil Nadu Chief Minister official/);
 assert.doesNotMatch(SOURCE.searchApi, /profile_form_cm/);
 assert.match(SOURCE.searchApi, /function buildSourceDerivedAnswer\(results, metadata = \{\}\)/);
@@ -356,11 +357,9 @@ const routingSandbox = {
 vm.createContext(routingSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isMedicalAdviceIntent'), routingSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isMedicalEmergencyIntent'), routingSandbox);
-vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isRestaurantLookupIntent'), routingSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'decideAnswerPath'), routingSandbox);
 const clinicalPrompt = 'A patient on antidepressants eats aged cheese for dinner. Two hours later: pounding headache, flushing, sweating, blood pressure 220/120. The ER doc reaches for nitroprusside... then stops. Why?';
 assert.equal(routingSandbox.isMedicalAdviceIntent(clinicalPrompt), true);
-assert.equal(routingSandbox.isRestaurantLookupIntent(clinicalPrompt), false);
 assert.equal(routingSandbox.decideAnswerPath({
     raw: clinicalPrompt,
     flags: {
@@ -370,10 +369,9 @@ assert.equal(routingSandbox.decideAnswerPath({
     }
 }), 'medical_advice');
 assert.equal(routingSandbox.isMedicalAdviceIntent('Could this be a drug interaction or hypertensive crisis?'), true);
-assert.equal(routingSandbox.isRestaurantLookupIntent('dinner near me'), true);
-assert.equal(routingSandbox.isRestaurantLookupIntent('best restaurants in Chennai'), true);
-assert.equal(routingSandbox.isRestaurantLookupIntent('places to eat in Kyoto'), true);
-assert.equal(routingSandbox.isRestaurantLookupIntent('I ate dinner and got a headache'), false);
+assert.doesNotMatch(SOURCE.appHtml, /function isRestaurantLookupIntent/);
+assert.equal(routeMessage('restaurants near me open now').route, 'llm');
+assert.equal(routeMessage('best restaurants in Chennai').route, 'llm');
 
 clearItems();
 saveItems([{
@@ -403,6 +401,7 @@ assertContracts(SOURCE.appHtml, FEATURE_CONTRACTS);
 assert.match(SOURCE.visionApi, /function shouldEscalateMathOcrSolve/);
 assert.match(SOURCE.visionApi, /pipeline:\s*'fast-math-ocr-solve'/);
 assert.match(SOURCE.visionApi, /pipeline:\s*'planner-critic-solver'/);
+assert.doesNotMatch(SOURCE.visionApi, /llama-4-scout/);
 assert.match(SOURCE.speechInput, /try English or another language/);
 assert.match(SOURCE.chatGroqApi, /forceReview: false/);
 assert.doesNotMatch(SOURCE.chatGroqApi, /forceReview: !isInternalSummary/);
@@ -422,12 +421,12 @@ assert.match(SOURCE.appHtml, /displayProcessingPrompt/);
 assert.match(SOURCE.appHtml, /programmaticAction: 'verify_answer'/);
 assert.match(SOURCE.appHtml, /Verifying answer/);
 assert.match(SOURCE.appHtml, /Verify the previous answer for:/);
-assert.match(SOURCE.appHtml, /await maybeShowReferenceImageForQuery\(`\$\{visibleText\} \$\{selected\}`,\s*answer,\s*messageId\)/);
-assert.match(SOURCE.appHtml, /fetchPublicMediaFromWikimedia\(query,\s*3\)/);
-assert.match(SOURCE.appHtml, /dedupePublicMediaImages/);
-assert.match(SOURCE.appHtml, /url\.searchParams\.set\('piprop',\s*'thumbnail\|name\|original'\)/);
-assert.match(SOURCE.appHtml, /function formatPublicMediaTitle/);
-assert.match(SOURCE.appHtml, /object-contain/);
+assert.doesNotMatch(SOURCE.appHtml, /maybeShowReferenceImageForQuery/);
+assert.doesNotMatch(SOURCE.appHtml, /fetchPublicMediaFromWikimedia\(query,\s*3\)/);
+assert.doesNotMatch(SOURCE.appHtml, /dedupePublicMediaImages/);
+assert.doesNotMatch(SOURCE.appHtml, /url\.searchParams\.set\('piprop',\s*'thumbnail\|name\|original'\)/);
+assert.doesNotMatch(SOURCE.appHtml, /function formatPublicMediaTitle/);
+assert.doesNotMatch(SOURCE.appHtml, /object-contain/);
 assert.doesNotMatch(SOURCE.appHtml, /Â·/);
 assert.match(SOURCE.appHtml, /function getStableBrowserFactAnswer/);
 assert.match(SOURCE.appHtml, /function shouldSuppressDuplicateAssistantMessage/);
@@ -453,25 +452,6 @@ vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'shouldSuppressDuplicateAs
 assert.match(duplicateSandbox.getStableBrowserFactAnswer('Founder of penicillin'), /Alexander Fleming/);
 assert.equal(duplicateSandbox.shouldSuppressDuplicateAssistantMessage('Alexander Fleming discovered penicillin.\n\nSources:\n1. A', {}), false);
 assert.equal(duplicateSandbox.shouldSuppressDuplicateAssistantMessage('Alexander Fleming discovered penicillin.\n\nSources:\n1. B', {}), true);
-
-const mediaHelperSandbox = {
-    normalizeIntentTypos(value) {
-        return String(value || '');
-    }
-};
-vm.createContext(mediaHelperSandbox);
-vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'firstMediaString'), mediaHelperSandbox);
-vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'formatPublicMediaTitle'), mediaHelperSandbox);
-vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'cleanReferenceSubject'), mediaHelperSandbox);
-vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'extractReferenceSubject'), mediaHelperSandbox);
-vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'shouldTryReferenceImage'), mediaHelperSandbox);
-assert.equal(mediaHelperSandbox.formatPublicMediaTitle('File:Glass_vial_of_British_Standard_penicillin.jpg'), 'Glass vial of British Standard penicillin');
-assert.equal(mediaHelperSandbox.formatPublicMediaTitle('', 'History of penicillin'), 'History of penicillin');
-assert.equal(mediaHelperSandbox.extractReferenceSubject('who discovered penicillin'), 'penicillin');
-assert.equal(mediaHelperSandbox.extractReferenceSubject('explain photosynthesis'), 'photosynthesis');
-assert.equal(mediaHelperSandbox.shouldTryReferenceImage('who discovered penicillin', 'Alexander Fleming discovered penicillin.'), true);
-assert.equal(mediaHelperSandbox.shouldTryReferenceImage('debug this javascript error', 'Use console output.'), false);
-assert.equal(mediaHelperSandbox.shouldTryReferenceImage('calculate 2 + 2', 'The answer is 4.'), false);
 
 const riskSandbox = {};
 vm.createContext(riskSandbox);
