@@ -1384,6 +1384,16 @@ globalThis.fetch = async (url, init) => {
         verifyModelCalls += 1;
         const body = JSON.parse(String(init?.body || '{}'));
         const prompt = String(body?.messages?.[0]?.content || '');
+        if (prompt.includes('No usable retrieved source evidence was supplied')) {
+            assert.doesNotMatch(prompt, /Required source links:/);
+            return okJson({
+                choices: [{
+                    message: {
+                        content: 'Verdict: unsupported.\nEvidence used: No retrieved source evidence was available.\nHow checked: Source verification could not be completed.\nClaims needing live/source verification: The answer needs source verification.\nCorrected answer: Not enough evidence.\nSources: Source verification unavailable.'
+                    }
+                }]
+            });
+        }
         assert.match(prompt, /Required source links:/);
         assert.match(prompt, /\[Test Source\]\(https:\/\/example\.com\/fact\)/);
         assert.doesNotMatch(prompt, /Retrieved context \(RAG\):/);
@@ -1421,6 +1431,22 @@ assert.equal(verifyAnswerChat.body.quality.performed, false);
 assert.match(verifyAnswerChat.body.response, /\[Test Source\]\(https:\/\/example\.com\/fact\)/);
 assert.equal(verifyModelCalls, 1);
 assert.equal(verifyUnexpectedNetworkCalls, 0);
+const noSourceVerifyChat = await callHandler(chatHandler, request('/api/chat-groq', {
+    message: 'Verify this answer without usable evidence.',
+    intent: 'verify_answer',
+    grounding: {
+        originalRequest: 'Who is the current test role?',
+        sourceAnswer: 'A person is the current test role.',
+        localReviewFlags: 'Current fact: This may change over time.',
+        evidenceWarning: 'No answer-bearing public source was found.',
+        evidenceSources: []
+    }
+}));
+assert.equal(noSourceVerifyChat.statusCode, 200);
+assert.equal(noSourceVerifyChat.body.routing.strategy, 'verify_answer_fast_path');
+assert.match(noSourceVerifyChat.body.response, /Source verification unavailable/);
+assert.equal(noSourceVerifyChat.body.quality.externalVerification, false);
+assert.equal(verifyModelCalls, 2);
 assert.equal(chatTest.normalizeVerifyGrounding({
     sourceAnswer: 'A',
     evidenceSources: [{ title: 'Bad', url: 'javascript:alert(1)' }]
