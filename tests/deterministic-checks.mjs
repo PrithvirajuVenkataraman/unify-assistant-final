@@ -162,9 +162,6 @@ const FEATURE_CONTRACTS = Object.freeze({
             /priorUserPrompt:\s*String\(meta\?\.priorUserPrompt \|\| window\.__lastUserMessage/
         ]
     },
-    backgroundTripEvents: {
-        required: [/detached: true\s*\}\);\s*maybeNotifyTripEvent/]
-    },
     localClaimRiskFlags: {
         required: [
             /function analyzeAnswerRiskFlags\(userMessage, assistantText\)/,
@@ -277,22 +274,25 @@ assert.doesNotMatch(SOURCE.appHtml, /fetchPublicMediaFromWikimedia/);
 assert.doesNotMatch(SOURCE.appHtml, /https:\/\/commons\.wikimedia\.org\/w\/api\.php/);
 assert.doesNotMatch(SOURCE.appHtml, /Related public images/);
 assert.doesNotMatch(SOURCE.appHtml, /data-public-media="true"/);
-assert.match(SOURCE.appHtml, /function isIntercityRouteRequest\(text\)/);
-assert.match(SOURCE.appHtml, /function parseRouteRequest\(text\)/);
-assert.match(SOURCE.appHtml, /function isPersonalOriginPhrase\(value\)/);
-assert.match(SOURCE.appHtml, /function resolveRouteEndpoint\(value, kind = 'place'\)/);
-assert.match(SOURCE.appHtml, /function fetchOsrmDrivingRoute\(origin, destination\)/);
-assert.match(SOURCE.appHtml, /function buildRouteGuidanceMessage\(routePlan\)/);
-assert.match(SOURCE.appHtml, /\(\?:from\\s\+\)\?my\\s\+location/);
-assert.match(SOURCE.appHtml, /\(\?:from\\s\+\)\?my\\s\+place/);
-assert.match(SOURCE.appHtml, /from\\s\+here/);
-assert.match(SOURCE.appHtml, /where\\s\+i\\s\+am/);
-assert.match(SOURCE.appHtml, /Open Maps for current traffic, train\/bus schedules, and exact route/);
-assert.match(SOURCE.appHtml, /where\\s\+a\\s\+i/);
-assert.match(SOURCE.appHtml, /origin_not_allowed/);
+assert.doesNotMatch(SOURCE.appHtml, /function isIntercityRouteRequest\(text\)/);
+assert.doesNotMatch(SOURCE.appHtml, /function parseRouteRequest\(text\)/);
+assert.doesNotMatch(SOURCE.appHtml, /function isPersonalOriginPhrase\(value\)/);
+assert.doesNotMatch(SOURCE.appHtml, /function resolveRouteEndpoint\(value, kind = 'place'\)/);
+assert.doesNotMatch(SOURCE.appHtml, /function fetchOsrmDrivingRoute\(origin, destination\)/);
+assert.doesNotMatch(SOURCE.appHtml, /function buildRouteGuidanceMessage\(routePlan\)/);
+assert.doesNotMatch(SOURCE.appHtml, /pendingRouteDisambiguation/);
+assert.doesNotMatch(SOURCE.appHtml, /tripState/);
+assert.doesNotMatch(SOURCE.appHtml, /router\.project-osrm\.org/);
+assert.doesNotMatch(SOURCE.appHtml, /Open Maps for current traffic, train\/bus schedules, and exact route/);
+assert.doesNotMatch(SOURCE.readme, /Route and travel help/);
 assert.match(SOURCE.appHtml, /function buildContextCopilotBadgeHtml/);
 assert.match(SOURCE.appHtml, /function shouldShowContextCopilotBadge/);
 assert.match(SOURCE.appHtml, /contextual_follow_up/);
+assert.match(SOURCE.appHtml, /ambiguous_short_context/);
+assert.match(SOURCE.appHtml, /function buildAmbiguousShortContextReply/);
+assert.match(SOURCE.appHtml, /function createExplicitMemoryRecord/);
+assert.match(SOURCE.appHtml, /function findRelevantSavedMemory/);
+assert.match(SOURCE.appHtml, /Relevant saved memory:/);
 assert.doesNotMatch(SOURCE.appHtml, /alwaysShowContextCopilotBadge\s*=\s*true/);
 assert.match(SOURCE.appHtml, /function splitReadableSentences\(text\)/);
 assert.ok(SOURCE.appHtml.includes("char === '.' && /\\d/.test(prev) && /\\d/.test(next)"));
@@ -507,24 +507,46 @@ assert.equal(languageSandbox.detectInputLanguageHint('hola, can you help me?').i
 assert.equal(languageSandbox.detectInputLanguageHint('hello தமிழ் help').includes('English-Tamil'), true);
 assert.equal(languageSandbox.detectInputLanguageHint('தமிழ்'), 'Tamil');
 
-const routeSandbox = {
-    normalizeIntentTypos(value) {
-        return String(value || '');
+const memorySandbox = {
+    Date,
+    memoryStore: {},
+    AppState: { user: { memory: {} } },
+    normalizeThing(value) {
+        return String(value || '').toLowerCase().trim().replace(/\s+/g, ' ');
+    },
+    levenshteinDistance(a, b) {
+        a = String(a || '');
+        b = String(b || '');
+        const dp = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
+        for (let i = 0; i <= a.length; i += 1) dp[i][0] = i;
+        for (let j = 0; j <= b.length; j += 1) dp[0][j] = j;
+        for (let i = 1; i <= a.length; i += 1) {
+            for (let j = 1; j <= b.length; j += 1) {
+                dp[i][j] = Math.min(
+                    dp[i - 1][j] + 1,
+                    dp[i][j - 1] + 1,
+                    dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+                );
+            }
+        }
+        return dp[a.length][b.length];
     }
 };
-vm.createContext(routeSandbox);
-vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isPersonalOriginPhrase'), routeSandbox);
-vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'cleanRouteEndpoint'), routeSandbox);
-vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'parseRouteRequest'), routeSandbox);
-vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isIntercityRouteRequest'), routeSandbox);
-const chidambaramRoute = routeSandbox.parseRouteRequest('best route to Bangalore from Chidambaram');
-assert.equal(chidambaramRoute.origin, 'Chidambaram');
-assert.equal(chidambaramRoute.destination, 'Bangalore');
-const personalRoute = routeSandbox.parseRouteRequest('best route to Bangalore from my location');
-assert.equal(personalRoute.originNeedsGps, true);
-assert.equal(personalRoute.destination, 'Bangalore');
-assert.equal(routeSandbox.isIntercityRouteRequest('how to reach Bengaluru from Chidambaram'), true);
-assert.equal(routeSandbox.isPersonalOriginPhrase('from my place'), true);
+vm.createContext(memorySandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getMemoryRecordValue'), memorySandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeMemoryRecord'), memorySandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'createExplicitMemoryRecord'), memorySandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeMemoryStoreRecords'), memorySandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'memorySearchTokens'), memorySandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'scoreMemoryMatch'), memorySandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'findRelevantSavedMemory'), memorySandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'buildRelevantSavedMemoryContext'), memorySandbox);
+memorySandbox.memoryStore.keys = memorySandbox.createExplicitMemoryRecord('keys', 'on the kitchen counter', 'my keys are on the kitchen counter');
+assert.equal(memorySandbox.memoryStore.keys.category, 'location');
+assert.ok(memorySandbox.memoryStore.keys.createdAt);
+assert.equal(memorySandbox.findRelevantSavedMemory('where are my key')[0].value, 'on the kitchen counter');
+assert.equal(memorySandbox.findRelevantSavedMemory('tell me about Saturn').length, 0);
+assert.match(memorySandbox.buildRelevantSavedMemoryContext('where are my keys'), /Relevant saved memory:\n- keys: on the kitchen counter/);
 
 console.log('deterministic-checks-ok'); 
 
