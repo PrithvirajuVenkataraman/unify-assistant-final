@@ -103,6 +103,17 @@ export function classifyInput(message, pending = null, activeThread = null) {
     const startsClearRequest = REQUEST_STARTERS.test(originalMessage);
     const topic = deriveTopic(originalMessage);
     const topicOverlap = activeThread ? countOverlap(tokens, tokenize(activeThread.topic)) : 0;
+    const ambiguousShortContext = Boolean(activeThread) &&
+        !pending &&
+        !isCancel &&
+        !isSetting &&
+        !isFeatureCommand &&
+        !isStandaloneLiveRequest &&
+        !isFollowUp &&
+        !startsClearRequest &&
+        tokens.length > 0 &&
+        tokens.length <= 3 &&
+        topicOverlap === 0;
     const clearNewIntent = !isCancel &&
         !isSetting &&
         hasSubstantiveIntent &&
@@ -128,6 +139,7 @@ export function classifyInput(message, pending = null, activeThread = null) {
         isFollowUp,
         isCorrection,
         pendingMatch,
+        ambiguousShortContext,
         clearNewIntent
     };
 }
@@ -164,6 +176,8 @@ function resolveInput(state, input, limits) {
                 cancelledPendingState
             );
         }
+    } else if (classification.ambiguousShortContext) {
+        return resolution(originalMessage, originalMessage, activeThread, 'ambiguous_short_context', 0.58, null);
     } else if (classification.clearNewIntent) {
         cancelledPendingState = clearPending(state, 'superseded_by_new_intent');
         const thread = createThread(state, classification.topic || originalMessage, limits.maxThreads);
@@ -173,7 +187,12 @@ function resolveInput(state, input, limits) {
     } else if (classification.pendingMatch && state.pending) {
         decisionReason = 'pending_clarification_answer';
         confidence = 0.96;
-        return resolution(originalMessage, originalMessage, activeThread, decisionReason, confidence, null);
+        const pendingThread = state.threads.get(state.pending.threadId) || activeThread;
+        if (pendingThread) {
+            state.activeThreadId = pendingThread.id;
+            pendingThread.updatedAt = Date.now();
+        }
+        return resolution(originalMessage, originalMessage, pendingThread, decisionReason, confidence, null);
     } else if (classification.isFollowUp && activeThread) { 
         if (!shouldResolveAgainstActiveThread(originalMessage, classification, activeThread)) {
             const thread = createThread(state, classification.topic || originalMessage, limits.maxThreads);
