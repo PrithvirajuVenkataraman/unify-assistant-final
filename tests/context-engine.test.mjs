@@ -89,6 +89,11 @@ engine.setPending({ type: 'location_choice', expected: 'number', options: ['Pari
 result = engine.resolve({ message: '2' });
 assert.equal(result.decisionReason, 'pending_clarification_answer');
 
+engine.setPending({ type: 'weather_location', expected: 'location', threadId: primaryThread });
+result = engine.resolve({ message: 'Bengaluru' });
+assert.equal(result.decisionReason, 'pending_clarification_answer');
+assertUsesThread(result, primaryThread);
+
 engine.setPending({ type: 'location_choice', expected: 'number', options: ['Paris', 'Texas'] });
 result = engine.resolve({ message: PROMPT.listRequest });
 assert.equal(result.decisionReason, 'clear_new_intent');
@@ -201,6 +206,10 @@ copilot = contextCopilotEngine.resolve({ message: 'Tell me about guitar chords w
 assert.equal(copilot.decisionReason, 'clear_new_intent');
 const guitarThread = copilot.activeThread.id;
 recordExchange(contextCopilotEngine, guitarThread, copilot.resolvedMessage, 'Guitar chords summary.');
+
+copilot = contextCopilotEngine.resolve({ message: 'Bengaluru' });
+assert.equal(copilot.decisionReason, 'ambiguous_short_context');
+assertUsesThread(copilot, guitarThread, 'bare place-like replies should ask clarification against active context');
 
 copilot = contextCopilotEngine.resolve({ message: 'bitcoin price now' });
 assert.notEqual(copilot.decisionReason, 'contextual_follow_up');
