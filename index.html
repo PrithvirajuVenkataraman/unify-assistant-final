@@ -687,7 +687,7 @@ function normalizeIntentTypos(text) {
         'what', 'whats', 'who', 'tell', 'about', 'define', 'meaning', 'show',
         'image', 'picture', 'photo', 'look', 'like', 'weather', 'forecast',
         'news', 'shopping', 'grocery', 'itinerary', 'hotel',
-        'restaurants', 'transport', 'route', 'translate', 'translator', 'joke',
+        'restaurants', 'transport', 'translate', 'translator', 'joke',
         'calendar', 'budget', 'sync', 'chief', 'minister', 'tamil', 'nadu'
     ];
 
@@ -713,7 +713,119 @@ function normalizeIntentTypos(text) {
             return min <= limit ? best : lower;
         }) 
         .join(''); 
-} 
+}
+
+function getMemoryRecordValue(record) {
+    if (record && typeof record === 'object') {
+        return String(record.value || record.location || '').trim();
+    }
+    return String(record || '').trim();
+}
+
+function normalizeMemoryRecord(key, record) {
+    const normalizedKey = normalizeThing(key);
+    if (record && typeof record === 'object' && record.value) {
+        return {
+            key: String(record.key || normalizedKey).trim() || normalizedKey,
+            value: String(record.value || '').trim(),
+            category: String(record.category || 'location').trim() || 'location',
+            createdAt: String(record.createdAt || new Date().toISOString()),
+            updatedAt: String(record.updatedAt || record.createdAt || new Date().toISOString()),
+            sourcePhrase: String(record.sourcePhrase || '').trim()
+        };
+    }
+    const now = new Date().toISOString();
+    return {
+        key: normalizedKey,
+        value: getMemoryRecordValue(record),
+        category: 'location',
+        createdAt: now,
+        updatedAt: now,
+        sourcePhrase: ''
+    };
+}
+
+function createExplicitMemoryRecord(key, value, sourcePhrase = '') {
+    const existing = memoryStore?.[key];
+    const previous = existing && typeof existing === 'object' ? existing : null;
+    const now = new Date().toISOString();
+    return {
+        key,
+        value: String(value || '').trim(),
+        category: 'location',
+        createdAt: String(previous?.createdAt || now),
+        updatedAt: now,
+        sourcePhrase: String(sourcePhrase || '').trim().slice(0, 240)
+    };
+}
+
+function normalizeMemoryStoreRecords() {
+    const next = {};
+    for (const [key, value] of Object.entries(memoryStore || {})) {
+        if (key === 'name') continue;
+        const record = normalizeMemoryRecord(key, value);
+        if (record.key && record.value) next[record.key] = record;
+    }
+    memoryStore = next;
+    AppState.user.memory = memoryStore;
+    return memoryStore;
+}
+
+function memorySearchTokens(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(token => token && token.length > 1)
+        .slice(0, 32);
+}
+
+function scoreMemoryMatch(query, key, record) {
+    const normalizedQuery = normalizeThing(String(query || '').replace(/^(?:the|my|a|an)\s+/i, ''));
+    const normalizedKey = normalizeThing(key);
+    const value = getMemoryRecordValue(record);
+    if (!normalizedQuery || !normalizedKey || !value) return 0;
+    if (normalizedQuery === normalizedKey) return 100;
+    if (normalizedQuery.replace(/s$/, '') === normalizedKey.replace(/s$/, '')) return 92;
+    if (normalizedKey.includes(normalizedQuery) || normalizedQuery.includes(normalizedKey)) return 82;
+
+    const queryTokens = memorySearchTokens(normalizedQuery);
+    const keyTokens = memorySearchTokens(normalizedKey);
+    const overlap = keyTokens.filter(token => queryTokens.includes(token) || queryTokens.includes(token.replace(/s$/, ''))).length;
+    if (overlap > 0) return 50 + overlap * 8;
+
+    const distance = levenshteinDistance(normalizedQuery, normalizedKey);
+    const maxDistance = Math.max(1, Math.floor(Math.min(normalizedQuery.length, normalizedKey.length) / 3));
+    return distance <= maxDistance ? 40 - distance : 0;
+}
+
+function findRelevantSavedMemory(text, limit = 3) {
+    const query = String(text || '').trim();
+    if (!query || !memoryStore) return [];
+    normalizeMemoryStoreRecords();
+    return Object.entries(memoryStore)
+        .map(([key, record]) => ({
+            key,
+            record,
+            score: scoreMemoryMatch(query, key, record)
+        }))
+        .filter(item => item.score >= 50)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .map(item => ({
+            key: item.key,
+            value: getMemoryRecordValue(item.record),
+            category: item.record?.category || 'location',
+            updatedAt: item.record?.updatedAt || ''
+        }));
+}
+
+function buildRelevantSavedMemoryContext(text) {
+    const relevant = findRelevantSavedMemory(text, 3);
+    if (!relevant.length) return '';
+    const lines = relevant.map(item => `- ${item.key}: ${item.value}`);
+    return `\n\nRelevant saved memory:\n${lines.join('\n')}`;
+}
 
 function buildMemoryInspectorHtml() { 
     const entries = Object.entries(memoryStore || {})
@@ -724,7 +836,8 @@ function buildMemoryInspectorHtml() {
     }
     return entries.map(([key, value]) => {
         const label = escapeHtml(String(key || '').slice(0, 60));
-        const body = escapeHtml(String(typeof value === 'string' ? value : JSON.stringify(value)).slice(0, 140));
+        const record = normalizeMemoryRecord(key, value);
+        const body = escapeHtml(`${record.value}${record.updatedAt ? ` | updated ${record.updatedAt.slice(0, 10)}` : ''}`.slice(0, 160));
         const encodedKey = encodeURIComponent(key);
         return `
             <div class="memory-inspector-item">
@@ -3222,16 +3335,6 @@ function isLowSignalModelAnswer(text) {
     ].some(pattern => pattern.test(t));
 }
 
-function isUnsupportedRouteDistanceAnswer(userMessage, answerText) {
-    if (!isIntercityRouteRequest(userMessage)) return false;
-    const raw = String(answerText || '');
-    if (!raw.trim()) return false;
-    const hasNumericRouteClaim = /\b\d{2,4}(?:\.\d+)?\s*(?:km|kilometers?|mi|miles?|hours?|hrs?|minutes?|mins?)\b/i.test(raw);
-    if (!hasNumericRouteClaim) return false;
-    const hasGroundedMapSource = /\b(?:OSRM|OpenStreetMap|Google Maps|Driving route:|Transit\/train\/bus view:|Open Maps for current traffic)\b/i.test(raw);
-    return !hasGroundedMapSource;
-}
-
 function sanitizeWeakModelAnswer(answerText, userMessage) {
     const raw = String(answerText || '').trim();
     if (!raw) return '';
@@ -3261,9 +3364,6 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
     const looksLikeWeakExplainerTemplate =
         /follow these steps|quick recap|next thing to learn|to understand (its|the|this) meaning/i.test(raw) ||
         (/(\n|^)\s*1[\).:-]\s+/.test(raw) && /(\n|^)\s*2[\).:-]\s+/.test(raw));
-    if (isUnsupportedRouteDistanceAnswer(userMessage, raw)) {
-        return '';
-    }
     if (directQuery && looksLikeResearchSteps) {
         return '';
     }
@@ -3483,7 +3583,7 @@ function queueApiReply(intent, data = {}, fallbackText = '') {
 function isLikelyLocationOrTravelQuery(text) {
     const t = String(text || '').toLowerCase();
     if (!t.trim()) return false;
-    return /\b(map|maps|directions?|route|near me|nearby|location|where is|where to|hotel|hotels|restaurant|restaurants|food|trip|travel|itinerary|weather|transport|bus|train|taxi|uber|airport|station)\b/.test(t);
+    return /\b(near me|nearby|location|where is|where to|hotel|hotels|restaurant|restaurants|food|trip|travel|itinerary|weather|transport|bus|train|taxi|uber|airport|station)\b/.test(t);
 }
 
 function isPastReleaseQuestion(text) {
@@ -3625,9 +3725,12 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
         const directExplainerHint = isDirectExplainerQuery(normalizedUserMessage)
             ? 'This is a direct explainer/identity query. Do not give research steps or suggestions to search online. Answer directly with concise factual content.'
             : '';
+        const relevantSavedMemoryContext = requestOptions?.grounding
+            ? ''
+            : buildRelevantSavedMemoryContext(normalizedUserMessage);
         const effectiveMessage = requestOptions?.grounding
             ? normalizedUserMessage
-            : `${normalizedUserMessage}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\nPrompt-requested explanation style: ${activeLearningMode}. ${learningHint}${languageReplyHint}\n${conciseFactHint}\n${directExplainerHint}\n\nStyle requirements: Be specific, avoid repetition, and stay natural.`; 
+            : `${normalizedUserMessage}${relevantSavedMemoryContext}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\nPrompt-requested explanation style: ${activeLearningMode}. ${learningHint}${languageReplyHint}\n${conciseFactHint}\n${directExplainerHint}\n\nStyle requirements: Be specific, avoid repetition, and stay natural.`; 
 
          
         const data = await window.JarvisApi.postJson('/api/chat-groq', { 
@@ -3802,25 +3905,6 @@ async function handleNameCorrection(text) {
         let translatorMode = false;
         let translatorLanguage = null;
         let lastBudgetPlan = null;
-        let tripState = {
-            active: false,
-            watchId: null,
-            destinationText: '',
-            destinationCoords: null,
-            currentCoords: null,
-            startedAt: null,
-            baselineDistanceMiles: 0,
-            lastDistanceMiles: null,
-            etaMinutes: null,
-            offRouteDetections: 0,
-            closeAlertSent: false,
-            routeLabel: '',
-            lastUpdatedAt: null,
-            routeGeometryLatLngs: null,
-            currentSpeedMph: null,
-            lastPlaceName: 'Detecting...',
-            lastPlaceFetchTime: 0
-        };
 
         // Assistant mode defaults
         let responseStyle = 'balanced';
@@ -3894,7 +3978,7 @@ let showRoutingDebugBadge = false;
             'what', 'whats', 'who', 'tell', 'about', 'define', 'meaning', 'show',
             'image', 'picture', 'photo', 'look', 'like', 'weather', 'forecast',
             'news', 'shopping', 'grocery', 'itinerary', 'hotel',
-            'restaurants', 'transport', 'route', 'translate', 'translator', 'joke',
+            'restaurants', 'transport', 'translate', 'translator', 'joke',
             'calendar', 'budget', 'sync'
         ];
 
@@ -8118,7 +8202,7 @@ function getSmallTownTransportTemplate(locationInfo) {
                 '- Intercity bus terminals are typically key for regional travel',
                 '- Rental car is useful when visiting multiple outskirts in one day'
             ],
-            tip: 'Use known pickup points (station, plaza, hotel) to reduce navigation confusion.'
+            tip: 'Use known pickup points (station, plaza, hotel) to reduce pickup confusion.'
         };
     }
 
@@ -8184,7 +8268,7 @@ async function buildTransportMessage(locationInfo) {
     const transitAgencySearch = `https://www.google.com/search?q=${encodeURIComponent(`${fullLocation} official transit agency`)}`;
     const busMap = `https://www.google.com/maps/search/${encodeURIComponent(`bus stops in ${fullLocation}`)}`;
     const railMap = `https://www.google.com/maps/search/${encodeURIComponent(`rail or metro stations in ${fullLocation}`)}`;
-    const transitDirections = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(fullLocation)}&travelmode=transit`;
+    const transitOverview = `https://www.google.com/maps/search/${encodeURIComponent(`public transport in ${fullLocation}`)}`;
     const ridesSearch = `https://www.google.com/search?q=${encodeURIComponent(`${rideApps} ${fullLocation}`)}`;
     const taxiStandMap = `https://www.google.com/maps/search/${encodeURIComponent(`taxi stand in ${fullLocation}`)}`;
     const carRentalSearch = `https://www.google.com/search?q=${encodeURIComponent(`car rental in ${fullLocation}`)}`;
@@ -8200,13 +8284,13 @@ async function buildTransportMessage(locationInfo) {
             transitAgencySearch,
             busMap,
             railMap,
-            transitDirections,
+            transitOverview,
             ridesSearch,
             taxiStandMap,
             carRentalSearch
         }
     }, {
-        fallbackText: `Transport links for ${fullLocation}\n\nBus: ${busMap}\nRail: ${railMap}\nTransit directions: ${transitDirections}\nRide options: ${ridesSearch}\nTaxi stands: ${taxiStandMap}\nCar rental: ${carRentalSearch}\nTransit info: ${transitAgencySearch}`
+        fallbackText: `Transport links for ${fullLocation}\n\nBus: ${busMap}\nRail: ${railMap}\nTransit overview: ${transitOverview}\nRide options: ${ridesSearch}\nTaxi stands: ${taxiStandMap}\nCar rental: ${carRentalSearch}\nTransit info: ${transitAgencySearch}`
     });
 }
 
@@ -8359,7 +8443,7 @@ function isSupportConversationExit(text) {
 
 function isFunctionalTaskQuery(text) {
     const t = String(text || '').toLowerCase();
-    return /\b(weather|forecast|temperature|news|headlines|score|scores|winner|who won|price|rate|ceo|president|prime minister|trip|travel|itinerary|hotel|restaurant|translate|translator|recipe|calendar|budget|map|directions|route|hospital|police|pharmacy|atm|shopping|grocery)\b/.test(t);
+    return /\b(weather|forecast|temperature|news|headlines|score|scores|winner|who won|price|rate|ceo|president|prime minister|trip|travel|itinerary|hotel|restaurant|translate|translator|recipe|calendar|budget|hospital|police|pharmacy|atm|shopping|grocery)\b/.test(t);
 }
 
 function shouldUseSupportConversationMode(text) {
@@ -14975,6 +15059,15 @@ function detectInputLanguageHint(text) {
             return true;
         }
 
+        function buildAmbiguousShortContextReply(contextResolution) {
+            const topic = String(contextResolution?.activeThread?.entity || contextResolution?.activeThread?.topic || '').trim();
+            const original = String(contextResolution?.originalMessage || '').trim();
+            if (topic) {
+                return `Did you mean "${original}" as a new topic, or as a follow-up about ${topic}?`;
+            }
+            return `Did you mean "${original}" as a new topic, or as a follow-up to the previous answer?`;
+        }
+
         async function processCommand(text) {
             syncConversationPendingState();
             const contextResolution = window.JarvisConversation?.resolve({ message: text }) || null;
@@ -15000,6 +15093,12 @@ function detectInputLanguageHint(text) {
                 clearSupersededConversationState();
                 window.JarvisState?.resetConversationState();
                 addChatMessage('Context cleared. Start a new topic whenever you are ready.', false);
+                return;
+            }
+            if (contextResolution?.decisionReason === 'ambiguous_short_context') {
+                const clarification = buildAmbiguousShortContextReply(contextResolution);
+                addChatMessage(clarification, false);
+                saveToHistory(text, clarification, { recordContext: false });
                 return;
             }
             text = contextResolution?.resolvedMessage || text;
@@ -15118,29 +15217,6 @@ function detectInputLanguageHint(text) {
 
             if (isCurrentLocationIntentText(lower)) {
                 await handleCurrentLocationRequest(text);
-                return;
-            }
-
-            const quickTripDestination = extractTripDestinationFromCommand(text);
-            if (quickTripDestination) {
-                await startForegroundTrip(quickTripDestination);
-                return;
-            }
-
-            if (/\b(stop\s+trip|end\s+trip|stop\s+tracking)\b/i.test(lower)) {
-                stopForegroundTrip(true);
-                return;
-            }
-
-            if (/\b(trip\s+status|how\s+far\s+am\s+i|eta\s+to\s+destination)\b/i.test(lower) && tripState.destinationText) {
-                renderTripCard();
-                await deliverApiReply('trip_status', {
-                    active: tripState.active,
-                    destination: tripState.destinationText,
-                    distanceMiles: tripState.lastDistanceMiles != null ? Number(tripState.lastDistanceMiles.toFixed(2)) : null,
-                    distanceKm: tripState.lastDistanceMiles != null ? Number(milesToKm(tripState.lastDistanceMiles).toFixed(2)) : null,
-                    etaMinutes: tripState.etaMinutes != null ? Math.round(tripState.etaMinutes) : null
-                }, { historyKey: text });
                 return;
             }
 
@@ -15820,27 +15896,6 @@ Quick recap: ...
                 return;
             }
 
-            if (window.pendingRouteDisambiguation && /^\s*[1-5]\s*$/.test(cleanText)) {
-                const idx = Math.max(0, parseInt(cleanText.trim(), 10) - 1);
-                const pending = window.pendingRouteDisambiguation;
-                const chosen = Array.isArray(pending.options) ? pending.options[idx] : null;
-                if (chosen) {
-                    const resolved = {
-                        lat: Number(chosen.lat),
-                        lon: Number(chosen.lon),
-                        label: [chosen.city, chosen.state, chosen.country].filter(Boolean).join(', ') || chosen.displayName || chosen.input,
-                        input: chosen.displayName || '',
-                        source: 'nominatim'
-                    };
-                    const nextPlan = { ...pending.plan };
-                    if (pending.target === 'origin') nextPlan.originResolved = resolved;
-                    if (pending.target === 'destination') nextPlan.destinationResolved = resolved;
-                    window.pendingRouteDisambiguation = null;
-                    await handleDeterministicRouteRequest(nextPlan.raw || `${nextPlan.origin} to ${nextPlan.destination}`, nextPlan);
-                    return;
-                }
-            }
-
             if (window.pendingLocationDisambiguation && /^\s*[1-5]\s*$/.test(cleanText)) {
                 const idx = Math.max(0, parseInt(cleanText.trim(), 10) - 1);
                 const chosen = window.pendingLocationDisambiguation.options[idx];
@@ -16339,11 +16394,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             // Hotel/Transport queries
             const isHotelMatch = cleanText.toLowerCase().match(/\b(hotel|hotels|stay|staying|accommodation|accommodations|lodge|resort|hostel|place to stay|places to stay|where can i stay|where should i stay)\b/i);
             const isTransportMatch = cleanText.toLowerCase().match(/\b(transport|transportation|bus|train|taxi|uber|ola|auto|rickshaw|metro|subway|getting around|get around|how to reach|how do i get|travel to)\b/i);
-
-            if (isIntercityRouteRequest(text)) {
-                await handleDeterministicRouteRequest(text);
-                return;
-            }
 
             if (isHotelMatch || isTransportMatch) { 
 
@@ -17150,519 +17200,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         }
         // Reminder feature disabled.
 
-        function updateUtilityPanelVisibility() {
-            const panel = document.getElementById('utility-panel');
-            if (!panel) return;
-            const showTrip = Boolean(tripState.active || tripState.destinationText);
-            panel.classList.toggle('utility-panel-visible', showTrip);
-        }
-
-        function renderTripCard() {
-            const section = document.getElementById('trip-section');
-            const summary = document.getElementById('trip-summary');
-            if (!section || !summary) return;
-
-            section.classList.toggle('hidden', !tripState.active && !tripState.destinationText);
-            updateUtilityPanelVisibility();
-            if (!tripState.active && !tripState.destinationText) {
-                summary.innerHTML = '';
-                renderTripLiveMap();
-                return;
-            }
-
-            const rows = [];
-            rows.push(`<p><strong>Destination:</strong> ${escapeHtml(tripState.destinationText || 'Not set')}</p>`);
-            rows.push(`<p><strong>Status:</strong> ${tripState.active ? 'Tracking live in this tab' : 'Ready to start'}</p>`);
-            if (tripState.lastDistanceMiles != null) {
-                rows.push(`<p><strong>Distance left:</strong> ${formatDistanceKmWithMiles(tripState.lastDistanceMiles)}</p>`);
-            }
-            if (tripState.etaMinutes != null) {
-                const etaMinutesRounded = Math.max(1, Math.round(tripState.etaMinutes));
-                const etaClock = new Date(Date.now() + etaMinutesRounded * 60 * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-                rows.push(`<p><strong>Estimated time:</strong> ${etaMinutesRounded} min</p>`);
-                rows.push(`<p><strong>ETA:</strong> ${etaClock}</p>`);
-            }
-            if (tripState.startedAt) {
-                rows.push(`<p><strong>Started:</strong> ${new Date(tripState.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>`);
-            }
-            if (tripState.offRouteDetections > 0) {
-                rows.push(`<p><strong>Route drift:</strong> ${tripState.offRouteDetections} potential off-route warning${tripState.offRouteDetections > 1 ? 's' : ''}</p>`);
-            }
-            if (tripState.lastUpdatedAt) {
-                rows.push(`<p><strong>Last update:</strong> ${new Date(tripState.lastUpdatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}</p>`);
-            }
-            
-            summary.innerHTML = rows.join('');
-            renderTripLiveMap();
-        }
-
-        async function promptTripDestination() {
-            await deliverApiReply('trip_destination_prompt', {
-                examples: ['start trip to Times Square', 'start trip to office']
-            });
-        }
-
-        async function geocodeLocationName(name) {
-            const query = String(name || '').trim();
-            if (!query) return null;
-
-            const candidates = await geocodeLocationCandidates(query, 8);
-            if (candidates.length) {
-                const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-                const scored = candidates
-                    .map((candidate) => {
-                        const haystack = `${candidate.displayName || ''} ${candidate.city || ''} ${candidate.state || ''}`.toLowerCase();
-                        const tokenHits = tokens.filter(token => haystack.includes(token)).length;
-                        const localityBoost = /suburb|neighbourhood|village|hamlet|quarter|residential/.test(String(candidate.type || '').toLowerCase()) ? 0.6 : 0;
-                        const exactBoost = haystack.includes(query.toLowerCase()) ? 1.2 : 0;
-                        const score = tokenHits + exactBoost + localityBoost + (Number(candidate.importance || 0) * 0.3);
-                        return { candidate, score };
-                    })
-                    .sort((a, b) => b.score - a.score);
-
-                const best = scored[0]?.candidate;
-                if (best && Number.isFinite(best.lat) && Number.isFinite(best.lon)) {
-                    return {
-                        lat: Number(best.lat),
-                        lon: Number(best.lon),
-                        label: best.displayName || [best.city, best.state, best.country].filter(Boolean).join(', ') || query
-                    };
-                }
-            }
-
-            const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=1`);
-            if (!response.ok) return null;
-            const data = await response.json();
-            const first = Array.isArray(data) ? data[0] : null;
-            if (!first) return null;
-            return { lat: parseFloat(first.lat), lon: parseFloat(first.lon), label: first.display_name || query };
-        }
-
-        function haversineMiles(lat1, lon1, lat2, lon2) {
-            const toRad = (deg) => deg * Math.PI / 180;
-            const R = 3958.8;
-            const dLat = toRad(lat2 - lat1);
-            const dLon = toRad(lon2 - lon1);
-            const a = Math.sin(dLat / 2) ** 2 +
-                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-            return 2 * R * Math.asin(Math.sqrt(a));
-        }
-
-        function estimateRoadMiles(straightLineMiles) {
-            return Math.max(0.1, straightLineMiles * 1.22);
-        }
-
-        function milesToKm(miles) {
-            return Number(miles || 0) * 1.609344;
-        }
-
-        function formatDistanceKmWithMiles(miles) {
-            const milesNum = Number(miles || 0);
-            const km = milesToKm(milesNum);
-            return `${km.toFixed(2)} km (${milesNum.toFixed(2)} miles)`;
-        }
-
-        function resetTripRouteGeometryCache() {
-            tripRouteFetchInFlight = false;
-            tripRouteNextFetchAt = 0;
-            tripRouteLastFrom = null;
-            tripRouteLastTo = null;
-            tripState.routeGeometryLatLngs = null;
-        }
-
-        function buildOsrmRouteUrl(from, to) {
-            const fromLon = Number(from?.lon);
-            const fromLat = Number(from?.lat);
-            const toLon = Number(to?.lon);
-            const toLat = Number(to?.lat);
-            return `https://router.project-osrm.org/route/v1/driving/${fromLon},${fromLat};${toLon},${toLat}?overview=full&geometries=geojson&steps=false`;
-        }
-
-        function isPersonalOriginPhrase(value) {
-            const raw = String(value || '').trim().toLowerCase();
-            return /^(?:(?:from\s+)?my\s+location|(?:from\s+)?my\s+place|my\s+current\s+location|current\s+location|here|from\s+here|where\s+i\s+am|where\s+am\s+i|my\s+area|near\s+me)$/i.test(raw);
-        }
-
-        function cleanRouteEndpoint(value) {
-            return String(value || '')
-                .replace(/\b(?:please|best|route|directions?|way|travel|go|reach|get|from|to|between)\b/gi, ' ')
-                .replace(/[?.!,;:]+$/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-        }
-
-        function parseRouteRequest(text) {
-            const raw = normalizeIntentTypos(String(text || '').trim());
-            if (!raw) return null;
-            const patterns = [
-                { pattern: /\b(?:best\s+)?(?:route|way|directions?)\s+(?:to|for)\s+(.+?)\s+from\s+(.+)$/i, order: 'destination_origin' },
-                { pattern: /\b(?:how\s+(?:to|do\s+i)\s+(?:go|reach|get|travel)\s+(?:to\s+)?)\s*(.+?)\s+from\s+(.+)$/i, order: 'destination_origin' },
-                { pattern: /\b(?:from)\s+(.+?)\s+(?:to)\s+(.+)$/i, order: 'origin_destination' },
-                { pattern: /\b(?:between)\s+(.+?)\s+(?:and)\s+(.+)$/i, order: 'origin_destination' },
-                { pattern: /\b(?:route|directions?)\s+from\s+(.+?)\s+to\s+(.+)$/i, order: 'origin_destination' },
-                { pattern: /\b(?:best\s+way\s+to\s+reach)\s+(.+?)\s+from\s+(.+)$/i, order: 'destination_origin' }
-            ];
-            for (const entry of patterns) {
-                const pattern = entry.pattern;
-                const match = raw.match(pattern);
-                if (!match) continue;
-                let origin = '';
-                let destination = '';
-                if (entry.order === 'origin_destination') {
-                    origin = cleanRouteEndpoint(match[1]);
-                    destination = cleanRouteEndpoint(match[2]);
-                } else {
-                    destination = cleanRouteEndpoint(match[1]);
-                    origin = cleanRouteEndpoint(match[2]);
-                }
-                if (!origin || !destination) continue;
-                const originNeedsGps = isPersonalOriginPhrase(origin);
-                return { origin, destination, originNeedsGps, raw };
-            }
-            return null;
-        }
-
-        function isIntercityRouteRequest(text) {
-            const parsed = parseRouteRequest(text);
-            if (!parsed) return false;
-            return Boolean(parsed.destination && (parsed.origin || parsed.originNeedsGps));
-        }
-
-        async function resolveRouteEndpoint(value, kind = 'place') {
-            const raw = String(value || '').trim();
-            if (kind === 'origin' && isPersonalOriginPhrase(raw)) {
-                const position = await getCurrentPositionAsync({
-                    enableHighAccuracy: true,
-                    timeout: 12000,
-                    maximumAge: 60000
-                });
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                return {
-                    lat,
-                    lon,
-                    label: 'your current location',
-                    input: raw,
-                    source: 'browser_geolocation'
-                };
-            }
-
-            const hasQualifier = /,|\b(india|usa|us|united states|uk|england|canada|australia)\b/i.test(raw);
-            const candidates = await geocodeLocationCandidates(raw, 5);
-            const valid = candidates.filter(item => Number.isFinite(item.lat) && Number.isFinite(item.lon));
-            if (!valid.length) return { unresolved: true, input: raw, kind };
-            const countries = new Set(valid.map(item => item.countryCode).filter(Boolean));
-            if (!hasQualifier && countries.size > 1) {
-                return { needsClarification: true, input: raw, kind, options: valid.slice(0, 5) };
-            }
-            const best = valid[0];
-            return {
-                lat: best.lat,
-                lon: best.lon,
-                label: [best.city, best.state, best.country].filter(Boolean).join(', ') || best.displayName || raw,
-                input: raw,
-                source: 'nominatim'
-            };
-        }
-
-        async function fetchOsrmDrivingRoute(origin, destination) {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 7000);
-                const response = await fetch(buildOsrmRouteUrl(origin, destination), {
-                    signal: controller.signal,
-                    headers: { 'Accept': 'application/json' }
-                });
-                clearTimeout(timeoutId);
-                if (!response.ok) return null;
-                const data = await response.json();
-                const route = Array.isArray(data?.routes) ? data.routes[0] : null;
-                const distanceMeters = Number(route?.distance);
-                const durationSeconds = Number(route?.duration);
-                if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) return null;
-                return {
-                    distanceKm: distanceMeters / 1000,
-                    distanceMiles: distanceMeters / 1609.344,
-                    durationMinutes: Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds / 60 : null,
-                    source: 'OSRM public routing'
-                };
-            } catch (error) {
-                return null;
-            }
-        }
-
-        function buildRouteGuidanceMessage(routePlan) {
-            const origin = routePlan?.origin || {};
-            const destination = routePlan?.destination || {};
-            const route = routePlan?.route || null;
-            const originLabel = origin.label || routePlan?.originInput || 'origin';
-            const destinationLabel = destination.label || routePlan?.destinationInput || 'destination';
-            const mapsDrivingUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${origin.lat},${origin.lon}`)}&destination=${encodeURIComponent(`${destination.lat},${destination.lon}`)}&travelmode=driving`;
-            const mapsTransitUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${origin.lat},${origin.lon}`)}&destination=${encodeURIComponent(`${destination.lat},${destination.lon}`)}&travelmode=transit`;
-            const straightMiles = haversineMiles(origin.lat, origin.lon, destination.lat, destination.lon);
-            const lines = [
-                `Best route from ${originLabel} to ${destinationLabel}`,
-                ''
-            ];
-            if (route) {
-                const distanceText = `${route.distanceKm.toFixed(1)} km (${route.distanceMiles.toFixed(1)} miles)`;
-                const etaText = route.durationMinutes ? `; OSRM no-traffic driving estimate: ${Math.round(route.durationMinutes)} min` : '';
-                lines.push(`Approx driving distance from ${route.source}: ${distanceText}${etaText}.`);
-            } else {
-                lines.push(`I could not verify a road distance from OSRM. Straight-line distance only: ${formatDistanceKmWithMiles(straightMiles)}.`);
-            }
-            lines.push(
-                '',
-                'Practical options:',
-                '- Car/taxi: use the driving map link for the exact road route and current traffic.',
-                '- Train/bus: check live schedules before leaving; intercity services change by date and operator.',
-                '- If you need the fastest option, compare the driving and transit links at your departure time.',
-                '',
-                `Driving route: ${mapsDrivingUrl}`,
-                `Transit/train/bus view: ${mapsTransitUrl}`,
-                '',
-                'Open Maps for current traffic, train/bus schedules, and exact route.'
-            );
-            return lines.join('\n');
-        }
-
-        async function handleDeterministicRouteRequest(text, presetPlan = null) {
-            const parsed = presetPlan || parseRouteRequest(text);
-            if (!parsed) return false;
-            showThinkingIndicator('Checking route');
-            try {
-                const origin = parsed.originResolved || await resolveRouteEndpoint(parsed.origin, 'origin');
-                if (origin?.needsClarification) {
-                    window.pendingRouteDisambiguation = { plan: parsed, target: 'origin', options: origin.options };
-                    await deliverApiReply('location_disambiguation', {
-                        rawInput: origin.input,
-                        options: origin.options.map((o, i) => ({
-                            index: i + 1,
-                            label: [o.city, o.state, o.country].filter(Boolean).join(', ')
-                        })),
-                        replyInstruction: 'Reply with the number.'
-                    });
-                    return true;
-                }
-                if (origin?.unresolved) {
-                    addChatMessage(`I could not resolve the starting place "${parsed.origin}". Please include the state/country or use "from my location".`, false);
-                    return true;
-                }
-
-                const destination = parsed.destinationResolved || await resolveRouteEndpoint(parsed.destination, 'destination');
-                if (destination?.needsClarification) {
-                    window.pendingRouteDisambiguation = { plan: { ...parsed, originResolved: origin }, target: 'destination', options: destination.options };
-                    await deliverApiReply('location_disambiguation', {
-                        rawInput: destination.input,
-                        options: destination.options.map((o, i) => ({
-                            index: i + 1,
-                            label: [o.city, o.state, o.country].filter(Boolean).join(', ')
-                        })),
-                        replyInstruction: 'Reply with the number.'
-                    });
-                    return true;
-                }
-                if (destination?.unresolved) {
-                    addChatMessage(`I could not resolve the destination "${parsed.destination}". Please include the state/country.`, false);
-                    return true;
-                }
-
-                const route = await fetchOsrmDrivingRoute(origin, destination);
-                const message = buildRouteGuidanceMessage({
-                    origin,
-                    destination,
-                    route,
-                    originInput: parsed.origin,
-                    destinationInput: parsed.destination
-                });
-                addVerifiedAssistantMessage(message, route ? 'Map-grounded route' : 'Route needs map check');
-                saveToHistory(text, message);
-                return true;
-            } catch (error) {
-                if (parsed.originNeedsGps) {
-                    await deliverApiReply('gps_access_error', {
-                        feature: 'route_origin'
-                    }, {
-                        historyKey: text,
-                        fallbackText: 'I need location permission to use your current place as the route origin. Enable location access or ask with a named starting place, like "from Chidambaram".'
-                    });
-                    return true;
-                }
-                addChatMessage('I could not build that route right now. Please include both origin and destination with state/country if needed.', false);
-                return true;
-            } finally {
-                hideThinkingIndicator();
-            }
-        }
-
-        function shouldRefreshTripRouteGeometry(from, to, nowMs) {
-            if (!tripRouteLastFrom || !tripRouteLastTo) return true;
-            if (nowMs >= tripRouteNextFetchAt) return true;
-
-            const movedFromMiles = haversineMiles(from.lat, from.lon, tripRouteLastFrom.lat, tripRouteLastFrom.lon);
-            const movedToMiles = haversineMiles(to.lat, to.lon, tripRouteLastTo.lat, tripRouteLastTo.lon);
-            return movedFromMiles >= 0.1 || movedToMiles >= 0.03;
-        }
-
-        async function refreshTripRouteGeometry(force = false) {
-            if (!tripState.active || !tripState.currentCoords || !tripState.destinationCoords) return;
-            if (tripRouteFetchInFlight) return;
-
-            const nowMs = Date.now();
-            const from = { lat: Number(tripState.currentCoords.lat), lon: Number(tripState.currentCoords.lon) };
-            const to = { lat: Number(tripState.destinationCoords.lat), lon: Number(tripState.destinationCoords.lon) };
-            if (!force && !shouldRefreshTripRouteGeometry(from, to, nowMs)) return;
-
-            tripRouteFetchInFlight = true;
-            tripRouteNextFetchAt = nowMs + 12000;
-
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 6500);
-                const response = await fetch(buildOsrmRouteUrl(from, to), {
-                    signal: controller.signal,
-                    headers: { 'Accept': 'application/json' }
-                });
-                clearTimeout(timeoutId);
-                if (!response.ok) return;
-
-                const data = await response.json();
-                const route = Array.isArray(data?.routes) ? data.routes[0] : null;
-                const coords = Array.isArray(route?.geometry?.coordinates) ? route.geometry.coordinates : [];
-                if (coords.length >= 2) {
-                    tripState.routeGeometryLatLngs = coords
-                        .map(pair => [Number(pair[1]), Number(pair[0])])
-                        .filter(pair => Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
-                    tripRouteLastFrom = from;
-                    tripRouteLastTo = to;
-                }
-            } catch (e) {
-            } finally {
-                tripRouteFetchInFlight = false;
-                if (tripState.active) renderTripLiveMap();
-            }
-        }
-
-        function renderTripLiveMap() {
-            const mapContainer = document.getElementById('trip-live-map');
-            const floatingPanel = document.getElementById('floating-trip-panel');
-
-            if (!tripState.active || !tripState.currentCoords || !tripState.destinationCoords) {
-                if (tripMapInstance) {
-                    tripMapInstance = null;
-                }
-                resetTripRouteGeometryCache();
-                if (mapContainer) {
-                    mapContainer.classList.add('hidden');
-                    mapContainer.innerHTML = '';
-                }
-                if (floatingPanel) {
-                    floatingPanel.classList.add('hidden');
-                    floatingPanel.classList.remove('flex');
-                }
-                return;
-            }
-
-            const curLat = Number(tripState.currentCoords.lat).toFixed(6);
-            const curLon = Number(tripState.currentCoords.lon).toFixed(6);
-            const destLat = Number(tripState.destinationCoords.lat).toFixed(6);
-            const destLon = Number(tripState.destinationCoords.lon).toFixed(6);
-            const directionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(`${curLat},${curLon}`)}&destination=${encodeURIComponent(`${destLat},${destLon}`)}&travelmode=driving`;
-
-            // Update Floating Panel
-            if (floatingPanel) {
-                floatingPanel.classList.remove('hidden');
-                floatingPanel.classList.add('flex');
-                
-                document.getElementById('floating-trip-dest').textContent = tripState.destinationText || '';
-                document.getElementById('floating-trip-dist').textContent = tripState.lastDistanceMiles != null ? tripState.lastDistanceMiles.toFixed(1) + ' mi' : '--';
-                document.getElementById('floating-trip-eta').textContent = tripState.etaMinutes != null ? `${Math.max(1, Math.round(tripState.etaMinutes))} min` : '--';
-                
-                let speedText = '--';
-                if (tripState.currentSpeedMph != null) {
-                    speedText = Math.round(tripState.currentSpeedMph) + ' mph';
-                }
-                document.getElementById('floating-trip-speed').textContent = speedText;
-                document.getElementById('floating-trip-area').textContent = tripState.lastPlaceName || '--';
-                
-                const floatingMap = document.getElementById('floating-trip-map');
-                if (floatingMap && !floatingMap.innerHTML.includes('iframe')) {
-                    floatingMap.innerHTML = `
-                        <iframe
-                            src="https://maps.google.com/maps?saddr=${curLat},${curLon}&daddr=${destLat},${destLon}&output=embed"
-                            width="100%"
-                            height="100%"
-                            style="border:0; display:block;"
-                            loading="lazy"
-                            allowfullscreen>
-                        </iframe>
-                    `;
-                }
-            }
-
-            if (mapContainer) {
-                mapContainer.innerHTML = `
-                    <div class="map-container" style="width: 100%; height: 260px; border-radius: 12px; overflow: hidden;">
-                    <iframe
-                        src="https://maps.google.com/maps?saddr=${curLat},${curLon}&daddr=${destLat},${destLon}&output=embed"
-                        width="100%"
-                        height="100%"
-                        style="border:0; display:block;"
-                        loading="lazy"
-                        allowfullscreen>
-                    </iframe>
-                </div>
-                <div id="trip-live-map-meta" class="px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
-                    Live origin: ${curLat}, ${curLon}
-                    <span class="mx-1">-</span>
-                    Destination: ${escapeHtml(tripState.destinationText || '')}
-                    <span class="mx-1">-</span>
-                    Distance: ${tripState.lastDistanceMiles != null ? formatDistanceKmWithMiles(tripState.lastDistanceMiles) : '--'}
-                    <span class="mx-1">-</span>
-                    <a class="underline" href="${directionsUrl}" target="_blank" rel="noopener noreferrer">Open navigation</a>
-                </div>
-                `;
-                mapContainer.classList.remove('hidden');
-            }
-            tripMapInstance = true;
-        }
-
-        function getTravelSpeedMph(mode) {
-            if (mode === 'walk') return 3.1;
-            if (mode === 'transit') return 16;
-            return 26;
-        }
-
-        function parseDestinationAlias(raw) {
-            const value = String(raw || '').trim().toLowerCase();
-            if (!value) return '';
-            return String(raw || '').trim();
-        }
-
-        function extractTripDestinationFromCommand(text) {
-            const raw = String(text || '').trim();
-            if (!raw) return '';
-
-            const patterns = [
-                /\b(?:start|track)\s+(?:my\s+)?(?:a\s+)?trip\s+to\s+(.+)$/i,
-                /\b(?:start|open|show)\s+(?:the\s+)?map\s+to\s+(.+)$/i,
-                /\b(?:start|open|show)\s+(?:the\s+)?map\s+for\s+(.+)$/i,
-                /\b(?:navigate|route)\s+(?:me\s+)?to\s+(.+)$/i,
-                /\broute\s+for\s+(.+)$/i,
-                /\b(?:get\s+)?directions?\s+(?:to|for)\s+(.+)$/i,
-                /\bnavigation\s+(?:to|for)\s+(.+)$/i,
-                /\b(?:start|begin)\s+(?:live\s+)?navigation\s+(?:to|for)\s+(.+)$/i
-            ];
-
-            for (const pattern of patterns) {
-                const match = raw.match(pattern);
-                if (!match || !match[1]) continue;
-                const cleaned = parseDestinationAlias(match[1].replace(/[?.!,]$/g, '').trim());
-                if (cleaned) return cleaned;
-            }
-            return '';
-        }
-
         function getCurrentPositionAsync(options = {}) {
             return new Promise((resolve, reject) => {
                 if (!navigator.geolocation) {
@@ -17752,196 +17289,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 });
             } finally {
                 hideThinkingIndicator();
-            }
-        }
-
-        async function startForegroundTrip(destinationInput) {
-            const destinationText = parseDestinationAlias(destinationInput);
-            if (!destinationText) {
-                await deliverApiReply('trip_missing_destination', {
-                    examples: ['start trip to office', 'start trip to Central Park']
-                });
-                return;
-            }
-
-            const destination = await geocodeLocationName(destinationText);
-            if (!destination) {
-                await deliverApiReply('trip_destination_unresolved', {
-                    destinationInput: destinationText
-                });
-                return;
-            }
-
-            let startPosition;
-            try {
-                startPosition = await getCurrentPositionAsync();
-            } catch (error) {
-                await deliverApiReply('trip_requires_gps', {
-                    destination: destinationText
-                });
-                return;
-            }
-
-            stopForegroundTrip(false);
-
-            const startLat = startPosition.coords.latitude;
-            const startLon = startPosition.coords.longitude;
-            const baselineDistance = estimateRoadMiles(haversineMiles(startLat, startLon, destination.lat, destination.lon));
-            const initialEta = Math.max(3, Math.round((baselineDistance / getTravelSpeedMph('drive')) * 60));
-
-            tripState = {
-                active: true,
-                watchId: null,
-                destinationText,
-                destinationCoords: { lat: destination.lat, lon: destination.lon },
-                currentCoords: { lat: startLat, lon: startLon },
-                startedAt: Date.now(),
-                baselineDistanceMiles: baselineDistance,
-                lastDistanceMiles: baselineDistance,
-                etaMinutes: initialEta,
-                offRouteDetections: 0,
-                closeAlertSent: false,
-                routeLabel: destination.label || destinationText,
-                lastUpdatedAt: Date.now(),
-                routeGeometryLatLngs: null
-            };
-            renderTripCard();
-            void refreshTripRouteGeometry(true);
-
-            await deliverApiReply('trip_started', {
-                destination: destinationText
-            });
-
-            tripState.watchId = navigator.geolocation.watchPosition(
-                (position) => handleTripPositionUpdate(position),
-                () => {
-                    const warn = 'Live trip tracking lost GPS access. Keep location permission on and the website open.';
-                    addChatMessage(warn, false, null, { detached: true });
-                    stopForegroundTrip(false);
-                },
-                {
-                    enableHighAccuracy: true,
-                    maximumAge: 5000,
-                    timeout: 15000
-                }
-            );
-        }
-
-        function startTripToOffice() {
-            startForegroundTrip('office');
-        }
-
-        function maybeNotifyTripEvent(title, body) {
-            try {
-                if ('Notification' in window && Notification.permission === 'granted') {
-                    new Notification(title, { body, tag: `jarvis-trip-${Date.now()}` });
-                }
-            } catch (e) {}
-        }
-
-        function handleTripPositionUpdate(position) {
-            if (!tripState.active || !tripState.destinationCoords) return;
-            const lat = position.coords.latitude;
-            const lon = position.coords.longitude;
-            const straightLine = haversineMiles(lat, lon, tripState.destinationCoords.lat, tripState.destinationCoords.lon);
-            const roadMilesLeft = estimateRoadMiles(straightLine);
-            const etaMinutes = Math.max(1, Math.round((roadMilesLeft / getTravelSpeedMph('drive')) * 60));
-            const distanceLabel = formatDistanceKmWithMiles(roadMilesLeft);
-
-            // Calculate speed
-            let speedMph = null;
-            if (position.coords.speed !== null && position.coords.speed >= 0) {
-                speedMph = position.coords.speed * 2.23694; // m/s to mph
-            } else {
-                // Fallback using devicemotion (accelerometer) if moving, or manual distance
-                if (rawDeviceAccel > 0.5) {
-                    speedMph = rawDeviceAccel * 2.23694; 
-                } else if (tripState.lastUpdatedAt && tripState.currentCoords) {
-                    const hoursPassed = (Date.now() - tripState.lastUpdatedAt) / 3600000;
-                    const milesMoved = haversineMiles(tripState.currentCoords.lat, tripState.currentCoords.lon, lat, lon);
-                    if (hoursPassed > 0) speedMph = milesMoved / hoursPassed;
-                }
-            }
-            tripState.currentSpeedMph = speedMph;
-
-            // Reverse geocode occasionally (every 60s)
-            const now = Date.now();
-            if (now - (tripState.lastPlaceFetchTime || 0) > 60000) {
-                tripState.lastPlaceFetchTime = now;
-                fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, {
-                    headers: { 'User-Agent': 'JARVISAssistant/1.0' }
-                }).then(r => r.json()).then(data => {
-                    const addr = data?.address || {};
-                    const place = addr.suburb || addr.neighbourhood || addr.road || addr.village || addr.city || addr.town || 'Route';
-                    tripState.lastPlaceName = place;
-                    renderTripLiveMap();
-                }).catch(() => {});
-            }
-
-            if (tripState.lastDistanceMiles != null && roadMilesLeft > tripState.lastDistanceMiles + 0.22) {
-                tripState.offRouteDetections += 1;
-                if (tripState.offRouteDetections <= 2) {
-                    const warn = `Distance to ${tripState.destinationText} increased to ${distanceLabel}.`;
-                    deliverApiReply('trip_off_route_warning', {
-                        destination: tripState.destinationText,
-                        distanceMiles: Number(roadMilesLeft.toFixed(2)),
-                        distanceKm: Number(milesToKm(roadMilesLeft).toFixed(2))
-                    }, { speak: true, detached: true });
-                    maybeNotifyTripEvent('Trip warning', warn);
-                }
-            }
-
-            tripState.lastDistanceMiles = roadMilesLeft;
-            tripState.etaMinutes = etaMinutes;
-            tripState.currentCoords = { lat, lon };
-            tripState.lastUpdatedAt = Date.now();
-            void refreshTripRouteGeometry(false);
-
-            if (!tripState.closeAlertSent && (roadMilesLeft <= 0.35 || etaMinutes <= 3)) {
-                tripState.closeAlertSent = true;
-                const closeMsg = `About ${distanceLabel} left to ${tripState.destinationText}.`;
-                deliverApiReply('trip_near_destination', {
-                    destination: tripState.destinationText,
-                    distanceMiles: Number(roadMilesLeft.toFixed(2)),
-                    distanceKm: Number(milesToKm(roadMilesLeft).toFixed(2))
-                }, { speak: true, detached: true });
-                maybeNotifyTripEvent('Near destination', closeMsg);
-            }
-
-            
-
-            renderTripCard();
-        }
-
-        function stopForegroundTrip(announce = true) {
-            if (tripState.watchId != null && navigator.geolocation?.clearWatch) {
-                try {
-                    navigator.geolocation.clearWatch(tripState.watchId);
-                } catch (e) {}
-            }
-            const hadTrip = tripState.active;
-            tripState = {
-                active: false,
-                watchId: null,
-                destinationText: tripState.destinationText || '',
-                destinationCoords: null,
-                currentCoords: null,
-                startedAt: null,
-                baselineDistanceMiles: 0,
-                lastDistanceMiles: null,
-                etaMinutes: null,
-                offRouteDetections: 0,
-                closeAlertSent: false,
-                routeLabel: '',
-                lastUpdatedAt: null,
-                routeGeometryLatLngs: null,
-                currentSpeedMph: null,
-                lastPlaceName: 'Detecting...',
-                lastPlaceFetchTime: 0
-            };
-            renderTripCard();
-            if (announce && hadTrip) {
-                deliverApiReply('trip_stopped', {}, { speak: true, detached: true });
             }
         }
 
@@ -18064,7 +17411,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 
                 const normalizedThing = normalizeThing(thing);
                 
-                memoryStore[normalizedThing] = fullLocation;
+                normalizeMemoryStoreRecords();
+                memoryStore[normalizedThing] = createExplicitMemoryRecord(normalizedThing, fullLocation, text);
                 saveUserData();
                 
                 await deliverApiReply('memory_saved', {
@@ -18146,7 +17494,8 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 thing = thing.replace(/^(the|my|a|an)\s+/i, '');
                 
                 
-                let location = memoryStore[thing.toLowerCase()];
+                normalizeMemoryStoreRecords();
+                let location = getMemoryRecordValue(memoryStore[normalizeThing(thing)] || memoryStore[thing.toLowerCase()]);
                 
                 
                 if (!location) {
@@ -18174,63 +17523,17 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
         
         function findBestMemoryMatch(query) {
-            query = query.toLowerCase();
-            const keys = Object.keys(memoryStore);
-            
-            
-            for (const key of keys) {
-                
-                if (key === query) {
-                    return { thing: key, location: memoryStore[key] };
-                }
-                
-                
-                if (key === query + 's' || key + 's' === query) {
-                    return { thing: key, location: memoryStore[key] };
-                }
-                
-                
-                const keySingular = key.replace(/s$/, '');
-                const querySingular = query.replace(/s$/, '');
-                if (keySingular === querySingular) {
-                    return { thing: key, location: memoryStore[key] };
-                }
-                
-                
-                if (key.includes(query) || query.includes(key)) {
-                    return { thing: key, location: memoryStore[key] };
-                }
-                
-                
-                const keyWords = key.split(' ');
-                const queryWords = query.split(' ');
-                const matchCount = keyWords.filter(kw => queryWords.some(qw => 
-                    kw === qw || qw === kw + 's' || kw === qw + 's' ||
-                    kw.replace(/s$/, '') === qw.replace(/s$/, '')
-                )).length;
-                if (matchCount >= Math.min(keyWords.length, queryWords.length)) {
-                    return { thing: key, location: memoryStore[key] };
-                }
-            }
-            
-            
-            let bestMatch = null;
-            let bestDistance = Infinity;
-            const maxDistance = Math.floor(query.length / 3); 
-            
-            for (const key of keys) {
-                const distance = levenshteinDistance(query, key);
-                if (distance < bestDistance && distance <= maxDistance) {
-                    bestDistance = distance;
-                    bestMatch = key;
-                }
-            }
-            
-            if (bestMatch) {
-                return { thing: bestMatch, location: memoryStore[bestMatch] };
-            }
-            
-            return null;
+            normalizeMemoryStoreRecords();
+            const best = Object.entries(memoryStore)
+                .map(([key, record]) => ({
+                    key,
+                    record,
+                    score: scoreMemoryMatch(query, key, record)
+                }))
+                .filter(item => item.score > 0)
+                .sort((a, b) => b.score - a.score)[0];
+            if (!best || best.score < 35) return null;
+            return { thing: best.key, location: getMemoryRecordValue(best.record) };
         }
 
         function getUserStorageKey() {
@@ -18275,6 +17578,7 @@ function toggleMemoryPersistence(enabled) {
         function saveUserData() {
             if (!persistMemoryToDevice) return;
             try {
+                normalizeMemoryStoreRecords();
                 const data = {
                     userName: userName,
                     preferredAddress: getPreferredAddress(),
@@ -18303,6 +17607,7 @@ function toggleMemoryPersistence(enabled) {
                     preferredAddress = normalizePreferredAddress(data.preferredAddress) || 'sir';
                     AppState.user.preferredAddress = preferredAddress;
                     memoryStore = data.memoryStore || {};
+                    normalizeMemoryStoreRecords();
                     localStorage.setItem(storageKey, JSON.stringify({ userName, preferredAddress, memoryStore }));
                 }
             } catch (e) { console.error('Failed to load user data:', e); }
