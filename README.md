@@ -53,11 +53,8 @@ The user does not need to provide links. JARVIS searches from the original quest
 
 ## Project Map
 
-- `.github/workflows/quality.yml`: GitHub Actions quality workflow.
-- `.gitignore`: Local files ignored by git.
 - `index.html`: Main application UI and browser-side assistant workflows.
 - `package.json`: Project metadata, scripts, dependency list, and Vercel function settings.
-- `README.md`: Project overview and file map.
 - `styles.css`: App shell, chat layout, thinking indicator, mobile behavior, Live Vision preview, controls, and visual polish.
 - `science-format.js`: Browser-safe formatter for scientific notation, chemistry text, units, and speech-friendly science output.
 - `vercel.json`: Vercel routing and deployment settings.
