@@ -238,11 +238,30 @@ copilot = contextCopilotEngine.resolve({ message: 'go back to ISRO' });
 assert.equal(copilot.decisionReason, 'explicit_thread_resume');
 assertUsesThread(copilot, isroThread);
 
+copilot = contextCopilotEngine.resolve({ message: 'Another question: what is photosynthesis?' });
+assert.equal(copilot.decisionReason, 'clear_new_intent');
+assert.equal(copilot.primaryIntent, 'new_unrelated_task');
+assertDoesNotUseThread(copilot, isroThread);
+assert.doesNotMatch(copilot.resolvedMessage, /\bISRO\b/i);
+const photosynthesisThread = copilot.activeThread.id;
+recordExchange(contextCopilotEngine, photosynthesisThread, copilot.resolvedMessage, 'Photosynthesis summary.');
+
+copilot = contextCopilotEngine.resolve({ message: 'make it shorter' });
+assert.equal(copilot.decisionReason, 'contextual_follow_up');
+assert.equal(copilot.primaryIntent, 'continue_previous_task');
+assertUsesThread(copilot, photosynthesisThread);
+assert.match(copilot.resolvedMessage, /\bphotosynthesis\b/i);
+
 copilot = contextCopilotEngine.resolve({ message: 'who is Ada Lovelace?' });
 assert.equal(copilot.decisionReason, 'clear_new_intent');
 assertDoesNotUseThread(copilot, isroThread);
 assert.doesNotMatch(copilot.resolvedMessage, /\bISRO\b/i);
 const adaThread = copilot.activeThread.id;
+
+copilot = contextCopilotEngine.resolve({ message: 'compare them' });
+assert.equal(copilot.decisionReason, 'ambiguous_reference_context');
+assert.equal(copilot.primaryIntent, 'clarification');
+assertUsesThread(copilot, adaThread);
 
 const adaTopicBeforeAcknowledgement = contextCopilotEngine.getState().threads
     .find(thread => thread.id === adaThread).topic;
