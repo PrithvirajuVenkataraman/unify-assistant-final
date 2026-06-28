@@ -3946,6 +3946,7 @@ let showRoutingDebugBadge = false;
         let regenerationInProgress = false;
         let openAssistantActionMenuId = '';
         let lastAssistantMessageId = '';
+        const pendingAssistantVerifications = new Set();
 
         // Chat scroll-lock state
         let autoScrollLocked = false;
@@ -4950,6 +4951,12 @@ let showRoutingDebugBadge = false;
                 if (event.target?.closest?.('.assistant-action-menu-wrap')) return;
                 closeAssistantActionMenus();
             }, true);
+            document.addEventListener('click', handleAssistantActionClick, true);
+            document.addEventListener('click', (event) => {
+                if (event.target?.closest?.('.assistant-action-menu-wrap')) {
+                    event.stopPropagation();
+                }
+            }, true);
             document.addEventListener('keydown', (event) => {
                 if (event.key === 'Escape') closeAssistantActionMenus();
             }, true);
@@ -5503,18 +5510,69 @@ let showRoutingDebugBadge = false;
             const regenAttr = canRegenerate ? '' : 'disabled aria-disabled="true"';
             return `
                 <div class="assistant-action-row" data-message-id="${safeId}">
-                    <button type="button" class="assistant-action-icon" onclick="copyAssistantMessage('${safeId}')" title="Copy" aria-label="Copy">${getActionIconSvg('copy')}</button>
-                    <button type="button" class="assistant-action-icon" onclick="shareAssistantMessage('${safeId}')" title="Share" aria-label="Share">${getActionIconSvg('share')}</button>
-                    <button type="button" class="assistant-action-icon" onclick="regenerateAssistantMessage('${safeId}')" title="Regenerate" aria-label="Regenerate" ${regenAttr}>${getActionIconSvg('retry')}</button>
+                    <button type="button" class="assistant-action-icon" data-assistant-action="copy" onclick="return handleAssistantActionInline(event, '${safeId}', 'copy')" title="Copy" aria-label="Copy">${getActionIconSvg('copy')}</button>
+                    <button type="button" class="assistant-action-icon" data-assistant-action="share" onclick="return handleAssistantActionInline(event, '${safeId}', 'share')" title="Share" aria-label="Share">${getActionIconSvg('share')}</button>
+                    <button type="button" class="assistant-action-icon" data-assistant-action="regenerate" onclick="return handleAssistantActionInline(event, '${safeId}', 'regenerate')" title="Regenerate" aria-label="Regenerate" ${regenAttr}>${getActionIconSvg('retry')}</button>
                     <div class="assistant-action-menu-wrap">
-                        <button type="button" class="assistant-action-icon assistant-action-dots" onclick="toggleAssistantActionMenu('${safeId}', this)" title="More" aria-label="More actions" aria-expanded="false">${getActionIconSvg('dots')}</button>
+                        <button type="button" class="assistant-action-icon assistant-action-dots" data-assistant-action="menu" onclick="return handleAssistantActionInline(event, '${safeId}', 'menu')" title="More" aria-label="More actions" aria-expanded="false">${getActionIconSvg('dots')}</button>
                         <div id="assistant-action-menu-${safeId}" class="assistant-action-menu hidden" role="menu"> 
-                            <button type="button" onclick="askJarvisAboutMessage('${safeId}')" role="menuitem">${getActionIconSvg('ask')}<span>Ask JARVIS</span></button> 
-                            <button type="button" onclick="verifyAssistantMessage('${safeId}')" role="menuitem">${getActionIconSvg('verify')}<span>Verify this</span></button> 
+                            <button type="button" data-assistant-action="ask" onclick="return handleAssistantActionInline(event, '${safeId}', 'ask')" role="menuitem">${getActionIconSvg('ask')}<span>Ask JARVIS</span></button> 
+                            <button type="button" data-assistant-action="verify" onclick="return handleAssistantActionInline(event, '${safeId}', 'verify')" role="menuitem">${getActionIconSvg('verify')}<span>Verify this</span></button> 
                         </div> 
                     </div>
                 </div>
             `;
+        }
+
+        const assistantActionHandlers = {
+            copy: copyAssistantMessage,
+            share: shareAssistantMessage,
+            regenerate: regenerateAssistantMessage,
+            ask: askJarvisAboutMessage,
+            verify: verifyAssistantMessage
+        };
+
+        function handleAssistantActionInline(event, messageId, action) {
+            if (event?.__jarvisAssistantActionHandled) return false;
+            if (event) event.__jarvisAssistantActionHandled = true;
+            event?.preventDefault?.();
+            event?.stopPropagation?.();
+            const button = event?.currentTarget || event?.target?.closest?.('[data-assistant-action]');
+            void dispatchAssistantAction(messageId, action, button);
+            return false;
+        }
+
+        function handleAssistantActionClick(event) {
+            const button = event.target?.closest?.('[data-assistant-action]');
+            if (!button) return;
+            const row = button.closest?.('.assistant-action-row');
+            const messageId = row?.dataset?.messageId || '';
+            const action = button.dataset.assistantAction || '';
+            if (!messageId || !action) return;
+            event.__jarvisAssistantActionHandled = true;
+            event.preventDefault();
+            event.stopPropagation();
+            void dispatchAssistantAction(messageId, action, button);
+        }
+
+        async function dispatchAssistantAction(messageId, action, button = null) {
+            const id = String(messageId || '');
+            const normalizedAction = String(action || '').trim();
+            if (!id || !normalizedAction) return;
+            if (normalizedAction === 'menu') {
+                toggleAssistantActionMenu(id, button);
+                return;
+            }
+            const handler = assistantActionHandlers[normalizedAction];
+            if (!handler) return;
+            const isLongRunning = ['regenerate', 'verify', 'ask'].includes(normalizedAction);
+            if (isLongRunning && button) button.disabled = true;
+            try {
+                closeAssistantActionMenus();
+                await handler(id);
+            } finally {
+                if (button?.isConnected) button.disabled = false;
+            }
         }
 
         function closeAssistantActionMenus() {
@@ -5797,17 +5855,39 @@ let showRoutingDebugBadge = false;
             }
         }
 
+        async function withVerificationTimeout(promise, timeoutMs, onTimeout) {
+            let timeoutId = null;
+            const timeoutPromise = new Promise(resolve => {
+                timeoutId = setTimeout(() => resolve(typeof onTimeout === 'function' ? onTimeout() : null), timeoutMs);
+            });
+            try {
+                return await Promise.race([promise, timeoutPromise]);
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+
         async function buildVerificationEvidenceBundle(originalQuestion) {
             const query = String(originalQuestion || '').replace(/\s+/g, ' ').trim();
             if (!query || query === 'the previous question') {
                 return { query, sources: [], warning: 'No original user question was available for source lookup.' };
             }
             let results = [];
+            const searchController = new AbortController();
+            const searchTimeout = setTimeout(() => searchController.abort(), 5500);
             try {
-                const searchData = await fetchLiveSearchJson(query, {
-                    maxResults: 5,
-                    answer: false
-                });
+                const searchData = await withVerificationTimeout(
+                    fetchLiveSearchJson(query, {
+                        maxResults: 5,
+                        answer: false,
+                        signal: searchController.signal
+                    }),
+                    6000,
+                    () => ({ results: [], timeout: true })
+                );
+                if (searchData?.timeout) {
+                    return { query, sources: [], warning: 'Source lookup timed out before usable results were returned.' };
+                }
                 results = (Array.isArray(searchData?.results) ? searchData.results : [])
                     .filter(isUsableVerificationSource)
                     .slice(0, 5);
@@ -5817,10 +5897,16 @@ let showRoutingDebugBadge = false;
                     sources: [],
                     warning: String(error?.message || 'Source lookup failed before usable results were returned.')
                 };
+            } finally {
+                clearTimeout(searchTimeout);
             }
 
             const extractionCandidates = results.slice(0, 3);
-            const extracted = await Promise.all(extractionCandidates.map(item => fetchVerificationExtract(item.url, query)));
+            const extracted = await withVerificationTimeout(
+                Promise.all(extractionCandidates.map(item => fetchVerificationExtract(item.url, query))),
+                5000,
+                () => extractionCandidates.map(() => null)
+            );
             const extractedByUrl = new Map();
             extractionCandidates.forEach((item, index) => {
                 const result = extracted[index];
@@ -5858,10 +5944,16 @@ let showRoutingDebugBadge = false;
         async function verifyAssistantMessage(messageId) { 
             const meta = getAssistantMessageMeta(messageId); 
             if (!meta?.text) return; 
+            const verificationKey = String(messageId || '');
+            if (pendingAssistantVerifications.has(verificationKey)) {
+                showTemporaryMessage('Verification is already running for that answer.');
+                return;
+            }
             if (regenerationInProgress || activeRequestController || isProcessing || isAssistantProcessing()) {
                 showTemporaryMessage('Wait for the current response to finish before verifying an answer.');
                 return;
             }
+            pendingAssistantVerifications.add(verificationKey);
             const visible = 'Verify this answer'; 
             const flags = Array.isArray(meta.riskFlags) && meta.riskFlags.length 
                 ? meta.riskFlags.map(flag => `${flag.label}: ${flag.reason}`).join('\n') 
@@ -5889,7 +5981,7 @@ let showRoutingDebugBadge = false;
             });
             const previousRenderContext = beginResponseRenderContext(turn);
             addChatMessage(visible, true, null, { turnId: turn.id });
-            beginAssistantProcessing();
+            const controller = beginAbortableRequest();
             try {
                 showThinkingIndicator('Checking sources...');
                 const evidenceBundle = await buildVerificationEvidenceBundle(originalQuestion);
@@ -5902,7 +5994,16 @@ let showRoutingDebugBadge = false;
                     'Return the Sources section using only URLs from the retrieved source evidence. If no retrieved source evidence is available, write "Sources: Source verification unavailable."'
                 ].join('\n');
                 showThinkingIndicator('Verifying answer...');
-                const response = await askGeminiAI(verificationPrompt, {
+                const response = await window.JarvisApi.postJson('/api/chat-groq', {
+                    message: verificationPrompt,
+                    context: [],
+                    preferences: {
+                        userName,
+                        responseLength: 'normal',
+                        responseFormat: 'paragraph',
+                        responseStyle,
+                        customSystemPrompt
+                    },
                     intent: 'verify_answer',
                     grounding: {
                         originalRequest: originalQuestion,
@@ -5912,6 +6013,9 @@ let showRoutingDebugBadge = false;
                         evidenceSources: evidenceBundle.sources,
                         evidenceWarning: evidenceBundle.warning
                     }
+                }, {
+                    signal: controller.signal,
+                    timeoutMs: 25000
                 });
                 if (response?.aborted) return;
                 const finalText = String(response?.response || response?.text || '').trim() || 'I could not complete verification this time.';
@@ -5928,8 +6032,10 @@ let showRoutingDebugBadge = false;
                     turnId: turn.id
                 });
             } finally {
+                pendingAssistantVerifications.delete(verificationKey);
+                hideThinkingIndicator();
                 restoreResponseRenderContext(previousRenderContext);
-                endAssistantProcessing();
+                clearActiveRequest(controller);
                 resetPrimaryActionButtonWhenIdle();
             }
         }
