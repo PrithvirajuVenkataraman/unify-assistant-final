@@ -5456,6 +5456,7 @@ let showRoutingDebugBadge = false;
             const resolved = String(context.resolvedUserText || '').trim();
             const compactOriginal = original.length > 220 ? `${original.slice(0, 220).trim()}...` : original;
             const compactResolved = resolved.length > 220 ? `${resolved.slice(0, 220).trim()}...` : resolved;
+            const primaryIntent = String(context.primaryIntent || '').trim();
             return `
                 <details class="context-copilot-badge">
                     <summary>
@@ -5465,6 +5466,7 @@ let showRoutingDebugBadge = false;
                     <div class="context-copilot-details">
                         ${compactOriginal ? `<div><strong>Original:</strong> ${escapeHtml(compactOriginal)}</div>` : ''}
                         ${compactResolved ? `<div><strong>Understood as:</strong> ${escapeHtml(compactResolved)}</div>` : ''}
+                        ${primaryIntent ? `<div><strong>Intent:</strong> ${escapeHtml(primaryIntent)}</div>` : ''}
                         <div><strong>Reason:</strong> ${escapeHtml(reason)}</div>
                         ${confidence ? `<div><strong>Confidence:</strong> ${confidence}%</div>` : ''}
                     </div>
@@ -15080,6 +15082,7 @@ function detectInputLanguageHint(text) {
                     originalUserText: String(useDisplayForContext ? contextDisplayText : (contextResolution.originalMessage || contextDisplayText || '')),
                     resolvedUserText: String(contextDisplayText || contextResolution.resolvedMessage || text || ''),
                     contextDecisionReason: String(contextResolution.decisionReason || ''),
+                    primaryIntent: String(contextResolution.primaryIntent || ''),
                     contextConfidence: Number(contextResolution.confidence) || 0,
                     activeThreadTopic: String(contextResolution.activeThread?.topic || ''),
                     activeThreadEntity: String(contextResolution.activeThread?.entity || '')
@@ -15095,7 +15098,7 @@ function detectInputLanguageHint(text) {
                 addChatMessage('Context cleared. Start a new topic whenever you are ready.', false);
                 return;
             }
-            if (contextResolution?.decisionReason === 'ambiguous_short_context') {
+            if (['ambiguous_short_context', 'ambiguous_reference_context'].includes(contextResolution?.decisionReason)) {
                 const clarification = buildAmbiguousShortContextReply(contextResolution);
                 addChatMessage(clarification, false);
                 saveToHistory(text, clarification, { recordContext: false });
