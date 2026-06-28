@@ -13,12 +13,14 @@ const INTENT_TERMS = Object.freeze({
         'price', 'cost', 'latest', 'latest news', 'latest mission', 'mission',
         'source', 'sources', 'pros', 'cons', 'difference', 'differences'
     ],
+    modificationPhrases: ['make it', 'make this', 'make that', 'change it', 'change this', 'change that', 'shorter', 'longer', 'simpler', 'instead'],
     correctionOpeners: ['no', 'nah', 'nope', 'actually', 'wait', 'sorry'],
     correctionIntents: ['i meant', 'that is', 'that was', 'you misunderstood'],
     correctionPhrases: ['that is wrong', "that's wrong", 'you got that wrong', 'not what i meant', 'i meant'],
     switchActions: ['change', 'switch', 'new', 'different', 'another'],
     switchTargets: ['topic', 'subject'],
-    switchPhrases: ['anyway', 'moving on', 'on another note', "let's talk about", 'lets talk about', "let's discuss about", 'lets discuss about'],
+    switchPhrases: ['anyway', 'moving on', 'on another note', "let's talk about", 'lets talk about', "let's discuss about", 'lets discuss about', 'switching topics', 'another question', 'new task', 'forget that'],
+    switchOpeners: ['now', 'another question', 'switching topics', 'forget that', "let's talk about", 'lets talk about', 'new task'],
     resumePhrases: ['back to', 'return to', 'resume', 'continue with', 'earlier', 'previous topic', 'again about', 'regarding'],
     pronounTargets: ['it', 'its', 'this', 'that', 'this one', 'that one', 'the company', 'the person', 'the topic'],
     entityQuestionLeads: ['who', 'what'],
@@ -31,8 +33,10 @@ const REQUEST_STARTERS = leadingWordPattern(INTENT_TERMS.requestStarters);
 const REQUEST_STARTERS_WITH_STOP = leadingWordPattern([...INTENT_TERMS.requestStarters, 'stop']);
 const QUESTION_LEADS = leadingWordPattern(INTENT_TERMS.questionLeads);
 const FOLLOW_UP_SIGNALS = containsPhrasePattern([...INTENT_TERMS.followUpReferences, ...INTENT_TERMS.followUpPhrases]);
+const MODIFICATION_SIGNALS = containsPhrasePattern(INTENT_TERMS.modificationPhrases);
 const CORRECTION_SIGNALS = correctionPattern();
 const EXPLICIT_SWITCH = switchPattern();
+const EXPLICIT_SWITCH_OPENER = switchOpenerPattern();
 const EXPLICIT_RESUME = containsPhrasePattern(INTENT_TERMS.resumePhrases);
 const SETTINGS_COMMAND = commandTargetPattern(['set', 'change', 'switch', 'turn', 'enable', 'disable'], INTENT_TERMS.settingTargets);
 const FEATURE_COMMAND = containsPhrasePattern(INTENT_TERMS.featureTargets);
@@ -95,9 +99,10 @@ export function classifyInput(message, pending = null, activeThread = null) {
     const isFeatureCommand = FEATURE_COMMAND.test(lower);
     const isStandaloneLiveRequest = STANDALONE_LIVE_REQUEST.test(originalMessage);
     const isAcknowledgement = ACKNOWLEDGEMENTS.test(lower);
-    const isExplicitSwitch = EXPLICIT_SWITCH.test(lower);
+    const isExplicitSwitch = EXPLICIT_SWITCH.test(lower) || EXPLICIT_SWITCH_OPENER.test(lower);
     const isCorrection = CORRECTION_SIGNALS.test(originalMessage);
-    const isFollowUp = isCorrection || FOLLOW_UP_SIGNALS.test(lower) || (isAcknowledgement && Boolean(activeThread));
+    const isModification = MODIFICATION_SIGNALS.test(lower);
+    const isFollowUp = isCorrection || isModification || FOLLOW_UP_SIGNALS.test(lower) || (isAcknowledgement && Boolean(activeThread));
     const pendingMatch = pending ? matchesPending(originalMessage, pending) : false;
     const hasSubstantiveIntent = tokens.length >= 1 && !isAcknowledgement;
     const startsClearRequest = REQUEST_STARTERS.test(originalMessage);
@@ -109,6 +114,7 @@ export function classifyInput(message, pending = null, activeThread = null) {
         !isSetting &&
         !isFeatureCommand &&
         !isStandaloneLiveRequest &&
+        !isExplicitSwitch &&
         !isFollowUp &&
         !startsClearRequest &&
         tokens.length > 0 &&
@@ -136,6 +142,7 @@ export function classifyInput(message, pending = null, activeThread = null) {
         isStandaloneLiveRequest,
         isAcknowledgement,
         isExplicitSwitch,
+        isModification,
         isFollowUp,
         isCorrection,
         pendingMatch,
@@ -178,6 +185,8 @@ function resolveInput(state, input, limits) {
         }
     } else if (classification.ambiguousShortContext) {
         return resolution(originalMessage, originalMessage, activeThread, 'ambiguous_short_context', 0.58, null);
+    } else if (classification.isFollowUp && hasAmbiguousReferenceAcrossThreads(state, originalMessage, activeThread)) {
+        return resolution(originalMessage, originalMessage, activeThread, 'ambiguous_reference_context', 0.52, null);
     } else if (classification.clearNewIntent) {
         cancelledPendingState = clearPending(state, 'superseded_by_new_intent');
         const thread = createThread(state, classification.topic || originalMessage, limits.maxThreads);
@@ -387,9 +396,30 @@ function resolution(originalMessage, resolvedMessage, thread, decisionReason, co
         resolvedMessage,
         activeThread: thread ? { ...thread } : null,
         decisionReason,
+        primaryIntent: primaryIntentForDecision(decisionReason),
         confidence,
         cancelledPendingState
     };
+}
+
+function primaryIntentForDecision(decisionReason) {
+    switch (String(decisionReason || '')) {
+        case 'contextual_follow_up':
+            return 'continue_previous_task';
+        case 'conversation_repair':
+            return 'modify_previous_task';
+        case 'explicit_thread_resume':
+            return 'refers_back_to_earlier_task';
+        case 'pending_clarification_answer':
+        case 'ambiguous_short_context':
+        case 'ambiguous_reference_context':
+            return 'clarification';
+        case 'clear_new_intent':
+        case 'new_intent_low_context_confidence':
+            return 'new_unrelated_task';
+        default:
+            return 'new_unrelated_task';
+    }
 }
 
 function deriveTopic(text) {
@@ -462,6 +492,25 @@ function shouldResolveAgainstActiveThread(message, classification, activeThread)
     return explicitReference && tokens.length <= 3 && hasTopicAnchor;
 }
 
+function hasAmbiguousReferenceAcrossThreads(state, message, activeThread) {
+    if (!activeThread || !state?.threads || state.threads.size < 2) return false;
+    const raw = cleanText(message);
+    if (!raw) return false;
+    if (MODIFICATION_SIGNALS.test(raw)) return false;
+    const hasVagueReference = containsPhrasePattern(['it', 'this', 'that', 'they', 'them', 'those', 'these', 'one', 'them both', 'both of them']).test(raw);
+    if (!hasVagueReference) return false;
+    const tokens = tokenize(raw);
+    const activeTokens = tokenize(`${activeThread.topic || ''} ${activeThread.entity || ''}`);
+    const activeOverlap = countOverlap(tokens, activeTokens);
+    if (activeOverlap > 0) return false;
+    const namesOtherThread = [...state.threads.values()]
+        .filter(thread => thread.id !== activeThread.id)
+        .some(thread => countOverlap(tokens, tokenize(`${thread.topic || ''} ${thread.entity || ''}`)) > 0);
+    if (namesOtherThread) return false;
+    const isPairwiseRequest = /\b(?:compare|difference|differences|both|between|versus|vs)\b/i.test(raw);
+    return isPairwiseRequest || tokens.length <= 4;
+}
+
 function tokenize(text) {
     return cleanText(text)
         .toLowerCase()
@@ -510,6 +559,11 @@ function switchPattern() {
     const target = phraseAlternation(INTENT_TERMS.switchTargets);
     const phrase = phraseAlternation(INTENT_TERMS.switchPhrases);
     return new RegExp(`\\b(?:${action})\\s+(?:${target})\\b|\\b(?:${phrase})\\b`, 'i');
+}
+
+function switchOpenerPattern() {
+    const opener = phraseAlternation(INTENT_TERMS.switchOpeners);
+    return new RegExp(`^(?:${opener})(?:\\b|\\s*[:,.-])`, 'i');
 }
 
 function countOverlap(a, b) {
