@@ -46,6 +46,14 @@
                 : '';
             const effectiveMessage = buildGroundedUserMessage(message, intent, grounding);
             const isInternalSummary = isInternalSummarizerPrompt(effectiveMessage, '');
+            if (intent === 'verify_answer') {
+                return await handleVerifyAnswerRequest(res, {
+                    requestId,
+                    message: effectiveMessage,
+                    grounding,
+                    preferences
+                });
+            }
             const stableFactAnswer = getStableFactAnswer(effectiveMessage);
             if (stableFactAnswer) {
                 return res.status(200).json({
@@ -225,8 +233,147 @@
         ].filter(Boolean).join('\n\n');
     }
 
+    async function handleVerifyAnswerRequest(res, options = {}) {
+        const requestId = String(options.requestId || `cg_verify_${Date.now().toString(36)}`);
+        const grounding = options.grounding || {};
+        const originalRequest = String(grounding.originalRequest || 'unknown').trim();
+        const answer = String(grounding.sourceAnswer || grounding.selectedText || '').trim();
+        const localReviewFlags = String(grounding.localReviewFlags || 'No local review flags were supplied.').trim();
+        const sources = Array.isArray(grounding.evidenceSources) ? grounding.evidenceSources : [];
+        const evidenceWarning = String(grounding.evidenceWarning || '').trim();
+        const sourceBlock = formatVerifyEvidenceSources(sources, evidenceWarning);
+        const verificationPrompt = [
+            'You are verifying one previous assistant answer. Do not answer the original user request from scratch.',
+            'Return a concise verification report with exactly these sections:',
+            'Verdict: likely accurate, partly accurate, unsupported, or incorrect.',
+            'Evidence used: summarize only the answer text, local flags, and supplied retrieved evidence.',
+            'How checked: concise rationale, no hidden chain-of-thought.',
+            'Claims needing live/source verification: list unsupported claims, or "None identified from supplied evidence."',
+            'Corrected answer: include only if the original is wrong or materially incomplete.',
+            'Sources: markdown links only from supplied retrieved evidence, or "Source verification unavailable."',
+            '',
+            `Original user request:\n${originalRequest || 'unknown'}`,
+            '',
+            `Answer to verify:\n${answer || 'No answer text supplied.'}`,
+            '',
+            `Local review flags:\n${localReviewFlags}`,
+            '',
+            sourceBlock,
+            sources.length ? `Required source links:\n${formatRequiredVerifySourceLinks(sources)}` : '',
+            '',
+            'Do not ask the user to provide links. If supplied source evidence is missing or weak, say so clearly.'
+        ].filter(Boolean).join('\n');
+
+        const lengthPolicy = { instruction: 'Keep the verification report concise and complete.', maxTokens: 1800, temperature: 0.2 };
+        const modelResult = await runModelWithFallback(verificationPrompt, lengthPolicy);
+        let finalParsed = modelResult.ok
+            ? normalizeAssistantResponseStyle(modelResult.parsedResponse)
+            : {
+                intent: 'verify_answer',
+                response: buildVerifyUnavailableReport(answer, evidenceWarning),
+                action: null
+            };
+        finalParsed = {
+            ...finalParsed,
+            intent: 'verify_answer',
+            response: ensureVerificationSourcesSection(finalParsed.response || finalParsed.text || '', sources, evidenceWarning),
+            action: null
+        };
+
+        return res.status(200).json({
+            success: true,
+            ...finalParsed,
+            requestId,
+            provider: modelResult.provider || 'deterministic',
+            modelUsed: modelResult.modelUsed || 'verify-fallback-v1',
+            routing: {
+                mode: CHAT_ROUTER_MODE,
+                strategy: 'verify_answer_fast_path',
+                reason: 'explicit_verify_answer_intent',
+                webEligible: false,
+                preloadedSources: sources.length
+            },
+            webEscalation: {
+                considered: false,
+                escalated: false,
+                reason: 'verify_answer_fast_path',
+                sourceCount: sources.length,
+                requestType: 'verification'
+            },
+            quality: {
+                performed: false,
+                verdict: 'not_required',
+                passes: 0,
+                corrected: false,
+                reasons: ['verify_answer_fast_path'],
+                elapsedMs: 0,
+                externalVerification: sources.length > 0
+            }
+        });
+    }
+
+    function formatVerifyEvidenceSources(sources, warning = '') {
+        const normalized = Array.isArray(sources) ? sources.slice(0, 6) : [];
+        if (!normalized.length) {
+            return `Retrieved source evidence: unavailable.\nNo usable retrieved source evidence was supplied.\nReason: ${warning || 'No usable source evidence was supplied.'}`;
+        }
+        return normalized.map((source, index) => [
+            `[${index + 1}] ${String(source?.title || 'Source').trim()}`,
+            source?.description ? `Snippet: ${String(source.description).trim()}` : '',
+            source?.text ? `Extracted text: ${String(source.text).trim().slice(0, 2500)}` : '',
+            source?.date ? `Date: ${String(source.date).trim()}` : '',
+            `URL: ${String(source?.url || '').trim()}`
+        ].filter(Boolean).join('\n')).join('\n\n');
+    }
+
+    function formatRequiredVerifySourceLinks(sources) {
+        return (Array.isArray(sources) ? sources : [])
+            .filter(source => /^https?:\/\//i.test(String(source?.url || '')))
+            .slice(0, 6)
+            .map((source, index) => {
+                const title = String(source?.title || `Source ${index + 1}`).replace(/\s+/g, ' ').trim();
+                return `${index + 1}. [${title}](${String(source.url || '').trim()})`;
+            })
+            .join('\n');
+    }
+
+    function buildVerifyUnavailableReport(answer, warning = '') {
+        return [
+            'Verdict: unsupported.',
+            `Evidence used: I reviewed the supplied answer text${warning ? ` and the retrieval warning: ${warning}` : ', but no usable retrieved source evidence was available'}.`,
+            'How checked: Source verification could not be completed from the supplied evidence, so I cannot confirm the factual claims.',
+            'Claims needing live/source verification: Any factual claims in the answer still need source verification.',
+            'Sources: Source verification unavailable.'
+        ].join('\n');
+    }
+
+    function ensureVerificationSourcesSection(text, sources = [], warning = '') {
+        let out = String(text || '').trim() || buildVerifyUnavailableReport('', warning);
+        const preformattedSourceLines = (Array.isArray(sources) ? sources : [])
+            .filter(source => typeof source === 'string' && /\[[^\]]+\]\(https?:\/\/[^)]+\)/i.test(source))
+            .slice(0, 6);
+        const usableSources = (Array.isArray(sources) ? sources : [])
+            .filter(source => /^https?:\/\//i.test(String(source?.url || '')))
+            .slice(0, 6);
+        const sourceLines = preformattedSourceLines.length ? preformattedSourceLines : usableSources.map((source, index) => {
+            const title = String(source?.title || `Source ${index + 1}`).replace(/\s+/g, ' ').trim();
+            const url = String(source.url || '').trim();
+            return `${index + 1}. [${title}](${url})`;
+        });
+        const replacement = sourceLines.length
+            ? `Sources:\n${sourceLines.join('\n')}`
+            : 'Sources: Source verification unavailable.';
+        if (/(?:^|\n)\s*Sources:\s*/i.test(out)) {
+            out = out.replace(/(?:^|\n)\s*Sources:\s*[\s\S]*$/i, `\n${replacement}`).trim();
+        } else {
+            out = `${out}\n\n${replacement}`.trim();
+        }
+        return out;
+    }
+
     function buildGroundedUserMessage(message, intent, grounding) {
         const action = String(intent || 'chat');
+        if (action === 'verify_answer') return String(message || '').trim();
         if (!action.startsWith('selection_') || !grounding) return String(message || '').trim();
         const actionName = action.replace(/^selection_/, '');
         const selectedText = String(grounding.selectedText || '').trim();
@@ -235,7 +382,16 @@
         const customInstruction = String(grounding.customInstruction || message || '').trim();
         const actionRules = {
             explain: 'Explain the selected text in the context of the source answer.',
-            verify: 'Check the selected claim for internal consistency and clearly distinguish uncertainty from verified fact.',
+            verify: [
+                'Check the selected claim for internal consistency and clearly distinguish uncertainty from verified fact.',
+                'Return a clear verification report with these exact sections:',
+                'Verdict: likely accurate, partly accurate, unsupported, or incorrect.',
+                'Evidence used: summarize the selected text and source answer supplied in this request.',
+                'How checked: give a concise rationale for the verdict without revealing hidden chain-of-thought.',
+                'Claims needing live/source verification: list claims that cannot be verified from the supplied evidence.',
+                'Corrected answer: include only if the original is wrong or incomplete.',
+                'Sources: include source links only if they are present in the supplied text; otherwise say source verification unavailable.'
+            ].join('\n'),
             rewrite: 'Rewrite only the selected text according to the user instruction, preserving its intended meaning.',
             translate: 'Translate only the selected text into the language requested by the user.',
             custom: 'Follow the custom instruction about the selected text.'
@@ -287,6 +443,10 @@
         const lower = text.toLowerCase().replace(/[?.!]+$/g, '').replace(/\s+/g, ' ');
         if (/\b(latest|current|today|now|as of|who is the current)\b/.test(lower)) return '';
 
+        if (isPenicillinDiscoveryQuestion(lower)) {
+            return 'Alexander Fleming discovered penicillin in 1928. Ernst Chain and Howard Florey later helped develop penicillin into an effective medical treatment.';
+        }
+
         const capitalMatch = lower.match(/^(?:what(?:'s| is)|which city is|name)\s+(?:the\s+)?capital\s+(?:city\s+)?of\s+(.+?)$/) ||
             lower.match(/^(.+?)\s+capital$/);
         if (!capitalMatch) return '';
@@ -299,6 +459,12 @@
         const capital = STABLE_CAPITALS[rawCountry];
         if (!capital) return '';
         return `The capital of ${formatCountryName(rawCountry)} is ${capital}.`;
+    }
+
+    function isPenicillinDiscoveryQuestion(message) {
+        const text = String(message || '').toLowerCase();
+        return /\bpenicillin\b/.test(text) &&
+            /\b(who discovered|discoverer|discovered|founder|inventor|invented|discovery of)\b/.test(text);
     }
 
     function formatCountryName(country) {
@@ -1671,8 +1837,8 @@
             : {};
         const intent = normalizeIntent(body.intent);
         const grounding = normalizeGrounding(body.grounding, intent);
-        if (intent.startsWith('selection_') && !grounding) {
-            return { ok: false, error: 'Selection requests require valid grounding data.' };
+        if ((intent.startsWith('selection_') || intent === 'verify_answer') && !grounding) {
+            return { ok: false, error: 'Grounded requests require valid grounding data.' };
         }
         return {
             ok: true,
@@ -1694,11 +1860,12 @@
 
     function normalizeIntent(value) {
         const intent = String(value || 'chat').trim().toLowerCase();
-        return ['chat', 'selection_explain', 'selection_verify', 'selection_rewrite', 'selection_translate', 'selection_custom']
+        return ['chat', 'verify_answer', 'selection_explain', 'selection_verify', 'selection_rewrite', 'selection_translate', 'selection_custom']
             .includes(intent) ? intent : 'chat';
     }
 
     function normalizeGrounding(value, intent) {
+        if (String(intent) === 'verify_answer') return normalizeVerifyGrounding(value);
         if (!String(intent).startsWith('selection_')) return null;
         if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
         const grounding = {
@@ -1708,6 +1875,32 @@
             customInstruction: String(value.customInstruction || '').trim().slice(0, 2000)
         };
         return grounding.selectedText && grounding.sourceAnswer ? grounding : null;
+    }
+
+    function normalizeVerifyGrounding(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+        const evidenceSources = Array.isArray(value.evidenceSources)
+            ? value.evidenceSources
+                .map(source => ({
+                    title: String(source?.title || 'Source').trim().slice(0, 180),
+                    url: String(source?.url || '').trim().slice(0, 1000),
+                    description: String(source?.description || '').trim().slice(0, 800),
+                    text: String(source?.text || '').trim().slice(0, 3500),
+                    date: String(source?.date || '').trim().slice(0, 80),
+                    sourceType: String(source?.sourceType || '').trim().slice(0, 80)
+                }))
+                .filter(source => source.title && /^https?:\/\//i.test(source.url))
+                .slice(0, 6)
+            : [];
+        const grounding = {
+            selectedText: String(value.selectedText || '').trim().slice(0, 10000),
+            sourceAnswer: String(value.sourceAnswer || '').trim().slice(0, 12000),
+            originalRequest: String(value.originalRequest || '').trim().slice(0, 4000),
+            localReviewFlags: String(value.localReviewFlags || '').trim().slice(0, 2000),
+            evidenceSources,
+            evidenceWarning: String(value.evidenceWarning || '').trim().slice(0, 1000)
+        };
+        return (grounding.selectedText || grounding.sourceAnswer) ? grounding : null;
     }
 
     function normalizeAssistantResponseStyle(payload) {
@@ -1917,6 +2110,8 @@
         getUnknownGeneralKnowledgeEscalationDecision,
         normalizeChatRequest,
         normalizeCustomSystemPrompt,
+        ensureVerificationSourcesSection,
+        normalizeVerifyGrounding,
         normalizeResponseStyle,
         resolveContextualLiveQuery,
         resolveRouteEscalation,
