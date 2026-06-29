@@ -118,7 +118,18 @@ const FEATURE_CONTRACTS = Object.freeze({
             /const supportedLanguages = Object\.freeze/,
             /filipino: \{ name: 'Filipino'/,
             /spanish: \{ name: 'Spanish'/,
-            /malayalam: \{ name: 'Malayalam'/
+            /malayalam: \{ name: 'Malayalam'/,
+            /Memory Vault/,
+            /Voice shortcuts/,
+            /Translator helper/,
+            /Privacy & Data Center/,
+            /function addMemoryVaultItemFromHelp/,
+            /function editMemoryItem/,
+            /function collectLocalDataSnapshot/,
+            /function exportAllLocalDataJson/,
+            /function clearLocalPreferencesData/,
+            /function parseOneShotTranslationRequest/,
+            /function handleOneShotTranslation/
         ],
         forbidden: [
             /<label for="speech-language-select" class="font-bold">Voice input<\/label>/,
@@ -295,6 +306,10 @@ assert.match(SOURCE.appHtml, /ambiguous_short_context/);
 assert.match(SOURCE.appHtml, /function buildAmbiguousShortContextReply/);
 assert.match(SOURCE.appHtml, /function createExplicitMemoryRecord/);
 assert.match(SOURCE.appHtml, /function findRelevantSavedMemory/);
+assert.match(SOURCE.appHtml, /function parseMemorySaveRequest/);
+assert.match(SOURCE.appHtml, /function parseMemoryForgetRequest/);
+assert.match(SOURCE.appHtml, /function showSavedMemoryVault/);
+assert.match(SOURCE.appHtml, /Export All Data/);
 assert.match(SOURCE.appHtml, /Relevant saved memory:/);
 assert.doesNotMatch(SOURCE.appHtml, /alwaysShowContextCopilotBadge\s*=\s*true/);
 assert.match(SOURCE.appHtml, /function splitReadableSentences\(text\)/);
@@ -308,6 +323,12 @@ assert.match(SOURCE.readme, /Standout Feature: Context Copilot/);
 assert.match(SOURCE.readme, /local, deterministic, private, and free-for-life/);
 assert.match(SOURCE.readme, /Exact Features/);
 assert.match(SOURCE.readme, /Crawl4AI fallback/);
+assert.match(SOURCE.readme, /Memory Vault/);
+assert.match(SOURCE.readme, /Voice Shortcuts/);
+assert.match(SOURCE.readme, /Universal Translator Helper/);
+assert.match(SOURCE.readme, /Privacy & Data Center/);
+assert.match(SOURCE.readme, /remember my passport is in the drawer/);
+assert.match(SOURCE.readme, /export all local data/i);
 assert.doesNotMatch(SOURCE.readme, /Public Images/);
 assert.match(SOURCE.readme, /Verification/);
 assert.doesNotMatch(SOURCE.readme, /OCR Uploads/);
@@ -556,6 +577,7 @@ const memorySandbox = {
 };
 vm.createContext(memorySandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getMemoryRecordValue'), memorySandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'inferMemoryRecordType'), memorySandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeMemoryRecord'), memorySandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'createExplicitMemoryRecord'), memorySandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeMemoryStoreRecords'), memorySandbox);
@@ -565,10 +587,32 @@ vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'findRelevantSavedMemory')
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'buildRelevantSavedMemoryContext'), memorySandbox);
 memorySandbox.memoryStore.keys = memorySandbox.createExplicitMemoryRecord('keys', 'on the kitchen counter', 'my keys are on the kitchen counter');
 assert.equal(memorySandbox.memoryStore.keys.category, 'location');
+assert.equal(memorySandbox.createExplicitMemoryRecord('insurance', 'renew this week', 'save note: renew this week', 'note').type, 'note');
 assert.ok(memorySandbox.memoryStore.keys.createdAt);
 assert.equal(memorySandbox.findRelevantSavedMemory('where are my key')[0].value, 'on the kitchen counter');
 assert.equal(memorySandbox.findRelevantSavedMemory('tell me about Saturn').length, 0);
 assert.match(memorySandbox.buildRelevantSavedMemoryContext('where are my keys'), /Relevant saved memory:\n- keys: on the kitchen counter/);
+
+const translatorSandbox = {
+    supportedLanguages: {
+        tamil: { name: 'Tamil', nativeName: 'Tamil' },
+        hindi: { name: 'Hindi', nativeName: 'Hindi' },
+        spanish: { name: 'Spanish', nativeName: 'Spanish' }
+    }
+};
+vm.createContext(translatorSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeTranslatorLanguageKey'), translatorSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'resolveTranslatorLanguage'), translatorSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'parseOneShotTranslationRequest'), translatorSandbox);
+const tamilTranslationRequest = translatorSandbox.parseOneShotTranslationRequest('translate "hello" to Tamil');
+assert.equal(tamilTranslationRequest.sourceText, 'hello');
+assert.equal(tamilTranslationRequest.targetLanguage, 'tamil');
+assert.equal(tamilTranslationRequest.rawTargetLanguage, 'Tamil');
+const hindiTranslationRequest = translatorSandbox.parseOneShotTranslationRequest('say this in Hindi: I need help');
+assert.equal(hindiTranslationRequest.sourceText, 'I need help');
+assert.equal(hindiTranslationRequest.targetLanguage, 'hindi');
+assert.equal(hindiTranslationRequest.rawTargetLanguage, 'Hindi');
+assert.equal(translatorSandbox.parseOneShotTranslationRequest('what does "hola" mean in English').targetLanguage, 'english');
 
 const visiblePromptSandbox = {
     window: {},
