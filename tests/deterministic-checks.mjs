@@ -64,7 +64,9 @@ const FEATURE_CONTRACTS = Object.freeze({
             /const conversationTurns = new Map\(\)/,
             /function createConversationTurn\(/,
             /replaceMessageId:\s*messageId/,
-            /window\.__lastUserMessage = previousLastUserMessage/,
+            /function setLastVisibleUserMessage\(/,
+            /function isInternalPromptText\(/,
+            /setLastVisibleUserMessage\(rawPrompt\)/,
             /JarvisConversation\?\.resolve/,
             /clearSupersededConversationState/,
             /displayProcessingPrompt/,
@@ -107,7 +109,8 @@ const FEATURE_CONTRACTS = Object.freeze({
             /function isWebsiteUiVisionIntent/,
             /visible branding, logo, page title, header, or app chrome/,
             /extractVisibleDomainFromVisionDetails/,
-            /Do not guess or use web search/
+            /Do not guess or use web search/,
+            /likely brand\/model only from visible evidence/
         ] 
     }, 
     helpAndVoice: {
@@ -405,6 +408,11 @@ assert.match(SOURCE.visionApi, /function shouldEscalateMathOcrSolve/);
 assert.match(SOURCE.visionApi, /pipeline:\s*'fast-math-ocr-solve'/);
 assert.match(SOURCE.visionApi, /pipeline:\s*'planner-critic-solver'/);
 assert.doesNotMatch(SOURCE.visionApi, /llama-4-scout/);
+assert.match(SOURCE.visionApi, /"brand": "visible or likely brand/);
+assert.match(SOURCE.visionApi, /"model": "visible or likely product\/model/);
+assert.match(SOURCE.visionApi, /"modelEvidence": \["visible clue supporting the brand\/model"\]/);
+assert.match(SOURCE.visionApi, /"distinctiveFeatures": \["camera layout, logo, color, ports, UI, shape, or other useful visual details"\]/);
+assert.match(SOURCE.visionApi, /infer brand\/model only from visible evidence/);
 assert.match(SOURCE.speechInput, /try English or another language/);
 assert.match(SOURCE.chatGroqApi, /forceReview: false/);
 assert.doesNotMatch(SOURCE.chatGroqApi, /forceReview: !isInternalSummary/);
@@ -435,6 +443,9 @@ assert.match(SOURCE.appHtml, /displayProcessingPrompt/);
 assert.match(SOURCE.appHtml, /programmaticAction: 'verify_answer'/);
 assert.match(SOURCE.appHtml, /Verifying answer/);
 assert.match(SOURCE.appHtml, /Verify the previous answer for:/);
+assert.match(SOURCE.appHtml, /function addVisibleInputHistory/);
+assert.match(SOURCE.appHtml, /setLastVisibleUserMessage\(visible \|\| String\(options\?\.displayProcessingPrompt/);
+assert.match(SOURCE.appHtml, /input\.value = isInternalPromptText\(historyValue\) \? '' : historyValue/);
 assert.doesNotMatch(SOURCE.appHtml, /maybeShowReferenceImageForQuery/);
 assert.doesNotMatch(SOURCE.appHtml, /fetchPublicMediaFromWikimedia\(query,\s*3\)/);
 assert.doesNotMatch(SOURCE.appHtml, /dedupePublicMediaImages/);
@@ -547,6 +558,44 @@ assert.ok(memorySandbox.memoryStore.keys.createdAt);
 assert.equal(memorySandbox.findRelevantSavedMemory('where are my key')[0].value, 'on the kitchen counter');
 assert.equal(memorySandbox.findRelevantSavedMemory('tell me about Saturn').length, 0);
 assert.match(memorySandbox.buildRelevantSavedMemoryContext('where are my keys'), /Relevant saved memory:\n- keys: on the kitchen counter/);
+
+const visiblePromptSandbox = {
+    window: {},
+    inputHistory: [],
+    lastVisibleUserMessage: ''
+};
+vm.createContext(visiblePromptSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isInternalPromptText'), visiblePromptSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'setLastVisibleUserMessage'), visiblePromptSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getLastVisibleUserMessage'), visiblePromptSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'addVisibleInputHistory'), visiblePromptSandbox);
+assert.equal(visiblePromptSandbox.isInternalPromptText('Check whether this answer is accurate and internally consistent.'), true);
+assert.equal(visiblePromptSandbox.setLastVisibleUserMessage('Answer to verify:\nHidden answer'), false);
+assert.equal(visiblePromptSandbox.setLastVisibleUserMessage('What is this phone?'), true);
+assert.equal(visiblePromptSandbox.getLastVisibleUserMessage(), 'What is this phone?');
+visiblePromptSandbox.addVisibleInputHistory('Original user request: secret');
+visiblePromptSandbox.addVisibleInputHistory('What is this phone?');
+assert.deepEqual(visiblePromptSandbox.inputHistory, ['What is this phone?']);
+
+const visionFormatSandbox = {};
+vm.createContext(visionFormatSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'pickReadableVisionObject'), visionFormatSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'withReadableArticle'), visionFormatSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'compactVisionTextMention'), visionFormatSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'formatVisionJsonToReadableText'), visionFormatSandbox);
+const richVisionText = visionFormatSandbox.formatVisionJsonToReadableText({
+    answer: 'It appears to be an iPhone based on the rear camera cluster.',
+    brand: 'Apple',
+    model: 'iPhone 15 Pro',
+    modelEvidence: ['triple rear camera layout', 'Apple logo visible'],
+    distinctiveFeatures: ['titanium-like side rail', 'square camera bump'],
+    uncertainty: 'Exact model is not fully certain from this angle.',
+    objects: [{ label: 'smartphone', count: 1, confidence: 0.91 }]
+});
+assert.match(richVisionText, /likely Apple iPhone 15 Pro/);
+assert.match(richVisionText, /Evidence: triple rear camera layout; Apple logo visible/);
+assert.match(richVisionText, /Visible details: titanium-like side rail; square camera bump/);
+assert.match(richVisionText, /Uncertainty: Exact model is not fully certain/);
 
 console.log('deterministic-checks-ok'); 
 
