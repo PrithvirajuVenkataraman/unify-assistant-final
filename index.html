@@ -848,182 +848,6 @@ function buildRelevantSavedMemoryContext(text) {
     return `\n\nRelevant saved memory:\n${lines.join('\n')}`;
 }
 
-function buildMemoryInspectorHtml(filter = '') { 
-    const query = String(filter || '').toLowerCase().trim();
-    const entries = Object.entries(memoryStore || {})
-        .filter(([key]) => key !== 'name')
-        .map(([key, value]) => [key, normalizeMemoryRecord(key, value)])
-        .filter(([key, record]) => {
-            if (!query) return true;
-            return `${key} ${record.title} ${record.value} ${record.type}`.toLowerCase().includes(query);
-        })
-        .slice(0, 30);
-    if (!entries.length) {
-        return `<p class="text-xs">${query ? 'No matching memory items.' : 'No saved memory items yet.'}</p>`;
-    }
-    return entries.map(([key, record]) => {
-        const label = escapeHtml(String(record.title || key || '').slice(0, 60));
-        const body = escapeHtml(`${record.value}${record.updatedAt ? ` | updated ${record.updatedAt.slice(0, 10)}` : ''}`.slice(0, 180));
-        const type = escapeHtml(String(record.type || record.category || 'note'));
-        const encodedKey = encodeURIComponent(key);
-        return `
-            <div class="memory-inspector-item">
-                <div class="min-w-0">
-                    <strong>${label}</strong>
-                    <span class="text-[10px] uppercase tracking-wide opacity-70 ml-2">${type}</span>
-                    <p>${body}</p>
-                </div>
-                <div class="flex gap-2 shrink-0">
-                    <button type="button" class="memory-action-btn" onclick="editMemoryItem('${encodedKey}')">Edit</button>
-                    <button type="button" class="memory-action-btn" onclick="deleteMemoryItem('${encodedKey}')">Delete</button>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-function refreshMemoryVaultList() {
-    const list = document.getElementById('memory-inspector-list');
-    const filter = document.getElementById('memory-vault-search')?.value || '';
-    if (list) list.innerHTML = buildMemoryInspectorHtml(filter);
-}
-
-function filterMemoryVault() {
-    refreshMemoryVaultList();
-}
-
-function addMemoryVaultItemFromHelp() {
-    const titleEl = document.getElementById('memory-vault-title');
-    const valueEl = document.getElementById('memory-vault-value');
-    const typeEl = document.getElementById('memory-vault-type');
-    const title = normalizeThing(titleEl?.value || '');
-    const value = String(valueEl?.value || '').trim();
-    const type = String(typeEl?.value || 'note').toLowerCase();
-    if (!title || !value) {
-        showTemporaryMessage('Add a title and value first.');
-        return false;
-    }
-    memoryStore[title] = createExplicitMemoryRecord(title, value, 'Help Memory Vault', type);
-    saveUserData();
-    if (titleEl) titleEl.value = '';
-    if (valueEl) valueEl.value = '';
-    refreshMemoryVaultList();
-    refreshPrivacyDataSummary();
-    showTemporaryMessage('Memory saved.');
-    return true;
-}
-
-function editMemoryItem(encodedKey) {
-    const key = decodeURIComponent(String(encodedKey || ''));
-    const current = normalizeMemoryRecord(key, memoryStore?.[key]);
-    if (!key || !current.value) return;
-    const nextValue = window.prompt(`Edit memory: ${current.title || key}`, current.value);
-    if (nextValue === null) return;
-    const value = String(nextValue || '').trim();
-    if (!value) {
-        showTemporaryMessage('Memory value cannot be empty.');
-        return;
-    }
-    memoryStore[key] = {
-        ...current,
-        value,
-        updatedAt: new Date().toISOString()
-    };
-    saveUserData();
-    refreshMemoryVaultList();
-    showTemporaryMessage('Memory updated.');
-}
-
-function deleteMemoryItem(encodedKey) {
-    const key = decodeURIComponent(String(encodedKey || ''));
-    if (!key || !Object.prototype.hasOwnProperty.call(memoryStore || {}, key)) return;
-    delete memoryStore[key];
-    saveUserData();
-    refreshMemoryVaultList();
-    refreshPrivacyDataSummary();
-    showTemporaryMessage('Memory item deleted.');
-}
-
-function parseMemorySaveRequest(text) {
-    const raw = String(text || '').trim();
-    if (!raw) return null;
-    let match = raw.match(/^(?:save\s+note|note)\s*:\s*(.+)$/i);
-    if (match) {
-        const value = match[1].trim();
-        return { key: normalizeThing(value.split(/\s+/).slice(0, 6).join(' ')) || 'note', value, type: 'note', sourcePhrase: raw };
-    }
-    match = raw.match(/^remember\s+(?:that\s+)?(.+?)\s+(?:is|are)\s+(.+)$/i);
-    if (match) {
-        const key = normalizeThing(match[1].replace(/^my\s+/i, ''));
-        return { key, value: match[2].trim(), type: inferMemoryRecordType(key, match[2], raw), sourcePhrase: raw };
-    }
-    match = raw.match(/^remember\s*:\s*(.+)$/i);
-    if (match) {
-        const value = match[1].trim();
-        return { key: normalizeThing(value.split(/\s+/).slice(0, 6).join(' ')) || 'note', value, type: 'note', sourcePhrase: raw };
-    }
-    match = raw.match(/^my\s+(.+?)\s+(?:is|are)\s+(.+)$/i);
-    if (match && /\b(in|on|at|inside|near|with)\b/i.test(match[2])) {
-        const key = normalizeThing(match[1]);
-        return { key, value: match[2].trim(), type: 'location', sourcePhrase: raw };
-    }
-    match = raw.match(/^i\s+(?:put|left)\s+(?:my\s+)?(.+?)\s+(in|on|at|inside|near)\s+(.+)$/i);
-    if (match) {
-        const key = normalizeThing(match[1]);
-        return { key, value: `${match[2]} ${match[3]}`.trim(), type: 'location', sourcePhrase: raw };
-    }
-    return null;
-}
-
-function isMemoryShowRequest(text) {
-    const t = String(text || '').toLowerCase().trim();
-    return /\b(show|open|list|view)\s+(my\s+)?(saved\s+)?(notes?|memory|memories|memory vault)\b/.test(t) ||
-        /\bwhat\s+(have|did)\s+you\s+(remember|saved?)\b/.test(t);
-}
-
-function parseMemoryForgetRequest(text) {
-    const raw = String(text || '').trim();
-    const match = raw.match(/^(?:forget|delete memory|remove memory|delete saved note|remove saved note)\s+(.+)$/i);
-    if (!match) return '';
-    return normalizeThing(match[1].replace(/^(about|for|my|the)\s+/i, ''));
-}
-
-function showSavedMemoryVault(query = '') {
-    normalizeMemoryStoreRecords();
-    const matches = findRelevantSavedMemory(query, 10);
-    const entries = matches.length
-        ? matches
-        : Object.entries(memoryStore || {})
-            .filter(([key]) => key !== 'name')
-            .slice(0, 10)
-            .map(([key, record]) => {
-                const normalized = normalizeMemoryRecord(key, record);
-                return { key, value: normalized.value, category: normalized.type || normalized.category || 'note', updatedAt: normalized.updatedAt };
-            });
-    const response = entries.length
-        ? `Memory Vault\n\n${entries.map(item => `- ${item.key} (${item.category || 'note'}): ${item.value}`).join('\n')}`
-        : 'Memory Vault is empty. Save something with "remember ..." or "save note: ...".';
-    addChatMessage(response, false);
-    saveToHistory(String(query || 'show memory'), response);
-    return true;
-}
-
-function forgetMemoryByQuery(query) {
-    const term = normalizeThing(query);
-    if (!term) return false;
-    normalizeMemoryStoreRecords();
-    const directKey = Object.keys(memoryStore || {}).find(key => normalizeThing(key) === term);
-    const match = directKey || findRelevantSavedMemory(term, 1)[0]?.key || '';
-    if (!match || !memoryStore[match]) return false;
-    delete memoryStore[match];
-    saveUserData();
-    refreshMemoryVaultList();
-    refreshPrivacyDataSummary();
-    addChatMessage(`Removed "${match}" from Memory Vault.`, false);
-    saveToHistory(`forget ${query}`, `Removed "${match}" from Memory Vault.`);
-    return true;
-}
-
 // ========== CONTENT MODERATION ==========
 function isInappropriateContent(text) {
     const lower = text.toLowerCase();
@@ -1118,8 +942,7 @@ function isConversationRecallRequest(text) {
 function isMemoryStorageRequest(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    return Boolean(parseMemorySaveRequest(text)) ||
-        /\b(my\s+.+\s+(?:is|are)\s+(?:in|on|at)\s+.+|i\s+(?:put|left)\s+(?:my\s+)?.+\s+(?:in|on|at)\s+.+|remember\s+that\s+my\s+.+\s+(?:is|are)\s+(?:in|on|at)\s+.+)\b/.test(t);
+    return /\b(my\s+.+\s+(?:is|are)\s+(?:in|on|at)\s+.+|i\s+(?:put|left)\s+(?:my\s+)?.+\s+(?:in|on|at)\s+.+|remember\s+that\s+my\s+.+\s+(?:is|are)\s+(?:in|on|at)\s+.+)\b/.test(t);
 }
 
 function isMemoryRecallRequest(text) {
@@ -2238,27 +2061,6 @@ async function handleOneShotTranslation(text) {
     addChatMessage(reply, false);
     saveToHistory(text, reply);
     return true;
-}
-
-function getTranslatorHelperLanguage() {
-    return resolveTranslatorLanguage(document.getElementById('translator-helper-language')?.value || 'hindi') || 'hindi';
-}
-
-async function translateHelperOnce(phrase = '') {
-    const textEl = document.getElementById('translator-helper-text');
-    const sourceText = String(phrase || textEl?.value || '').trim();
-    if (!sourceText) {
-        showTemporaryMessage('Enter a phrase to translate.');
-        return false;
-    }
-    const language = getTranslatorHelperLanguage();
-    await handleOneShotTranslation(`translate "${sourceText}" to ${supportedLanguages[language]?.name || language}`);
-    return true;
-}
-
-async function startTranslatorHelperMode() {
-    const language = getTranslatorHelperLanguage();
-    await activateTranslatorMode(language);
 }
 
 // Activate translator mode 
@@ -4541,121 +4343,15 @@ let showRoutingDebugBadge = false;
                         <section class="help-settings-card">
                             <div class="help-section-heading">
                                 <div>
-                                    <h3 class="font-bold">Vision</h3>
-                                    <p class="text-xs">Tune camera answers and check vision readiness.</p>
-                                </div>
-                                <button type="button" class="memory-action-btn" onclick="runSystemDiagnostics()">Run checks</button>
-                            </div>
-                            <div class="space-y-3">
-                                <div>
-                                    <p class="text-xs font-bold mb-2">Detail level</p>
-                                    <div class="flex flex-wrap gap-2">
-                                        <button type="button" data-mode-group="vision-detail" data-mode-value="concise" data-base-class="memory-action-btn" onclick="setVisionDetailLevel('concise')">Concise</button>
-                                        <button type="button" data-mode-group="vision-detail" data-mode-value="balanced" data-base-class="memory-action-btn" onclick="setVisionDetailLevel('balanced')">Balanced</button>
-                                        <button type="button" data-mode-group="vision-detail" data-mode-value="detailed" data-base-class="memory-action-btn" onclick="setVisionDetailLevel('detailed')">Detailed</button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <p class="text-xs font-bold mb-2">Evidence</p>
-                                    <div class="flex flex-wrap gap-2">
-                                        <button type="button" data-mode-group="vision-evidence" data-mode-value="on" data-base-class="memory-action-btn" onclick="setVisionShowEvidence(true)">Show</button>
-                                        <button type="button" data-mode-group="vision-evidence" data-mode-value="off" data-base-class="memory-action-btn" onclick="setVisionShowEvidence(false)">Hide</button>
-                                    </div>
-                                </div>
-                                <div id="system-check-panel" class="help-diagnostics-panel">
-                                    <p id="system-check-summary" class="text-xs font-bold">${escapeHtml(buildVisionDiagnosticsSummary())}</p>
-                                    <div id="system-check-results" class="text-xs space-y-1 mt-2">${buildVisionDiagnosticsHtml()}</div>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section class="help-settings-card">  
-                            <div class="help-section-heading">
-                                <div>
-                                    <h3 class="font-bold">Memory Vault</h3>
-                                    <p class="text-xs">Add, search, edit, and delete explicit saved notes on this device.</p>
-                                </div>
-                                <button type="button" class="memory-action-btn" onclick="showSavedMemoryVault()">Show in chat</button>
-                            </div>
-                            <label class="memory-persist-row flex items-center justify-between gap-3 mb-3">
-                                <span class="memory-persist-label text-xs font-medium">Persist memory on this device</span>
-                                <input type="checkbox" id="persist-memory-toggle" class="h-4 w-4" ${persistMemoryToDevice ? 'checked' : ''} onchange="toggleMemoryPersistence(this.checked)">
-                            </label>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
-                                <select id="memory-vault-type" class="custom-system-prompt-input !min-h-0 !h-10">
-                                    <option value="note">Note</option>
-                                    <option value="location">Location</option>
-                                    <option value="preference">Preference</option>
-                                    <option value="reminder">Reminder</option>
-                                </select>
-                                <input id="memory-vault-title" class="custom-system-prompt-input !min-h-0 !h-10 md:col-span-2" placeholder="Title, e.g. passport">
-                            </div>
-                            <textarea id="memory-vault-value" class="custom-system-prompt-input mb-2" rows="2" placeholder="Saved detail, e.g. in the drawer"></textarea>
-                            <div class="flex flex-wrap gap-2 mb-3">
-                                <button type="button" onclick="addMemoryVaultItemFromHelp()" class="memory-action-btn">Add Memory</button>
-                                <input id="memory-vault-search" class="custom-system-prompt-input !min-h-0 !h-9 flex-1 min-w-[180px]" placeholder="Search memory" oninput="filterMemoryVault()">
-                            </div>
-                            <div id="memory-inspector-list" class="mt-3">
-                                ${buildMemoryInspectorHtml()}
-                            </div>
-                        </section> 
-
-                        <section class="help-settings-card">
-                            <div class="help-section-heading">
-                                <div>
-                                    <h3 class="font-bold">Voice shortcuts</h3>
-                                    <p class="text-xs">Say these commands while voice input or converse mode is active.</p>
-                                </div>
-                            </div>
-                            <div class="text-xs grid grid-cols-1 md:grid-cols-2 gap-2">
-                                <div>open vision</div>
-                                <div>start translator</div>
-                                <div>show memory</div>
-                                <div>export data</div>
-                                <div>delete local data</div>
-                                <div>new chat</div>
-                                <div>read this</div>
-                                <div>summarize this</div>
-                            </div>
-                        </section>
-
-                        <section class="help-settings-card">
-                            <div class="help-section-heading">
-                                <div>
-                                    <h3 class="font-bold">Translator helper</h3>
-                                    <p class="text-xs">Translate one phrase or start translator mode with local controls.</p>
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
-                                <select id="translator-helper-language" class="custom-system-prompt-input !min-h-0 !h-10">
-                                    ${Object.entries(supportedLanguages).map(([key, lang]) => `<option value="${escapeHtml(key)}">${escapeHtml(lang.name)}</option>`).join('')}
-                                </select>
-                                <input id="translator-helper-text" class="custom-system-prompt-input !min-h-0 !h-10 md:col-span-2" placeholder="Phrase to translate">
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                                <button type="button" class="memory-action-btn" onclick="translateHelperOnce()">Translate Once</button>
-                                <button type="button" class="memory-action-btn" onclick="startTranslatorHelperMode()">Start Mode</button>
-                                <button type="button" class="memory-action-btn" onclick="translateHelperOnce('How much does this cost?')">Cost phrase</button>
-                                <button type="button" class="memory-action-btn" onclick="translateHelperOnce('Where is the restroom?')">Restroom phrase</button>
-                                <button type="button" class="memory-action-btn" onclick="translateHelperOnce('I need help.')">Help phrase</button>
-                            </div>
-                        </section>
-
-                        <section class="help-settings-card">
-                            <div class="help-section-heading">
-                                <div>
-                                    <h3 class="font-bold">Privacy & Data Center</h3>
+                                    <h3 class="font-bold">Data controls</h3>
                                     <p class="text-xs">Review, export, and delete browser-local app data.</p>
                                 </div>
                             </div>
                             <div id="privacy-data-summary" class="help-diagnostics-panel text-xs space-y-1 mb-3">${buildPrivacyDataSummaryHtml()}</div>
                             <div class="flex flex-wrap gap-2">
-                                <button type="button" onclick="exportAllLocalDataJson()" class="memory-action-btn">Export All Data</button>
                                 <button type="button" onclick="exportChatHistoryJson()" class="memory-action-btn">Export Chat Only</button>
-                                <button type="button" onclick="clearSavedMemoryStore()" class="memory-action-btn">Clear Memory</button>
                                 <button type="button" onclick="clearConversationHistoryData()" class="memory-action-btn">Clear Chat</button>
-                                <button type="button" onclick="clearLocalPreferencesData()" class="memory-action-btn">Clear Preferences</button>
-                                <button type="button" onclick="deleteAllLocalDataNow()" class="memory-action-btn">Delete All Local Data</button>
+                                <button type="button" onclick="clearSavedMemoryStore()" class="memory-action-btn">Clear Memory</button>
                             </div>
                         </section>
 
@@ -5206,7 +4902,6 @@ let showRoutingDebugBadge = false;
             if (!ok) return;
             memoryStore = {};
             saveUserData();
-            refreshMemoryVaultList();
             refreshPrivacyDataSummary();
             showTemporaryMessage('Saved memory cleared.');
         }
@@ -5234,7 +4929,6 @@ let showRoutingDebugBadge = false;
             window.JarvisState?.resetConversationState();
             saveUserData();
             localStorage.removeItem(getHistoryStorageKey());
-            refreshMemoryVaultList();
             refreshPrivacyDataSummary();
             showTemporaryMessage('Memory and history cleared.');
         }
@@ -7545,36 +7239,6 @@ ${code}
                 if (chatContainer) chatContainer.innerHTML = '';
                 saveConversationHistory();
                 showTemporaryMessage('Chat cleared.');
-                return true;
-            }
-            if (/^(open|start|turn on|enable)\s+(vision|live vision|camera)$/.test(t)) {
-                if (!isContinuousVisionActive) toggleContinuousVision();
-                showTemporaryMessage('Opening Live Vision.');
-                return true;
-            }
-            if (/^(show|open|list)\s+(memory|memories|memory vault|saved notes)$/.test(t)) {
-                showSavedMemoryVault();
-                return true;
-            }
-            if (/^(export data|export all data|download data)$/.test(t)) {
-                exportAllLocalDataJson();
-                return true;
-            }
-            if (/^(delete local data|delete all data|wipe local data|reset app data)$/.test(t)) {
-                deleteAllLocalDataNow();
-                return true;
-            }
-            if (/^(start|open|enable)\s+translator(?:\s+(.+))?$/.test(t)) {
-                const language = resolveTranslatorLanguage(t.match(/translator\s+(.+)$/i)?.[1] || 'hindi') || 'hindi';
-                activateTranslatorMode(language);
-                return true;
-            }
-            if (/^(read this|summarize this)$/.test(t)) {
-                if (isContinuousVisionActive) {
-                    handleContinuousVisionQuery(t === 'read this' ? 'read the visible text' : 'summarize what you see');
-                } else {
-                    addChatMessage('Open Live Vision first so I can read or summarize what the camera sees.', false);
-                }
                 return true;
             }
             return false;
@@ -15511,104 +15175,12 @@ function exportChatHistoryJson() {
     }
 }
 
-function getLocalStorageEntriesByPrefix(prefixes = ['jarvis_', 'unify_']) {
-    const entries = {};
-    try {
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (!key || !prefixes.some(prefix => key.startsWith(prefix))) continue;
-            const raw = localStorage.getItem(key);
-            try {
-                entries[key] = JSON.parse(raw);
-            } catch (_) {
-                entries[key] = raw;
-            }
-        }
-    } catch (_) {}
-    return entries;
-}
-
-function collectLocalDataSnapshot() {
-    normalizeMemoryStoreRecords();
-    const localEntries = getLocalStorageEntriesByPrefix();
-    const cachedFactEntries = Object.fromEntries(
-        Object.entries(localEntries).filter(([key]) => key.startsWith('jarvis_current_fact_'))
-    );
-    return {
-        exportedAt: new Date().toISOString(),
-        memory: memoryStore || {},
-        chatHistory: sanitizeConversationHistoryRecords(conversationHistory),
-        preferences: {
-            userEmail: localEntries.jarvis_user_email || '',
-            learnedPreferences: localEntries.jarvis_learned_preferences || null,
-            assistantModes: localEntries.jarvis_assistant_modes || null,
-            persistMemory: localEntries.jarvis_persist_memory ?? persistMemoryToDevice,
-            voiceLanguage: localEntries.jarvis_voice_input_language || ''
-        },
-        feedbackLearning: localEntries.jarvis_feedback_learning || localEntries.jarvis_feedback || null,
-        cachedFacts: cachedFactEntries,
-        rawLocalSettings: localEntries
-    };
-}
-
-function downloadJsonPayload(payload, filenamePrefix) {
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${filenamePrefix}-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
-}
-
-function exportAllLocalDataJson() {
-    try {
-        downloadJsonPayload(collectLocalDataSnapshot(), 'jarvis-local-data');
-        showTemporaryMessage('Local app data exported.');
-        return true;
-    } catch (_) {
-        showTemporaryMessage('Could not export local data.');
-        return false;
-    }
-}
-
-function clearLocalPreferencesData() {
-    try {
-        [
-            'jarvis_user_email',
-            'jarvis_learned_preferences',
-            'jarvis_assistant_modes',
-            'jarvis_voice_input_language',
-            'jarvis_has_visited',
-            'jarvis_feedback_learning',
-            'jarvis_feedback'
-        ].forEach(key => localStorage.removeItem(key));
-        const factKeys = [];
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith('jarvis_current_fact_')) factKeys.push(key);
-        }
-        factKeys.forEach(key => localStorage.removeItem(key));
-        refreshPrivacyDataSummary();
-        showTemporaryMessage('Preferences and cached facts cleared.');
-    } catch (_) {
-        showTemporaryMessage('Could not clear preferences.');
-    }
-}
-
 function buildPrivacyDataSummaryHtml() {
     const memoryCount = Object.keys(memoryStore || {}).filter(key => key !== 'name').length;
     const historyCount = Array.isArray(conversationHistory) ? conversationHistory.length : 0;
-    const entries = getLocalStorageEntriesByPrefix();
-    const cachedFactCount = Object.keys(entries).filter(key => key.startsWith('jarvis_current_fact_')).length;
-    const hasPrefs = Boolean(entries.jarvis_learned_preferences || entries.jarvis_assistant_modes || entries.jarvis_voice_input_language || entries.jarvis_user_email);
     return [
         `Memory: ${memoryCount} item${memoryCount === 1 ? '' : 's'}`,
-        `Chat history: ${historyCount} record${historyCount === 1 ? '' : 's'}`,
-        `Preferences: ${hasPrefs ? 'stored' : 'none'}`,
-        `Cached facts: ${cachedFactCount}`
+        `Chat history: ${historyCount} record${historyCount === 1 ? '' : 's'}`
     ].map(line => `<div>${escapeHtml(line)}</div>`).join('');
 }
 
@@ -15651,7 +15223,6 @@ function cleanExistingConversationHistory() {
                 window.JarvisState?.resetConversationState?.();
                 const chatContainer = document.getElementById('chat-container');
                 if (chatContainer) chatContainer.innerHTML = '';
-                refreshMemoryVaultList();
                 refreshPrivacyDataSummary();
                 showTemporaryMessage('All local app data deleted.');
             } catch (_) {
@@ -15880,31 +15451,13 @@ function detectInputLanguageHint(text) {
                 return;
             }
 
-            if (/\b(export all data|export local data|download all data|export data)\b/i.test(compact)) {
-                exportAllLocalDataJson();
-                return;
-            }
-
-            if (/\b(export (chat|history)|download (chat|history))\b/i.test(compact)) {
+            if (/\b(export (chat|history|data)|download (chat|history))\b/i.test(compact)) {
                 exportChatHistoryJson();
                 return;
             }
 
             if (/\b(delete all data|wipe local data|clear all local data|reset app data)\b/i.test(compact)) {
                 deleteAllLocalDataNow();
-                return;
-            }
-
-            if (isMemoryShowRequest(compact)) {
-                showSavedMemoryVault(compact);
-                return;
-            }
-
-            const forgetMemoryQuery = parseMemoryForgetRequest(compact);
-            if (forgetMemoryQuery) {
-                if (!forgetMemoryByQuery(forgetMemoryQuery)) {
-                    addChatMessage(`I could not find a saved memory matching "${forgetMemoryQuery}".`, false);
-                }
                 return;
             }
 
@@ -18136,18 +17689,6 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
         }
 
         async function handleMemoryStorage(text) {
-            const parsed = parseMemorySaveRequest(text);
-            if (parsed?.key && parsed?.value) {
-                normalizeMemoryStoreRecords();
-                memoryStore[parsed.key] = createExplicitMemoryRecord(parsed.key, parsed.value, parsed.sourcePhrase || text, parsed.type || '');
-                saveUserData();
-                refreshMemoryVaultList();
-                refreshPrivacyDataSummary();
-                const response = `Saved to Memory Vault: ${parsed.key} - ${parsed.value}`;
-                addChatMessage(response, false);
-                saveToHistory(text, response);
-                return;
-            }
             const lower = text.toLowerCase();
             
             
