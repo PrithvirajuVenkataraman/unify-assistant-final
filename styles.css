@@ -814,16 +814,18 @@ body.dark .composer-action-item:hover {
 }
 
 .assistant-action-menu {
-    position: absolute;
-    right: 0;
-    top: 34px;
-    z-index: 80;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 9999;
     min-width: 170px;
+    max-width: min(240px, calc(100vw - 16px));
     padding: 6px;
     border: 1px solid rgba(148, 163, 184, 0.25);
     border-radius: 8px;
     background: #05070d;
     box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+    transform: translate3d(0, 0, 0);
 }
 
 .assistant-action-menu button {
@@ -867,8 +869,7 @@ body.dark .composer-action-item:hover {
     }
 
     .assistant-action-menu {
-        right: auto;
-        left: 0;
+        min-width: 178px;
     }
 }
 
@@ -1043,9 +1044,9 @@ body.dark .footer-action-btn-primary:hover {
     width: min(420px, calc(100vw - 24px));
     border-radius: 14px;
     overflow: hidden;
-    border: 1px solid var(--ui-border);
-    background: var(--ui-surface);
-    box-shadow: 0 10px 24px rgba(2, 6, 23, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.34) !important;
+    background: #000000 !important;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.72);
     pointer-events: auto;
 }
 
@@ -1059,8 +1060,8 @@ body.dark .footer-action-btn-primary:hover {
     justify-content: space-between;
     gap: 8px;
     padding: 7px 8px;
-    background: var(--ui-surface-muted);
-    border-bottom: 1px solid var(--ui-border);
+    background: #000000 !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.24) !important;
 }
 
 .continuous-vision-actions {
@@ -1079,21 +1080,21 @@ body.dark .footer-action-btn-primary:hover {
     font-size: 10px;
     font-weight: 700;
     letter-spacing: 0.02em;
-    color: #ffffff;
-    background: var(--ui-primary);
+    color: #000000 !important;
+    background: #ffffff !important;
 }
 
 .continuous-vision-minimize,
 .continuous-vision-close {
-    border: 1px solid var(--ui-border);
+    border: 1px solid rgba(255, 255, 255, 0.34) !important;
     border-radius: 8px;
     padding: 4px 8px;
     min-width: fit-content;
     white-space: nowrap;
     font-size: 11px;
     font-weight: 700;
-    color: var(--ui-text);
-    background: var(--ui-surface);
+    color: #ffffff !important;
+    background: #000000 !important;
 }
 
 .continuous-vision-preview.is-minimized {
@@ -1102,6 +1103,7 @@ body.dark .footer-action-btn-primary:hover {
 
 .continuous-vision-preview.is-minimized .continuous-vision-video,
 .continuous-vision-preview.is-minimized .continuous-vision-zoom-controls,
+.continuous-vision-preview.is-minimized .continuous-vision-status,
 .continuous-vision-preview.is-minimized .continuous-vision-hint {
     display: none !important;
 }
@@ -1110,7 +1112,8 @@ body.dark .footer-action-btn-primary:hover {
     width: 100%;
     aspect-ratio: 4 / 3;
     object-fit: cover;
-    background: #000;
+    background: #000000 !important;
+    display: block;
 }
 
 .camera-zoom-controls,
@@ -1119,7 +1122,7 @@ body.dark .footer-action-btn-primary:hover {
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
-    background: rgba(15, 23, 42, 0.94);
+    background: #000000 !important;
     border-top: 1px solid rgba(148, 163, 184, 0.28);
 }
 
@@ -1227,8 +1230,41 @@ body.dark .footer-action-btn-primary:hover {
     padding: 6px 8px;
     font-size: 11px;
     font-weight: 600;
-    color: var(--ui-text-muted);
-    background: var(--ui-surface);
+    color: rgba(255, 255, 255, 0.82) !important;
+    background: #000000 !important;
+}
+
+.continuous-vision-status {
+    margin: 0;
+    padding: 6px 8px 0;
+    font-size: 11px;
+    font-weight: 800;
+    color: #ffffff !important;
+    background: #000000 !important;
+    letter-spacing: 0.01em;
+}
+
+.continuous-vision-status[data-state="ready"] {
+    color: #bbf7d0 !important;
+}
+
+.continuous-vision-status[data-state="loading"] {
+    color: #dbeafe !important;
+}
+
+.continuous-vision-status[data-state="warning"] {
+    color: #fde68a !important;
+}
+
+.continuous-vision-status[data-state="error"] {
+    color: #fecaca !important;
+}
+
+.help-diagnostics-panel {
+    border: 1px solid rgba(255, 255, 255, 0.34) !important;
+    border-radius: 10px;
+    padding: 10px;
+    background: #000000 !important;
 }
 
 /* Selection helper */
