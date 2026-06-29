@@ -946,15 +946,17 @@ function formatVisionResponse(data, task, userPrompt = '') {
 
 function buildObjectFirstVisionAnswer({ directAnswer, summary, objects, brand, model, modelEvidence, distinctiveFeatures, uncertainty, compactText, explainIntent, detailedIntent, includeText }) {
     const topObject = pickTopObjectLabel(objects);
+    const topObjectMeta = pickTopObjectMeta(objects);
     const answer = removeDetectedTextLead(compactSingleLine(directAnswer || summary));
     const parts = [];
     const identity = [brand, model].filter(Boolean).join(' ').trim();
+    const confidence = normalizeVisionConfidence(topObjectMeta?.confidence, uncertainty);
 
     if (identity) {
         const qualified = uncertainty ? `likely ${identity}` : identity;
-        parts.push(topObject ? `This looks like ${withArticle(qualified)} (${topObject}).` : `This looks like ${withArticle(qualified)}.`);
+        parts.push(`Likely item: ${topObject ? `${qualified} (${topObject})` : qualified}.`);
     } else if (topObject) {
-        parts.push(`I see ${withArticle(topObject)}.`);
+        parts.push(detailedIntent || explainIntent ? `Likely item: ${topObject}.` : `Visible item: ${topObject}.`);
     } else if (answer) {
         parts.push(answer);
     }
@@ -975,14 +977,22 @@ function buildObjectFirstVisionAnswer({ directAnswer, summary, objects, brand, m
         parts.push(`Uncertainty: ${uncertainty}`);
     }
 
+    if (confidence) {
+        parts.push(`Confidence: ${confidence}.`);
+    }
+
     if (includeText && compactText) {
-        parts.push(`I also see something written as "${compactTextForMention(compactText)}."`);
+        parts.push(`Readable text: "${compactTextForMention(compactText)}."`);
     }
 
     return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 
 function pickTopObjectLabel(objects) {
+    return pickTopObjectMeta(objects)?.label || '';
+}
+
+function pickTopObjectMeta(objects) {
     if (!Array.isArray(objects) || !objects.length) return '';
     const skip = /^(text|words|lettering|logo|label|screen|display|brand|writing|document|paper)$/i;
     const sorted = objects
@@ -992,7 +1002,16 @@ function pickTopObjectLabel(objects) {
         }))
         .filter(item => item.label && !skip.test(item.label))
         .sort((a, b) => b.confidence - a.confidence);
-    return sorted[0]?.label || '';
+    return sorted[0] || null;
+}
+
+function normalizeVisionConfidence(score, uncertainty = '') {
+    if (uncertainty) return 'medium';
+    const value = Number(score);
+    if (!Number.isFinite(value)) return '';
+    if (value >= 0.82) return 'high';
+    if (value >= 0.55) return 'medium';
+    return 'low';
 }
 
 function withArticle(label) {
