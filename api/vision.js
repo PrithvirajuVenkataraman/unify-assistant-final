@@ -747,6 +747,8 @@ function buildVisionPrompt(userPrompt, task) {
             : '- For general vision, focus on the most prominent foreground object first. Do not let small background text dominate the answer.',
         '- Ignore wall color/background/decor unless user explicitly asks for background.',
         '- If a clear product or object is prominent, name it in answer and summary.',
+        '- For phones, tablets, laptops, earbuds, watches, and other consumer electronics, identify the likely brand and model only from visible evidence such as logos, camera layout, button placement, ports, colors, screen UI, or readable text.',
+        '- If the exact model is uncertain, say "likely" and explain the visible evidence. Do not pretend certainty.',
         'If text appears, preserve character accuracy, punctuation, and line order.',
         'Detect visible objects including products, people, animals, food, devices, vehicles, and common items.',
         'If user asks "what is this" or "explain this product/part", identify the most likely item and explain its practical purpose briefly.',
@@ -758,6 +760,11 @@ function buildVisionPrompt(userPrompt, task) {
         '{',
         '  "summary": "short useful summary",',
         '  "answer": "direct concise answer to user prompt",',
+        '  "brand": "visible or likely brand when supported, otherwise empty string",',
+        '  "model": "visible or likely product/model when supported, otherwise empty string",',
+        '  "modelEvidence": ["visible clue supporting the brand/model"],',
+        '  "distinctiveFeatures": ["camera layout, logo, color, ports, UI, shape, or other useful visual details"],',
+        '  "uncertainty": "short uncertainty note, or empty string when confident",',
         '  "objects": [',
         '    { "label": "person", "count": 2, "confidence": 0.88 }',
         '  ],',
@@ -778,12 +785,12 @@ function buildVisionPrompt(userPrompt, task) {
         'Rules:',
         '- Use empty arrays when a section does not apply.',
         '- Confidence values must be between 0 and 1.',
-        '- Keep summary under 35 words.',
-        '- Keep answer under 80 words.',
+        '- Keep summary under 45 words.',
+        '- Keep answer under 140 words for product/object identification, otherwise under 80 words.',
         '- Do not fabricate unreadable text; only include likely readable snippets.',
         isTextTask
             ? '- For OCR tasks: prioritize exact text extraction first. Preserve row order, numbers, totals, units, and symbols exactly.'
-            : '- For non-OCR tasks: answer with the main visible object first. Mention readable text only briefly as secondary context.'
+            : '- For non-OCR tasks: answer with the main visible object first. For product/device identification, include likely brand/model, evidence, distinctive features, and uncertainty when useful.'
     ].join('\n');
 }
 
@@ -808,7 +815,7 @@ function getTaskRule(task) {
         case 'translate_to_english':
             return 'Extract visible text and translate it accurately to English.';
         default:
-            return 'Answer user query concisely. Prefer text/software content over scene background. If no text is readable, describe or explain the main foreground object.';
+            return 'Answer the user query with useful object/product detail. Prefer the prominent foreground item. For devices, infer brand/model only from visible evidence and qualify uncertainty.';
     }
 }
 
@@ -850,7 +857,7 @@ function safeParseJson(text) {
 
 function wantsDetailedVisionResponse(task, userPrompt) {
     const text = String(userPrompt || '').toLowerCase();
-    if (/\b(tell me everything|everything|all details|full details|detailed|in detail|explain fully|complete breakdown|show all)\b/.test(text)) {
+    if (/\b(tell me everything|everything|all details|full details|detailed|in detail|explain fully|complete breakdown|show all|what is this|what's this|identify|which model|what model|what phone|which phone|brand|product)\b/.test(text)) {
         return true;
     }
     // OCR-focused tasks should remain detailed by default.
@@ -876,6 +883,11 @@ function formatVisionResponse(data, task, userPrompt = '') {
     const billTotals = Array.isArray(bill.totals) ? bill.totals : [];
     const hasReadableText = Boolean(fullText || textDetected.length);
     const compactText = fullText || textDetected.slice(0, 12).join('\n');
+    const brand = String(data?.brand || '').trim();
+    const model = String(data?.model || '').trim();
+    const modelEvidence = Array.isArray(data?.modelEvidence) ? data.modelEvidence.map(v => String(v || '').trim()).filter(Boolean) : [];
+    const distinctiveFeatures = Array.isArray(data?.distinctiveFeatures) ? data.distinctiveFeatures.map(v => String(v || '').trim()).filter(Boolean) : [];
+    const uncertainty = String(data?.uncertainty || '').trim();
 
     if (task === 'text_extract') {
         if (compactText) return `Detected text:\n${compactText.slice(0, 6000)}`;
@@ -910,12 +922,19 @@ function formatVisionResponse(data, task, userPrompt = '') {
     }
 
     const explainIntent = isObjectExplanationIntent(userPrompt);
+    const detailedIntent = wantsDetailedVisionResponse(task, userPrompt);
     const objectFirstAnswer = buildObjectFirstVisionAnswer({
         directAnswer,
         summary,
         objects,
+        brand,
+        model,
+        modelEvidence,
+        distinctiveFeatures,
+        uncertainty,
         compactText,
         explainIntent,
+        detailedIntent,
         includeText: hasReadableText
     });
     if (objectFirstAnswer) {
@@ -925,19 +944,35 @@ function formatVisionResponse(data, task, userPrompt = '') {
     return conciseVisionFallback(directAnswer, summary, objects);
 }
 
-function buildObjectFirstVisionAnswer({ directAnswer, summary, objects, compactText, explainIntent, includeText }) {
+function buildObjectFirstVisionAnswer({ directAnswer, summary, objects, brand, model, modelEvidence, distinctiveFeatures, uncertainty, compactText, explainIntent, detailedIntent, includeText }) {
     const topObject = pickTopObjectLabel(objects);
     const answer = removeDetectedTextLead(compactSingleLine(directAnswer || summary));
     const parts = [];
+    const identity = [brand, model].filter(Boolean).join(' ').trim();
 
-    if (topObject) {
+    if (identity) {
+        const qualified = uncertainty ? `likely ${identity}` : identity;
+        parts.push(topObject ? `This looks like ${withArticle(qualified)} (${topObject}).` : `This looks like ${withArticle(qualified)}.`);
+    } else if (topObject) {
         parts.push(`I see ${withArticle(topObject)}.`);
     } else if (answer) {
         parts.push(answer);
     }
 
-    if (explainIntent && answer && topObject && !answer.toLowerCase().includes(topObject.toLowerCase())) {
+    if ((explainIntent || detailedIntent) && answer && (!identity || !answer.toLowerCase().includes(identity.toLowerCase()))) {
         parts.push(answer);
+    }
+
+    if (detailedIntent && modelEvidence?.length) {
+        parts.push(`Evidence: ${modelEvidence.slice(0, 3).join('; ')}.`);
+    }
+
+    if (detailedIntent && distinctiveFeatures?.length) {
+        parts.push(`Visible details: ${distinctiveFeatures.slice(0, 4).join('; ')}.`);
+    }
+
+    if (uncertainty) {
+        parts.push(`Uncertainty: ${uncertainty}`);
     }
 
     if (includeText && compactText) {
@@ -1004,7 +1039,7 @@ function conciseVisionFallback(directAnswer, summary, objects) {
 
 function isObjectExplanationIntent(userPrompt) {
     const text = String(userPrompt || '').toLowerCase();
-    return /\b(what is this|what is that|identify|explain|about this|about that|product|part|component|use|used for|purpose|how it works)\b/.test(text);
+    return /\b(what is this|what's this|what is that|identify|explain|about this|about that|product|part|component|use|used for|purpose|how it works|what phone|which phone|what model|which model|brand)\b/.test(text);
 }
 
 function normalizeDetected(list) {
