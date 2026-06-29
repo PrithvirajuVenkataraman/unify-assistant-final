@@ -1455,8 +1455,38 @@ function copyAssistantPlan(button) {
     copyToClipboard(text);
 }
 
+function isInternalPromptText(text) {
+    const value = String(text || '').trim();
+    if (!value) return true;
+    return /(Check whether this answer is accurate|Answer to verify:|Original user request:|Return a clear verification report|Retrieved source evidence|Local review flags|User custom reply instructions|Payload JSON:|Intent: generic_reply|OCR JSON:|Planner JSON:|Critic JSON:)/i.test(value);
+}
+
+function setLastVisibleUserMessage(text) {
+    const value = String(text || '').trim();
+    if (!value || isInternalPromptText(value)) return false;
+    lastVisibleUserMessage = value;
+    window.__lastUserMessage = value;
+    return true;
+}
+
+function getLastVisibleUserMessage() {
+    const visible = String(lastVisibleUserMessage || '').trim();
+    if (visible && !isInternalPromptText(visible)) return visible;
+    const legacy = String(window.__lastUserMessage || '').trim();
+    return legacy && !isInternalPromptText(legacy) ? legacy : '';
+}
+
+function addVisibleInputHistory(text) {
+    const value = String(text || '').trim();
+    if (!value || isInternalPromptText(value)) return;
+    if (!inputHistory.length || inputHistory[inputHistory.length - 1] !== value) {
+        inputHistory.push(value);
+        if (inputHistory.length > 50) inputHistory = inputHistory.slice(-50);
+    }
+}
+
 function retryLastRequest() { 
-    const last = window.__lastUserMessage;
+    const last = getLastVisibleUserMessage();
     if (!last) return;
     const input = document.getElementById('text-input');
     if (!input) return;
@@ -3707,7 +3737,7 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
             !intent.wantsHotels, 
           __retried: false };
 
-        window.__lastUserMessage = normalizedUserMessage;  
+        setLastVisibleUserMessage(normalizedUserMessage);  
  
         const responseMode = detectRequestedResponseLength(normalizedUserMessage); 
         const responseHint = RESPONSE_LENGTH_HINTS[responseMode] || RESPONSE_LENGTH_HINTS.normal; 
@@ -3946,6 +3976,7 @@ let showRoutingDebugBadge = false;
         let regenerationInProgress = false;
         let openAssistantActionMenuId = '';
         let lastAssistantMessageId = '';
+        let lastVisibleUserMessage = '';
         const pendingAssistantVerifications = new Set();
 
         // Chat scroll-lock state
@@ -4289,7 +4320,8 @@ let showRoutingDebugBadge = false;
                     }
                 }
                 const idx = inputHistory.length - 1 - inputHistoryIndex;
-                input.value = inputHistory[idx] || '';
+                const historyValue = inputHistory[idx] || '';
+                input.value = isInternalPromptText(historyValue) ? '' : historyValue;
                 autoResizeComposerTextarea();
                 toggleSendButton();
             });
@@ -5710,9 +5742,15 @@ let showRoutingDebugBadge = false;
             }
             regenerationInProgress = true;
             closeAssistantActionMenus();
-            const actionButton = Array.from(document.querySelectorAll('.assistant-action-row'))
-                .find(row => row.dataset.messageId === String(messageId || ''))
-                ?.querySelector('[aria-label="Regenerate"]');
+            const sourceRow = Array.from(document.querySelectorAll('.assistant-action-row'))
+                .find(row => row.dataset.messageId === String(messageId || ''));
+            const replaceTarget = sourceRow?.closest?.('[data-role="assistant"]') || document.querySelector(`[data-role="assistant"][data-message-id="${CSS.escape(String(messageId || ''))}"]`);
+            if (!sourceRow || !replaceTarget) {
+                regenerationInProgress = false;
+                showTemporaryMessage('I cannot regenerate that answer because its message is no longer available.');
+                return;
+            }
+            const actionButton = sourceRow.querySelector('[aria-label="Regenerate"]');
             if (actionButton) actionButton.disabled = true;
 
             const previousContext = Array.isArray(conversationContext)
@@ -5722,7 +5760,7 @@ let showRoutingDebugBadge = false;
                 ? conversationHistory.map(item => ({ ...item }))
                 : [];
             const previousEngineState = window.JarvisConversation?.getState?.() || null;
-            const previousLastUserMessage = window.__lastUserMessage;
+            const previousLastUserMessage = getLastVisibleUserMessage();
             const previousRenderContext = beginResponseRenderContext(turn || {
                 id: meta?.turnId || '',
                 rawPrompt,
@@ -5731,7 +5769,7 @@ let showRoutingDebugBadge = false;
                 replaceMessageId: messageId,
                 isRegeneration: true
             });
-            window.__lastUserMessage = rawPrompt;
+            setLastVisibleUserMessage(rawPrompt);
             beginAssistantProcessing();
             try {
                 conversationContext = Array.isArray(turn?.contextSnapshot)
@@ -5752,7 +5790,7 @@ let showRoutingDebugBadge = false;
                 if (previousEngineState) {
                     window.JarvisConversation?.restoreState?.(previousEngineState);
                 }
-                window.__lastUserMessage = previousLastUserMessage;
+                if (previousLastUserMessage) setLastVisibleUserMessage(previousLastUserMessage);
                 restoreResponseRenderContext(previousRenderContext);
                 endAssistantProcessing();
                 regenerationInProgress = false;
@@ -5771,7 +5809,7 @@ let showRoutingDebugBadge = false;
             }
             closeAssistantActionMenus();
             hideSelectionHelperPopover();
-            window.__lastUserMessage = actual;
+            setLastVisibleUserMessage(visible || String(options?.displayProcessingPrompt || '').trim() || 'Programmatic action');
             const turn = createConversationTurn(visible || actual, actual, 'programmatic', {
                 displayProcessingPrompt: String(options?.displayProcessingPrompt || visible || actual).trim(),
                 topicLabel: String(options?.topicLabel || visible || '').trim(),
@@ -7129,11 +7167,8 @@ async function sendTextInput(submission = {}) {
                     ? 'Converse mode is listening...'
                     : 'Ask anything...';
                 toggleSendButton();
-                window.__lastUserMessage = outgoingText;
-                if (text && (!inputHistory.length || inputHistory[inputHistory.length - 1] !== text)) {
-                    inputHistory.push(text);
-                    if (inputHistory.length > 50) inputHistory = inputHistory.slice(-50);
-                }
+                setLastVisibleUserMessage(outgoingText);
+                addVisibleInputHistory(outgoingText);
                 inputHistoryIndex = -1;
                 addChatMessage(outgoingText, true, null, { turnId: turn.id });
 
@@ -17779,7 +17814,7 @@ async function editMessage(button) {
         textNode.innerHTML = escapeHtml(nextText).replace(/\n/g, '<br>');
     }
     button.dataset.message = encodeURIComponent(nextText);
-    window.__lastUserMessage = nextText;
+    setLastVisibleUserMessage(nextText);
     const turn = createConversationTurn(nextText, nextText, 'edited');
     const previousRenderContext = beginResponseRenderContext(turn);
     if (userRow) userRow.dataset.turnId = turn.id;
@@ -18368,7 +18403,7 @@ async function handleContinuousVisionQuery(text) {
                 ? `Extract all readable text and translate it to English. User query: "${text}".` 
                 : (isWebsiteUiIntent
                     ? `Identify the website, web app, mobile app, or UI shown in the image using only visible evidence. First use visible branding, logo, page title, header, or app chrome. If branding is unclear, inspect visible URL/address-bar/domain/tab text and extract the likely site or app name. Do not guess or use web search. If no brand or URL is visible, describe the UI normally and say the site name is not visible. User query: "${text}". Respond in 1-2 short sentences.`
-                    : `Describe only what is relevant to the user query. Focus on the most prominent foreground object first. If readable text is visible, mention it only as secondary context, for example: "I also see something written as ...". If the user asks about a product/part/object, identify it and explain its practical use briefly. Preserve exact numbers/symbols/equations when text exists. User query: "${text}". Respond in 1-2 short sentences, concise and practical.`)); 
+                    : `Describe what is relevant to the user query. Focus on the most prominent foreground object first. If it is a phone, tablet, laptop, wearable, or other product, infer the likely brand/model only from visible evidence such as logos, camera layout, ports, buttons, colors, UI, or readable text; say "likely" when uncertain and include the evidence. If readable text is visible, mention it as secondary context. Preserve exact numbers/symbols/equations when text exists. User query: "${text}".`)); 
         const response = await fetch('/api/vision', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -18444,6 +18479,15 @@ function formatVisionJsonToReadableText(payload) {
     if (!payload || typeof payload !== 'object') return '';
     const summary = String(payload.summary || '').trim();
     const directAnswer = String(payload.answer || '').trim();
+    const brand = String(payload.brand || '').trim();
+    const model = String(payload.model || '').trim();
+    const modelEvidence = Array.isArray(payload.modelEvidence)
+        ? payload.modelEvidence.map(v => String(v || '').trim()).filter(Boolean)
+        : [];
+    const distinctiveFeatures = Array.isArray(payload.distinctiveFeatures)
+        ? payload.distinctiveFeatures.map(v => String(v || '').trim()).filter(Boolean)
+        : [];
+    const uncertainty = String(payload.uncertainty || '').trim();
     const objects = Array.isArray(payload.objects) ? payload.objects : [];
     const fullText = String(payload.fullText || '').trim();
     const textDetected = Array.isArray(payload.textDetected)
@@ -18452,13 +18496,33 @@ function formatVisionJsonToReadableText(payload) {
     const compactText = fullText || textDetected.slice(0, 12).join('\n');
     const objectLabel = pickReadableVisionObject(objects);
     const parts = [];
+    const identity = [brand, model].filter(Boolean).join(' ').trim();
 
-    if (objectLabel) {
+    if (identity) {
+        const qualified = uncertainty ? `likely ${identity}` : identity;
+        parts.push(objectLabel ? `This looks like ${withReadableArticle(qualified)} (${objectLabel}).` : `This looks like ${withReadableArticle(qualified)}.`);
+    } else if (objectLabel) {
         parts.push(`I see ${withReadableArticle(objectLabel)}.`);
     } else if (directAnswer) {
         parts.push(directAnswer.replace(/\s+/g, ' ').trim().slice(0, 280));
     } else if (summary) {
         parts.push(summary.replace(/\s+/g, ' ').trim().slice(0, 280));
+    }
+
+    if (directAnswer && identity && !directAnswer.toLowerCase().includes(identity.toLowerCase())) {
+        parts.push(directAnswer.replace(/\s+/g, ' ').trim().slice(0, 280));
+    }
+
+    if (modelEvidence.length) {
+        parts.push(`Evidence: ${modelEvidence.slice(0, 3).join('; ')}.`);
+    }
+
+    if (distinctiveFeatures.length) {
+        parts.push(`Visible details: ${distinctiveFeatures.slice(0, 4).join('; ')}.`);
+    }
+
+    if (uncertainty) {
+        parts.push(`Uncertainty: ${uncertainty}`);
     }
 
     if (compactText) {
@@ -18597,8 +18661,9 @@ function refineVisionAnswer(text) {
         .trim();
 
     const sentences = splitReadableSentences(out);
-    if (sentences.length > 2) {
-        out = sentences.slice(0, 2).join(' ');
+    const maxSentences = /\b(Evidence:|Visible details:|Uncertainty:|likely\s+[A-Z0-9])/.test(out) ? 4 : 2;
+    if (sentences.length > maxSentences) {
+        out = sentences.slice(0, maxSentences).join(' ');
     }
     return out;
 }
