@@ -413,6 +413,17 @@ assert.match(SOURCE.visionApi, /"model": "visible or likely product\/model/);
 assert.match(SOURCE.visionApi, /"modelEvidence": \["visible clue supporting the brand\/model"\]/);
 assert.match(SOURCE.visionApi, /"distinctiveFeatures": \["camera layout, logo, color, ports, UI, shape, or other useful visual details"\]/);
 assert.match(SOURCE.visionApi, /infer brand\/model only from visible evidence/);
+assert.match(SOURCE.visionApi, /Likely item:/);
+assert.match(SOURCE.visionApi, /Confidence: \$\{confidence\}\./);
+assert.match(SOURCE.appHtml, /id="continuous-vision-status"/);
+assert.match(SOURCE.appHtml, /function updateContinuousVisionStatus/);
+assert.match(SOURCE.appHtml, /function addVisionRecoveryMessage/);
+assert.match(SOURCE.appHtml, /function buildVisionDiagnosticsHtml/);
+assert.match(SOURCE.appHtml, /setVisionDetailLevel/);
+assert.match(SOURCE.appHtml, /setVisionShowEvidence/);
+assert.match(SOURCE.styles, /\.continuous-vision-preview\s*\{[\s\S]*background:\s*#000000\s*!important/);
+assert.match(SOURCE.styles, /\.continuous-vision-preview-header\s*\{[\s\S]*background:\s*#000000\s*!important/);
+assert.match(SOURCE.styles, /\.continuous-vision-status/);
 assert.match(SOURCE.speechInput, /try English or another language/);
 assert.match(SOURCE.chatGroqApi, /forceReview: false/);
 assert.doesNotMatch(SOURCE.chatGroqApi, /forceReview: !isInternalSummary/);
@@ -579,9 +590,11 @@ assert.deepEqual(visiblePromptSandbox.inputHistory, ['What is this phone?']);
 
 const visionFormatSandbox = {};
 vm.createContext(visionFormatSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'pickReadableVisionObjectMeta'), visionFormatSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'pickReadableVisionObject'), visionFormatSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'withReadableArticle'), visionFormatSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'compactVisionTextMention'), visionFormatSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeReadableVisionConfidence'), visionFormatSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'formatVisionJsonToReadableText'), visionFormatSandbox);
 const richVisionText = visionFormatSandbox.formatVisionJsonToReadableText({
     answer: 'It appears to be an iPhone based on the rear camera cluster.',
@@ -592,10 +605,11 @@ const richVisionText = visionFormatSandbox.formatVisionJsonToReadableText({
     uncertainty: 'Exact model is not fully certain from this angle.',
     objects: [{ label: 'smartphone', count: 1, confidence: 0.91 }]
 });
-assert.match(richVisionText, /likely Apple iPhone 15 Pro/);
+assert.match(richVisionText, /Likely item: likely Apple iPhone 15 Pro \(smartphone\)/);
 assert.match(richVisionText, /Evidence: triple rear camera layout; Apple logo visible/);
 assert.match(richVisionText, /Visible details: titanium-like side rail; square camera bump/);
 assert.match(richVisionText, /Uncertainty: Exact model is not fully certain/);
+assert.match(richVisionText, /Confidence: medium/);
 
 console.log('deterministic-checks-ok'); 
 
