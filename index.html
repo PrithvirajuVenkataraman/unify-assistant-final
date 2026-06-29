@@ -194,6 +194,7 @@
             <button type="button" class="continuous-vision-zoom-btn" onclick="adjustContinuousVisionZoom(0.25)" aria-label="Zoom in">+</button>
             <button type="button" class="continuous-vision-zoom-reset" onclick="resetContinuousVisionZoom()" aria-label="Reset live vision zoom">Reset</button>
         </div>
+        <p id="continuous-vision-status" class="continuous-vision-status" role="status">Camera inactive</p>
         <p id="continuous-vision-hint" class="continuous-vision-hint">Camera is on. Ask: "What do you see?"</p>
     </div>
     <canvas id="continuous-vision-canvas" class="hidden"></canvas>
@@ -3944,6 +3945,9 @@ async function handleNameCorrection(text) {
         let newsVerificationMode = 'normal';
         let persistMemoryToDevice = true;
         let medicalMode = false;
+        let visionDetailLevel = 'balanced';
+        let visionShowEvidence = true;
+        let recentVisionError = '';
 let supportConversationMode = false;
 
 const supportedLanguages = Object.freeze({
@@ -4192,6 +4196,24 @@ let showRoutingDebugBadge = false;
             enforceDarkMode();
         }
 
+        function buildVisionDiagnosticsSummary() {
+            return `Vision diagnostics: ${isContinuousVisionActive ? 'camera active' : 'camera inactive'}`;
+        }
+
+        function buildVisionDiagnosticsHtml() {
+            const cameraSupport = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+            const rows = [
+                { label: 'Browser camera support', ok: cameraSupport, detail: cameraSupport ? 'Available' : 'Unavailable' },
+                { label: 'Live Vision state', ok: isContinuousVisionActive, detail: isContinuousVisionActive ? 'Active' : 'Inactive' },
+                { label: 'Vision route', ok: true, detail: 'Run checks to verify /api/vision' },
+                { label: 'Recent vision error', ok: !recentVisionError, detail: recentVisionError || 'None' }
+            ];
+            return rows.map(row => {
+                const status = row.ok ? 'PASS' : 'INFO';
+                return `<div><span class="font-semibold">${status}</span> - ${escapeHtml(row.label)}: ${escapeHtml(row.detail)}</div>`;
+            }).join('');
+        }
+
         
         
         function showHelpModal() {
@@ -4235,6 +4257,37 @@ let showRoutingDebugBadge = false;
                                 placeholder="Example: Reply like ChatGPT. Be concise, structured, direct, and avoid unnecessary endings."
                                 oninput="setCustomSystemPrompt(this.value, false)"
                                 onchange="setCustomSystemPrompt(this.value, true)">${escapeHtml(customSystemPrompt)}</textarea>
+                        </section>
+
+                        <section class="help-settings-card">
+                            <div class="help-section-heading">
+                                <div>
+                                    <h3 class="font-bold">Vision</h3>
+                                    <p class="text-xs">Tune camera answers and check vision readiness.</p>
+                                </div>
+                                <button type="button" class="memory-action-btn" onclick="runSystemDiagnostics()">Run checks</button>
+                            </div>
+                            <div class="space-y-3">
+                                <div>
+                                    <p class="text-xs font-bold mb-2">Detail level</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button type="button" data-mode-group="vision-detail" data-mode-value="concise" data-base-class="memory-action-btn" onclick="setVisionDetailLevel('concise')">Concise</button>
+                                        <button type="button" data-mode-group="vision-detail" data-mode-value="balanced" data-base-class="memory-action-btn" onclick="setVisionDetailLevel('balanced')">Balanced</button>
+                                        <button type="button" data-mode-group="vision-detail" data-mode-value="detailed" data-base-class="memory-action-btn" onclick="setVisionDetailLevel('detailed')">Detailed</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-bold mb-2">Evidence</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <button type="button" data-mode-group="vision-evidence" data-mode-value="on" data-base-class="memory-action-btn" onclick="setVisionShowEvidence(true)">Show</button>
+                                        <button type="button" data-mode-group="vision-evidence" data-mode-value="off" data-base-class="memory-action-btn" onclick="setVisionShowEvidence(false)">Hide</button>
+                                    </div>
+                                </div>
+                                <div id="system-check-panel" class="help-diagnostics-panel">
+                                    <p id="system-check-summary" class="text-xs font-bold">${escapeHtml(buildVisionDiagnosticsSummary())}</p>
+                                    <div id="system-check-results" class="text-xs space-y-1 mt-2">${buildVisionDiagnosticsHtml()}</div>
+                                </div>
+                            </div>
                         </section>
 
                         <section class="help-settings-card">  
@@ -4335,7 +4388,9 @@ let showRoutingDebugBadge = false;
                     responseFormat,
                     customSystemPrompt,
                     newsVerificationMode,
-                    medicalMode
+                    medicalMode,
+                    visionDetailLevel,
+                    visionShowEvidence
                 }));
             } catch (e) { console.error('Error saving assistant modes:', e); }
         }
@@ -4633,6 +4688,8 @@ let showRoutingDebugBadge = false;
             updateModeButtonGroup('response-length', responseLength);
             updateModeButtonGroup('response-format', responseFormat);
             updateModeButtonGroup('medical-mode', medicalMode ? 'on' : 'off');
+            updateModeButtonGroup('vision-detail', visionDetailLevel);
+            updateModeButtonGroup('vision-evidence', visionShowEvidence ? 'on' : 'off');
             const customInput = document.getElementById('custom-system-prompt-input');
             if (customInput && customInput.value !== customSystemPrompt) {
                 customInput.value = customSystemPrompt;
@@ -4646,6 +4703,8 @@ let showRoutingDebugBadge = false;
             customSystemPrompt = '';
             newsVerificationMode = 'normal';
             medicalMode = false;
+            visionDetailLevel = 'balanced';
+            visionShowEvidence = true;
             supportConversationMode = false;
             try {
                 const saved = localStorage.getItem('jarvis_assistant_modes');
@@ -4659,6 +4718,8 @@ let showRoutingDebugBadge = false;
                     customSystemPrompt = String(parsed.customSystemPrompt || '').trim().slice(0, 1200);
                     newsVerificationMode = ['normal', 'strict'].includes(parsed.newsVerificationMode) ? parsed.newsVerificationMode : 'normal';
                     medicalMode = !!parsed.medicalMode;
+                    visionDetailLevel = ['concise', 'balanced', 'detailed'].includes(parsed.visionDetailLevel) ? parsed.visionDetailLevel : 'balanced';
+                    visionShowEvidence = parsed.visionShowEvidence !== false;
                 }
             } catch (e) {}
             window.responseStyle = responseStyle;
@@ -4668,6 +4729,8 @@ let showRoutingDebugBadge = false;
             window.learningMode = 'standard';
             window.newsVerificationMode = newsVerificationMode;
             window.medicalMode = medicalMode;
+            window.visionDetailLevel = visionDetailLevel;
+            window.visionShowEvidence = visionShowEvidence;
             window.JarvisConversation?.setPreferences({
                 responseLength,
                 responseFormat,
@@ -5153,6 +5216,16 @@ let showRoutingDebugBadge = false;
                 label: 'Live Vision support',
                 ok: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
                 detail: (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? 'Camera API available' : 'Camera API unavailable'
+            });
+            checks.push({
+                label: 'Live Vision active',
+                ok: !!isContinuousVisionActive,
+                detail: isContinuousVisionActive ? 'Camera stream active' : 'Camera stream inactive'
+            });
+            checks.push({
+                label: 'Recent vision error',
+                ok: !recentVisionError,
+                detail: recentVisionError || 'None'
             });
             const [chatPing, visionPing] = await Promise.all([
                 pingEndpoint('/api/chat-groq', { message: 'health check' }),
@@ -6472,6 +6545,22 @@ function normalizeUiTokens(text) {
                 ...meta,
                 sourceType: 'verified'
             });
+        }
+
+        function setVisionDetailLevel(mode, announce = true) {
+            visionDetailLevel = ['concise', 'balanced', 'detailed'].includes(mode) ? mode : 'balanced';
+            window.visionDetailLevel = visionDetailLevel;
+            saveAssistantModes();
+            updateAssistantModeUI();
+            if (announce) showTemporaryMessage(`Vision detail set to ${visionDetailLevel}.`);
+        }
+
+        function setVisionShowEvidence(enabled, announce = true) {
+            visionShowEvidence = !!enabled;
+            window.visionShowEvidence = visionShowEvidence;
+            saveAssistantModes();
+            updateAssistantModeUI();
+            if (announce) showTemporaryMessage(visionShowEvidence ? 'Vision evidence is visible.' : 'Vision evidence is hidden.');
         }
 
         function normalizeVerifiedLiveMessage(input) {
@@ -18142,6 +18231,32 @@ let continuousVisionRotationDeg = 0;
 let continuousVisionFacingMode = 'environment';
 let continuousVisionZoomState = { value: 1, min: 1, max: 3, step: 0.1, hardware: false };
 
+function updateContinuousVisionStatus(message, state = 'info') {
+    const statusEl = document.getElementById('continuous-vision-status');
+    if (!statusEl) return;
+    statusEl.textContent = String(message || '').trim() || 'Camera inactive';
+    statusEl.dataset.state = String(state || 'info').trim();
+}
+
+function queueVisionRetry(text) {
+    const input = document.getElementById('text-input');
+    if (!input) return;
+    input.value = String(text || 'What do you see?').trim();
+    input.focus();
+    toggleSendButton();
+}
+
+function addVisionRecoveryMessage(message, retryText = 'What do you see?') {
+    const safeMessage = escapeHtml(String(message || 'Vision analysis failed. Please try again.'));
+    const safeRetry = encodeURIComponent(String(retryText || 'What do you see?').trim());
+    addChatMessage(`
+        <div>
+            <p class="assistant-md-p">${safeMessage}</p>
+            <button type="button" class="memory-action-btn mt-2" onclick="queueVisionRetry(decodeURIComponent('${safeRetry}'))">Retry vision</button>
+        </div>
+    `, false, true);
+}
+
 function applyContinuousVisionRotation() {
     const videoEl = document.getElementById('continuous-vision-video');
     if (!videoEl) return;
@@ -18277,11 +18392,13 @@ async function toggleContinuousVision() {
         document.getElementById('continuous-vision-zoom-controls')?.classList.add('hidden');
         setContinuousVisionMinimized(false);
         previewShell?.classList.add('hidden');
+        updateContinuousVisionStatus('Camera inactive', 'info');
         isContinuousVisionActive = false;
         btn.classList.remove('bg-blue-100', 'text-blue-600', 'dark:bg-blue-900/30');
         showTemporaryMessage('Continuous Vision deactivated.');
     } else {
         try {
+            updateContinuousVisionStatus('Requesting camera...', 'loading');
             continuousVisionStream = await requestCameraStreamForFacingMode('environment');
             videoEl.srcObject = continuousVisionStream;
             videoEl.muted = true;
@@ -18289,9 +18406,11 @@ async function toggleContinuousVision() {
             applyContinuousVisionRotation();
             videoEl.classList.remove('hidden');
             setContinuousVisionMinimized(false);
-            previewShell?.classList.remove('hidden');
             if (hintEl) hintEl.textContent = 'Camera is on. Ask: "What do you see?"';
             await videoEl.play().catch(() => {});
+            await waitForContinuousVisionReady(1800);
+            previewShell?.classList.remove('hidden');
+            updateContinuousVisionStatus('Camera ready', 'ready');
 
             const track = continuousVisionStream.getVideoTracks?.()[0] || null;
             continuousVisionTrack = track;
@@ -18313,6 +18432,8 @@ async function toggleContinuousVision() {
             btn.classList.add('bg-blue-100', 'text-blue-600', 'dark:bg-blue-900/30');
             showTemporaryMessage('Continuous Vision activated! Ask "What do you see?" or "What am I looking at?"');
         } catch (e) {
+            recentVisionError = String(e?.message || 'Camera access denied or unavailable.').slice(0, 180);
+            updateContinuousVisionStatus('Camera unavailable', 'error');
             showError('Camera access denied or unavailable.');
         }
     }
@@ -18377,6 +18498,7 @@ function isCanvasFrameBlank(ctx, width, height) {
 }
 
 async function handleContinuousVisionQuery(text) {
+    updateContinuousVisionStatus('Preparing frame...', 'loading');
     await waitForContinuousVisionReady();
     let base64 = captureVisionFrame();
     if (!base64) {
@@ -18385,9 +18507,12 @@ async function handleContinuousVisionQuery(text) {
     }
     if (!base64) {
         const msg = 'I cannot see anything. Make sure the camera is active and has permissions.';
-        addChatMessage(msg, false);
+        recentVisionError = msg;
+        updateContinuousVisionStatus('Frame unclear or too dark', 'warning');
+        addVisionRecoveryMessage(msg, text);
         return;
     }
+    updateContinuousVisionStatus('Analyzing frame...', 'loading');
     showThinkingIndicator('Analyzing your view...');
     try {
         const isTextReadIntent = /\b(read|text|ocr|bill|receipt|invoice|sign|label|menu|document)\b/i.test(String(text || '')); 
@@ -18403,7 +18528,7 @@ async function handleContinuousVisionQuery(text) {
                 ? `Extract all readable text and translate it to English. User query: "${text}".` 
                 : (isWebsiteUiIntent
                     ? `Identify the website, web app, mobile app, or UI shown in the image using only visible evidence. First use visible branding, logo, page title, header, or app chrome. If branding is unclear, inspect visible URL/address-bar/domain/tab text and extract the likely site or app name. Do not guess or use web search. If no brand or URL is visible, describe the UI normally and say the site name is not visible. User query: "${text}". Respond in 1-2 short sentences.`
-                    : `Describe what is relevant to the user query. Focus on the most prominent foreground object first. If it is a phone, tablet, laptop, wearable, or other product, infer the likely brand/model only from visible evidence such as logos, camera layout, ports, buttons, colors, UI, or readable text; say "likely" when uncertain and include the evidence. If readable text is visible, mention it as secondary context. Preserve exact numbers/symbols/equations when text exists. User query: "${text}".`)); 
+                    : `Describe what is relevant to the user query in a professional, concise report. Vision detail preference: ${visionDetailLevel}. Evidence display preference: ${visionShowEvidence ? 'include visible evidence when useful' : 'hide evidence unless needed for uncertainty'}. Focus on the most prominent foreground object first. If it is a phone, tablet, laptop, wearable, or other product, infer the likely brand/model only from visible evidence such as logos, camera layout, ports, buttons, colors, UI, or readable text; say "likely" when uncertain and include the evidence. If readable text is visible, mention it as secondary context. Preserve exact numbers/symbols/equations when text exists. User query: "${text}".`)); 
         const response = await fetch('/api/vision', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -18426,7 +18551,9 @@ async function handleContinuousVisionQuery(text) {
             const failMsg = /\bnot found for api version|supported methods|generatecontent|model .* failed with status 404\b/i.test(rawError)
                 ? 'Vision service is temporarily unavailable for the current model. Please retry in a few seconds.'
                 : (rawError || 'Vision analysis failed. Please try again.');
-            addChatMessage(failMsg, false);
+            recentVisionError = failMsg;
+            updateContinuousVisionStatus('Vision model unavailable', 'error');
+            addVisionRecoveryMessage(failMsg, text);
             return;
         }
         const details = data?.details && typeof data.details === 'object' ? data.details : {};
@@ -18443,12 +18570,17 @@ async function handleContinuousVisionQuery(text) {
         if (isWebsiteUiIntent) {
             answer = refineWebsiteUiVisionAnswer(answer, details);
         }
-        if (!answer) answer = 'I can see the image, but I could not generate a clear answer.'; 
+        answer = applyVisionReplyPreferences(answer);
+        if (!answer) answer = 'The frame was received, but I could not produce a reliable visual answer.'; 
+        recentVisionError = '';
+        updateContinuousVisionStatus('Camera ready', 'ready');
         addChatMessage(answer, false);
         saveToHistory(text, answer);
     } catch(e) {
         const msg = 'Vision analysis failed. Please try again.';
-        addChatMessage(msg, false);
+        recentVisionError = String(e?.message || msg).slice(0, 180);
+        updateContinuousVisionStatus('Vision analysis failed', 'error');
+        addVisionRecoveryMessage(msg, text);
     } finally {
         hideThinkingIndicator();
     }
@@ -18495,14 +18627,16 @@ function formatVisionJsonToReadableText(payload) {
         : [];
     const compactText = fullText || textDetected.slice(0, 12).join('\n');
     const objectLabel = pickReadableVisionObject(objects);
+    const objectMeta = pickReadableVisionObjectMeta(objects);
     const parts = [];
     const identity = [brand, model].filter(Boolean).join(' ').trim();
+    const confidence = normalizeReadableVisionConfidence(objectMeta?.confidence, uncertainty);
 
     if (identity) {
         const qualified = uncertainty ? `likely ${identity}` : identity;
-        parts.push(objectLabel ? `This looks like ${withReadableArticle(qualified)} (${objectLabel}).` : `This looks like ${withReadableArticle(qualified)}.`);
+        parts.push(`Likely item: ${objectLabel ? `${qualified} (${objectLabel})` : qualified}.`);
     } else if (objectLabel) {
-        parts.push(`I see ${withReadableArticle(objectLabel)}.`);
+        parts.push(`Visible item: ${objectLabel}.`);
     } else if (directAnswer) {
         parts.push(directAnswer.replace(/\s+/g, ' ').trim().slice(0, 280));
     } else if (summary) {
@@ -18525,8 +18659,12 @@ function formatVisionJsonToReadableText(payload) {
         parts.push(`Uncertainty: ${uncertainty}`);
     }
 
+    if (confidence) {
+        parts.push(`Confidence: ${confidence}.`);
+    }
+
     if (compactText) {
-        parts.push(`I also see something written as "${compactVisionTextMention(compactText)}."`);
+        parts.push(`Readable text: "${compactVisionTextMention(compactText)}."`);
     }
 
     if (parts.length) return parts.join(' ').replace(/\s+/g, ' ').trim();
@@ -18547,6 +18685,10 @@ function formatVisionJsonToReadableText(payload) {
 }
 
 function pickReadableVisionObject(objects) {
+    return pickReadableVisionObjectMeta(objects)?.label || '';
+}
+
+function pickReadableVisionObjectMeta(objects) {
     if (!Array.isArray(objects) || !objects.length) return '';
     const skip = /^(text|words|lettering|logo|label|screen|display|brand|writing|document|paper)$/i;
     const candidates = objects
@@ -18556,7 +18698,16 @@ function pickReadableVisionObject(objects) {
         }))
         .filter(item => item.label && !skip.test(item.label))
         .sort((a, b) => b.confidence - a.confidence);
-    return candidates[0]?.label || '';
+    return candidates[0] || null;
+}
+
+function normalizeReadableVisionConfidence(score, uncertainty = '') {
+    if (uncertainty) return 'medium';
+    const value = Number(score);
+    if (!Number.isFinite(value)) return '';
+    if (value >= 0.82) return 'high';
+    if (value >= 0.55) return 'medium';
+    return 'low';
 }
 
 function withReadableArticle(label) {
@@ -18649,11 +18800,28 @@ function normalizeVisionAnswerForChat(answer, details = {}) {
     return refineVisionAnswer(normalized);
 }
 
+function applyVisionReplyPreferences(answer) {
+    let out = String(answer || '').trim();
+    if (!out) return '';
+    if (!visionShowEvidence) {
+        out = out
+            .replace(/\s*Evidence:\s*[^.]+\.?/gi, '')
+            .replace(/\s*Visible details:\s*[^.]+\.?/gi, '')
+            .replace(/\s*Readable text:\s*"[^"]*"\.?/gi, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+    if (visionDetailLevel === 'concise') {
+        const sentences = splitReadableSentences(out);
+        if (sentences.length > 2) out = sentences.slice(0, 2).join(' ');
+    }
+    return out;
+}
+
 function refineVisionAnswer(text) {
     let out = String(text || '').trim();
     if (!out) return '';
     out = out
-        .replace(/^likely item:\s*[^.]+\.?\s*/i, '')
         .replace(/^detected text:\s*/i, 'I see something written as ')
         .replace(/^\s*person\.\s*/i, '')
         .replace(/\bappears to be\b/gi, 'is')
@@ -18661,7 +18829,7 @@ function refineVisionAnswer(text) {
         .trim();
 
     const sentences = splitReadableSentences(out);
-    const maxSentences = /\b(Evidence:|Visible details:|Uncertainty:|likely\s+[A-Z0-9])/.test(out) ? 4 : 2;
+    const maxSentences = /\b(Likely item:|Evidence:|Visible details:|Uncertainty:|Confidence:|likely\s+[A-Z0-9])/.test(out) ? 5 : 2;
     if (sentences.length > maxSentences) {
         out = sentences.slice(0, maxSentences).join(' ');
     }
