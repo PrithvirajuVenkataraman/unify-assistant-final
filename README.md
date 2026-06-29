@@ -9,6 +9,10 @@ The app is intentionally simple: a static frontend, small browser modules, and N
 - Text chat, explanations, summaries, writing help & planning.
 - Voice-to-text input through the browser.
 - Live Vision for camera-based questions.
+- Memory Vault for explicit local notes, locations, preferences, and reminders.
+- Voice shortcuts for common app actions.
+- Universal Translator Helper for one-shot phrases and translator mode.
+- Privacy & Data Center for export and deletion controls.
 - Weather, location, hotel, food, itinerary, and general transport overview help.
 - Verification that checks an answer against retrieved sources.
 - Local preferences, chat history, regeneration, interruption, and feedback.
@@ -36,6 +40,51 @@ Saved memory items include a normalized key, value, category, created time, upda
 
 Unrelated saved memory is not injected into model context.
 
+## Free Universal Features
+
+### Memory Vault
+
+Memory Vault is a local-first notes area inside Help & Options. It can save structured records with a type, title, value, creation time, update time, and source text. The supported types are note, location, preference, and reminder.
+
+Example commands:
+
+- `remember my passport is in the drawer`
+- `save note: renew the insurance this week`
+- `show my saved notes`
+- `forget passport`
+
+Sensitive memory remains explicit-only. JARVIS should not silently save private facts unless the user clearly asks it to remember or save them.
+
+### Voice Shortcuts
+
+Voice shortcuts use the browser Web Speech flow and do not require a paid service. While voice input or converse mode is active, users can say:
+
+- `open vision`
+- `start translator`
+- `show memory`
+- `export data`
+- `delete local data`
+- `new chat`
+- `read this`
+- `summarize this`
+
+### Universal Translator Helper
+
+The Translator Helper in Help & Options provides target-language buttons, quick phrases, one-shot translation, and translator mode. It reuses the existing translation endpoint and supported language map.
+
+Example commands:
+
+- `translate "How much does this cost?" to Tamil`
+- `say this in Hindi: I need help`
+- `what does "vanakkam" mean in English`
+- `translate to Kannada`
+
+### Privacy & Data Center
+
+The Privacy & Data Center in Help & Options shows local data categories and provides controls to export or delete them. It can export all local app data, export chat only, clear Memory Vault, clear chat, clear preferences and cached facts, or delete all local app data.
+
+Local data categories include Memory Vault records, chat history, preferences, feedback learning, voice language, cached facts, and app settings stored under `jarvis_` or `unify_` localStorage keys.
+
 ## Verification
 
 The Verify action uses a dedicated verification path. It checks the previous answer against retrieved evidence, then returns a report with a verdict, evidence used, how it was checked, claims that need source verification, corrections when needed, and source links.
@@ -53,8 +102,11 @@ The user does not need to provide links. JARVIS searches from the original quest
 
 ## Project Map
 
+- `.github/workflows/quality.yml`: GitHub Actions quality workflow.
+- `.gitignore`: Local files ignored by git.
 - `index.html`: Main application UI and browser-side assistant workflows.
 - `package.json`: Project metadata, scripts, dependency list, and Vercel function settings.
+- `README.md`: Project overview and file map.
 - `styles.css`: App shell, chat layout, thinking indicator, mobile behavior, Live Vision preview, controls, and visual polish.
 - `science-format.js`: Browser-safe formatter for scientific notation, chemistry text, units, and speech-friendly science output.
 - `vercel.json`: Vercel routing and deployment settings.
@@ -97,5 +149,7 @@ The user does not need to provide links. JARVIS searches from the original quest
 ## Privacy Notes
 
 - Chat history, memory, preferences, and feedback are stored in browser localStorage when persistence is enabled.
+- Memory Vault records are explicit-only and stay in browser storage unless exported or deleted.
+- Privacy & Data Center can export all local data, export chat only, clear selected categories, or delete all local app data.
 - Camera, microphone, and location require browser permission.
 - Provider API keys must stay server-side. Do not put them in frontend files.
