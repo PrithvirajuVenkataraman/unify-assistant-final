@@ -119,6 +119,19 @@ const FEATURE_CONTRACTS = Object.freeze({
             /filipino: \{ name: 'Filipino'/,
             /spanish: \{ name: 'Spanish'/,
             /malayalam: \{ name: 'Malayalam'/,
+            /Data controls/,
+            /Export Chat Only/,
+            /Clear Chat/,
+            /Clear Memory/,
+            /function parseOneShotTranslationRequest/,
+            /function handleOneShotTranslation/
+        ],
+        forbidden: [
+            /<label for="speech-language-select" class="font-bold">Voice input<\/label>/,
+            /id="speech-language-select"/,
+            /Availability depends on your browser and device speech recognizer/,
+            /Privacy and answer quality/,
+            /real-time facts are not externally verified/,
             /Memory Vault/,
             /Voice shortcuts/,
             /Translator helper/,
@@ -128,15 +141,8 @@ const FEATURE_CONTRACTS = Object.freeze({
             /function collectLocalDataSnapshot/,
             /function exportAllLocalDataJson/,
             /function clearLocalPreferencesData/,
-            /function parseOneShotTranslationRequest/,
-            /function handleOneShotTranslation/
-        ],
-        forbidden: [
-            /<label for="speech-language-select" class="font-bold">Voice input<\/label>/,
-            /id="speech-language-select"/,
-            /Availability depends on your browser and device speech recognizer/,
-            /Privacy and answer quality/,
-            /real-time facts are not externally verified/
+            /Export All Data/,
+            /Delete All Local Data/
         ]
     },
     ocrCamera: {
@@ -306,10 +312,10 @@ assert.match(SOURCE.appHtml, /ambiguous_short_context/);
 assert.match(SOURCE.appHtml, /function buildAmbiguousShortContextReply/);
 assert.match(SOURCE.appHtml, /function createExplicitMemoryRecord/);
 assert.match(SOURCE.appHtml, /function findRelevantSavedMemory/);
-assert.match(SOURCE.appHtml, /function parseMemorySaveRequest/);
-assert.match(SOURCE.appHtml, /function parseMemoryForgetRequest/);
-assert.match(SOURCE.appHtml, /function showSavedMemoryVault/);
-assert.match(SOURCE.appHtml, /Export All Data/);
+assert.doesNotMatch(SOURCE.appHtml, /function parseMemorySaveRequest/);
+assert.doesNotMatch(SOURCE.appHtml, /function parseMemoryForgetRequest/);
+assert.doesNotMatch(SOURCE.appHtml, /function showSavedMemoryVault/);
+assert.doesNotMatch(SOURCE.appHtml, /Export All Data/);
 assert.match(SOURCE.appHtml, /Relevant saved memory:/);
 assert.doesNotMatch(SOURCE.appHtml, /alwaysShowContextCopilotBadge\s*=\s*true/);
 assert.match(SOURCE.appHtml, /function splitReadableSentences\(text\)/);
@@ -323,12 +329,15 @@ assert.match(SOURCE.readme, /Standout Feature: Context Copilot/);
 assert.match(SOURCE.readme, /local, deterministic, private, and free-for-life/);
 assert.match(SOURCE.readme, /Exact Features/);
 assert.match(SOURCE.readme, /Crawl4AI fallback/);
-assert.match(SOURCE.readme, /Memory Vault/);
-assert.match(SOURCE.readme, /Voice Shortcuts/);
-assert.match(SOURCE.readme, /Universal Translator Helper/);
-assert.match(SOURCE.readme, /Privacy & Data Center/);
-assert.match(SOURCE.readme, /remember my passport is in the drawer/);
-assert.match(SOURCE.readme, /export all local data/i);
+assert.match(SOURCE.readme, /Prompt-Based Translation/);
+assert.match(SOURCE.readme, /Help & Data Controls/);
+assert.match(SOURCE.readme, /export chat, clear chat, and clear memory/i);
+assert.doesNotMatch(SOURCE.readme, /Memory Vault/);
+assert.doesNotMatch(SOURCE.readme, /Voice Shortcuts/);
+assert.doesNotMatch(SOURCE.readme, /Universal Translator Helper/);
+assert.doesNotMatch(SOURCE.readme, /Privacy & Data Center/);
+assert.doesNotMatch(SOURCE.readme, /remember my passport is in the drawer/);
+assert.doesNotMatch(SOURCE.readme, /export all local data/i);
 assert.doesNotMatch(SOURCE.readme, /Public Images/);
 assert.match(SOURCE.readme, /Verification/);
 assert.doesNotMatch(SOURCE.readme, /OCR Uploads/);
