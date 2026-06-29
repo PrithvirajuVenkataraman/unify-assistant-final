@@ -4938,22 +4938,22 @@ let showRoutingDebugBadge = false;
             document.addEventListener('mousedown', (event) => {
                 if (!selectionHelperState.popoverEl) return;
                 if (selectionHelperState.popoverEl.contains(event.target)) return;
-                if (event.target?.closest?.('.assistant-action-menu-wrap')) return;
+                if (event.target?.closest?.('.assistant-action-menu-wrap, .assistant-action-menu')) return;
                 hideSelectionHelperPopover();
             }, true);
             document.addEventListener('touchstart', (event) => {
                 if (!selectionHelperState.popoverEl) return;
                 if (selectionHelperState.popoverEl.contains(event.target)) return;
-                if (event.target?.closest?.('.assistant-action-menu-wrap')) return;
+                if (event.target?.closest?.('.assistant-action-menu-wrap, .assistant-action-menu')) return;
                 hideSelectionHelperPopover();
             }, true);
             document.addEventListener('mousedown', (event) => {
-                if (event.target?.closest?.('.assistant-action-menu-wrap')) return;
+                if (event.target?.closest?.('.assistant-action-menu-wrap, .assistant-action-menu')) return;
                 closeAssistantActionMenus();
             }, true);
             document.addEventListener('click', handleAssistantActionClick, true);
             document.addEventListener('click', (event) => {
-                if (event.target?.closest?.('.assistant-action-menu-wrap')) {
+                if (event.target?.closest?.('.assistant-action-menu-wrap, .assistant-action-menu')) {
                     event.stopPropagation();
                 }
             }, true);
@@ -5515,7 +5515,7 @@ let showRoutingDebugBadge = false;
                     <button type="button" class="assistant-action-icon" data-assistant-action="regenerate" onclick="return handleAssistantActionInline(event, '${safeId}', 'regenerate')" title="Regenerate" aria-label="Regenerate" ${regenAttr}>${getActionIconSvg('retry')}</button>
                     <div class="assistant-action-menu-wrap">
                         <button type="button" class="assistant-action-icon assistant-action-dots" data-assistant-action="menu" onclick="return handleAssistantActionInline(event, '${safeId}', 'menu')" title="More" aria-label="More actions" aria-expanded="false">${getActionIconSvg('dots')}</button>
-                        <div id="assistant-action-menu-${safeId}" class="assistant-action-menu hidden" role="menu"> 
+                        <div id="assistant-action-menu-${safeId}" class="assistant-action-menu hidden" role="menu" data-message-id="${safeId}"> 
                             <button type="button" data-assistant-action="ask" onclick="return handleAssistantActionInline(event, '${safeId}', 'ask')" role="menuitem">${getActionIconSvg('ask')}<span>Ask JARVIS</span></button> 
                             <button type="button" data-assistant-action="verify" onclick="return handleAssistantActionInline(event, '${safeId}', 'verify')" role="menuitem">${getActionIconSvg('verify')}<span>Verify this</span></button> 
                         </div> 
@@ -5546,7 +5546,8 @@ let showRoutingDebugBadge = false;
             const button = event.target?.closest?.('[data-assistant-action]');
             if (!button) return;
             const row = button.closest?.('.assistant-action-row');
-            const messageId = row?.dataset?.messageId || '';
+            const menu = button.closest?.('.assistant-action-menu');
+            const messageId = row?.dataset?.messageId || menu?.dataset?.messageId || '';
             const action = button.dataset.assistantAction || '';
             if (!messageId || !action) return;
             event.__jarvisAssistantActionHandled = true;
@@ -5580,6 +5581,13 @@ let showRoutingDebugBadge = false;
                 menu.classList.add('hidden');
                 menu.style.left = '';
                 menu.style.top = '';
+                const id = String(menu.dataset?.messageId || '').trim();
+                const row = id
+                    ? Array.from(document.querySelectorAll('.assistant-action-row'))
+                        .find(item => item.dataset.messageId === id)
+                    : null;
+                const wrap = row?.querySelector?.('.assistant-action-menu-wrap');
+                if (wrap && menu.parentElement !== wrap) wrap.appendChild(menu);
             });
             document.querySelectorAll('.assistant-action-dots').forEach(btn => btn.setAttribute('aria-expanded', 'false'));
             openAssistantActionMenuId = '';
@@ -5588,6 +5596,7 @@ let showRoutingDebugBadge = false;
         function positionAssistantActionMenu(menu, button) {
             if (!menu || !button) return;
             const buttonRect = button.getBoundingClientRect();
+            if (menu.parentElement !== document.body) document.body.appendChild(menu);
             menu.classList.remove('hidden');
             const menuRect = menu.getBoundingClientRect();
             const margin = 8;
@@ -6061,10 +6070,11 @@ let showRoutingDebugBadge = false;
                 };
                 const input = document.getElementById('text-input');
                 if (input) {
-                    input.value = '';
+                    input.value = 'About this answer: ';
                     input.dataset.inputSource = 'selection';
                     input.placeholder = 'Ask JARVIS about the selected text...';
                     input.focus();
+                    input.setSelectionRange?.(input.value.length, input.value.length);
                     toggleSendButton();
                 }
                 showTemporaryMessage('Selection attached. Type what you want JARVIS to do.');
