@@ -2875,11 +2875,6 @@ svg [fill]:not([fill="none"]) {
     color: unset !important;
 }
 
-.jarvis-sidebar-logo rect {
-    fill: #02070d !important;
-    stroke: #142033 !important;
-}
-
 .jarvis-sidebar-logo circle:nth-of-type(1) {
     fill: none !important;
     stroke: #baf5ff !important;
