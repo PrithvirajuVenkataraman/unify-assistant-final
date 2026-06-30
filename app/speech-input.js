@@ -52,7 +52,11 @@ export function createSpeechInputController(options = {}) {
     }
 
     function emitState() {
-        callbacks.onState(getState());
+        const state = getState();
+        callbacks.onState(state);
+        try {
+            globalThis.dispatchEvent?.(new CustomEvent('jarvis:speech-state', { detail: state }));
+        } catch {}
     }
 
     function clearInterim() {
@@ -159,8 +163,18 @@ export function createSpeechInputController(options = {}) {
             }
             currentInterim = interim.trim();
             callbacks.onInterim(currentInterim, getState());
+            try {
+                globalThis.dispatchEvent?.(new CustomEvent('jarvis:speech-transcript', {
+                    detail: { text: currentInterim, final: false, mode: nextMode }
+                }));
+            } catch {}
             const finalText = finalParts.join(' ').trim();
             if (!finalText) return;
+            try {
+                globalThis.dispatchEvent?.(new CustomEvent('jarvis:speech-transcript', {
+                    detail: { text: finalText, final: true, mode: nextMode }
+                }));
+            } catch {}
             const transcriptId = finalResultIds.join('|');
 
             if (nextMode === 'converse') {
