@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
-    <meta name="mobile-web-app-capable" content="yes"> 
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>JARVIS</title>
@@ -30,9 +30,20 @@
     <aside id="chat-sidebar-panel" class="chat-sidebar-panel" aria-label="Chat history" aria-hidden="true">
         <div class="chat-sidebar-header">
             <div class="chat-sidebar-brand" aria-hidden="true">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                    <path d="M12 2.5a4.3 4.3 0 0 1 4.1 3 4.4 4.4 0 0 1 4.1 6.7 4.4 4.4 0 0 1-2.9 6.8 4.3 4.3 0 0 1-7.4 1.9 4.4 4.4 0 0 1-6.1-5.4A4.3 4.3 0 0 1 5 8.1a4.4 4.4 0 0 1 7-5.6z"></path>
-                    <path d="M8.2 9.2 12 7l3.8 2.2v4.4L12 15.8l-3.8-2.2z"></path>
+                <svg class="jarvis-sidebar-logo" width="34" height="34" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+                    <rect x="5" y="5" width="54" height="54" rx="15" fill="#02070d" stroke="#142033" stroke-width="1.2"></rect>
+                    <circle cx="32" cy="32" r="17.2" stroke="#baf5ff" stroke-width="3.3"></circle>
+                    <circle cx="32" cy="32" r="22.8" stroke="#0ea5e9" stroke-width="1.3" opacity="0.95"></circle>
+                    <path d="M18.7 23.3a23 23 0 0 1 12.1-5.1" stroke="#1fb6ff" stroke-width="2.3" stroke-linecap="round"></path>
+                    <path d="M40.7 18.8a23 23 0 0 1 7.7 5.6" stroke="#40dfff" stroke-width="2.3" stroke-linecap="round"></path>
+                    <path d="M47.2 39.8a23 23 0 0 1-7.7 5.5" stroke="#40dfff" stroke-width="2.3" stroke-linecap="round"></path>
+                    <path d="M29 45.8a23 23 0 0 1-11-6" stroke="#1fb6ff" stroke-width="2.3" stroke-linecap="round"></path>
+                    <path d="M23 19.8h7.8" stroke="#63e8ff" stroke-width="3.6" stroke-linecap="butt"></path>
+                    <path d="M33.7 18.2h8" stroke="#63e8ff" stroke-width="3.6" stroke-linecap="butt" transform="rotate(28 33.7 18.2)"></path>
+                    <path d="M45.2 31h6.6" stroke="#63e8ff" stroke-width="3.6" stroke-linecap="butt" transform="rotate(83 45.2 31)"></path>
+                    <path d="M34.4 45.6h8.2" stroke="#20d8f6" stroke-width="3.6" stroke-linecap="butt"></path>
+                    <path d="M13.7 32.5h6.7" stroke="#63e8ff" stroke-width="3.6" stroke-linecap="butt" transform="rotate(95 13.7 32.5)"></path>
+                    <text x="32" y="35.5" text-anchor="middle" fill="#dffaff" font-size="8.2" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="1.1">JARVIS</text>
                 </svg>
             </div>
             <button type="button" class="chat-sidebar-close" onclick="closeChatSidebar()" aria-label="Close chat history">
@@ -4425,7 +4436,7 @@ let showRoutingDebugBadge = false;
                         <div>
                             <p class="help-modal-kicker">Control Center</p>
                             <h2 id="help-modal-title" class="text-xl font-bold">Help & Options</h2>
-                            <p class="help-modal-subtitle">Tune how JARVIS replies, checks sources, uses vision, and stores local data.</p>
+                            <p class="help-modal-subtitle">Tune how JARVIS replies, checks sources, and stores local data.</p>
                         </div>
                         <button onclick="closeHelpModal()" class="help-modal-close-btn" aria-label="Close Help & Options">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -4448,10 +4459,6 @@ let showRoutingDebugBadge = false;
                             <div>
                                 <span class="help-status-label">Format</span>
                                 <strong>${escapeHtml(responseFormat === 'bullet' ? 'Bullets' : responseFormat === 'steps' ? 'Steps' : 'Paragraph')}</strong>
-                            </div>
-                            <div>
-                                <span class="help-status-label">Vision</span>
-                                <strong>${escapeHtml(visionDetailLevel.charAt(0).toUpperCase() + visionDetailLevel.slice(1))}</strong>
                             </div>
                         </section>
 
@@ -4504,7 +4511,7 @@ let showRoutingDebugBadge = false;
                             <div class="help-section-heading">
                                 <div>
                                     <h3 class="font-bold">Custom instructions</h3>
-                                    <p class="text-xs">Tell JARVIS how to reply. Accuracy and safety still come first.</p>
+                                    <p class="text-xs">Tell JARVIS how to reply. Keep responses concise, useful, and consistent.</p>
                                 </div>
                                 <button type="button" class="memory-action-btn" onclick="resetCustomSystemPrompt()">Reset</button>
                             </div>
@@ -4516,39 +4523,6 @@ let showRoutingDebugBadge = false;
                                 placeholder="Example: Reply like ChatGPT. Be concise, structured, direct, and avoid unnecessary endings."
                                 oninput="setCustomSystemPrompt(this.value, false)"
                                 onchange="setCustomSystemPrompt(this.value, true)">${escapeHtml(customSystemPrompt)}</textarea>
-                        </section>
-
-                        <section class="help-settings-card">
-                            <div class="help-section-heading">
-                                <div>
-                                    <h3 class="font-bold">Safety and vision</h3>
-                                    <p class="text-xs">Set stricter wording for health topics and control camera-answer detail.</p>
-                                </div>
-                            </div>
-                            <div class="help-control-grid">
-                                <div>
-                                    <span class="help-control-label">Medical mode</span>
-                                    <div class="help-segmented-control" role="group" aria-label="Medical mode">
-                                        <button type="button" data-mode-group="medical-mode" data-mode-value="off" onclick="setMedicalMode(false)" aria-pressed="false">Off</button>
-                                        <button type="button" data-mode-group="medical-mode" data-mode-value="on" onclick="setMedicalMode(true)" aria-pressed="false">On</button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <span class="help-control-label">Vision detail</span>
-                                    <div class="help-segmented-control" role="group" aria-label="Vision detail">
-                                        <button type="button" data-mode-group="vision-detail" data-mode-value="concise" onclick="setVisionDetailLevel('concise')" aria-pressed="false">Concise</button>
-                                        <button type="button" data-mode-group="vision-detail" data-mode-value="balanced" onclick="setVisionDetailLevel('balanced')" aria-pressed="false">Balanced</button>
-                                        <button type="button" data-mode-group="vision-detail" data-mode-value="detailed" onclick="setVisionDetailLevel('detailed')" aria-pressed="false">Detailed</button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <span class="help-control-label">Visible evidence</span>
-                                    <div class="help-segmented-control" role="group" aria-label="Vision evidence">
-                                        <button type="button" data-mode-group="vision-evidence" data-mode-value="on" onclick="setVisionShowEvidence(true)" aria-pressed="false">Show</button>
-                                        <button type="button" data-mode-group="vision-evidence" data-mode-value="off" onclick="setVisionShowEvidence(false)" aria-pressed="false">Hide</button>
-                                    </div>
-                                </div>
-                            </div>
                         </section>
 
                         <section class="help-settings-card">
