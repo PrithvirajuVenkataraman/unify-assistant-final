@@ -855,6 +855,148 @@ body.dark .composer-action-item:hover {
     flex: 0 0 auto;
 }
 
+.assistant-improve-chip-row {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-left: 2px;
+}
+
+.assistant-improve-chip {
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    border-radius: 999px;
+    padding: 5px 9px;
+    color: #e5e7eb;
+    background: rgba(15, 23, 42, 0.72);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.assistant-improve-chip:hover {
+    color: #fff;
+    border-color: rgba(226, 232, 240, 0.38);
+    background: rgba(51, 65, 85, 0.86);
+}
+
+.slash-command-picker {
+    position: fixed;
+    z-index: 9998;
+    padding: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 10px;
+    background: #05070d;
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.48);
+}
+
+.slash-command-title {
+    padding: 5px 7px 8px;
+    color: #cbd5e1;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0;
+}
+
+.slash-command-list {
+    display: grid;
+    gap: 4px;
+}
+
+.slash-command-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 0;
+    border-radius: 8px;
+    padding: 9px 10px;
+    color: #f8fafc;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+
+.slash-command-item span {
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.slash-command-item small {
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 650;
+    white-space: nowrap;
+}
+
+.slash-command-item:hover,
+.slash-command-item.is-active {
+    background: rgba(59, 130, 246, 0.18);
+}
+
+.export-format-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(0, 0, 0, 0.58);
+}
+
+.export-format-panel {
+    width: min(360px, 100%);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 10px;
+    background: #05070d;
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.48);
+    padding: 12px;
+}
+
+.export-format-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: #f8fafc;
+    margin-bottom: 10px;
+}
+
+.export-format-header button {
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 8px;
+    color: #f8fafc;
+    background: rgba(148, 163, 184, 0.14);
+    cursor: pointer;
+}
+
+.export-format-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.export-format-actions button {
+    border: 1px solid rgba(148, 163, 184, 0.26);
+    border-radius: 8px;
+    padding: 10px;
+    color: #f8fafc;
+    background: rgba(15, 23, 42, 0.8);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.export-format-actions button:hover {
+    background: rgba(51, 65, 85, 0.9);
+}
+
 @media (max-width: 640px) {
     .footer-action-btn,
     .input-utility-btn {
@@ -866,10 +1008,26 @@ body.dark .composer-action-item:hover {
     .assistant-action-row {
         align-self: flex-start;
         padding-left: 0;
+        flex-wrap: wrap;
     }
 
     .assistant-action-menu {
         min-width: 178px;
+    }
+
+    .assistant-improve-chip-row {
+        flex-basis: 100%;
+        margin-top: 2px;
+    }
+
+    .slash-command-item {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .slash-command-item small {
+        white-space: normal;
     }
 }
 
@@ -940,10 +1098,10 @@ body.dark .footer-action-btn-primary:hover {
 }
 
 .help-modal-enhanced {
-    border-radius: 16px;
+    border-radius: 18px;
     display: flex;
     flex-direction: column;
-    max-height: min(80vh, 720px);
+    max-height: min(88vh, 820px);
     overflow: hidden !important;
 }
 
@@ -962,6 +1120,58 @@ body.dark .footer-action-btn-primary:hover {
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+}
+
+.help-modal-kicker {
+    margin: 0 0 4px;
+    color: var(--ui-text-muted) !important;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.help-modal-subtitle {
+    margin: 4px 0 0;
+    max-width: 560px;
+    color: var(--ui-text-muted) !important;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.help-status-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.help-status-strip > div {
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--ui-border);
+    border-radius: 12px;
+    background: var(--ui-surface-muted);
+}
+
+.help-status-label,
+.help-control-label {
+    display: block;
+    color: var(--ui-text-muted) !important;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+
+.help-status-strip strong {
+    display: block;
+    overflow: hidden;
+    color: var(--ui-text) !important;
+    font-size: 14px;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .noise-level-control {
@@ -1332,6 +1542,63 @@ body.dark .footer-action-btn-primary:hover {
     background: var(--ui-surface-muted);
 }
 
+.help-settings-card-prominent {
+    background: color-mix(in srgb, var(--ui-surface-muted) 82%, var(--ui-primary) 18%);
+}
+
+.help-control-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.help-control-grid > div {
+    min-width: 0;
+}
+
+.help-segmented-control {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--ui-border);
+    border-radius: 12px;
+    background: var(--ui-surface);
+}
+
+.help-segmented-control button {
+    min-width: 0;
+    min-height: 36px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--ui-text-muted) !important;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.1;
+    transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.help-segmented-control button:hover,
+.help-segmented-control button:focus-visible {
+    color: var(--ui-text) !important;
+    background: var(--ui-surface-muted);
+}
+
+.help-segmented-control button:focus-visible {
+    outline: 2px solid var(--ui-primary);
+    outline-offset: 2px;
+}
+
+.help-segmented-control button.is-selected,
+.help-segmented-control button[aria-pressed="true"] {
+    background: var(--ui-primary);
+    color: #ffffff !important;
+    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22);
+}
+
 .custom-system-prompt-input,
 .help-select-control {
     width: 100%;
@@ -1369,13 +1636,13 @@ body.dark .footer-action-btn-primary:hover {
     margin-bottom: 12px;
 }
 
-.response-style-grid {
+.help-response-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
 }
 
-.response-style-card {
+.help-response-card {
     min-height: 82px;
     padding: 12px;
     border: 1px solid var(--ui-border);
@@ -1387,18 +1654,18 @@ body.dark .footer-action-btn-primary:hover {
     transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
 }
 
-.response-style-card:hover,
-.response-style-card:focus-visible {
+.help-response-card:hover,
+.help-response-card:focus-visible {
     border-color: var(--ui-primary);
 }
 
-.response-style-card:focus-visible {
+.help-response-card:focus-visible {
     outline: 2px solid var(--ui-primary);
     outline-offset: 2px;
 }
 
-.response-style-card.is-selected,
-.response-style-card[aria-pressed="true"] {
+.help-response-card.is-selected,
+.help-response-card[aria-pressed="true"] {
     border-color: var(--ui-primary);
     background: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-surface));
     box-shadow: 0 0 0 1px var(--ui-primary);
@@ -1442,8 +1709,30 @@ body.dark .footer-action-btn-primary:hover {
         max-width: min(280px, 80vw);
     }
 
-    .response-style-grid {
+    .help-response-grid {
         grid-template-columns: 1fr;
+    }
+
+    .help-modal-enhanced {
+        max-height: calc(100dvh - 20px);
+    }
+
+    .help-modal-header {
+        align-items: flex-start !important;
+    }
+
+    .help-status-strip,
+    .help-control-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .help-segmented-control {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .help-segmented-control button {
+        padding-left: 6px;
+        padding-right: 6px;
     }
 }
 
