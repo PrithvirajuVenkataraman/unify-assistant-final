@@ -4304,9 +4304,13 @@ let showRoutingDebugBadge = false;
             };
 
             modal.innerHTML = `
-                <div class="help-modal-enhanced max-w-2xl w-full">
-                    <div class="help-modal-header p-5 flex justify-between items-center gap-4">
-                        <h2 id="help-modal-title" class="text-xl font-bold">Help & Options</h2>
+                <div class="help-modal-enhanced max-w-3xl w-full">
+                    <div class="help-modal-header p-5 flex justify-between items-start gap-4">
+                        <div>
+                            <p class="help-modal-kicker">Control Center</p>
+                            <h2 id="help-modal-title" class="text-xl font-bold">Help & Options</h2>
+                            <p class="help-modal-subtitle">Tune how JARVIS replies, checks sources, uses vision, and stores local data.</p>
+                        </div>
                         <button onclick="closeHelpModal()" class="help-modal-close-btn" aria-label="Close Help & Options">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -4316,6 +4320,70 @@ let showRoutingDebugBadge = false;
                     </div>
 
                     <div class="help-modal-body p-5 space-y-4 custom-scrollbar">
+                        <section class="help-status-strip" aria-label="Current assistant settings">
+                            <div>
+                                <span class="help-status-label">Style</span>
+                                <strong>${escapeHtml(responseStyle.charAt(0).toUpperCase() + responseStyle.slice(1))}</strong>
+                            </div>
+                            <div>
+                                <span class="help-status-label">Length</span>
+                                <strong>${escapeHtml(responseLength.charAt(0).toUpperCase() + responseLength.slice(1))}</strong>
+                            </div>
+                            <div>
+                                <span class="help-status-label">Format</span>
+                                <strong>${escapeHtml(responseFormat === 'bullet' ? 'Bullets' : responseFormat === 'steps' ? 'Steps' : 'Paragraph')}</strong>
+                            </div>
+                            <div>
+                                <span class="help-status-label">Vision</span>
+                                <strong>${escapeHtml(visionDetailLevel.charAt(0).toUpperCase() + visionDetailLevel.slice(1))}</strong>
+                            </div>
+                        </section>
+
+                        <section class="help-settings-card help-settings-card-prominent">
+                            <div class="help-section-heading">
+                                <div>
+                                    <h3 class="font-bold">Reply behavior</h3>
+                                    <p class="text-xs">Choose the default tone and structure for normal answers.</p>
+                                </div>
+                            </div>
+                            <div class="help-response-grid">
+                                <button type="button" class="help-response-card" data-mode-group="response-style" data-mode-value="balanced" onclick="setResponseStyle('balanced')" aria-pressed="false">
+                                    <span class="response-style-title">Balanced</span>
+                                    <span class="response-style-description">Direct, useful, and neutral for everyday questions.</span>
+                                </button>
+                                <button type="button" class="help-response-card" data-mode-group="response-style" data-mode-value="chatty" onclick="setResponseStyle('chatty')" aria-pressed="false">
+                                    <span class="response-style-title">Chatty</span>
+                                    <span class="response-style-description">Warmer and more conversational without losing structure.</span>
+                                </button>
+                                <button type="button" class="help-response-card" data-mode-group="response-style" data-mode-value="supportive" onclick="setResponseStyle('supportive')" aria-pressed="false">
+                                    <span class="response-style-title">Supportive</span>
+                                    <span class="response-style-description">Gentler guidance for stressful or personal topics.</span>
+                                </button>
+                                <button type="button" class="help-response-card" data-mode-group="response-style" data-mode-value="debate" onclick="setResponseStyle('debate')" aria-pressed="false">
+                                    <span class="response-style-title">Debate</span>
+                                    <span class="response-style-description">Tests assumptions and compares tradeoffs more actively.</span>
+                                </button>
+                            </div>
+                            <div class="help-control-grid mt-4">
+                                <div>
+                                    <span class="help-control-label">Length</span>
+                                    <div class="help-segmented-control" role="group" aria-label="Response length">
+                                        <button type="button" data-mode-group="response-length" data-mode-value="short" onclick="setResponseLength('short')" aria-pressed="false">Short</button>
+                                        <button type="button" data-mode-group="response-length" data-mode-value="normal" onclick="setResponseLength('normal')" aria-pressed="false">Normal</button>
+                                        <button type="button" data-mode-group="response-length" data-mode-value="detailed" onclick="setResponseLength('detailed')" aria-pressed="false">Detailed</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <span class="help-control-label">Format</span>
+                                    <div class="help-segmented-control" role="group" aria-label="Response format">
+                                        <button type="button" data-mode-group="response-format" data-mode-value="paragraph" onclick="setResponseFormat('paragraph')" aria-pressed="false">Paragraph</button>
+                                        <button type="button" data-mode-group="response-format" data-mode-value="bullet" onclick="setResponseFormat('bullet')" aria-pressed="false">Bullets</button>
+                                        <button type="button" data-mode-group="response-format" data-mode-value="steps" onclick="setResponseFormat('steps')" aria-pressed="false">Steps</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
                         <section class="help-settings-card">
                             <div class="help-section-heading">
                                 <div>
@@ -4332,6 +4400,39 @@ let showRoutingDebugBadge = false;
                                 placeholder="Example: Reply like ChatGPT. Be concise, structured, direct, and avoid unnecessary endings."
                                 oninput="setCustomSystemPrompt(this.value, false)"
                                 onchange="setCustomSystemPrompt(this.value, true)">${escapeHtml(customSystemPrompt)}</textarea>
+                        </section>
+
+                        <section class="help-settings-card">
+                            <div class="help-section-heading">
+                                <div>
+                                    <h3 class="font-bold">Safety and vision</h3>
+                                    <p class="text-xs">Set stricter wording for health topics and control camera-answer detail.</p>
+                                </div>
+                            </div>
+                            <div class="help-control-grid">
+                                <div>
+                                    <span class="help-control-label">Medical mode</span>
+                                    <div class="help-segmented-control" role="group" aria-label="Medical mode">
+                                        <button type="button" data-mode-group="medical-mode" data-mode-value="off" onclick="setMedicalMode(false)" aria-pressed="false">Off</button>
+                                        <button type="button" data-mode-group="medical-mode" data-mode-value="on" onclick="setMedicalMode(true)" aria-pressed="false">On</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <span class="help-control-label">Vision detail</span>
+                                    <div class="help-segmented-control" role="group" aria-label="Vision detail">
+                                        <button type="button" data-mode-group="vision-detail" data-mode-value="concise" onclick="setVisionDetailLevel('concise')" aria-pressed="false">Concise</button>
+                                        <button type="button" data-mode-group="vision-detail" data-mode-value="balanced" onclick="setVisionDetailLevel('balanced')" aria-pressed="false">Balanced</button>
+                                        <button type="button" data-mode-group="vision-detail" data-mode-value="detailed" onclick="setVisionDetailLevel('detailed')" aria-pressed="false">Detailed</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <span class="help-control-label">Visible evidence</span>
+                                    <div class="help-segmented-control" role="group" aria-label="Vision evidence">
+                                        <button type="button" data-mode-group="vision-evidence" data-mode-value="on" onclick="setVisionShowEvidence(true)" aria-pressed="false">Show</button>
+                                        <button type="button" data-mode-group="vision-evidence" data-mode-value="off" onclick="setVisionShowEvidence(false)" aria-pressed="false">Hide</button>
+                                    </div>
+                                </div>
+                            </div>
                         </section>
 
                         <section class="help-settings-card">
@@ -4858,7 +4959,7 @@ let showRoutingDebugBadge = false;
             const buttons = modal.querySelectorAll(`[data-mode-group="${group}"]`);
             buttons.forEach(button => {
                 const isActive = button.dataset.modeValue === selectedValue;
-                if (group === 'response-style') {
+                if (group === 'response-style' || button.closest('.help-segmented-control')) {
                     button.classList.toggle('is-selected', isActive);
                     button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
                     button.setAttribute('data-active', isActive ? 'true' : 'false');
