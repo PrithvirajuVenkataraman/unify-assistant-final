@@ -396,6 +396,378 @@ option {
     outline: none;
 }
 
+.voice-conversation-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 130;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: calc(18px + env(safe-area-inset-top)) 18px calc(22px + env(safe-area-inset-bottom));
+    background: #000000;
+    color: #ffffff;
+}
+
+.voice-conversation-topbar {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.voice-screen-icon-btn,
+.voice-screen-control {
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+    cursor: pointer;
+}
+
+.voice-screen-icon-btn {
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+}
+
+.voice-conversation-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    text-align: center;
+}
+
+.voice-conversation-orb {
+    width: min(220px, 54vw);
+    height: min(220px, 54vw);
+    display: grid;
+    place-items: center;
+    position: relative;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 48%, rgba(255,255,255,0.96), rgba(120,120,120,0.42) 42%, rgba(255,255,255,0.06) 70%, rgba(255,255,255,0.02));
+    box-shadow: 0 0 80px rgba(255,255,255,0.15);
+}
+
+.voice-conversation-orb span {
+    position: absolute;
+    width: 7px;
+    height: 58%;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.52);
+    transform-origin: center;
+}
+
+.voice-conversation-orb span:nth-child(1) { transform: rotate(0deg) scaleY(0.38); }
+.voice-conversation-orb span:nth-child(2) { transform: rotate(45deg) scaleY(0.52); }
+.voice-conversation-orb span:nth-child(3) { transform: rotate(90deg) scaleY(0.34); }
+.voice-conversation-orb span:nth-child(4) { transform: rotate(135deg) scaleY(0.48); }
+
+.voice-conversation-screen.is-listening .voice-conversation-orb span,
+.voice-conversation-screen.is-thinking .voice-conversation-orb span {
+    animation: voice-bar-pulse 1.05s ease-in-out infinite;
+}
+
+.voice-conversation-screen.is-thinking .voice-conversation-orb {
+    box-shadow: 0 0 110px rgba(59, 130, 246, 0.22);
+}
+
+@keyframes voice-bar-pulse {
+    0%, 100% { height: 35%; opacity: 0.55; }
+    50% { height: 72%; opacity: 0.92; }
+}
+
+.voice-conversation-state {
+    margin: 0;
+    font-size: clamp(28px, 7vw, 52px);
+    font-weight: 850;
+    line-height: 1;
+}
+
+.voice-conversation-detail {
+    max-width: 520px;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.66);
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.voice-conversation-transcript {
+    width: min(640px, 92vw);
+    min-height: 78px;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.055);
+    text-align: left;
+}
+
+.voice-conversation-transcript span,
+.voice-conversation-transcript strong {
+    display: block;
+}
+
+.voice-conversation-transcript span {
+    margin-bottom: 6px;
+    color: rgba(255, 255, 255, 0.54);
+    font-size: 11px;
+    font-weight: 850;
+    text-transform: uppercase;
+}
+
+.voice-conversation-transcript strong {
+    color: #ffffff;
+    font-size: 15px;
+    line-height: 1.45;
+}
+
+.voice-conversation-controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.voice-screen-control {
+    min-width: 132px;
+    min-height: 44px;
+    border-radius: 999px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 850;
+}
+
+.voice-screen-control.primary {
+    background: #ffffff;
+    color: #000000;
+    border-color: #ffffff;
+}
+
+.voice-screen-control.danger {
+    color: #fecaca;
+}
+
+.memory-manager-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 125;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(0, 0, 0, 0.62);
+}
+
+.memory-manager-panel {
+    width: min(860px, 100%);
+    max-height: min(86vh, 780px);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 18px;
+    background: #050505;
+    color: #ffffff;
+    padding: 18px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+
+.memory-manager-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.memory-manager-kicker {
+    margin: 0 0 4px;
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 11px;
+    font-weight: 850;
+    text-transform: uppercase;
+}
+
+.memory-manager-header h2 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 850;
+    line-height: 1.1;
+}
+
+.memory-manager-close,
+.memory-manager-search button,
+.memory-manager-toolbar button,
+.memory-manager-actions button {
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.07);
+    color: #ffffff;
+    cursor: pointer;
+}
+
+.memory-manager-close {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+}
+
+.memory-manager-search {
+    display: grid;
+    grid-template-columns: 1fr 42px;
+    gap: 8px;
+}
+
+.memory-manager-search input {
+    min-width: 0;
+    height: 42px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    background: #000000;
+    color: #ffffff;
+    padding: 0 12px;
+    outline: none;
+}
+
+.memory-manager-search input:focus {
+    border-color: rgba(255, 255, 255, 0.48);
+}
+
+.memory-manager-search button,
+.memory-manager-toolbar button,
+.memory-manager-actions button {
+    border-radius: 11px;
+    font-weight: 800;
+}
+
+.memory-manager-toolbar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.memory-manager-toolbar button {
+    min-height: 38px;
+    padding: 8px 12px;
+}
+
+.memory-manager-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: grid;
+    gap: 10px;
+    padding-right: 2px;
+}
+
+.memory-manager-empty {
+    padding: 24px 4px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 14px;
+}
+
+.memory-manager-item {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: start;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.045);
+    padding: 13px;
+}
+
+.memory-manager-item.is-pinned {
+    border-color: rgba(255, 255, 255, 0.36);
+    background: rgba(255, 255, 255, 0.075);
+}
+
+.memory-manager-item-title {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+
+.memory-manager-item-title strong {
+    font-size: 15px;
+}
+
+.memory-manager-item-title span {
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 11px;
+    font-weight: 850;
+    text-transform: uppercase;
+}
+
+.memory-manager-item p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.88);
+    line-height: 1.45;
+}
+
+.memory-manager-item small {
+    display: block;
+    margin-top: 7px;
+    color: rgba(255, 255, 255, 0.52);
+}
+
+.memory-manager-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.memory-manager-actions button {
+    min-height: 32px;
+    padding: 7px 9px;
+    font-size: 12px;
+}
+
+@media (max-width: 640px) {
+    .voice-conversation-screen {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    .voice-conversation-transcript {
+        min-height: 96px;
+    }
+
+    .voice-conversation-controls {
+        align-items: stretch;
+        flex-direction: column-reverse;
+    }
+
+    .voice-screen-control {
+        width: 100%;
+    }
+
+    .memory-manager-backdrop {
+        align-items: stretch;
+        padding: 10px;
+    }
+
+    .memory-manager-panel {
+        max-height: calc(100dvh - 20px);
+        border-radius: 16px;
+        padding: 14px;
+    }
+
+    .memory-manager-item {
+        grid-template-columns: 1fr;
+    }
+
+    .memory-manager-actions {
+        justify-content: flex-start;
+    }
+}
+
 .header-enhanced {
     display: flex;
     align-items: center;
