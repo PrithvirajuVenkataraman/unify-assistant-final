@@ -1760,6 +1760,13 @@ body.dark .footer-action-btn-primary:hover {
 }
 
 .help-modal-enhanced {
+    --ui-surface: #ffffff;
+    --ui-surface-muted: #f3f4f6;
+    --ui-text: #000000;
+    --ui-text-muted: #374151;
+    --ui-border: #cbd5e1;
+    --ui-primary: #111827;
+    --ui-primary-hover: #000000;
     border-radius: 18px;
     display: flex;
     flex-direction: column;
@@ -1803,7 +1810,7 @@ body.dark .footer-action-btn-primary:hover {
 
 .help-status-strip {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
 }
 
@@ -2133,10 +2140,11 @@ body.dark .footer-action-btn-primary:hover {
 }
 
 .help-diagnostics-panel {
-    border: 1px solid rgba(255, 255, 255, 0.34) !important;
+    border: 1px solid #cbd5e1 !important;
     border-radius: 10px;
     padding: 10px;
-    background: #000000 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
 }
 
 /* Selection helper */
@@ -2256,7 +2264,7 @@ body.dark .footer-action-btn-primary:hover {
 
 .help-segmented-control button.is-selected,
 .help-segmented-control button[aria-pressed="true"] {
-    background: var(--ui-primary);
+    background: #000000;
     color: #ffffff !important;
     box-shadow: 0 1px 8px rgba(0, 0, 0, 0.22);
 }
@@ -2328,9 +2336,9 @@ body.dark .footer-action-btn-primary:hover {
 
 .help-response-card.is-selected,
 .help-response-card[aria-pressed="true"] {
-    border-color: var(--ui-primary);
-    background: color-mix(in srgb, var(--ui-primary) 12%, var(--ui-surface));
-    box-shadow: 0 0 0 1px var(--ui-primary);
+    border-color: #000000;
+    background: #f3f4f6;
+    box-shadow: 0 0 0 1px #000000;
 }
 
 .response-style-title,
@@ -2443,7 +2451,7 @@ body.dark .help-modal-enhanced .memory-persist-row {
 
 body.dark .help-modal-enhanced .memory-persist-label,
 body.dark .help-modal-enhanced .memory-action-btn {
-    color: #ffffff !important;
+    color: #000000 !important;
 }
 
 body.dark .help-modal-enhanced .memory-action-btn,
@@ -2451,8 +2459,8 @@ body.dark .help-modal-enhanced .memory-action-btn:hover,
 body.dark .help-modal-enhanced .memory-action-btn:focus,
 body.dark .help-modal-enhanced .memory-action-btn:focus-visible,
 body.dark .help-modal-enhanced .memory-action-btn:active {
-    background: #1e293b !important;
-    border: 1px solid rgba(148, 163, 184, 0.55) !important;
+    background: #e5e7eb !important;
+    border: 1px solid #cbd5e1 !important;
     box-shadow: none !important;
     border-radius: 10px !important;
     padding: 7px 12px !important;
@@ -2964,6 +2972,75 @@ button:hover {
     align-items: center !important;
     justify-content: center !important;
     border: 1px solid rgba(255, 255, 255, 0.45) !important;
+}
+
+.help-modal-enhanced,
+.help-modal-enhanced *,
+.help-modal-enhanced *::before,
+.help-modal-enhanced *::after {
+    color: #000000 !important;
+    border-color: #cbd5e1 !important;
+}
+
+.help-modal-enhanced {
+    background: #ffffff !important;
+}
+
+.help-modal-enhanced > div:first-child,
+.help-modal-header,
+.help-settings-card,
+.help-settings-card-prominent,
+.help-status-strip > div,
+.help-response-card,
+.help-segmented-control,
+.custom-system-prompt-input,
+.help-select-control,
+.help-diagnostics-panel {
+    background: #ffffff !important;
+}
+
+.help-modal-subtitle,
+.help-modal-kicker,
+.help-status-label,
+.help-control-label,
+.response-style-description,
+.help-modal-enhanced .text-xs {
+    color: #374151 !important;
+}
+
+.help-modal-close-btn,
+.help-modal-enhanced .memory-action-btn {
+    background: #f3f4f6 !important;
+    color: #000000 !important;
+    border-color: #cbd5e1 !important;
+}
+
+.help-modal-close-btn:hover,
+.help-modal-enhanced .memory-action-btn:hover,
+.help-response-card:hover,
+.help-segmented-control button:hover {
+    background: #e5e7eb !important;
+    color: #000000 !important;
+    border-color: #94a3b8 !important;
+}
+
+.help-response-card.is-selected,
+.help-response-card[aria-pressed="true"] {
+    background: #f3f4f6 !important;
+    border-color: #000000 !important;
+    box-shadow: 0 0 0 1px #000000 !important;
+}
+
+.help-segmented-control button.is-selected,
+.help-segmented-control button[aria-pressed="true"] {
+    background: #000000 !important;
+    color: #ffffff !important;
+    border-color: #000000 !important;
+}
+
+.help-segmented-control button.is-selected *,
+.help-segmented-control button[aria-pressed="true"] * {
+    color: #ffffff !important;
 }
 
 .settings-toggle-row {
