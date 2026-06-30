@@ -3090,6 +3090,73 @@ button:hover {
     color: #ffffff !important;
 }
 
+.voice-conversation-screen,
+.voice-conversation-screen *,
+.voice-conversation-screen *::before,
+.voice-conversation-screen *::after {
+    color: #000000 !important;
+    border-color: #d1d5db !important;
+}
+
+.voice-conversation-screen {
+    background: #f8fafc !important;
+}
+
+.voice-conversation-state {
+    color: #000000 !important;
+}
+
+.voice-conversation-detail,
+.voice-conversation-transcript span {
+    color: #374151 !important;
+}
+
+.voice-conversation-transcript {
+    background: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 18px 46px rgba(15, 23, 42, 0.10) !important;
+}
+
+.voice-screen-icon-btn,
+.voice-screen-control {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.10) !important;
+}
+
+.voice-screen-icon-btn:hover,
+.voice-screen-control:hover {
+    background: #e5e7eb !important;
+    color: #000000 !important;
+    border-color: #94a3b8 !important;
+}
+
+.voice-screen-control.primary {
+    background: #000000 !important;
+    color: #ffffff !important;
+    border-color: #000000 !important;
+}
+
+.voice-screen-control.primary:hover {
+    background: #111827 !important;
+    color: #ffffff !important;
+}
+
+.voice-screen-control.primary *,
+.voice-screen-control.primary:hover * {
+    color: #ffffff !important;
+}
+
+.voice-conversation-orb {
+    background: radial-gradient(circle at 50% 48%, #ffffff, #dbeafe 42%, #bfdbfe 70%, #eff6ff) !important;
+    box-shadow: 0 0 80px rgba(37, 99, 235, 0.18) !important;
+}
+
+.voice-conversation-orb span {
+    background: rgba(0, 0, 0, 0.62) !important;
+}
+
 .settings-toggle-row {
     gap: 14px !important;
     flex-wrap: wrap !important;
