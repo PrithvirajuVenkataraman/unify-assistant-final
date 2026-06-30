@@ -5246,6 +5246,7 @@ let showRoutingDebugBadge = false;
             conversationContext = [];
             chatSessions = [];
             localStorage.removeItem(CHAT_SESSIONS_STORAGE_KEY);
+            forgetActiveEmptyChatDraft();
             startNewChatSession();
             const historyKey = getHistoryStorageKey();
             localStorage.removeItem(historyKey);
@@ -5261,6 +5262,7 @@ let showRoutingDebugBadge = false;
             conversationContext = [];
             chatSessions = [];
             localStorage.removeItem(CHAT_SESSIONS_STORAGE_KEY);
+            forgetActiveEmptyChatDraft();
             startNewChatSession();
             saveUserData();
             localStorage.removeItem(getHistoryStorageKey());
@@ -18818,6 +18820,7 @@ let chatSessionLongPressTimer = null;
 let isRestoringChatSession = false;
 
 const CHAT_SESSIONS_STORAGE_KEY = 'jarvis_chat_sessions_v1';
+const CHAT_ACTIVE_DRAFT_STORAGE_KEY = 'jarvis_active_empty_chat_draft_v1';
 const CHAT_SESSION_MAX_MESSAGES = 160;
 
 function createChatSession(title = 'New chat') {
@@ -18885,6 +18888,40 @@ function saveChatSessions() {
     } catch (_) {}
 }
 
+function rememberActiveEmptyChatDraft(session) {
+    if (!persistMemoryToDevice || !session || session.deleted || session.messages.length || session.pinned) return;
+    try {
+        localStorage.setItem(CHAT_ACTIVE_DRAFT_STORAGE_KEY, JSON.stringify({
+            id: session.id,
+            createdAt: session.createdAt,
+            updatedAt: session.updatedAt
+        }));
+    } catch (_) {}
+}
+
+function forgetActiveEmptyChatDraft() {
+    try {
+        localStorage.removeItem(CHAT_ACTIVE_DRAFT_STORAGE_KEY);
+    } catch (_) {}
+}
+
+function loadActiveEmptyChatDraft() {
+    if (!persistMemoryToDevice) return null;
+    try {
+        const saved = localStorage.getItem(CHAT_ACTIVE_DRAFT_STORAGE_KEY);
+        const parsed = saved ? JSON.parse(saved) : null;
+        const id = String(parsed?.id || '').trim();
+        if (!id) return null;
+        const session = createChatSession();
+        session.id = id;
+        session.createdAt = String(parsed?.createdAt || session.createdAt);
+        session.updatedAt = String(parsed?.updatedAt || session.updatedAt);
+        return session;
+    } catch (_) {
+        return null;
+    }
+}
+
 function migrateLegacyHistoryToChatSession() {
     if (chatSessions.length) return;
     try {
@@ -18907,6 +18944,26 @@ function migrateLegacyHistoryToChatSession() {
 }
 
 function startNewChatSession(options = {}) {
+    const existingEmptySession = chatSessions.find(item =>
+        item &&
+        item.id === activeChatSessionId &&
+        !item.deleted &&
+        !item.pinned &&
+        !item.messages.length
+    );
+    if (existingEmptySession && options.forceNew !== true) {
+        conversationHistory = [];
+        if (!options.keepVisible) {
+            const chatContainer = document.getElementById('chat-container');
+            if (chatContainer) chatContainer.innerHTML = '';
+            chatHistory = [];
+        }
+        window.JarvisConversation?.reset?.();
+        window.JarvisState?.resetConversationState?.();
+        rememberActiveEmptyChatDraft(existingEmptySession);
+        renderChatSidebarList();
+        return existingEmptySession;
+    }
     const session = createChatSession();
     activeChatSessionId = session.id;
     chatSessions.push(session);
@@ -18918,9 +18975,27 @@ function startNewChatSession(options = {}) {
     }
     window.JarvisConversation?.reset?.();
     window.JarvisState?.resetConversationState?.();
-    if (options.persistEmpty === true || session.messages.length || session.pinned) saveChatSessions();
+    if (options.persistEmpty === true || session.messages.length || session.pinned) {
+        forgetActiveEmptyChatDraft();
+        saveChatSessions();
+    } else {
+        rememberActiveEmptyChatDraft(session);
+    }
     renderChatSidebarList();
     return session;
+}
+
+function initializeActiveChatSessionForStartup() {
+    const draft = loadActiveEmptyChatDraft();
+    if (draft) {
+        activeChatSessionId = draft.id;
+        chatSessions.push(draft);
+        conversationHistory = [];
+        chatHistory = [];
+        renderChatSidebarList();
+        return draft;
+    }
+    return startNewChatSession();
 }
 
 function getActiveChatSession() {
@@ -18963,6 +19038,7 @@ function recordActiveChatMessage(role, text, turnId = '') {
     if (!session.title || session.title === 'New chat') {
         session.title = deriveChatTitleFromMessages(session.messages);
     }
+    forgetActiveEmptyChatDraft();
     saveChatSessions();
     renderChatSidebarList();
 }
@@ -20256,7 +20332,7 @@ function endARSession() {
 }
 
 loadChatSessions();
-startNewChatSession();
+initializeActiveChatSessionForStartup();
 
 </script>
 
