@@ -109,6 +109,7 @@
     <div id="chat-session-menu" class="chat-session-menu hidden" role="menu" aria-label="Chat actions">
         <button type="button" data-chat-action="rename" onclick="handleChatSessionMenuAction('rename')" role="menuitem">Rename</button>
         <button type="button" data-chat-action="pin" onclick="handleChatSessionMenuAction('pin')" role="menuitem">Pin</button>
+        <button type="button" data-chat-action="share" onclick="handleChatSessionMenuAction('share')" role="menuitem">Share</button>
         <button type="button" data-chat-action="delete" onclick="handleChatSessionMenuAction('delete')" role="menuitem">Delete</button>
     </div>
     <section id="voice-conversation-screen" class="voice-conversation-screen hidden" aria-hidden="true" aria-label="Voice conversation">
@@ -4522,21 +4523,6 @@ let showRoutingDebugBadge = false;
                                 placeholder="Example: Reply like ChatGPT. Be concise, structured, direct, and avoid unnecessary endings."
                                 oninput="setCustomSystemPrompt(this.value, false)"
                                 onchange="setCustomSystemPrompt(this.value, true)">${escapeHtml(customSystemPrompt)}</textarea>
-                        </section>
-
-                        <section class="help-settings-card">
-                            <div class="help-section-heading">
-                                <div>
-                                    <h3 class="font-bold">Data controls</h3>
-                                    <p class="text-xs">Review, export, and delete browser-local app data.</p>
-                                </div>
-                            </div>
-                            <div id="privacy-data-summary" class="help-diagnostics-panel text-xs space-y-1 mb-3">${buildPrivacyDataSummaryHtml()}</div>
-                            <div class="flex flex-wrap gap-2">
-                                <button type="button" onclick="showChatExportFormatPicker()" class="memory-action-btn">Export Chat Only</button>
-                                <button type="button" onclick="clearConversationHistoryData()" class="memory-action-btn">Clear Chat</button>
-                                <button type="button" onclick="clearSavedMemoryStore()" class="memory-action-btn">Clear Memory</button>
-                            </div>
                         </section>
 
                     </div>   
@@ -19263,6 +19249,30 @@ function closeChatSessionMenu() {
     activeChatSessionMenuId = '';
 }
 
+async function shareChatSession(session) {
+    if (!session) return;
+    const title = String(session.title || 'JARVIS chat').trim() || 'JARVIS chat';
+    const body = [`# ${title}`, '']
+        .concat((session.messages || []).map(item => {
+            const label = item.role === 'user' ? 'You' : 'JARVIS';
+            return `${label}: ${String(item.text || '').trim()}`;
+        }).filter(Boolean))
+        .join('\n\n')
+        .trim();
+    closeChatSessionMenu();
+    if (!body) return;
+    if (navigator.share) {
+        try {
+            await navigator.share({ title, text: body });
+            return;
+        } catch (error) {
+            if (String(error?.name || '') === 'AbortError') return;
+        }
+    }
+    copyToClipboard(body);
+    showTemporaryMessage('Chat copied for sharing.');
+}
+
 function handleChatSessionMenuAction(action) {
     const session = chatSessions.find(item => item.id === activeChatSessionMenuId && !item.deleted);
     if (!session) return;
@@ -19278,6 +19288,9 @@ function handleChatSessionMenuAction(action) {
     } else if (action === 'pin') {
         session.pinned = !session.pinned;
         session.updatedAt = new Date().toISOString();
+    } else if (action === 'share') {
+        void shareChatSession(session);
+        return;
     } else if (action === 'delete') {
         const ok = window.confirm(`Delete "${session.title || 'this chat'}"?`);
         if (!ok) return;
