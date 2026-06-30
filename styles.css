@@ -3020,12 +3020,12 @@ button:hover {
 .help-modal-enhanced *,
 .help-modal-enhanced *::before,
 .help-modal-enhanced *::after {
-    color: #000000 !important;
-    border-color: #cbd5e1 !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.34) !important;
 }
 
 .help-modal-enhanced {
-    background: #ffffff !important;
+    background: #000000 !important;
 }
 
 .help-modal-enhanced > div:first-child,
@@ -3038,7 +3038,7 @@ button:hover {
 .custom-system-prompt-input,
 .help-select-control,
 .help-diagnostics-panel {
-    background: #ffffff !important;
+    background: #000000 !important;
 }
 
 .help-modal-subtitle,
@@ -3047,37 +3047,37 @@ button:hover {
 .help-control-label,
 .response-style-description,
 .help-modal-enhanced .text-xs {
-    color: #374151 !important;
+    color: rgba(255, 255, 255, 0.76) !important;
 }
 
 .help-modal-close-btn,
 .help-modal-enhanced .memory-action-btn {
-    background: #f3f4f6 !important;
-    color: #000000 !important;
-    border-color: #cbd5e1 !important;
+    background: #111111 !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.34) !important;
 }
 
 .help-modal-close-btn:hover,
 .help-modal-enhanced .memory-action-btn:hover,
 .help-response-card:hover,
 .help-segmented-control button:hover {
-    background: #e5e7eb !important;
-    color: #000000 !important;
-    border-color: #94a3b8 !important;
+    background: #171717 !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.72) !important;
 }
 
 .help-response-card.is-selected,
 .help-response-card[aria-pressed="true"] {
-    background: #f3f4f6 !important;
-    border-color: #000000 !important;
-    box-shadow: 0 0 0 1px #000000 !important;
+    background: #111111 !important;
+    border-color: #ffffff !important;
+    box-shadow: 0 0 0 1px #ffffff !important;
 }
 
 .help-segmented-control button.is-selected,
 .help-segmented-control button[aria-pressed="true"] {
-    background: #000000 !important;
+    background: #1f2937 !important;
     color: #ffffff !important;
-    border-color: #000000 !important;
+    border-color: #ffffff !important;
 }
 
 .help-segmented-control button.is-selected *,
