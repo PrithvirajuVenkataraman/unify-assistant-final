@@ -7763,7 +7763,6 @@ ${code}
             if (/^(clear chat|clear history|new chat)$/.test(t)) {
                 startNewChatSession();
                 saveConversationHistory();
-                showTemporaryMessage('New chat started.');
                 return true;
             }
             return false;
@@ -18859,17 +18858,23 @@ function normalizeChatSession(raw) {
     };
 }
 
+function chatSessionHasUserMessage(session) {
+    return Array.isArray(session?.messages) && session.messages.some(item => item?.role === 'user' && String(item?.text || '').trim());
+}
+
 function getVisibleChatSessions() {
-    return chatSessions.filter(session => session && !session.deleted && (session.messages.length || session.pinned));
+    return chatSessions.filter(session => session && !session.deleted && chatSessionHasUserMessage(session));
 }
 
 function loadChatSessions() {
     try {
         const saved = localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
         const parsed = saved ? JSON.parse(saved) : [];
+        const rawCount = Array.isArray(parsed) ? parsed.length : 0;
         chatSessions = Array.isArray(parsed)
-            ? parsed.map(normalizeChatSession).filter(session => session && (session.messages.length || session.pinned))
+            ? parsed.map(normalizeChatSession).filter(session => session && chatSessionHasUserMessage(session))
             : [];
+        if (rawCount !== chatSessions.length) saveChatSessions();
     } catch (_) {
         chatSessions = [];
     }
@@ -18880,7 +18885,7 @@ function saveChatSessions() {
     if (!persistMemoryToDevice) return;
     try {
         const visibleOrActive = chatSessions
-            .filter(session => session && !session.deleted && (session.messages.length || session.pinned))
+            .filter(session => session && !session.deleted && chatSessionHasUserMessage(session))
             .slice(-80);
         localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(visibleOrActive));
         chatSessions = visibleOrActive;
@@ -18888,7 +18893,7 @@ function saveChatSessions() {
 }
 
 function rememberActiveEmptyChatDraft(session) {
-    if (!persistMemoryToDevice || !session || session.deleted || session.messages.length || session.pinned) return;
+    if (!persistMemoryToDevice || !session || session.deleted || chatSessionHasUserMessage(session)) return;
     try {
         localStorage.setItem(CHAT_ACTIVE_DRAFT_STORAGE_KEY, JSON.stringify({
             id: session.id,
@@ -18947,8 +18952,7 @@ function startNewChatSession(options = {}) {
         item &&
         item.id === activeChatSessionId &&
         !item.deleted &&
-        !item.pinned &&
-        !item.messages.length
+        !chatSessionHasUserMessage(item)
     );
     if (existingEmptySession && options.forceNew !== true) {
         conversationHistory = [];
@@ -18974,7 +18978,7 @@ function startNewChatSession(options = {}) {
     }
     window.JarvisConversation?.reset?.();
     window.JarvisState?.resetConversationState?.();
-    if (options.persistEmpty === true || session.messages.length || session.pinned) {
+    if (options.persistEmpty === true || chatSessionHasUserMessage(session)) {
         forgetActiveEmptyChatDraft();
         saveChatSessions();
     } else {
@@ -19025,9 +19029,11 @@ function recordActiveChatMessage(role, text, turnId = '') {
     const cleanText = String(text || '').trim();
     if (!cleanText) return;
     const session = getActiveChatSession();
+    const normalizedRole = role === 'assistant' ? 'assistant' : 'user';
+    if (normalizedRole === 'assistant' && !chatSessionHasUserMessage(session)) return;
     const now = new Date().toISOString();
     session.messages.push({
-        role: role === 'assistant' ? 'assistant' : 'user',
+        role: normalizedRole,
         text: cleanText,
         timestamp: now,
         turnId: String(turnId || '').trim()
