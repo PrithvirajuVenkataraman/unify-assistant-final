@@ -18614,7 +18614,7 @@ function normalizeChatSession(raw) {
 }
 
 function getVisibleChatSessions() {
-    return chatSessions.filter(session => session && !session.deleted && (session.messages.length || session.pinned || session.id === activeChatSessionId));
+    return chatSessions.filter(session => session && !session.deleted && (session.messages.length || session.pinned));
 }
 
 function loadChatSessions() {
@@ -18622,7 +18622,7 @@ function loadChatSessions() {
         const saved = localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
         const parsed = saved ? JSON.parse(saved) : [];
         chatSessions = Array.isArray(parsed)
-            ? parsed.map(normalizeChatSession).filter(Boolean)
+            ? parsed.map(normalizeChatSession).filter(session => session && (session.messages.length || session.pinned))
             : [];
     } catch (_) {
         chatSessions = [];
@@ -18634,7 +18634,7 @@ function saveChatSessions() {
     if (!persistMemoryToDevice) return;
     try {
         const visibleOrActive = chatSessions
-            .filter(session => session && !session.deleted && (session.messages.length || session.pinned || session.id === activeChatSessionId))
+            .filter(session => session && !session.deleted && (session.messages.length || session.pinned))
             .slice(-80);
         localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(visibleOrActive));
         chatSessions = visibleOrActive;
@@ -18674,7 +18674,7 @@ function startNewChatSession(options = {}) {
     }
     window.JarvisConversation?.reset?.();
     window.JarvisState?.resetConversationState?.();
-    saveChatSessions();
+    if (options.persistEmpty === true || session.messages.length || session.pinned) saveChatSessions();
     renderChatSidebarList();
     return session;
 }
