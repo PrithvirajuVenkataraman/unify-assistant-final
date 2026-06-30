@@ -2870,6 +2870,53 @@ svg [fill]:not([fill="none"]) {
     fill: currentColor !important;
 }
 
+.jarvis-sidebar-logo,
+.jarvis-sidebar-logo * {
+    color: unset !important;
+}
+
+.jarvis-sidebar-logo rect {
+    fill: #02070d !important;
+    stroke: #142033 !important;
+}
+
+.jarvis-sidebar-logo circle:nth-of-type(1) {
+    fill: none !important;
+    stroke: #baf5ff !important;
+}
+
+.jarvis-sidebar-logo circle:nth-of-type(2) {
+    fill: none !important;
+    stroke: #0ea5e9 !important;
+}
+
+.jarvis-sidebar-logo path {
+    fill: none !important;
+}
+
+.jarvis-sidebar-logo path:nth-of-type(1),
+.jarvis-sidebar-logo path:nth-of-type(4) {
+    stroke: #1fb6ff !important;
+}
+
+.jarvis-sidebar-logo path:nth-of-type(2),
+.jarvis-sidebar-logo path:nth-of-type(3),
+.jarvis-sidebar-logo path:nth-of-type(5),
+.jarvis-sidebar-logo path:nth-of-type(6),
+.jarvis-sidebar-logo path:nth-of-type(7),
+.jarvis-sidebar-logo path:nth-of-type(9) {
+    stroke: #63e8ff !important;
+}
+
+.jarvis-sidebar-logo path:nth-of-type(8) {
+    stroke: #20d8f6 !important;
+}
+
+.jarvis-sidebar-logo text {
+    fill: #dffaff !important;
+    stroke: none !important;
+}
+
 a,
 .assistant-message-text a {
     color: #ffffff !important;
