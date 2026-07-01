@@ -2519,6 +2519,7 @@ body.dark .response-action-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 8px;
     min-width: 58px;
     height: 28px;
     padding: 0 !important;
@@ -2549,11 +2550,11 @@ body.dark .response-action-btn {
     animation: jarvis-thinking-pulse 1s ease-in-out infinite;
 }
 
-.assistant-thinking-ring-mode .assistant-thinking-dot {
+.assistant-thinking-dots .assistant-thinking-ring {
     display: none;
 }
 
-.assistant-thinking-dots .assistant-thinking-ring {
+.assistant-thinking-ring-mode .assistant-thinking-ring {
     display: none;
 }
 
@@ -2587,9 +2588,15 @@ body.dark .response-action-btn {
 
 .assistant-thinking-text {
     font-size: 12px !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
     color: var(--ui-text-muted) !important;
     line-height: 1.2;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.assistant-thinking-text.is-searching {
+    color: #ffffff !important;
 }
 
 .professional-thinking-dots {
