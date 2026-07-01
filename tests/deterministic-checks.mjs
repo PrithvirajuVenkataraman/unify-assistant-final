@@ -389,8 +389,9 @@ assert.match(SOURCE.appHtml, /failClosed = roleHolderQuery \|\| \(forceFailClose
 assert.match(SOURCE.appHtml, /const publicSourceAllowed = isPublicSourceSearchAllowedWhenLiveDisabled\(initialQuery, initialIntent, initialEntityIntent\)/);
 assert.match(SOURCE.appHtml, /if \(!LIVE_RETRIEVAL_ENABLED && !publicSourceAllowed\)/);
 assert.doesNotMatch(SOURCE.appHtml, /async function fetchLiveSearchJson\(query, options = \{\}\)\s*\{\s*if \(!LIVE_RETRIEVAL_ENABLED\)/);
-assert.match(SOURCE.appHtml, /const shouldDelayAssistantRender = !isUser && Boolean\(document\.getElementById\('chat-thinking-indicator'\)\)/);
-assert.match(SOURCE.appHtml, /setManagedTimeout\(startAssistantRender, 500\)/);
+assert.match(SOURCE.appHtml, /const shouldDelayAssistantRender = false/);
+assert.doesNotMatch(SOURCE.appHtml, /setManagedTimeout\(startAssistantRender, 500\)/);
+assert.match(SOURCE.appHtml, /startAssistantRender\(\);/);
 assert.match(SOURCE.appHtml, /return addChatMessage\(finalText, false, null, \{/);
 assert.match(SOURCE.appHtml, /if \(roleHolderQuery\) \{[\s\S]*evidenceLevel === 'structured_claim'[\s\S]*Current holder not verified/);
 
