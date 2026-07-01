@@ -290,7 +290,7 @@ assert.equal(searchTest.extractSearchTargetQuery('Search the web for recent revi
 assert.deepEqual(searchTest.buildDeterministicSearchQueries('recent reviews of Nothing Phone 3'), [
     'Nothing Phone 3 reviews',
     'Nothing Phone 3 recent reviews',
-    'Nothing Phone 3 phone review'
+    'Nothing Phone 3 latest reviews'
 ]);
 assert.equal(searchTest.isRelatedToQuery('Nothing Phone 3 reviews', {
     title: 'Nothing Was the Same',
