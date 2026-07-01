@@ -826,6 +826,10 @@ assert.match(SOURCE.appHtml, /if \(hasChatSessionsStorageRecord\(\)\) \{[\s\S]*m
 assert.match(SOURCE.appHtml, /id="chat-delete-dialog"/);
 assert.match(SOURCE.appHtml, /Delete '\$\{session\.title \|\| 'this chat'\}'/);
 assert.match(SOURCE.appHtml, /rememberDeletedChatSession\(session\);[\s\S]*clearLegacyHistoryForDeletedSession\(session\);[\s\S]*session\.messages = \[\];[\s\S]*forgetActiveEmptyChatDraft\(\);[\s\S]*saveChatSessions\(\);[\s\S]*if \(wasActiveSession\) \{[\s\S]*conversationHistory = \[\];[\s\S]*startNewChatSession\(\);/);
+assert.match(SOURCE.appHtml, /askGeminiAI\(message,\s*\{[\s\S]*stream:\s*options\?\.stream === true[\s\S]*displayUserMessage:\s*options\?\.displayUserMessage/);
+assert.match(SOURCE.appHtml, /callAIWithTyping\(learningPrompt,[\s\S]*directModel:\s*true,[\s\S]*stream:\s*true,[\s\S]*displayUserMessage:\s*text/);
+assert.match(SOURCE.chatGroqApi, /if \(shouldStreamChatRequest\(req\.body, intent, grounding, routeDecision, isInternalSummary\)\)[\s\S]*handleStreamingChatRequest/);
+assert.match(SOURCE.chatGroqApi, /function needsPreStreamSafetyReview\(message\)/);
 assert.match(SOURCE.styles, /\.chat-delete-dialog\s*\{/);
 assert.match(SOURCE.styles, /\.chat-delete-dialog \.chat-delete-dialog-btn\.danger,[\s\S]*color:\s*#000000 !important/);
 assert.match(SOURCE.styles, /\.help-modal-enhanced \.help-modal-body\s*\{[\s\S]*padding:\s*16px !important/);
