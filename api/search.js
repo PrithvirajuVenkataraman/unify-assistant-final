@@ -140,7 +140,8 @@ export default async function handler(req, res) {
     if (guard.handled) return;
 
     const originalQuery = normalizeSearchQuery(req.body?.query || req.body?.q || '');
-    const query = extractSearchTargetQuery(originalQuery);
+    const rewrite = buildSearchQueryRewrite(originalQuery);
+    const query = rewrite.query;
     if (!query) {
         return res.status(400).json({
             success: false,
@@ -152,12 +153,15 @@ export default async function handler(req, res) {
     try {
         const limit = clampInt(req.body?.limit || req.body?.maxResults, 8, 1, 20);
         const mode = normalizeSearchMode(req.body?.mode || req.body?.searchMode || '');
-        const route = classifyFreeLiveIntent(originalQuery || query);
+        const route = await resolveRetrievalRoute(originalQuery || query, classifyFreeLiveIntent(originalQuery || query), {
+            useModelClassifier: mode === 'auto'
+        });
         if (mode === 'classify') {
             return res.status(200).json({
                 success: true,
                 query,
                 originalQuery: originalQuery === query ? undefined : originalQuery,
+                searchRewrite: rewrite,
                 route,
                 searchRequired: route.route !== 'llm',
                 searchSkipped: route.route === 'llm',
@@ -170,6 +174,7 @@ export default async function handler(req, res) {
                 success: true,
                 query,
                 originalQuery: originalQuery === query ? undefined : originalQuery,
+                searchRewrite: rewrite,
                 route,
                 searchRequired: false,
                 searchSkipped: true,
@@ -183,6 +188,7 @@ export default async function handler(req, res) {
                     success: true,
                     query,
                     originalQuery: originalQuery === query ? undefined : originalQuery,
+                    searchRewrite: rewrite,
                     route,
                     searchRequired: true,
                     searchSkipped: false,
@@ -197,6 +203,7 @@ export default async function handler(req, res) {
                 disabled: false,
                 query,
                 originalQuery: originalQuery === query ? undefined : originalQuery,
+                searchRewrite: rewrite,
                 route,
                 searchRequired: true,
                 searchSkipped: false,
@@ -222,6 +229,7 @@ export default async function handler(req, res) {
                 success: true,
                 query,
                 originalQuery: originalQuery === query ? undefined : originalQuery,
+                searchRewrite: rewrite,
                 route,
                 searchRequired: true,
                 searchSkipped: false,
@@ -233,6 +241,7 @@ export default async function handler(req, res) {
             success: true,
             query,
             originalQuery: originalQuery === query ? undefined : originalQuery,
+            searchRewrite: rewrite,
             route,
             searchRequired: mode === 'auto',
             searchSkipped: false,
@@ -276,6 +285,68 @@ function buildSearchSkippedSummary(query, route) {
         warnings: ['Live search skipped because the classifier routed this as stable model knowledge.'],
         refreshed: false,
         category: route?.category || 'stable_knowledge'
+    };
+}
+
+async function resolveRetrievalRoute(message, fallbackRoute = {}, options = {}) {
+    const route = normalizeRetrievalRoute(fallbackRoute);
+    if (isSpecializedRetrievalRoute(route) || route.category === 'unsupported_free_live') return route;
+    if (route.category === 'web_search' && route.reasons?.includes('explicit_or_product_search_requires_web_sources')) return route;
+    if (options.useModelClassifier !== true) return route;
+    const modelRoute = await classifyRetrievalIntentWithGemini(message).catch(error => ({
+        warning: `gemini_retrieval_classifier_failed:${String(error?.code || error?.message || 'unknown')}`
+    }));
+    if (!modelRoute?.decision) return route;
+    if (modelRoute.decision === 'stable_answer') {
+        return {
+            route: 'llm',
+            category: 'stable_knowledge',
+            confidence: modelRoute.confidence || 0.72,
+            reasons: ['model_retrieval_classifier_stable']
+        };
+    }
+    if (modelRoute.decision === 'needs_live_search') {
+        return {
+            route: 'live_required',
+            category: 'web_search',
+            confidence: modelRoute.confidence || 0.78,
+            reasons: ['model_retrieval_classifier_live_search']
+        };
+    }
+    return route;
+}
+
+function normalizeRetrievalRoute(route = {}) {
+    return {
+        route: String(route.route || 'llm'),
+        category: String(route.category || 'stable_knowledge'),
+        confidence: Number(route.confidence) || 0.42,
+        reasons: Array.isArray(route.reasons) ? route.reasons.map(String) : []
+    };
+}
+
+function isSpecializedRetrievalRoute(route = {}) {
+    return ['weather', 'crypto', 'sports', 'disasters', 'government', 'news', 'tourism_food_places'].includes(String(route.category || ''));
+}
+
+async function classifyRetrievalIntentWithGemini(message) {
+    if (!hasGeminiKey()) return null;
+    const prompt = `Return strict JSON only.
+Task: decide if this user message needs external live/public-source retrieval.
+Rules:
+- Choose "needs_live_search" for requests about recent/current information, reviews, prices, availability, comparisons, developing events, or anything likely to change.
+- Choose "stable_answer" for explanations, definitions, stable facts, writing, math, code help, summaries, or evergreen knowledge.
+- Do not rely on brand or product word lists; reason from the user's intent.
+User message: ${JSON.stringify(message)}
+JSON shape: {"decision":"needs_live_search|stable_answer","confidence":0.0,"subject":"...","intent":"..."}`;
+    const json = await callGeminiJson(prompt, { maxOutputTokens: 260, temperature: 0 });
+    const decision = String(json?.decision || '').trim();
+    if (!['needs_live_search', 'stable_answer'].includes(decision)) return null;
+    return {
+        decision,
+        confidence: Math.max(0.01, Math.min(0.99, Number(json?.confidence) || 0.72)),
+        subject: normalizeSearchQuery(json?.subject || ''),
+        intent: normalizeSearchQuery(json?.intent || '')
     };
 }
 
@@ -1256,10 +1327,12 @@ Rules:
 - Use only the fields provided. Do not invent facts.
 - Keep descriptions concise, source-grounded, and under 180 characters.
 - Prefer official_source, trusted_news, and exact query relevance.
+- Mark relevance as "relevant", "weak", or "irrelevant" based on the user query and source fields.
+- Exclude irrelevant sources from the ranked list.
 - Return indexes from the input list only.
 User query: ${JSON.stringify(query)}
 Results JSON: ${JSON.stringify(compact)}
-JSON shape: {"ranked":[{"index":0,"description":"...","reason":"..."}]}`;
+JSON shape: {"ranked":[{"index":0,"relevance":"relevant","description":"...","reason":"..."}]}`;
     const json = await callGeminiJson(prompt, { maxOutputTokens: 900, temperature: 0.1 });
     const ranked = Array.isArray(json?.ranked) ? json.ranked : [];
     if (!ranked.length) return { results, enhanced: false };
@@ -1270,16 +1343,14 @@ JSON shape: {"ranked":[{"index":0,"description":"...","reason":"..."}]}`;
         const index = Number(entry?.index);
         const item = byIndex.get(index);
         if (!item || used.has(index)) continue;
+        if (String(entry?.relevance || '').toLowerCase() === 'irrelevant') continue;
         used.add(index);
         enhanced.push({
             ...item,
             description: String(entry?.description || item.description || '').replace(/\s+/g, ' ').trim().slice(0, 320),
-            qualitySignals: Array.from(new Set([...(item.qualitySignals || []), 'gemini_ranked'])),
+            qualitySignals: Array.from(new Set([...(item.qualitySignals || []), 'gemini_ranked', String(entry?.relevance || '').toLowerCase() === 'weak' ? 'gemini_weak_relevance' : 'gemini_relevant'])),
             geminiReason: String(entry?.reason || '').slice(0, 160)
         });
-    }
-    for (const [index, item] of byIndex) {
-        if (!used.has(index)) enhanced.push(item);
     }
     return { results: enhanced.slice(0, limit), enhanced: true };
 }
@@ -1650,6 +1721,25 @@ function cleanSearchTargetPhrase(value) {
         .trim());
 }
 
+function buildSearchQueryRewrite(query) {
+    const normalized = normalizeSearchQuery(query)
+        .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '')
+        .trim();
+    if (!normalized) {
+        return { query: '', subject: '', freshnessNeeded: false, intent: 'general' };
+    }
+    const explicit = normalized.match(/^(?:please\s+)?(?:can\s+you\s+|could\s+you\s+)?(?:search(?:\s+the\s+web)?(?:\s+for)?|web\s+search(?:\s+for)?|look\s+up|find(?:\s+me)?|google)\s+(.+)$/i);
+    const target = cleanSearchTargetPhrase(explicit?.[1] || normalized);
+    const subject = extractSearchSubject(target);
+    const intent = extractSearchIntentTerm(target);
+    return {
+        query: target,
+        subject,
+        freshnessNeeded: isCurrentTopicSearchQuery(target) || /\b(?:latest|recent|current|newest|today|now|breaking)\b/i.test(target),
+        intent
+    };
+}
+
 function buildDeterministicSearchQueries(query) {
     const normalized = normalizeSearchQuery(query);
     if (!normalized) return [];
@@ -1832,6 +1922,9 @@ export const __test = {
     searchPublicSources,
     searchWikipedia,
     extractSearchTargetQuery,
+    buildSearchQueryRewrite,
+    resolveRetrievalRoute,
+    classifyRetrievalIntentWithGemini,
     buildDeterministicSearchQueries,
     isCurrentTopicSearchQuery,
     isRelatedCurrentTopicSource,
