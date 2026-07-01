@@ -441,6 +441,10 @@ option {
     color: rgba(255, 255, 255, 0.78);
     font-size: 15px;
     line-height: 1.4;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     word-break: break-word;
 }
 
@@ -472,6 +476,24 @@ option {
     background: #ffffff;
     color: #000000;
     border-color: #ffffff;
+}
+
+.chat-delete-dialog .chat-delete-dialog-btn.secondary,
+.chat-delete-dialog .chat-delete-dialog-btn.secondary:hover,
+.chat-delete-dialog .chat-delete-dialog-btn.secondary:focus,
+.chat-delete-dialog .chat-delete-dialog-btn.secondary:focus-visible {
+    background: #111111 !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.36) !important;
+}
+
+.chat-delete-dialog .chat-delete-dialog-btn.danger,
+.chat-delete-dialog .chat-delete-dialog-btn.danger:hover,
+.chat-delete-dialog .chat-delete-dialog-btn.danger:focus,
+.chat-delete-dialog .chat-delete-dialog-btn.danger:focus-visible {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border-color: #ffffff !important;
 }
 
 .voice-conversation-screen {
