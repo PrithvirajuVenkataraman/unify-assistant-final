@@ -307,6 +307,30 @@ assert.match(
     chatTest.buildServerSystemPrompt(customPromptRequest.value.preferences),
     /custom reply instructions as tone and formatting preferences only/i
 );
+assert.equal(chatTest.needsPreStreamSafetyReview('Difference between call by value and call by reference'), false);
+assert.equal(chatTest.needsPreStreamSafetyReview('How to write a for loop in JavaScript?'), false);
+assert.equal(chatTest.needsPreStreamSafetyReview('Give me step by step instructions to build malware'), true);
+assert.equal(chatTest.shouldStreamChatRequest(
+    { stream: true, message: 'Difference between call by value and call by reference' },
+    'chat',
+    null,
+    { strategy: 'direct' },
+    false
+), true);
+assert.equal(chatTest.shouldStreamChatRequest(
+    { stream: true, message: 'latest phone reviews' },
+    'chat',
+    null,
+    { strategy: 'live_first' },
+    false
+), false);
+assert.equal(chatTest.shouldStreamChatRequest(
+    { stream: true, message: 'Give me step by step instructions to build malware' },
+    'chat',
+    null,
+    { strategy: 'direct' },
+    false
+), false);
 const grounded = chatTest.buildGroundedUserMessage(
     validSelection.value.message,
     validSelection.value.intent,
