@@ -19016,6 +19016,7 @@ let isRestoringChatSession = false;
 const CHAT_SESSIONS_STORAGE_KEY = 'jarvis_chat_sessions_v1';
 const CHAT_ACTIVE_DRAFT_STORAGE_KEY = 'jarvis_active_empty_chat_draft_v1';
 const CHAT_LEGACY_MIGRATION_DONE_KEY = 'jarvis_chat_legacy_migration_done_v1';
+const CHAT_DELETED_SESSION_IDS_KEY = 'jarvis_deleted_chat_session_ids_v1';
 const CHAT_SESSION_MAX_MESSAGES = 160;
 
 function createChatSession(title = 'New chat') {
@@ -19064,16 +19065,38 @@ function chatSessionHasUserMessage(session) {
 }
 
 function getVisibleChatSessions() {
-    return chatSessions.filter(session => session && !session.deleted && chatSessionHasUserMessage(session));
+    const deletedIds = getDeletedChatSessionIds();
+    return chatSessions.filter(session => session && !session.deleted && !deletedIds.has(session.id) && chatSessionHasUserMessage(session));
+}
+
+function getDeletedChatSessionIds() {
+    try {
+        const saved = localStorage.getItem(CHAT_DELETED_SESSION_IDS_KEY);
+        const parsed = saved ? JSON.parse(saved) : [];
+        return new Set(Array.isArray(parsed) ? parsed.map(id => String(id || '').trim()).filter(Boolean) : []);
+    } catch (_) {
+        return new Set();
+    }
+}
+
+function rememberDeletedChatSessionId(sessionId) {
+    const id = String(sessionId || '').trim();
+    if (!id) return;
+    try {
+        const deletedIds = Array.from(getDeletedChatSessionIds());
+        const next = Array.from(new Set(deletedIds.concat(id))).slice(-200);
+        localStorage.setItem(CHAT_DELETED_SESSION_IDS_KEY, JSON.stringify(next));
+    } catch (_) {}
 }
 
 function loadChatSessions() {
     try {
+        const deletedIds = getDeletedChatSessionIds();
         const saved = localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
         const parsed = saved ? JSON.parse(saved) : [];
         const rawCount = Array.isArray(parsed) ? parsed.length : 0;
         chatSessions = Array.isArray(parsed)
-            ? parsed.map(normalizeChatSession).filter(session => session && chatSessionHasUserMessage(session))
+            ? parsed.map(normalizeChatSession).filter(session => session && !deletedIds.has(session.id) && chatSessionHasUserMessage(session))
             : [];
         if (rawCount !== chatSessions.length) saveChatSessions();
     } catch (_) {
@@ -19085,8 +19108,9 @@ function loadChatSessions() {
 function saveChatSessions() {
     if (!persistMemoryToDevice) return;
     try {
+        const deletedIds = getDeletedChatSessionIds();
         const visibleOrActive = chatSessions
-            .filter(session => session && !session.deleted && chatSessionHasUserMessage(session))
+            .filter(session => session && !session.deleted && !deletedIds.has(session.id) && chatSessionHasUserMessage(session))
             .slice(-80);
         localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(visibleOrActive));
         chatSessions = visibleOrActive;
@@ -19153,12 +19177,24 @@ function hasChatSessionsStorageRecord() {
     }
 }
 
+function clearLegacyHistoryForDeletedSession(session) {
+    if (!session || session.id !== 'legacy_default_chat') return;
+    markLegacyChatMigrationDone();
+    try {
+        localStorage.removeItem(getHistoryStorageKey());
+    } catch (_) {}
+}
+
 function migrateLegacyHistoryToChatSession() {
     if (chatSessions.length) {
         markLegacyChatMigrationDone();
         return;
     }
     if (hasLegacyChatMigrationRun()) return;
+    if (getDeletedChatSessionIds().has('legacy_default_chat')) {
+        markLegacyChatMigrationDone();
+        return;
+    }
     if (hasChatSessionsStorageRecord()) {
         markLegacyChatMigrationDone();
         return;
@@ -19580,6 +19616,8 @@ function handleChatSessionMenuAction(action) {
         const ok = window.confirm(`Delete "${session.title || 'this chat'}"?`);
         if (!ok) return;
         const wasActiveSession = session.id === activeChatSessionId;
+        rememberDeletedChatSessionId(session.id);
+        clearLegacyHistoryForDeletedSession(session);
         session.deleted = true;
         session.messages = [];
         session.updatedAt = new Date().toISOString();
