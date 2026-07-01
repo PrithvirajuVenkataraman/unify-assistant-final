@@ -139,7 +139,8 @@ export default async function handler(req, res) {
     });
     if (guard.handled) return;
 
-    const query = normalizeSearchQuery(req.body?.query || req.body?.q || '');
+    const originalQuery = normalizeSearchQuery(req.body?.query || req.body?.q || '');
+    const query = extractSearchTargetQuery(originalQuery);
     if (!query) {
         return res.status(400).json({
             success: false,
@@ -151,11 +152,12 @@ export default async function handler(req, res) {
     try {
         const limit = clampInt(req.body?.limit || req.body?.maxResults, 8, 1, 20);
         const mode = normalizeSearchMode(req.body?.mode || req.body?.searchMode || '');
-        const route = classifyFreeLiveIntent(query);
+        const route = classifyFreeLiveIntent(originalQuery || query);
         if (mode === 'classify') {
             return res.status(200).json({
                 success: true,
                 query,
+                originalQuery: originalQuery === query ? undefined : originalQuery,
                 route,
                 searchRequired: route.route !== 'llm',
                 searchSkipped: route.route === 'llm',
@@ -167,6 +169,7 @@ export default async function handler(req, res) {
             return res.status(200).json({
                 success: true,
                 query,
+                originalQuery: originalQuery === query ? undefined : originalQuery,
                 route,
                 searchRequired: false,
                 searchSkipped: true,
@@ -174,11 +177,12 @@ export default async function handler(req, res) {
             });
         }
         if (route.route === 'live_required') {
-            if (route.category === 'government' || route.category === 'news') {
+            if (route.category === 'government' || route.category === 'news' || route.category === 'web_search') {
                 const search = await runVerifiedWebSearch(query, { limit });
                 return res.status(200).json({
                     success: true,
                     query,
+                    originalQuery: originalQuery === query ? undefined : originalQuery,
                     route,
                     searchRequired: true,
                     searchSkipped: false,
@@ -192,6 +196,7 @@ export default async function handler(req, res) {
                 success: !unsupported,
                 disabled: false,
                 query,
+                originalQuery: originalQuery === query ? undefined : originalQuery,
                 route,
                 searchRequired: true,
                 searchSkipped: false,
@@ -216,6 +221,7 @@ export default async function handler(req, res) {
             return res.status(200).json({
                 success: true,
                 query,
+                originalQuery: originalQuery === query ? undefined : originalQuery,
                 route,
                 searchRequired: true,
                 searchSkipped: false,
@@ -226,6 +232,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
             success: true,
             query,
+            originalQuery: originalQuery === query ? undefined : originalQuery,
             route,
             searchRequired: mode === 'auto',
             searchSkipped: false,
@@ -303,14 +310,16 @@ export async function searchPublicSources(query, options = {}) {
     if (!normalizedQuery) return [];
     const limit = clampInt(options.limit, 8, 1, 20);
     const governmentRoleResults = await searchGovernmentRole(normalizedQuery, { limit: Math.min(3, limit) }).catch(() => []);
+    const deterministicQueries = buildDeterministicSearchQueries(normalizedQuery);
     const plannedQueries = Array.isArray(options.plannedQueries) && options.plannedQueries.length
         ? options.plannedQueries
         : [normalizedQuery];
     const querySet = Array.from(new Set([
         normalizedQuery,
+        ...deterministicQueries,
         ...plannedQueries.map(item => normalizeSearchQuery(item)).filter(Boolean),
         ...getOfficialSourceShortcuts(normalizedQuery).map(item => item.query)
-    ])).slice(0, 5);
+    ])).slice(0, 7);
     const settled = await Promise.allSettled(querySet.flatMap(candidate => [
         searchWikipedia(candidate, { limit: Math.min(4, limit) }),
         searchWikidata(candidate, { limit: Math.min(3, limit) }),
@@ -1569,7 +1578,28 @@ function isRelatedToQuery(query, item) {
     const terms = tokenize(query).filter(term => !COMMON_QUERY_TERMS.has(term));
     if (!terms.length) return true;
     const hay = `${item?.title || ''} ${item?.description || ''} ${item?.sourceLabel || ''}`.toLowerCase();
+    if (isProductReviewSearchQuery(query)) {
+        return isRelatedProductReviewSource(query, hay);
+    }
     return terms.some(term => hay.includes(term));
+}
+
+function isRelatedProductReviewSource(query, haystack) {
+    const subject = extractProductSearchSubject(query);
+    const subjectTerms = tokenize(subject).filter(term => !COMMON_QUERY_TERMS.has(term) && !/^\d$/.test(term));
+    const queryTerms = tokenize(query).filter(term => !COMMON_QUERY_TERMS.has(term) && !/^\d$/.test(term));
+    const text = String(haystack || '').toLowerCase();
+    const matchedSubjectTerms = subjectTerms.filter(term => text.includes(term));
+    const matchedQueryTerms = queryTerms.filter(term => text.includes(term));
+    const compactText = text.replace(/[^a-z0-9]+/g, ' ').trim();
+    const hasSubjectPhrase = subject && compactText.includes(subject.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
+    const hasDevicePhrase = /\b(?:nothing\s+phone|phone\s+3|iphone|pixel|galaxy|oneplus)\b/i.test(text);
+    if (hasSubjectPhrase) return true;
+    if (hasDevicePhrase && matchedQueryTerms.length >= 2) return true;
+    if (!subjectTerms.some(term => /phone|smartphone|laptop|tablet|camera|headphones|earbuds|watch|console|device|model|iphone|pixel|galaxy|oneplus/i.test(term))) {
+        return false;
+    }
+    return matchedSubjectTerms.length >= Math.min(2, subjectTerms.length) && matchedQueryTerms.length >= 2 && /\b(review|hands-on|price|worth|compare|vs|available|launch)/i.test(text);
 }
 
 function buildGdeltDescription(item, domain, date) {
@@ -1583,7 +1613,7 @@ function buildGdeltDescription(item, domain, date) {
 }
 
 function tokenize(text = '') {
-    return Array.from(new Set(String(text || '').toLowerCase().match(/[a-z0-9]{2,}/g) || []));
+    return Array.from(new Set(String(text || '').toLowerCase().match(/[a-z0-9]{1,}/g) || []));
 }
 
 function normalizeResultKey(item) {
@@ -1603,6 +1633,55 @@ function normalizeResultKey(item) {
 
 function normalizeSearchQuery(query) {
     return String(query || '').replace(/\s+/g, ' ').trim().slice(0, MAX_QUERY_LENGTH);
+}
+
+function extractSearchTargetQuery(query) {
+    const normalized = normalizeSearchQuery(query)
+        .replace(/^[“"']+|[”"']+$/g, '')
+        .replace(/[?.!]+$/g, '')
+        .trim();
+    if (!normalized) return '';
+    const explicit = normalized.match(/^(?:please\s+)?(?:can\s+you\s+|could\s+you\s+)?(?:search(?:\s+the\s+web)?(?:\s+for)?|web\s+search(?:\s+for)?|look\s+up|find(?:\s+me)?|google)\s+(.+)$/i);
+    if (explicit?.[1]) return cleanSearchTargetPhrase(explicit[1]);
+    return cleanSearchTargetPhrase(normalized);
+}
+
+function cleanSearchTargetPhrase(value) {
+    return normalizeSearchQuery(String(value || '')
+        .replace(/^(?:about|on|for)\s+/i, '')
+        .replace(/[?.!]+$/g, '')
+        .trim());
+}
+
+function buildDeterministicSearchQueries(query) {
+    const normalized = normalizeSearchQuery(query);
+    if (!normalized) return [];
+    if (!isProductReviewSearchQuery(normalized)) return [];
+    const subject = extractProductSearchSubject(normalized);
+    if (!subject) return [];
+    return Array.from(new Set([
+        `${subject} reviews`,
+        `${subject} recent reviews`,
+        `${subject} phone review`
+    ].map(normalizeSearchQuery).filter(Boolean)));
+}
+
+function isProductReviewSearchQuery(query) {
+    const text = String(query || '').toLowerCase();
+    const hasProductSignal = /\b(phone|smartphone|laptop|tablet|camera|headphones|earbuds|watch|console|device|model|iphone|pixel|galaxy|oneplus|nothing\s+phone)\b/.test(text);
+    const hasFreshOrReviewSignal = /\b(reviews?|hands-on|worth\s+it|good|best|vs|compare|comparison|price|available|availability|launched|release(?:d)?|latest|recent|current|newest)\b/.test(text);
+    return hasProductSignal && hasFreshOrReviewSignal;
+}
+
+function extractProductSearchSubject(query) {
+    let text = normalizeSearchQuery(query)
+        .replace(/\b(?:latest|recent|current|newest|reviews?|review|hands-on|worth\s+it|good|best|price|available|availability|launched|released?|compare|comparison|vs)\b/gi, ' ')
+        .replace(/\b(?:of|for|about|on|the|is|are|should|i|buy|get)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const nothingPhone = String(query || '').match(/\bnothing\s+phone\s+\(?[a-z0-9]+\)?/i);
+    if (nothingPhone?.[0]) text = nothingPhone[0];
+    return normalizeSearchQuery(text).replace(/\s*\(\s*/g, ' ').replace(/\s*\)\s*/g, '').trim();
 }
 
 function createSerperStatusError(status, detail = '') {
@@ -1749,6 +1828,11 @@ export const __test = {
     rankSources,
     searchPublicSources,
     searchWikipedia,
+    extractSearchTargetQuery,
+    buildDeterministicSearchQueries,
+    isProductReviewSearchQuery,
+    isRelatedProductReviewSource,
+    isRelatedToQuery,
     buildGeminiSearchPlan,
     enhanceResultsWithGemini,
     isTrustedLiveSource,
