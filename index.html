@@ -19015,6 +19015,7 @@ let isRestoringChatSession = false;
 
 const CHAT_SESSIONS_STORAGE_KEY = 'jarvis_chat_sessions_v1';
 const CHAT_ACTIVE_DRAFT_STORAGE_KEY = 'jarvis_active_empty_chat_draft_v1';
+const CHAT_LEGACY_MIGRATION_DONE_KEY = 'jarvis_chat_legacy_migration_done_v1';
 const CHAT_SESSION_MAX_MESSAGES = 160;
 
 function createChatSession(title = 'New chat') {
@@ -19130,8 +19131,39 @@ function loadActiveEmptyChatDraft() {
     }
 }
 
+function hasLegacyChatMigrationRun() {
+    try {
+        return localStorage.getItem(CHAT_LEGACY_MIGRATION_DONE_KEY) === '1';
+    } catch (_) {
+        return true;
+    }
+}
+
+function markLegacyChatMigrationDone() {
+    try {
+        localStorage.setItem(CHAT_LEGACY_MIGRATION_DONE_KEY, '1');
+    } catch (_) {}
+}
+
+function hasChatSessionsStorageRecord() {
+    try {
+        return localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY) !== null;
+    } catch (_) {
+        return true;
+    }
+}
+
 function migrateLegacyHistoryToChatSession() {
-    if (chatSessions.length) return;
+    if (chatSessions.length) {
+        markLegacyChatMigrationDone();
+        return;
+    }
+    if (hasLegacyChatMigrationRun()) return;
+    if (hasChatSessionsStorageRecord()) {
+        markLegacyChatMigrationDone();
+        return;
+    }
+    markLegacyChatMigrationDone();
     try {
         const legacy = localStorage.getItem(getHistoryStorageKey());
         const parsed = legacy ? JSON.parse(legacy) : [];
@@ -19547,8 +19579,16 @@ function handleChatSessionMenuAction(action) {
     } else if (action === 'delete') {
         const ok = window.confirm(`Delete "${session.title || 'this chat'}"?`);
         if (!ok) return;
+        const wasActiveSession = session.id === activeChatSessionId;
         session.deleted = true;
-        if (session.id === activeChatSessionId) startNewChatSession();
+        session.messages = [];
+        session.updatedAt = new Date().toISOString();
+        forgetActiveEmptyChatDraft();
+        saveChatSessions();
+        if (wasActiveSession) startNewChatSession();
+        renderChatSidebarList();
+        closeChatSessionMenu();
+        return;
     }
     saveChatSessions();
     renderChatSidebarList();
