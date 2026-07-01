@@ -88,9 +88,10 @@ export default async function handler(req, res) {
 
         const parsed = safeParseJson(rawText) || extractJsonFromText(rawText);
         if (!parsed) {
+            const cleanedRaw = cleanVisionDisplayText(rawText);
             return res.status(200).json({
                 success: true,
-                response: rawText,
+                response: cleanedRaw || 'I can see the image, but I could not produce a clean visual answer.',
                 task,
                 raw: true
             });
@@ -475,7 +476,6 @@ async function runFastMathOcrSolvePipeline({ providers, mimeType, imageBase64, u
     }
     lines.push(`Final answer: ${finalAnswer}`);
     if (verification.length) lines.push(`Verification: ${verification.join(' | ')}`);
-    lines.push(`Confidence: ${confidence || ocrConfidence || 'medium'}`);
 
     return {
         response: lines.join('\n\n'),
@@ -629,7 +629,6 @@ async function runMathOcrSolvePipeline({ providers, mimeType, imageBase64, userP
     }
     lines.push(`Final answer: ${finalAnswer}`);
     if (checks.length) lines.push(`Verification: ${checks.join(' | ')}`);
-    lines.push(`Confidence: ${confidence}`);
 
     return {
         response: lines.join('\n\n'),
@@ -950,7 +949,6 @@ function buildObjectFirstVisionAnswer({ directAnswer, summary, objects, brand, m
     const answer = removeDetectedTextLead(compactSingleLine(directAnswer || summary));
     const parts = [];
     const identity = [brand, model].filter(Boolean).join(' ').trim();
-    const confidence = normalizeVisionConfidence(topObjectMeta?.confidence, uncertainty);
 
     if (identity) {
         const qualified = uncertainty ? `likely ${identity}` : identity;
@@ -977,15 +975,11 @@ function buildObjectFirstVisionAnswer({ directAnswer, summary, objects, brand, m
         parts.push(`Uncertainty: ${uncertainty}`);
     }
 
-    if (confidence) {
-        parts.push(`Confidence: ${confidence}.`);
-    }
-
     if (includeText && compactText) {
         parts.push(`Readable text: "${compactTextForMention(compactText)}."`);
     }
 
-    return parts.join(' ').replace(/\s+/g, ' ').trim();
+    return cleanVisionDisplayText(parts.join(' '));
 }
 
 function pickTopObjectLabel(objects) {
@@ -1012,6 +1006,25 @@ function normalizeVisionConfidence(score, uncertainty = '') {
     if (value >= 0.82) return 'high';
     if (value >= 0.55) return 'medium';
     return 'low';
+}
+
+function cleanVisionDisplayText(text) {
+    let out = String(text || '').trim();
+    if (!out) return '';
+    out = out
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .replace(/\b"?(?:objects|people|animals|textDetected|modelEvidence|distinctiveFeatures|confidence)"?\s*:\s*(?:\[[\s\S]*?\]|\{[\s\S]*?\}|[0-9.]+|"[^"]*")\s*,?/gi, ' ')
+        .replace(/"(?:answer|summary|brand|model|uncertainty|fullText|label|count)"\s*:\s*"?/gi, ' ')
+        .replace(/\bConfidence:\s*[^\n.]+\.?/gi, ' ')
+        .replace(/[{}[\]]/g, ' ')
+        .replace(/"\s*,\s*"/g, ' ')
+        .replace(/"\s*:\s*"/g, ': ')
+        .replace(/(^|[\s,])"/g, '$1')
+        .replace(/"(?=[\s,.]|$)/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return out.slice(0, 1200);
 }
 
 function withArticle(label) {
