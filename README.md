@@ -1,16 +1,21 @@
 # JARVIS
 
-JARVIS is a browser-based assistant for chat, writing, planning, translation, weather, live vision, source checking, and everyday help.
+JARVIS is a browser-based assistant for chat, writing, planning, translation, weather, live vision, saved chats, local memory, source checking, and everyday help.
 
 The app is intentionally simple: a static frontend, small browser modules, and Node/Vercel-style API routes. There is no frontend build step.
 
 ## Exact Features
 
 - Text chat, explanations, summaries, writing help & planning.
+- Token-by-token streaming for normal chat answers, with JSON fallback for reviewed or structured routes.
 - Voice-to-text input through the browser.
-- Live Vision for camera-based questions.
+- Live Vision for camera-based questions, opened from the left sidebar.
+- ChatGPT-style saved chats with search, restore, rename, pin, share, and delete.
+- Local Memory Manager for explicit saved memory.
 - Prompt-based translation and translator mode.
-- Help & Options with custom instructions and simple data controls.
+- Slash command picker for fast prompt templates and Live Vision access.
+- Chat export helpers for JSON, TXT, and Markdown.
+- Help & Options with custom instructions.
 - Weather, location, hotel, food, itinerary, and general transport overview help.
 - Verification that checks an answer against retrieved sources.
 - Local preferences, chat history, regeneration, interruption, and feedback.
@@ -49,9 +54,19 @@ Example commands:
 - `what does "vanakkam" mean in English`
 - `translate to Kannada`
 
-## Help & Data Controls
+## Sidebar And Options
 
-Help & Options intentionally stays small. It contains custom system instructions and a data controls panel with three actions: export chat, clear chat, and clear memory.
+The left sidebar is the primary control surface. It contains New chat, Search chats, Vision Analysis, Voice Conversation, Memory, System Instructions, and saved chat recents. Long-press or right-click a saved chat to rename, pin, share, or delete it.
+
+Help & Options intentionally stays small. It contains custom system instructions only.
+
+## Fast Answers
+
+Normal chat answers stream into the active assistant bubble as the model generates text. Structured routes, verification, source-grounded answers, and higher-risk flows can still use the complete JSON response path so review and formatting remain reliable.
+
+Press `/` in an empty prompt box to open the command picker. The picker offers Translate, Verify, Vision, Summarize, Professional, and Study templates. The user must select a command; typing `/` alone does not submit a hidden command.
+
+Chat export supports JSON, TXT, and Markdown. Individual assistant answers can be copied, shared, regenerated, or checked with the two-option More menu.
 
 ## Verification
 
@@ -61,7 +76,7 @@ The user does not need to provide links. JARVIS searches from the original quest
 
 ## Tech Stack
 
-- Frontend: static HTML, CSS, and vanilla browser JavaScript.
+- Frontend: static HTML, CSS, and vanilla JavaScript.
 - Browser modules: app state, storage, speech input, API client, and Context Copilot.
 - Backend: Node/Vercel-style API route handlers.
 - Model providers: Groq and Gemini, configured server-side.
@@ -70,8 +85,6 @@ The user does not need to provide links. JARVIS searches from the original quest
 
 ## Project Map
 
-- `.github/workflows/quality.yml`: GitHub Actions quality workflow.
-- `.gitignore`: Local files ignored by git.
 - `index.html`: Main application UI and browser-side assistant workflows.
 - `package.json`: Project metadata, scripts, dependency list, and Vercel function settings.
 - `README.md`: Project overview and file map.
@@ -117,6 +130,6 @@ The user does not need to provide links. JARVIS searches from the original quest
 ## Privacy Notes
 
 - Chat history, memory, preferences, and feedback are stored in browser localStorage when persistence is enabled.
-- Help & Options can export chat history, clear chat history, and clear saved memory.
+- Saved chat actions are managed from the sidebar. Explicit memory items are managed in Memory Manager.
 - Camera, microphone, and location require browser permission.
 - Provider API keys must stay server-side. Do not put them in frontend files.
