@@ -752,6 +752,39 @@ assert.equal(titleSandbox.deriveChatTitleFromMessages([
     { role: 'assistant', text: 'Start with DOM basics.' }
 ]), 'how do I learn JavaScript fast');
 
+const legacyDeleteSandbox = {
+    localStorage: {
+        data: new Map(),
+        get length() { return this.data.size; },
+        key(index) { return Array.from(this.data.keys())[index] || null; },
+        getItem(key) { return this.data.has(key) ? this.data.get(key) : null; },
+        setItem(key, value) { this.data.set(key, String(value)); },
+        removeItem(key) { this.data.delete(key); }
+    },
+    userName: 'tester',
+    conversationHistory: []
+};
+vm.createContext(legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getHistoryStorageKey'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeHistoryUserMessage'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeHistoryAssistantMessage'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'sanitizeConversationHistoryRecords'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeDeletedChatTitle'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'deriveChatTitleFromText'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getLegacyHistoryStorageKeys'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getChatSessionDeleteFingerprint'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'legacyHistoryItemMatchesDeletedSession'), legacyDeleteSandbox);
+legacyDeleteSandbox.localStorage.setItem('unify_history_tester', JSON.stringify([{ user: 'Old legacy question', ai: 'Old answer', turnId: 'turn-a' }]));
+legacyDeleteSandbox.localStorage.setItem('unify_history_other', JSON.stringify([{ user: 'Old legacy question', ai: 'Old answer', turnId: 'turn-b' }]));
+const legacyFingerprint = legacyDeleteSandbox.getChatSessionDeleteFingerprint({
+    id: 'legacy_default_chat',
+    title: 'Old legacy question',
+    messages: [{ role: 'user', text: 'Old legacy question' }, { role: 'assistant', text: 'Old answer' }]
+});
+assert.equal(legacyDeleteSandbox.getLegacyHistoryStorageKeys().filter(key => key.startsWith('unify_history_')).length, 2);
+assert.equal(legacyDeleteSandbox.legacyHistoryItemMatchesDeletedSession({ user: 'Old legacy question', ai: 'Old answer' }, legacyFingerprint), true);
+assert.equal(legacyDeleteSandbox.legacyHistoryItemMatchesDeletedSession({ user: 'Different question', ai: 'Different answer' }, legacyFingerprint), false);
+
 assert.match(SOURCE.appHtml, /trimmed === '\/'/);
 assert.match(SOURCE.appHtml, /getSlashCommandPicker\(\) && trimmed !== ''/);
 assert.match(SOURCE.appHtml, /CHAT_LEGACY_MIGRATION_DONE_KEY/);
@@ -762,15 +795,23 @@ assert.match(SOURCE.appHtml, /function getDeletedChatSessionTitles\(\)/);
 assert.match(SOURCE.appHtml, /function rememberDeletedChatSession\(session\)/);
 assert.match(SOURCE.appHtml, /function markLegacyChatMigrationDone\(\)/);
 assert.match(SOURCE.appHtml, /function hasChatSessionsStorageRecord\(\)/);
+assert.match(SOURCE.appHtml, /function getLegacyHistoryStorageKeys\(\)/);
+assert.match(SOURCE.appHtml, /\^unify_history_/);
+assert.match(SOURCE.appHtml, /function getChatSessionDeleteFingerprint\(session\)/);
+assert.match(SOURCE.appHtml, /function legacyHistoryItemMatchesDeletedSession\(item, fingerprint\)/);
+assert.match(SOURCE.appHtml, /function filterLegacyHistoryAgainstDeletedTombstones\(historyItems\)/);
 assert.match(SOURCE.appHtml, /function clearLegacyHistoryForDeletedSession\(session\)/);
 assert.match(SOURCE.appHtml, /if \(hasLegacyChatMigrationRun\(\)\) return;/);
 assert.match(SOURCE.appHtml, /getDeletedChatSessionIds\(\)\.has\('legacy_default_chat'\)/);
 assert.match(SOURCE.appHtml, /getDeletedChatSessionTitles\(\)\.has\(normalizeDeletedChatTitle\(legacyTitle\)\)/);
+assert.match(SOURCE.appHtml, /for \(const historyKey of getLegacyHistoryStorageKeys\(\)\)/);
+assert.match(SOURCE.appHtml, /conversationHistory = sanitizeConversationHistoryRecords\(conversationHistory\)[\s\S]*legacyHistoryItemMatchesDeletedSession\(item, fingerprint\)/);
 assert.match(SOURCE.appHtml, /if \(hasChatSessionsStorageRecord\(\)\) \{[\s\S]*markLegacyChatMigrationDone\(\);[\s\S]*return;/);
 assert.match(SOURCE.appHtml, /id="chat-delete-dialog"/);
 assert.match(SOURCE.appHtml, /Delete '\$\{session\.title \|\| 'this chat'\}'/);
-assert.match(SOURCE.appHtml, /rememberDeletedChatSession\(session\);[\s\S]*clearLegacyHistoryForDeletedSession\(session\);[\s\S]*session\.messages = \[\];[\s\S]*forgetActiveEmptyChatDraft\(\);[\s\S]*saveChatSessions\(\);[\s\S]*if \(wasActiveSession\) startNewChatSession\(\);/);
+assert.match(SOURCE.appHtml, /rememberDeletedChatSession\(session\);[\s\S]*clearLegacyHistoryForDeletedSession\(session\);[\s\S]*session\.messages = \[\];[\s\S]*forgetActiveEmptyChatDraft\(\);[\s\S]*saveChatSessions\(\);[\s\S]*if \(wasActiveSession\) \{[\s\S]*conversationHistory = \[\];[\s\S]*startNewChatSession\(\);/);
 assert.match(SOURCE.styles, /\.chat-delete-dialog\s*\{/);
+assert.match(SOURCE.styles, /\.chat-delete-dialog \.chat-delete-dialog-btn\.danger,[\s\S]*color:\s*#000000 !important/);
 assert.match(SOURCE.styles, /\.help-modal-enhanced \.help-modal-body\s*\{[\s\S]*padding:\s*16px !important/);
 
 console.log('deterministic-checks-ok'); 
