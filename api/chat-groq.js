@@ -24,6 +24,12 @@
         if (guard.handled) return;
 
         try {
+            const timing = {
+                startedAt: Date.now(),
+                modelMs: 0,
+                qualityMs: 0,
+                totalMs: 0
+            };
             const requestId = `cg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
             const request = normalizeChatRequest(req.body);
             if (!request.ok) {
@@ -124,7 +130,9 @@
                 effectiveMessage,
                 lengthPolicy.instruction
             );
+            const modelStartedAt = Date.now();
             const firstPass = await runModelWithFallback(firstPrompt, lengthPolicy);
+            timing.modelMs += Date.now() - modelStartedAt;
             if (!firstPass.ok) {
                 return res.status(503).json({
                     success: false,
@@ -161,7 +169,9 @@
                         effectiveMessage,
                         lengthPolicy.instruction
                     );
+                    const secondStartedAt = Date.now();
                     const secondPass = await runModelWithFallback(secondPrompt, lengthPolicy);
+                    timing.modelMs += Date.now() - secondStartedAt;
                     if (secondPass.ok) {
                         selectedPass = secondPass;
                     }
@@ -170,17 +180,22 @@
 
             let finalParsed = enforceLiveAnswerStyle(selectedPass.parsedResponse, effectiveMessage, liveRag.sources);
             finalParsed = applyResponseLengthPostCheck(finalParsed, lengthPolicy, effectiveMessage, '');
+            const qualityStartedAt = Date.now();
             const qualityResult = await reviewAnswerIfNeeded({
                 message: effectiveMessage,
                 answer: finalParsed?.response,
                 intent,
                 contextBlock,
+                routeDecision,
+                webEscalation: escalation,
                 forceReview: false
             });
+            timing.qualityMs = Date.now() - qualityStartedAt;
             if (qualityResult.correctedResponse) {
                 finalParsed = { ...finalParsed, response: qualityResult.correctedResponse };
             }
             finalParsed = normalizeAssistantResponseStyle(finalParsed);
+            timing.totalMs = Date.now() - timing.startedAt;
             return res.status(200).json({
                 success: true,
                 ...finalParsed,
@@ -202,7 +217,12 @@
                     requestType: isInternalSummary ? 'internal_summary' : 'user_query',
                     extractor: webEscalationExtractor || undefined
                 },
-                quality: qualityResult.metadata
+                quality: qualityResult.metadata,
+                timing: {
+                    modelMs: timing.modelMs,
+                    qualityMs: timing.qualityMs,
+                    totalMs: timing.totalMs
+                }
             });
         } catch (error) {
             console.error('[chat-groq] handler failure', {
@@ -1570,9 +1590,9 @@
         return '';
     }
 
-    async function reviewAnswerIfNeeded({ message, answer, intent, contextBlock, forceReview = false }) {
+    async function reviewAnswerIfNeeded({ message, answer, intent, contextBlock, routeDecision = null, webEscalation = null, forceReview = false }) {
         const startedAt = Date.now();
-        const riskReasons = getQualityRiskReasons(message, answer, intent);
+        const riskReasons = getQualityRiskReasons(message, answer, intent, { routeDecision, webEscalation });
         if (forceReview && !riskReasons.includes('always_on_review')) {
             riskReasons.unshift('always_on_review');
         }
@@ -1642,12 +1662,21 @@
         };
     }
 
-    function getQualityRiskReasons(message, answer, intent) {
+    function getQualityRiskReasons(message, answer, intent, options = {}) {
         const input = `${String(message || '')}\n${String(answer || '')}`.toLowerCase();
+        const answerText = String(answer || '').toLowerCase();
+        const routeDecision = options?.routeDecision || {};
+        const webEscalation = options?.webEscalation || {};
         const reasons = [];
-        if (String(intent || '') === 'selection_verify') reasons.push('explicit_verification');
+        if (String(intent || '') === 'verify_answer' || String(intent || '') === 'selection_verify') reasons.push('explicit_verification');
         if (/\b(wrong|incorrect|hallucinat|made that up|not true|check again|recheck|verify|are you sure)\b/.test(input)) {
             reasons.push('challenged_or_uncertain');
+        }
+        if (/\b(i'?m not sure|not sure|cannot verify|can't verify|could not verify|unable to verify|not enough information|may be|might be|likely|possibly|probably|unclear|unknown|not certain|uncertain)\b/.test(answerText)) {
+            reasons.push('model_uncertainty');
+        }
+        if (/\b(fallback|service_unavailable|service_error|unknown_general_knowledge_answer|crawl4ai_unavailable|low_confidence)\b/.test(`${String(routeDecision.reason || '')} ${String(webEscalation.reason || '')}`.toLowerCase())) {
+            reasons.push('routing_uncertainty');
         }
         if (/\b(medical|medicine|symptom|diagnos|dose|legal|lawyer|contract|financial|investment|tax|self-harm|suicide|emergency)\b/.test(input)) {
             reasons.push('high_stakes');
@@ -1657,9 +1686,6 @@
         }
         if (/\b(calculate|equation|formula|percent|probability|equals?)\b|(?:\d+\s*[-+*/]\s*\d+)/.test(input)) {
             reasons.push('calculation');
-        }
-        if (/\b(who|what|when|where|which|date|year|number|population|founded|invented|discovered)\b/.test(String(message || '').toLowerCase())) {
-            reasons.push('factual_claim');
         }
         return [...new Set(reasons)].slice(0, 5);
     }
