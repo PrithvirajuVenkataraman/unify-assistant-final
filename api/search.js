@@ -1578,14 +1578,14 @@ function isRelatedToQuery(query, item) {
     const terms = tokenize(query).filter(term => !COMMON_QUERY_TERMS.has(term));
     if (!terms.length) return true;
     const hay = `${item?.title || ''} ${item?.description || ''} ${item?.sourceLabel || ''}`.toLowerCase();
-    if (isProductReviewSearchQuery(query)) {
-        return isRelatedProductReviewSource(query, hay);
+    if (isCurrentTopicSearchQuery(query)) {
+        return isRelatedCurrentTopicSource(query, hay);
     }
     return terms.some(term => hay.includes(term));
 }
 
-function isRelatedProductReviewSource(query, haystack) {
-    const subject = extractProductSearchSubject(query);
+function isRelatedCurrentTopicSource(query, haystack) {
+    const subject = extractSearchSubject(query);
     const subjectTerms = tokenize(subject).filter(term => !COMMON_QUERY_TERMS.has(term) && !/^\d$/.test(term));
     const queryTerms = tokenize(query).filter(term => !COMMON_QUERY_TERMS.has(term) && !/^\d$/.test(term));
     const text = String(haystack || '').toLowerCase();
@@ -1593,13 +1593,10 @@ function isRelatedProductReviewSource(query, haystack) {
     const matchedQueryTerms = queryTerms.filter(term => text.includes(term));
     const compactText = text.replace(/[^a-z0-9]+/g, ' ').trim();
     const hasSubjectPhrase = subject && compactText.includes(subject.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
-    const hasDevicePhrase = /\b(?:nothing\s+phone|phone\s+3|iphone|pixel|galaxy|oneplus)\b/i.test(text);
     if (hasSubjectPhrase) return true;
-    if (hasDevicePhrase && matchedQueryTerms.length >= 2) return true;
-    if (!subjectTerms.some(term => /phone|smartphone|laptop|tablet|camera|headphones|earbuds|watch|console|device|model|iphone|pixel|galaxy|oneplus/i.test(term))) {
-        return false;
-    }
-    return matchedSubjectTerms.length >= Math.min(2, subjectTerms.length) && matchedQueryTerms.length >= 2 && /\b(review|hands-on|price|worth|compare|vs|available|launch)/i.test(text);
+    if (subjectTerms.length <= 1) return matchedSubjectTerms.length === subjectTerms.length && matchedQueryTerms.length >= 2;
+    const requiredSubjectMatches = Math.min(subjectTerms.length, Math.max(2, Math.ceil(subjectTerms.length * 0.67)));
+    return matchedSubjectTerms.length >= requiredSubjectMatches && matchedQueryTerms.length >= requiredSubjectMatches;
 }
 
 function buildGdeltDescription(item, domain, date) {
@@ -1656,32 +1653,38 @@ function cleanSearchTargetPhrase(value) {
 function buildDeterministicSearchQueries(query) {
     const normalized = normalizeSearchQuery(query);
     if (!normalized) return [];
-    if (!isProductReviewSearchQuery(normalized)) return [];
-    const subject = extractProductSearchSubject(normalized);
+    if (!isCurrentTopicSearchQuery(normalized)) return [];
+    const subject = extractSearchSubject(normalized);
     if (!subject) return [];
+    const intent = extractSearchIntentTerm(normalized);
     return Array.from(new Set([
-        `${subject} reviews`,
-        `${subject} recent reviews`,
-        `${subject} phone review`
+        `${subject} ${intent}`.trim(),
+        `${subject} recent ${intent}`.trim(),
+        `${subject} latest ${intent}`.trim()
     ].map(normalizeSearchQuery).filter(Boolean)));
 }
 
-function isProductReviewSearchQuery(query) {
+function isCurrentTopicSearchQuery(query) {
     const text = String(query || '').toLowerCase();
-    const hasProductSignal = /\b(phone|smartphone|laptop|tablet|camera|headphones|earbuds|watch|console|device|model|iphone|pixel|galaxy|oneplus|nothing\s+phone)\b/.test(text);
-    const hasFreshOrReviewSignal = /\b(reviews?|hands-on|worth\s+it|good|best|vs|compare|comparison|price|available|availability|launched|release(?:d)?|latest|recent|current|newest)\b/.test(text);
-    return hasProductSignal && hasFreshOrReviewSignal;
+    const hasFreshOrReviewSignal = /\b(reviews?|hands-on|worth\s+it|vs|compare|comparison|price|available|availability|launched)\b/.test(text);
+    return hasFreshOrReviewSignal && extractSearchSubject(query).split(/\s+/).filter(Boolean).length >= 2;
 }
 
-function extractProductSearchSubject(query) {
-    let text = normalizeSearchQuery(query)
+function extractSearchSubject(query) {
+    const text = normalizeSearchQuery(query)
         .replace(/\b(?:latest|recent|current|newest|reviews?|review|hands-on|worth\s+it|good|best|price|available|availability|launched|released?|compare|comparison|vs)\b/gi, ' ')
-        .replace(/\b(?:of|for|about|on|the|is|are|should|i|buy|get)\b/gi, ' ')
+        .replace(/\b(?:of|for|about|on|the|is|are|should|i|buy|get|now|today|live|exact|rate)\b/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-    const nothingPhone = String(query || '').match(/\bnothing\s+phone\s+\(?[a-z0-9]+\)?/i);
-    if (nothingPhone?.[0]) text = nothingPhone[0];
     return normalizeSearchQuery(text).replace(/\s*\(\s*/g, ' ').replace(/\s*\)\s*/g, '').trim();
+}
+
+function extractSearchIntentTerm(query) {
+    const text = String(query || '').toLowerCase();
+    if (/\bprice|available|availability|launched|released?\b/.test(text)) return 'latest';
+    if (/\bvs|compare|comparison\b/.test(text)) return 'comparison';
+    if (/\bworth\s+it|best\b/.test(text)) return 'review';
+    return 'reviews';
 }
 
 function createSerperStatusError(status, detail = '') {
@@ -1830,8 +1833,8 @@ export const __test = {
     searchWikipedia,
     extractSearchTargetQuery,
     buildDeterministicSearchQueries,
-    isProductReviewSearchQuery,
-    isRelatedProductReviewSource,
+    isCurrentTopicSearchQuery,
+    isRelatedCurrentTopicSource,
     isRelatedToQuery,
     buildGeminiSearchPlan,
     enhanceResultsWithGemini,
