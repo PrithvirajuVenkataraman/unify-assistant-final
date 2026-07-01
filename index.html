@@ -223,25 +223,6 @@
         <div class="max-w-5xl mx-auto px-3 py-1">
             <div class="max-w-xl sm:max-w-3xl mx-auto">
             <div id="input-bar-inner" class="flex items-center gap-1.5 modern-input px-2 py-1">
-                <div class="composer-actions">
-                    <button
-                        type="button"
-                        id="composer-plus-btn"
-                        class="composer-plus-btn"
-                        onclick="toggleComposerActionsMenu()"
-                        aria-label="Open actions"
-                        aria-expanded="false"
-                        aria-controls="composer-actions-menu">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                    </button>
-                    <div id="composer-actions-menu" class="composer-actions-menu hidden" role="menu" aria-label="Composer actions">
-                        <button type="button" id="vision-toggle-btn" class="composer-action-item" onclick="handleComposerAction('vision')" role="menuitem">Vision analysis</button>
-                        <button type="button" id="help-btn" class="composer-action-item" onclick="handleComposerAction('help')" role="menuitem">Help & options</button>
-                    </div>
-                </div>
                 <textarea
                     id="text-input"
                     rows="1"
@@ -4447,66 +4428,6 @@ let showRoutingDebugBadge = false;
                     </div>
 
                     <div class="help-modal-body p-5 space-y-4 custom-scrollbar">
-                        <section class="help-status-strip" aria-label="Current assistant settings">
-                            <div>
-                                <span class="help-status-label">Style</span>
-                                <strong>${escapeHtml(responseStyle.charAt(0).toUpperCase() + responseStyle.slice(1))}</strong>
-                            </div>
-                            <div>
-                                <span class="help-status-label">Length</span>
-                                <strong>${escapeHtml(responseLength.charAt(0).toUpperCase() + responseLength.slice(1))}</strong>
-                            </div>
-                            <div>
-                                <span class="help-status-label">Format</span>
-                                <strong>${escapeHtml(responseFormat === 'bullet' ? 'Bullets' : responseFormat === 'steps' ? 'Steps' : 'Paragraph')}</strong>
-                            </div>
-                        </section>
-
-                        <section class="help-settings-card help-settings-card-prominent">
-                            <div class="help-section-heading">
-                                <div>
-                                    <h3 class="font-bold">Reply behavior</h3>
-                                    <p class="text-xs">Choose the default tone and structure for normal answers.</p>
-                                </div>
-                            </div>
-                            <div class="help-response-grid">
-                                <button type="button" class="help-response-card" data-mode-group="response-style" data-mode-value="balanced" onclick="setResponseStyle('balanced')" aria-pressed="false">
-                                    <span class="response-style-title">Balanced</span>
-                                    <span class="response-style-description">Direct, useful, and neutral for everyday questions.</span>
-                                </button>
-                                <button type="button" class="help-response-card" data-mode-group="response-style" data-mode-value="chatty" onclick="setResponseStyle('chatty')" aria-pressed="false">
-                                    <span class="response-style-title">Chatty</span>
-                                    <span class="response-style-description">Warmer and more conversational without losing structure.</span>
-                                </button>
-                                <button type="button" class="help-response-card" data-mode-group="response-style" data-mode-value="supportive" onclick="setResponseStyle('supportive')" aria-pressed="false">
-                                    <span class="response-style-title">Supportive</span>
-                                    <span class="response-style-description">Gentler guidance for stressful or personal topics.</span>
-                                </button>
-                                <button type="button" class="help-response-card" data-mode-group="response-style" data-mode-value="debate" onclick="setResponseStyle('debate')" aria-pressed="false">
-                                    <span class="response-style-title">Debate</span>
-                                    <span class="response-style-description">Tests assumptions and compares tradeoffs more actively.</span>
-                                </button>
-                            </div>
-                            <div class="help-control-grid mt-4">
-                                <div>
-                                    <span class="help-control-label">Length</span>
-                                    <div class="help-segmented-control" role="group" aria-label="Response length">
-                                        <button type="button" data-mode-group="response-length" data-mode-value="short" onclick="setResponseLength('short')" aria-pressed="false">Short</button>
-                                        <button type="button" data-mode-group="response-length" data-mode-value="normal" onclick="setResponseLength('normal')" aria-pressed="false">Normal</button>
-                                        <button type="button" data-mode-group="response-length" data-mode-value="detailed" onclick="setResponseLength('detailed')" aria-pressed="false">Detailed</button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <span class="help-control-label">Format</span>
-                                    <div class="help-segmented-control" role="group" aria-label="Response format">
-                                        <button type="button" data-mode-group="response-format" data-mode-value="paragraph" onclick="setResponseFormat('paragraph')" aria-pressed="false">Paragraph</button>
-                                        <button type="button" data-mode-group="response-format" data-mode-value="bullet" onclick="setResponseFormat('bullet')" aria-pressed="false">Bullets</button>
-                                        <button type="button" data-mode-group="response-format" data-mode-value="steps" onclick="setResponseFormat('steps')" aria-pressed="false">Steps</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
                         <section class="help-settings-card">
                             <div class="help-section-heading">
                                 <div>
@@ -18514,7 +18435,6 @@ function showMemoryManager() {
         <div class="memory-manager-panel">
             <header class="memory-manager-header">
                 <div>
-                    <p class="memory-manager-kicker">Local memory</p>
                     <h2 id="memory-manager-title">Memory Manager</h2>
                 </div>
                 <button type="button" class="memory-manager-close" onclick="closeMemoryManager()" aria-label="Close memory manager">
@@ -19092,7 +19012,6 @@ function restoreChatSession(sessionId) {
     }
     closeChatSidebar();
     renderChatSidebarList();
-    showTemporaryMessage(`Opened ${session.title || 'chat'}.`);
 }
 
 function searchChatSessionText(session) {
