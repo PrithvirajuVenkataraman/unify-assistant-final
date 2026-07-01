@@ -403,6 +403,77 @@ option {
     outline: none;
 }
 
+.chat-delete-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-chat-sidebar) + 6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(0, 0, 0, 0.64);
+}
+
+.chat-delete-dialog-backdrop.hidden {
+    display: none !important;
+}
+
+.chat-delete-dialog {
+    width: min(360px, calc(100vw - 36px));
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 10px;
+    background: #050505;
+    color: #ffffff;
+    box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
+    padding: 18px;
+}
+
+.chat-delete-dialog h2 {
+    margin: 0 0 8px;
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 0;
+}
+
+.chat-delete-dialog p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 15px;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.chat-delete-dialog-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.chat-delete-dialog-btn {
+    min-height: 42px;
+    border: 1px solid rgba(255, 255, 255, 0.26);
+    border-radius: 8px;
+    background: #111111;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.chat-delete-dialog-btn:hover,
+.chat-delete-dialog-btn:focus-visible {
+    border-color: rgba(255, 255, 255, 0.7);
+    background: #191919;
+    outline: none;
+}
+
+.chat-delete-dialog-btn.danger {
+    background: #ffffff;
+    color: #000000;
+    border-color: #ffffff;
+}
+
 .voice-conversation-screen {
     position: fixed;
     inset: 0;
@@ -2324,6 +2395,17 @@ body.dark .footer-action-btn-primary:hover {
     margin-bottom: 12px;
 }
 
+.help-settings-card {
+    border: 1px solid var(--ui-border);
+    border-radius: 10px;
+    padding: 14px;
+    background: var(--ui-surface);
+}
+
+.help-modal-enhanced .help-settings-card {
+    margin: 0;
+}
+
 .help-response-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3051,6 +3133,8 @@ button:hover {
 
 .help-modal-enhanced {
     background: #000000 !important;
+    max-height: min(78vh, 620px) !important;
+    border-radius: 12px !important;
 }
 
 .help-modal-enhanced > div:first-child,
@@ -3089,6 +3173,50 @@ button:hover {
     background: #171717 !important;
     color: #ffffff !important;
     border-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.help-modal-enhanced .help-modal-header {
+    min-height: 0 !important;
+    padding: 14px 16px !important;
+}
+
+.help-modal-enhanced .help-modal-body {
+    padding: 16px !important;
+}
+
+.help-modal-enhanced .help-settings-card {
+    padding: 16px !important;
+    border-radius: 10px !important;
+}
+
+@media (max-width: 640px) {
+    .help-modal-enhanced {
+        width: calc(100vw - 28px) !important;
+        max-height: min(70vh, 560px) !important;
+        margin: 0 auto !important;
+    }
+
+    .help-modal-enhanced .help-modal-header {
+        padding: 12px 14px !important;
+    }
+
+    .help-modal-enhanced .help-modal-body {
+        padding: 14px !important;
+    }
+
+    .help-modal-enhanced .help-settings-card {
+        padding: 14px !important;
+    }
+
+    .help-section-heading {
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .custom-system-prompt-input {
+        min-height: 142px !important;
+        font-size: 14px !important;
+    }
 }
 
 .help-response-card.is-selected,
