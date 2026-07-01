@@ -4808,7 +4808,15 @@ let showRoutingDebugBadge = false;
                 openSlashCommandPicker();
             });
             input.addEventListener('input', () => {
-                if ((input.value || '').trim()) closeSlashCommandPicker();
+                const value = input.value || '';
+                const trimmed = value.trim();
+                if (trimmed === '/') {
+                    if (!getSlashCommandPicker()) openSlashCommandPicker();
+                    return;
+                }
+                if (getSlashCommandPicker() && trimmed !== '') {
+                    closeSlashCommandPicker();
+                }
             });
             window.addEventListener('resize', () => positionSlashCommandPicker(getSlashCommandPicker()));
             document.addEventListener('mousedown', event => {
@@ -19017,6 +19025,8 @@ function createChatSession(title = 'New chat') {
         messages: [],
         createdAt: now,
         updatedAt: now,
+        autoTitle: true,
+        titleEdited: false,
         pinned: false,
         deleted: false
     };
@@ -19041,6 +19051,8 @@ function normalizeChatSession(raw) {
         messages,
         createdAt: String(raw.createdAt || raw.updatedAt || new Date().toISOString()),
         updatedAt: String(raw.updatedAt || raw.createdAt || new Date().toISOString()),
+        autoTitle: raw.autoTitle !== false && raw.titleEdited !== true,
+        titleEdited: raw.titleEdited === true,
         pinned: raw.pinned === true,
         deleted: raw.deleted === true
     };
@@ -19086,7 +19098,9 @@ function rememberActiveEmptyChatDraft(session) {
         localStorage.setItem(CHAT_ACTIVE_DRAFT_STORAGE_KEY, JSON.stringify({
             id: session.id,
             createdAt: session.createdAt,
-            updatedAt: session.updatedAt
+            updatedAt: session.updatedAt,
+            autoTitle: session.autoTitle !== false,
+            titleEdited: session.titleEdited === true
         }));
     } catch (_) {}
 }
@@ -19108,6 +19122,8 @@ function loadActiveEmptyChatDraft() {
         session.id = id;
         session.createdAt = String(parsed?.createdAt || session.createdAt);
         session.updatedAt = String(parsed?.updatedAt || session.updatedAt);
+        session.autoTitle = parsed?.autoTitle !== false;
+        session.titleEdited = parsed?.titleEdited === true;
         return session;
     } catch (_) {
         return null;
@@ -19207,9 +19223,44 @@ function deriveChatTitleFromText(text) {
     return words.join(' ').slice(0, 60);
 }
 
+function isVagueChatTitlePrompt(text) {
+    const cleaned = String(text || '').replace(/[?.!,;:]+$/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    if (!cleaned) return true;
+    if (/^(what is this|what's this|what is it|what's it|what do you see|what am i looking at|describe this|analyze this|read this|help|explain|tell me more|this|that|it)$/i.test(cleaned)) return true;
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    return words.length <= 3 && /\b(this|that|it|help|explain|read|scan|vision|camera|image|screen)\b/.test(cleaned);
+}
+
+function deriveChatTitleFromAssistantText(text) {
+    let cleaned = String(text || '')
+        .replace(/\s+/g, ' ')
+        .replace(/^(Likely item|Visible item|Detected text|Readable text)\s*:\s*/i, '')
+        .replace(/^I can see\s+/i, '')
+        .replace(/^I see\s+/i, '')
+        .replace(/^It (?:looks like|appears to be|is)\s+/i, '')
+        .trim();
+    if (!cleaned) return 'New chat';
+    const firstSentence = splitReadableSentences(cleaned)[0] || cleaned.split(/[.!?]/)[0] || cleaned;
+    cleaned = firstSentence
+        .replace(/\([^)]*\)/g, ' ')
+        .replace(/\b(likely|probably|visible|showing|shown|there is|there are|a|an|the)\b/gi, ' ')
+        .replace(/[?.!,;:]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const words = cleaned.split(/\s+/).filter(Boolean).slice(0, 7);
+    return words.length ? words.join(' ').slice(0, 60) : 'New chat';
+}
+
 function deriveChatTitleFromMessages(messages = []) {
     const firstUser = messages.find(item => item.role === 'user' && item.text);
-    return firstUser ? deriveChatTitleFromText(firstUser.text) : 'New chat';
+    const firstAssistant = messages.find(item => item.role === 'assistant' && item.text);
+    const userTitle = firstUser ? deriveChatTitleFromText(firstUser.text) : 'New chat';
+    if (firstUser && isVagueChatTitlePrompt(firstUser.text) && firstAssistant) {
+        const assistantTitle = deriveChatTitleFromAssistantText(firstAssistant.text);
+        if (assistantTitle && assistantTitle !== 'New chat') return assistantTitle;
+    }
+    if (userTitle && userTitle !== 'New chat') return userTitle;
+    return firstAssistant ? deriveChatTitleFromAssistantText(firstAssistant.text) : 'New chat';
 }
 
 function recordActiveChatMessage(role, text, turnId = '') {
@@ -19228,7 +19279,7 @@ function recordActiveChatMessage(role, text, turnId = '') {
     });
     session.messages = session.messages.slice(-CHAT_SESSION_MAX_MESSAGES);
     session.updatedAt = now;
-    if (!session.title || session.title === 'New chat') {
+    if (session.titleEdited !== true && session.autoTitle !== false) {
         session.title = deriveChatTitleFromMessages(session.messages);
     }
     forgetActiveEmptyChatDraft();
@@ -19482,6 +19533,8 @@ function handleChatSessionMenuAction(action) {
             const title = next.trim().slice(0, 80);
             if (title) {
                 session.title = title;
+                session.titleEdited = true;
+                session.autoTitle = false;
                 session.updatedAt = new Date().toISOString();
             }
         }
@@ -20213,7 +20266,6 @@ function formatVisionJsonToReadableText(payload) {
     const objectMeta = pickReadableVisionObjectMeta(objects);
     const parts = [];
     const identity = [brand, model].filter(Boolean).join(' ').trim();
-    const confidence = normalizeReadableVisionConfidence(objectMeta?.confidence, uncertainty);
 
     if (identity) {
         const qualified = uncertainty ? `likely ${identity}` : identity;
@@ -20242,15 +20294,11 @@ function formatVisionJsonToReadableText(payload) {
         parts.push(`Uncertainty: ${uncertainty}`);
     }
 
-    if (confidence) {
-        parts.push(`Confidence: ${confidence}.`);
-    }
-
     if (compactText) {
         parts.push(`Readable text: "${compactVisionTextMention(compactText)}."`);
     }
 
-    if (parts.length) return parts.join(' ').replace(/\s+/g, ' ').trim();
+    if (parts.length) return cleanVisionDisplayText(parts.join(' '));
 
     if (objects.length) {
         const objectLine = objects
@@ -20380,11 +20428,11 @@ function normalizeVisionAnswerForChat(answer, details = {}) {
         .replace(/^```(?:json)?\s*/i, '')
         .replace(/\s*```$/i, '')
         .trim();
-    return refineVisionAnswer(normalized);
+    return refineVisionAnswer(cleanVisionDisplayText(normalized));
 }
 
 function applyVisionReplyPreferences(answer) {
-    let out = String(answer || '').trim();
+    let out = cleanVisionDisplayText(answer);
     if (!out) return '';
     if (!visionShowEvidence) {
         out = out
@@ -20402,7 +20450,7 @@ function applyVisionReplyPreferences(answer) {
 }
 
 function refineVisionAnswer(text) {
-    let out = String(text || '').trim();
+    let out = cleanVisionDisplayText(text);
     if (!out) return '';
     out = out
         .replace(/^detected text:\s*/i, 'I see something written as ')
@@ -20412,11 +20460,30 @@ function refineVisionAnswer(text) {
         .trim();
 
     const sentences = splitReadableSentences(out);
-    const maxSentences = /\b(Likely item:|Evidence:|Visible details:|Uncertainty:|Confidence:|likely\s+[A-Z0-9])/.test(out) ? 5 : 2;
+    const maxSentences = /\b(Likely item:|Evidence:|Visible details:|Uncertainty:|likely\s+[A-Z0-9])/.test(out) ? 5 : 2;
     if (sentences.length > maxSentences) {
         out = sentences.slice(0, maxSentences).join(' ');
     }
     return out;
+}
+
+function cleanVisionDisplayText(text) {
+    let out = String(text || '').trim();
+    if (!out) return '';
+    out = out
+        .replace(/^```(?:json)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .replace(/\b"?(?:objects|people|animals|textDetected|modelEvidence|distinctiveFeatures|confidence)"?\s*:\s*(?:\[[\s\S]*?\]|\{[\s\S]*?\}|[0-9.]+|"[^"]*")\s*,?/gi, ' ')
+        .replace(/"(?:answer|summary|brand|model|uncertainty|fullText|label|count)"\s*:\s*"?/gi, ' ')
+        .replace(/\bConfidence:\s*[^\n.]+\.?/gi, ' ')
+        .replace(/[{}[\]]/g, ' ')
+        .replace(/"\s*,\s*"/g, ' ')
+        .replace(/"\s*:\s*"/g, ': ')
+        .replace(/(^|[\s,])"/g, '$1')
+        .replace(/"(?=[\s,.]|$)/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return out.slice(0, 1200);
 }
 
 function isContinuousVisionQuestion(text) {
