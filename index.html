@@ -102,6 +102,16 @@
         <button type="button" data-chat-action="share" onclick="handleChatSessionMenuAction('share')" role="menuitem">Share</button>
         <button type="button" data-chat-action="delete" onclick="handleChatSessionMenuAction('delete')" role="menuitem">Delete</button>
     </div>
+    <div id="chat-delete-dialog-backdrop" class="chat-delete-dialog-backdrop hidden" role="presentation" onclick="if (event.target === this) closeChatDeleteDialog()">
+        <section id="chat-delete-dialog" class="chat-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="chat-delete-dialog-title">
+            <h2 id="chat-delete-dialog-title">Delete</h2>
+            <p id="chat-delete-dialog-text">Delete ''</p>
+            <div class="chat-delete-dialog-actions">
+                <button type="button" class="chat-delete-dialog-btn secondary" onclick="closeChatDeleteDialog()">No</button>
+                <button type="button" class="chat-delete-dialog-btn danger" onclick="confirmChatDeleteDialog()">Yes</button>
+            </div>
+        </section>
+    </div>
     <section id="voice-conversation-screen" class="voice-conversation-screen hidden" aria-hidden="true" aria-label="Voice conversation">
         <div class="voice-conversation-topbar">
             <button type="button" class="voice-screen-icon-btn" onclick="closeVoiceConversationScreen()" aria-label="Close voice conversation">
@@ -4567,11 +4577,9 @@ let showRoutingDebugBadge = false;
 
             modal.innerHTML = `
                 <div class="help-modal-enhanced max-w-3xl w-full">
-                    <div class="help-modal-header p-5 flex justify-between items-start gap-4">
+                    <div class="help-modal-header p-4 flex justify-between items-start gap-3">
                         <div>
-                            <p class="help-modal-kicker">Control Center</p>
                             <h2 id="help-modal-title" class="text-xl font-bold">Help & Options</h2>
-                            <p class="help-modal-subtitle">Tune how JARVIS replies, checks sources, and stores local data.</p>
                         </div>
                         <button onclick="closeHelpModal()" class="help-modal-close-btn" aria-label="Close Help & Options">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -4581,12 +4589,12 @@ let showRoutingDebugBadge = false;
                         </button>
                     </div>
 
-                    <div class="help-modal-body p-5 space-y-4 custom-scrollbar">
+                    <div class="help-modal-body p-4 custom-scrollbar">
                         <section class="help-settings-card">
                             <div class="help-section-heading">
                                 <div>
                                     <h3 class="font-bold">Custom instructions</h3>
-                                    <p class="text-xs">Tell JARVIS how to reply. Keep responses concise, useful, and consistent.</p>
+                                    <p class="text-xs">Tell JARVIS how to reply.</p>
                                 </div>
                                 <button type="button" class="memory-action-btn" onclick="resetCustomSystemPrompt()">Reset</button>
                             </div>
@@ -19010,6 +19018,7 @@ let conversationHistory = [];
 let chatSessions = [];
 let activeChatSessionId = '';
 let activeChatSessionMenuId = '';
+let pendingChatDeleteSessionId = '';
 let chatSessionLongPressTimer = null;
 let isRestoringChatSession = false;
 
@@ -19017,6 +19026,7 @@ const CHAT_SESSIONS_STORAGE_KEY = 'jarvis_chat_sessions_v1';
 const CHAT_ACTIVE_DRAFT_STORAGE_KEY = 'jarvis_active_empty_chat_draft_v1';
 const CHAT_LEGACY_MIGRATION_DONE_KEY = 'jarvis_chat_legacy_migration_done_v1';
 const CHAT_DELETED_SESSION_IDS_KEY = 'jarvis_deleted_chat_session_ids_v1';
+const CHAT_DELETED_SESSION_TITLES_KEY = 'jarvis_deleted_chat_session_titles_v1';
 const CHAT_SESSION_MAX_MESSAGES = 160;
 
 function createChatSession(title = 'New chat') {
@@ -19065,8 +19075,7 @@ function chatSessionHasUserMessage(session) {
 }
 
 function getVisibleChatSessions() {
-    const deletedIds = getDeletedChatSessionIds();
-    return chatSessions.filter(session => session && !session.deleted && !deletedIds.has(session.id) && chatSessionHasUserMessage(session));
+    return chatSessions.filter(session => session && !isDeletedChatSession(session) && chatSessionHasUserMessage(session));
 }
 
 function getDeletedChatSessionIds() {
@@ -19079,8 +19088,38 @@ function getDeletedChatSessionIds() {
     }
 }
 
-function rememberDeletedChatSessionId(sessionId) {
-    const id = String(sessionId || '').trim();
+function normalizeDeletedChatTitle(title) {
+    return String(title || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function getDeletedChatSessionTitles() {
+    try {
+        const saved = localStorage.getItem(CHAT_DELETED_SESSION_TITLES_KEY);
+        const parsed = saved ? JSON.parse(saved) : [];
+        return new Set(Array.isArray(parsed) ? parsed.map(normalizeDeletedChatTitle).filter(Boolean) : []);
+    } catch (_) {
+        return new Set();
+    }
+}
+
+function isDeletedChatSession(session) {
+    if (!session || session.deleted) return true;
+    const deletedIds = getDeletedChatSessionIds();
+    if (deletedIds.has(session.id)) return true;
+    const title = normalizeDeletedChatTitle(session.title);
+    return Boolean(title && getDeletedChatSessionTitles().has(title));
+}
+
+function rememberDeletedChatSession(session) {
+    const id = String(session?.id || '').trim();
+    const title = normalizeDeletedChatTitle(session?.title);
+    if (title) {
+        try {
+            const deletedTitles = Array.from(getDeletedChatSessionTitles());
+            const nextTitles = Array.from(new Set(deletedTitles.concat(title))).slice(-200);
+            localStorage.setItem(CHAT_DELETED_SESSION_TITLES_KEY, JSON.stringify(nextTitles));
+        } catch (_) {}
+    }
     if (!id) return;
     try {
         const deletedIds = Array.from(getDeletedChatSessionIds());
@@ -19091,12 +19130,11 @@ function rememberDeletedChatSessionId(sessionId) {
 
 function loadChatSessions() {
     try {
-        const deletedIds = getDeletedChatSessionIds();
         const saved = localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY);
         const parsed = saved ? JSON.parse(saved) : [];
         const rawCount = Array.isArray(parsed) ? parsed.length : 0;
         chatSessions = Array.isArray(parsed)
-            ? parsed.map(normalizeChatSession).filter(session => session && !deletedIds.has(session.id) && chatSessionHasUserMessage(session))
+            ? parsed.map(normalizeChatSession).filter(session => session && !isDeletedChatSession(session) && chatSessionHasUserMessage(session))
             : [];
         if (rawCount !== chatSessions.length) saveChatSessions();
     } catch (_) {
@@ -19108,9 +19146,8 @@ function loadChatSessions() {
 function saveChatSessions() {
     if (!persistMemoryToDevice) return;
     try {
-        const deletedIds = getDeletedChatSessionIds();
         const visibleOrActive = chatSessions
-            .filter(session => session && !session.deleted && !deletedIds.has(session.id) && chatSessionHasUserMessage(session))
+            .filter(session => session && !isDeletedChatSession(session) && chatSessionHasUserMessage(session))
             .slice(-80);
         localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(visibleOrActive));
         chatSessions = visibleOrActive;
@@ -19178,10 +19215,33 @@ function hasChatSessionsStorageRecord() {
 }
 
 function clearLegacyHistoryForDeletedSession(session) {
-    if (!session || session.id !== 'legacy_default_chat') return;
+    if (!session) return;
     markLegacyChatMigrationDone();
     try {
-        localStorage.removeItem(getHistoryStorageKey());
+        const historyKey = getHistoryStorageKey();
+        const saved = localStorage.getItem(historyKey);
+        const parsed = saved ? JSON.parse(saved) : [];
+        const clean = sanitizeConversationHistoryRecords(parsed);
+        if (!clean.length || session.id === 'legacy_default_chat') {
+            localStorage.removeItem(historyKey);
+            return;
+        }
+        const sessionTexts = new Set((session.messages || [])
+            .map(item => String(item?.text || '').trim().toLowerCase())
+            .filter(Boolean));
+        const sessionTitle = String(session.title || '').trim().toLowerCase();
+        const filtered = clean.filter(item => {
+            const user = String(item?.user || '').trim().toLowerCase();
+            const ai = String(item?.ai || '').trim().toLowerCase();
+            if (sessionTexts.has(user) || sessionTexts.has(ai)) return false;
+            if (sessionTitle && (user.includes(sessionTitle) || ai.includes(sessionTitle))) return false;
+            return true;
+        });
+        if (filtered.length) {
+            localStorage.setItem(historyKey, JSON.stringify(filtered));
+        } else {
+            localStorage.removeItem(historyKey);
+        }
     } catch (_) {}
 }
 
@@ -19205,7 +19265,9 @@ function migrateLegacyHistoryToChatSession() {
         const parsed = legacy ? JSON.parse(legacy) : [];
         const clean = sanitizeConversationHistoryRecords(parsed);
         if (!clean.length) return;
-        const session = createChatSession(deriveChatTitleFromText(clean[0]?.user || 'Previous chat'));
+        const legacyTitle = deriveChatTitleFromText(clean[0]?.user || 'Previous chat');
+        if (getDeletedChatSessionTitles().has(normalizeDeletedChatTitle(legacyTitle))) return;
+        const session = createChatSession(legacyTitle);
         session.id = 'legacy_default_chat';
         session.messages = clean.flatMap(item => {
             const items = [];
@@ -19568,6 +19630,46 @@ function closeChatSessionMenu() {
     activeChatSessionMenuId = '';
 }
 
+function openChatDeleteDialog(session) {
+    if (!session) return;
+    pendingChatDeleteSessionId = session.id;
+    closeChatSessionMenu();
+    const backdrop = document.getElementById('chat-delete-dialog-backdrop');
+    const text = document.getElementById('chat-delete-dialog-text');
+    if (text) text.textContent = `Delete '${session.title || 'this chat'}'`;
+    backdrop?.classList.remove('hidden');
+    setTimeout(() => backdrop?.querySelector('.chat-delete-dialog-btn.danger')?.focus(), 0);
+}
+
+function closeChatDeleteDialog(clearPending = true) {
+    document.getElementById('chat-delete-dialog-backdrop')?.classList.add('hidden');
+    if (clearPending) pendingChatDeleteSessionId = '';
+}
+
+function confirmChatDeleteDialog() {
+    const session = chatSessions.find(item => item.id === pendingChatDeleteSessionId && !item.deleted);
+    if (!session) {
+        closeChatDeleteDialog();
+        return;
+    }
+    deleteChatSession(session);
+    closeChatDeleteDialog();
+}
+
+function deleteChatSession(session) {
+    if (!session) return;
+    const wasActiveSession = session.id === activeChatSessionId;
+    rememberDeletedChatSession(session);
+    clearLegacyHistoryForDeletedSession(session);
+    session.deleted = true;
+    session.messages = [];
+    session.updatedAt = new Date().toISOString();
+    forgetActiveEmptyChatDraft();
+    saveChatSessions();
+    if (wasActiveSession) startNewChatSession();
+    renderChatSidebarList();
+}
+
 async function shareChatSession(session) {
     if (!session) return;
     const title = String(session.title || 'JARVIS chat').trim() || 'JARVIS chat';
@@ -19613,19 +19715,7 @@ function handleChatSessionMenuAction(action) {
         void shareChatSession(session);
         return;
     } else if (action === 'delete') {
-        const ok = window.confirm(`Delete "${session.title || 'this chat'}"?`);
-        if (!ok) return;
-        const wasActiveSession = session.id === activeChatSessionId;
-        rememberDeletedChatSessionId(session.id);
-        clearLegacyHistoryForDeletedSession(session);
-        session.deleted = true;
-        session.messages = [];
-        session.updatedAt = new Date().toISOString();
-        forgetActiveEmptyChatDraft();
-        saveChatSessions();
-        if (wasActiveSession) startNewChatSession();
-        renderChatSidebarList();
-        closeChatSessionMenu();
+        openChatDeleteDialog(session);
         return;
     }
     saveChatSessions();
