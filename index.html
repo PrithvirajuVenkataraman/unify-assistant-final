@@ -3882,11 +3882,21 @@ function countAssistantWords(text) {
     return Array.isArray(words) ? words.length : 0;
 }
 
+function logLatencyTrace(eventName, details = {}) {
+    try {
+        console.debug('[JARVIS latency]', eventName, details);
+    } catch (_) {}
+}
+
 const USER_PROFILE_STORAGE_KEY = 'jarvis_user_profile';
 const LEGACY_DEFAULT_USER_STORAGE_KEY = 'unify_user_data_default_user';
 
 async function askGeminiAI(userMessage, requestOptions = {}) {
     const normalizedUserMessage = String(userMessage || '').trim();
+    const latencyTrace = {
+        requestId: `lat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+        submittedAt: performance.now()
+    };
     const controller = beginAbortableRequest();
     const hadExistingThinkingIndicator = Boolean(document.getElementById('chat-thinking-indicator'));
     let autoIndicatorShown = false;
@@ -3939,6 +3949,7 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
             : `${normalizedUserMessage}${relevantSavedMemoryContext}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\nPrompt-requested explanation style: ${activeLearningMode}. ${learningHint}${languageReplyHint}\n${conciseFactHint}\n${directExplainerHint}\n\nStyle requirements: Be specific, avoid repetition, and stay natural.`; 
 
          
+        latencyTrace.apiStartedAt = performance.now();
         const data = await window.JarvisApi.postJson('/api/chat-groq', { 
                 message: effectiveMessage, 
                 context: engineContext,
@@ -3955,6 +3966,15 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
                 signal: controller.signal,
                 timeoutMs: 25000
             });
+        latencyTrace.apiEndedAt = performance.now();
+        logLatencyTrace('chat_api_complete', {
+            requestId: latencyTrace.requestId,
+            apiMs: Math.round(latencyTrace.apiEndedAt - latencyTrace.apiStartedAt),
+            totalMs: Math.round(latencyTrace.apiEndedAt - latencyTrace.submittedAt),
+            serverTiming: data?.timing || null,
+            quality: data?.quality || null,
+            routing: data?.routing || null
+        });
         if (typeof data.response === 'string') {
             data.response = postProcessAssistantResponse(data.response, normalizedUserMessage);
             data.response = sanitizeWeakModelAnswer(data.response, normalizedUserMessage);
@@ -6750,9 +6770,10 @@ let showRoutingDebugBadge = false;
         }
 
         function addChatMessage(text, isUser = true, typewriter = null, meta = {}) {
+            const renderStartedAt = performance.now();
             const chatContainer = document.getElementById('chat-container');
             if (!chatContainer) return;
-            const shouldDelayAssistantRender = !isUser && Boolean(document.getElementById('chat-thinking-indicator'));
+            const shouldDelayAssistantRender = false;
             if (!isUser) hideThinkingIndicator();
             const rawDisplayText = normalizeUiTokens(String(text ?? ''));
             if (isUser && !rawDisplayText.trim()) return;
@@ -6880,17 +6901,11 @@ let showRoutingDebugBadge = false;
                 }
                 
                 
-                if (shouldDelayAssistantRender) {
-                    messageDiv.style.visibility = 'hidden';
-                }
                 const shouldTypewriter = typewriter === null
-                    ? !hasHtmlContent
+                    ? false
                     : (!!typewriter && !hasHtmlContent);
 
                 const startAssistantRender = () => {
-                    if (shouldDelayAssistantRender) {
-                        messageDiv.style.visibility = '';
-                    }
                     if (shouldTypewriter) {
                     const textElement = messageDiv.querySelector('.typewriter-text');
                     textElement.classList.add('is-streaming');
@@ -6942,12 +6957,16 @@ let showRoutingDebugBadge = false;
                     textElement.classList.remove('is-streaming');
                     textElement.innerHTML = formattedText;
                 }
-                };
-                if (shouldDelayAssistantRender) {
-                    setManagedTimeout(startAssistantRender, 500);
-                } else {
-                    startAssistantRender();
+                if (!isUser) {
+                    logLatencyTrace('assistant_first_render', {
+                        turnId: messageTurnId,
+                        messageId,
+                        renderMs: Math.round(performance.now() - renderStartedAt),
+                        typewriter: shouldTypewriter
+                    });
                 }
+                };
+                startAssistantRender();
                 speakConverseReply(plainMessageText, sourceTurn);
                 
                 maybeAutoScroll(chatContainer);
@@ -7673,6 +7692,10 @@ ${code}
         }
 
 async function sendTextInput(submission = {}) {
+            const sendTrace = {
+                requestId: `send_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+                submittedAt: performance.now()
+            };
             closeComposerActionsMenu();
             closeSlashCommandPicker();
             const input = document.getElementById('text-input');
@@ -7783,13 +7806,23 @@ async function sendTextInput(submission = {}) {
                             recordContext: false
                         });
                     } else {
+                        sendTrace.routeStartedAt = performance.now();
                         await processCommand(normalizedOutgoingText);
+                        sendTrace.routeEndedAt = performance.now();
                     }
                 } catch (error) {
                     console.error('sendTextInput failed:', error);
                     const fallback = 'I hit a temporary issue while processing that. Please try again.';
                     addChatMessage(fallback, false);
                 } finally {
+                    logLatencyTrace('send_complete', {
+                        requestId: sendTrace.requestId,
+                        totalMs: Math.round(performance.now() - sendTrace.submittedAt),
+                        routeMs: sendTrace.routeStartedAt && sendTrace.routeEndedAt
+                            ? Math.round(sendTrace.routeEndedAt - sendTrace.routeStartedAt)
+                            : null,
+                        source: inputSource
+                    });
                     clearSubmittedPromptBox(outgoingText, normalizedOutgoingText);
                     restoreResponseRenderContext(previousRenderContext);
                     endAssistantProcessing();
