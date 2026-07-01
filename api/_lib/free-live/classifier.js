@@ -4,8 +4,8 @@ const CATEGORY_PATTERNS = Object.freeze([
     {
         category: 'web_search',
         route: 'live_required',
-        reason: 'explicit_or_product_search_requires_web_sources',
-        pattern: /\b(?:search(?:\s+the\s+web)?|web\s+search|look\s+up|find)\b.+|\b(?:reviews?|hands-on|worth\s+it|good\??|best|vs|compare|comparison|price|available|launched|release(?:d)?)\b.*\b(?:phone|smartphone|laptop|tablet|camera|headphones|earbuds|watch|console|model|device|nothing\s+phone|iphone|pixel|galaxy|oneplus)\b|\b(?:phone|smartphone|laptop|tablet|camera|headphones|earbuds|watch|console|model|device|nothing\s+phone|iphone|pixel|galaxy|oneplus)\b.*\b(?:reviews?|hands-on|worth\s+it|good\??|best|vs|compare|comparison|price|available|launched|release(?:d)?)\b/i
+        reason: 'explicit_or_current_topic_search_requires_web_sources',
+        pattern: /\b(?:search(?:\s+the\s+web)?|web\s+search|look\s+up|find)\b.+/i
     },
     {
         category: 'weather',
@@ -69,7 +69,7 @@ export function classifyFreeLiveIntent(message) {
     const text = normalizeMessage(message);
     if (!text) return strictRoute('clarify', 'clarify', 0.2, ['empty_message']);
 
-    if (isExplicitOrProductSearch(text)) {
+    if (isExplicitSearchCommand(text)) {
         return strictRoute('live_required', 'web_search', 0.88, ['explicit_or_product_search_requires_web_sources']);
     }
 
@@ -79,10 +79,14 @@ export function classifyFreeLiveIntent(message) {
         }
     }
 
-    for (const entry of CATEGORY_PATTERNS) {
+    for (const entry of CATEGORY_PATTERNS.slice(1)) {
         if (entry.pattern.test(text)) {
             return strictRoute(entry.route, entry.category, 0.86, [entry.reason]);
         }
+    }
+
+    if (isImplicitCurrentTopicSearch(text)) {
+        return strictRoute('live_required', 'web_search', 0.82, ['current_topic_search_requires_web_sources']);
     }
 
     const llmScore = scorePatterns(text, LLM_PATTERNS, 0.28);
@@ -124,12 +128,34 @@ function normalizeMessage(message) {
 }
 
 function isExplicitOrProductSearch(text) {
+    return isExplicitSearchCommand(text) || isImplicitCurrentTopicSearch(text);
+}
+
+function isExplicitSearchCommand(text) {
     return CATEGORY_PATTERNS[0].pattern.test(text);
+}
+
+function isImplicitCurrentTopicSearch(text) {
+    const normalized = normalizeMessage(text);
+    if (!/\b(?:reviews?|hands-on|worth\s+it|vs|compare|comparison|price|available|availability|launched)\b/i.test(normalized)) {
+        return false;
+    }
+    const contentTokens = tokenizeForIntent(normalized).filter(token => !isIntentStopword(token));
+    return contentTokens.length >= 2;
+}
+
+function tokenizeForIntent(text) {
+    return String(text || '').toLowerCase().match(/[a-z0-9]{2,}/g) || []; 
+}
+
+function isIntentStopword(token) {
+    return /^(?:the|a|an|of|for|about|on|is|are|was|were|to|in|and|or|me|i|you|please|can|could|should|would|search|web|find|look|up|latest|recent|current|newest|review|reviews|hands|on|worth|best|vs|compare|comparison|price|available|availability|launched|released|release)$/.test(String(token || ''));
 }
 
 export const __test = {
     CATEGORY_PATTERNS,
     UNSUPPORTED_FREE_LIVE_PATTERNS,
     isExplicitOrProductSearch,
+    isImplicitCurrentTopicSearch,
     scorePatterns
 };
