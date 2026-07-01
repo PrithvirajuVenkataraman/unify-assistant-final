@@ -464,7 +464,8 @@ assert.match(SOURCE.visionApi, /"modelEvidence": \["visible clue supporting the 
 assert.match(SOURCE.visionApi, /"distinctiveFeatures": \["camera layout, logo, color, ports, UI, shape, or other useful visual details"\]/);
 assert.match(SOURCE.visionApi, /infer brand\/model only from visible evidence/);
 assert.match(SOURCE.visionApi, /Likely item:/);
-assert.match(SOURCE.visionApi, /Confidence: \$\{confidence\}\./);
+assert.doesNotMatch(SOURCE.visionApi, /Confidence: \$\{confidence\}\./);
+assert.match(SOURCE.visionApi, /function cleanVisionDisplayText/);
 assert.match(SOURCE.appHtml, /id="continuous-vision-status"/);
 assert.match(SOURCE.appHtml, /function updateContinuousVisionStatus/);
 assert.match(SOURCE.appHtml, /function addVisionRecoveryMessage/);
@@ -668,6 +669,7 @@ vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'pickReadableVisionObject'
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'withReadableArticle'), visionFormatSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'compactVisionTextMention'), visionFormatSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeReadableVisionConfidence'), visionFormatSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'cleanVisionDisplayText'), visionFormatSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'formatVisionJsonToReadableText'), visionFormatSandbox);
 const richVisionText = visionFormatSandbox.formatVisionJsonToReadableText({
     answer: 'It appears to be an iPhone based on the rear camera cluster.',
@@ -682,7 +684,30 @@ assert.match(richVisionText, /Likely item: likely Apple iPhone 15 Pro \(smartpho
 assert.match(richVisionText, /Evidence: triple rear camera layout; Apple logo visible/);
 assert.match(richVisionText, /Visible details: titanium-like side rail; square camera bump/);
 assert.match(richVisionText, /Uncertainty: Exact model is not fully certain/);
-assert.match(richVisionText, /Confidence: medium/);
+assert.doesNotMatch(richVisionText, /Confidence:/);
+assert.doesNotMatch(richVisionText, /\bconfidence\b/i);
+assert.doesNotMatch(richVisionText, /\bobjects\b/i);
+const messyVisionText = visionFormatSandbox.cleanVisionDisplayText('{ "objects": [{ "label": "laptop", "confidence": 0.98 }], "textDetected": ["JARVIS"], "answer": "A Lenovo laptop is visible." }');
+assert.doesNotMatch(messyVisionText, /\bobjects\b|confidence|textDetected|[{}[\]]/i);
+
+const titleSandbox = {};
+vm.createContext(titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'splitReadableSentences'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'deriveChatTitleFromText'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isVagueChatTitlePrompt'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'deriveChatTitleFromAssistantText'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'deriveChatTitleFromMessages'), titleSandbox);
+assert.equal(titleSandbox.deriveChatTitleFromMessages([
+    { role: 'user', text: 'what is this' },
+    { role: 'assistant', text: 'Likely item: likely Lenovo IdeaPad (laptop). Visible details: keyboard; JARVIS page.' }
+]), 'Lenovo IdeaPad');
+assert.equal(titleSandbox.deriveChatTitleFromMessages([
+    { role: 'user', text: 'how do I learn JavaScript fast?' },
+    { role: 'assistant', text: 'Start with DOM basics.' }
+]), 'how do I learn JavaScript fast');
+
+assert.match(SOURCE.appHtml, /trimmed === '\/'/);
+assert.match(SOURCE.appHtml, /getSlashCommandPicker\(\) && trimmed !== ''/);
 
 console.log('deterministic-checks-ok'); 
 
