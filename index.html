@@ -75,16 +75,6 @@
                 </svg>
                 <span>Vision Analysis</span>
             </button>
-            <button type="button" class="chat-sidebar-nav-item" onclick="openSidebarQuickAction('voice')">
-                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" aria-hidden="true">
-                    <path d="M4 12h2"></path>
-                    <path d="M8 7v10"></path>
-                    <path d="M12 4v16"></path>
-                    <path d="M16 8v8"></path>
-                    <path d="M20 12h-2"></path>
-                </svg>
-                <span>Voice Conversation</span>
-            </button>
             <button type="button" class="chat-sidebar-nav-item" onclick="openSidebarQuickAction('memory')">
                 <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" aria-hidden="true">
                     <path d="M12 3a7 7 0 0 0-7 7c0 4.5 4.1 7.2 6 9.5a1.3 1.3 0 0 0 2 0c1.9-2.3 6-5 6-9.5a7 7 0 0 0-7-7z"></path>
@@ -1043,7 +1033,8 @@ function isConversationRecallRequest(text) {
 function isMemoryStorageRequest(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
-    return /\b(my\s+.+\s+(?:is|are)\s+(?:in|on|at)\s+.+|i\s+(?:put|left)\s+(?:my\s+)?.+\s+(?:in|on|at)\s+.+|remember\s+that\s+my\s+.+\s+(?:is|are)\s+(?:in|on|at)\s+.+)\b/.test(t);
+    return /\b(my\s+.+\s+(?:is|are)\s+(?:in|on|at)\s+.+|i\s+(?:put|left)\s+(?:my\s+)?.+\s+(?:in|on|at)\s+.+|remember\s+that\s+my\s+.+\s+(?:is|are)\s+(?:in|on|at)\s+.+)\b/.test(t) ||
+        /\b(?:remember|save|store|memorize)\b[\s\S]{0,40}\b(?:this|that|to memory|in memory|as memory|prompt|note|saying|preference|instruction)\b/i.test(text);
 }
 
 function isMemoryRecallRequest(text) {
@@ -3405,10 +3396,11 @@ async function buildSearchFallbackAnswer(userMessage) {
         const response = await fetch('/api/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, maxResults: 5, answer: true })
+            body: JSON.stringify({ query, maxResults: 5, answer: true, mode: 'auto' })
         });
         if (!response.ok) return null;
         const data = await response.json();
+        if (data?.searchSkipped) return null;
         const results = Array.isArray(data?.results) ? data.results : [];
         if (results.length) {
             const lines = results
@@ -18419,7 +18411,21 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
 
         async function handleMemoryStorage(text) {
             const lower = text.toLowerCase();
-            
+            const noteRequest = extractExplicitMemoryNote(text);
+            if (noteRequest?.value) {
+                const key = noteRequest.key || deriveMemoryKeyFromText(noteRequest.value);
+                normalizeMemoryStoreRecords();
+                memoryStore[key] = createExplicitMemoryRecord(key, noteRequest.value, text, noteRequest.type || '');
+                saveUserData();
+
+                await deliverApiReply('memory_saved', {
+                    thing: key,
+                    location: noteRequest.value
+                }, {
+                    fallbackText: `Saved to memory: ${key}.`
+                });
+                return;
+            }
             
             
             let thing = null;
@@ -18469,9 +18475,49 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                 }, { speak: true });
             } else {
                 await deliverApiReply('memory_save_prompt_retry', {
-                    example: 'My car keys are on the kitchen counter'
+                    example: 'Remember this: I prefer concise answers'
                 }, { speak: true });
             }
+        }
+
+        function extractExplicitMemoryNote(text) {
+            const raw = String(text || '').trim();
+            if (!raw) return null;
+            const patterns = [
+                /^(?:please\s+)?(?:remember|save|store|memorize)\s+(?:this|that|this prompt|this note|this saying|this preference|to memory|in memory|as memory)\s*[:\-]\s*([\s\S]+)$/i,
+                /^(?:please\s+)?(?:remember|save|store|memorize)\s+(?:to memory|in memory)\s*[:\-]?\s*([\s\S]+)$/i,
+                /^(?:please\s+)?(?:remember|save|store|memorize)\s+(?:that\s+)?([\s\S]+)$/i
+            ];
+            for (const pattern of patterns) {
+                const match = raw.match(pattern);
+                const value = String(match?.[1] || '').replace(/^["'“”]+|["'“”]+$/g, '').trim();
+                if (!value || value.length < 2) continue;
+                if (/^(this|that|it)$/i.test(value)) continue;
+                return {
+                    value: value.slice(0, 700),
+                    key: deriveMemoryKeyFromText(value),
+                    type: inferMemoryRecordType('', value, raw)
+                };
+            }
+            return null;
+        }
+
+        function deriveMemoryKeyFromText(text) {
+            const cleaned = String(text || '')
+                .replace(/^that\s+/i, '')
+                .replace(/[^\w\s'-]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+            if (!cleaned) return `note ${new Date().toLocaleDateString()}`;
+            const preference = cleaned.match(/\b(?:i\s+)?(?:prefer|like|want|need)\s+(.{2,80})$/i);
+            const title = preference?.[1] || cleaned;
+            return title
+                .split(/\s+/)
+                .filter(word => !/^(the|a|an|my|i|me|to|in|on|at|that|this|please)$/.test(word))
+                .slice(0, 6)
+                .join(' ')
+                .slice(0, 60) || `note ${new Date().toLocaleDateString()}`;
         }
 
         
@@ -19348,10 +19394,6 @@ function openSidebarQuickAction(action) {
         handleComposerAction('vision');
         return;
     }
-    if (action === 'voice') {
-        showVoiceConversationScreen(true);
-        return;
-    }
     if (action === 'memory') {
         showMemoryManager();
         return;
@@ -19552,6 +19594,8 @@ function showThinkingIndicator(message = 'Thinking') {
     const phase = resolveThinkingPhase(statusText);
     const visualMode = phase.key === 'searching' ? 'ring' : 'dots';
     const visualModeClass = visualMode === 'ring' ? 'assistant-thinking-ring-mode' : 'assistant-thinking-dots';
+    const phaseLabel = phase.key === 'searching' ? 'SEARCHING' : phase.label;
+    const searchLabelClass = phase.key === 'searching' ? 'assistant-thinking-text is-searching' : 'assistant-thinking-text';
     if (!row) {
         row = document.createElement('div');
         row.id = 'chat-thinking-indicator';
@@ -19567,6 +19611,7 @@ function showThinkingIndicator(message = 'Thinking') {
                             <span class="assistant-thinking-dot"></span>
                             <span class="assistant-thinking-ring"></span>
                         </span>
+                        <span class="${searchLabelClass}" data-thinking-label>${escapeHtml(phaseLabel)}</span>
                     </div>
                 </div>
             </div>
@@ -19579,6 +19624,11 @@ function showThinkingIndicator(message = 'Thinking') {
         if (pulse) {
             pulse.classList.toggle('assistant-thinking-dots', visualMode === 'dots');
             pulse.classList.toggle('assistant-thinking-ring-mode', visualMode === 'ring');
+        }
+        const label = row.querySelector('[data-thinking-label]');
+        if (label) {
+            label.textContent = phaseLabel;
+            label.className = searchLabelClass;
         }
     }
     maybeAutoScroll(chatContainer);
