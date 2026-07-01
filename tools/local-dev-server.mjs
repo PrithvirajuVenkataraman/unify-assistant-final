@@ -107,6 +107,15 @@ function createApiResponseAdapter(nodeRes) {
             this.statusCode = Number(code) || 200;
             return this;
         },
+        writeHead(code, headers = {}) {
+            this.statusCode = Number(code) || this.statusCode || 200;
+            nodeRes.writeHead(this.statusCode, headers);
+            return this;
+        },
+        write(chunk) {
+            nodeRes.write(chunk);
+            return true;
+        },
         json(payload) {
             sendJson(nodeRes, this.statusCode, payload);
             return this;
