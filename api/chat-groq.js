@@ -123,6 +123,18 @@
 
             // Pass 1: model-only (no live search) for speed and cost.
             const lengthPolicy = buildLengthPolicy(effectiveMessage, '', { isInternalSummary });
+            if (shouldStreamChatRequest(req.body, intent, grounding, routeDecision, isInternalSummary)) {
+                return await handleStreamingChatRequest(res, {
+                    requestId,
+                    timing,
+                    systemPrompt,
+                    contextBlock,
+                    effectiveMessage,
+                    intent,
+                    routeDecision,
+                    lengthPolicy
+                });
+            }
             const firstPrompt = composeFinalPrompt(
                 systemPrompt,
                 preloadedLiveRag.ragText,
@@ -251,6 +263,129 @@
             `User message: ${message}`,
             lengthGuidance ? `Length guidance:\n${lengthGuidance}` : ''
         ].filter(Boolean).join('\n\n');
+    }
+
+    function shouldStreamChatRequest(body, intent, grounding, routeDecision, isInternalSummary) {
+        if (!body || body.stream !== true) return false;
+        if (String(intent || 'chat') !== 'chat') return false;
+        if (grounding) return false;
+        if (isInternalSummary) return false;
+        if (routeDecision?.strategy && routeDecision.strategy !== 'direct') return false;
+        return true;
+    }
+
+    function writeSse(res, eventName, payload = {}) {
+        res.write(`event: ${eventName}\n`);
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    }
+
+    function composeStreamingPrompt(systemPrompt, contextBlock, message, lengthGuidance = '') {
+        return [
+            systemPrompt,
+            contextBlock ? `Recent turns:\n${contextBlock}` : '',
+            `User message: ${message}`,
+            lengthGuidance ? `Length guidance:\n${lengthGuidance}` : '',
+            'Return only the final assistant answer as natural text.',
+            'Do not wrap the answer in JSON. Do not include hidden reasoning or system notes.'
+        ].filter(Boolean).join('\n\n');
+    }
+
+    async function handleStreamingChatRequest(res, options = {}) {
+        const {
+            requestId,
+            timing,
+            systemPrompt,
+            contextBlock,
+            effectiveMessage,
+            intent,
+            routeDecision,
+            lengthPolicy
+        } = options;
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        });
+        writeSse(res, 'meta', { requestId });
+
+        let streamedText = '';
+        try {
+            const prompt = composeStreamingPrompt(systemPrompt, contextBlock, effectiveMessage, lengthPolicy?.instruction || '');
+            const modelStartedAt = Date.now();
+            const streamResult = await streamModelWithFallback(prompt, lengthPolicy, delta => {
+                if (!delta) return;
+                streamedText += delta;
+                writeSse(res, 'delta', { text: delta });
+            });
+            timing.modelMs += Date.now() - modelStartedAt;
+
+            if (!streamResult.ok) {
+                writeSse(res, 'error', {
+                    code: streamResult.payload?.intent || 'service_unavailable',
+                    message: streamResult.payload?.response || 'The AI service is unavailable.'
+                });
+                return res.end();
+            }
+
+            let finalText = ensureCompleteAssistantResponse(
+                replaceLongDashes(String(streamResult.text || streamedText || '').trim())
+            );
+            const qualityStartedAt = Date.now();
+            const qualityResult = await reviewAnswerIfNeeded({
+                message: effectiveMessage,
+                answer: finalText,
+                intent,
+                contextBlock,
+                routeDecision,
+                webEscalation: { reason: 'stream_fast_path' },
+                forceReview: false
+            });
+            timing.qualityMs = Date.now() - qualityStartedAt;
+            if (qualityResult.correctedResponse) {
+                finalText = ensureCompleteAssistantResponse(
+                    replaceLongDashes(String(qualityResult.correctedResponse || '').trim())
+                );
+                writeSse(res, 'correction', { text: finalText });
+            }
+            timing.totalMs = Date.now() - timing.startedAt;
+            writeSse(res, 'done', {
+                success: true,
+                requestId,
+                intent: 'casual_chat',
+                response: finalText,
+                action: null,
+                provider: streamResult.provider,
+                modelUsed: streamResult.modelUsed,
+                routing: {
+                    mode: CHAT_ROUTER_MODE,
+                    strategy: routeDecision.strategy,
+                    reason: routeDecision.reason,
+                    webEligible: routeDecision.webEligible,
+                    preloadedSources: 0
+                },
+                webEscalation: {
+                    considered: false,
+                    escalated: false,
+                    reason: 'stream_fast_path',
+                    sourceCount: 0,
+                    requestType: 'user_query'
+                },
+                quality: qualityResult.metadata,
+                timing: {
+                    modelMs: timing.modelMs,
+                    qualityMs: timing.qualityMs,
+                    totalMs: timing.totalMs
+                }
+            });
+            return res.end();
+        } catch (error) {
+            writeSse(res, 'error', {
+                code: 'stream_error',
+                message: 'The streaming response failed. Please try again.'
+            });
+            return res.end();
+        }
     }
 
     async function handleVerifyAnswerRequest(res, options = {}) {
@@ -723,6 +858,193 @@
             modelUsed,
             provider: 'gemini'
         };
+    }
+
+    async function streamModelWithFallback(finalPrompt, lengthPolicy = {}, onDelta = () => {}) {
+        const temp = Number.isFinite(Number(lengthPolicy?.temperature)) ? Number(lengthPolicy.temperature) : 0.7;
+        const maxTokens = clampInt(lengthPolicy?.maxTokens, 2500, 256, 12000);
+        const groqApiKey = process.env.GROQ_API_KEY || process.env.GROQ_KEY;
+
+        if (groqApiKey) {
+            const groqConfiguredModel = String(process.env.GROQ_MODEL || '').trim();
+            const groqCandidates = [
+                groqConfiguredModel,
+                'openai/gpt-oss-120b',
+                'openai/gpt-oss-20b',
+                'llama-3.3-70b-versatile',
+                'llama-3.1-8b-instant'
+            ].filter(Boolean);
+            for (const model of groqCandidates) {
+                const result = await streamGroqModel({
+                    apiKey: groqApiKey,
+                    model,
+                    prompt: finalPrompt,
+                    temperature: temp,
+                    maxTokens,
+                    timeoutMs: clampInt(lengthPolicy?.timeoutMs, MODEL_FETCH_TIMEOUT_MS, 1000, MODEL_FETCH_TIMEOUT_MS),
+                    onDelta
+                });
+                if (result.ok) return result;
+            }
+        }
+
+        const geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+        if (geminiApiKey) {
+            const geminiConfiguredModel = String(process.env.GEMINI_MODEL || '').trim();
+            const geminiCandidates = [
+                geminiConfiguredModel,
+                'gemini-3.5-flash',
+                'gemini-2.5-flash',
+                'gemini-2.5-flash-lite',
+                'gemini-2.0-flash'
+            ].filter(Boolean);
+            for (const model of geminiCandidates) {
+                const result = await streamGeminiModel({
+                    apiKey: geminiApiKey,
+                    model,
+                    prompt: finalPrompt,
+                    temperature: temp,
+                    maxTokens,
+                    timeoutMs: clampInt(lengthPolicy?.timeoutMs, MODEL_FETCH_TIMEOUT_MS, 1000, MODEL_FETCH_TIMEOUT_MS),
+                    onDelta
+                });
+                if (result.ok) return result;
+            }
+        }
+
+        return {
+            ok: false,
+            payload: {
+                intent: groqApiKey || geminiApiKey ? 'service_unavailable' : 'service_unconfigured',
+                response: groqApiKey || geminiApiKey
+                    ? 'The AI service is temporarily unavailable right now. Please try again shortly.'
+                    : 'AI backend is not configured. Set GROQ_API_KEY or GEMINI_API_KEY in the server environment.',
+                action: null
+            }
+        };
+    }
+
+    async function streamGroqModel({ apiKey, model, prompt, temperature, maxTokens, timeoutMs, onDelta }) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${apiKey}`
+                },
+                signal: controller.signal,
+                body: JSON.stringify({
+                    model,
+                    temperature,
+                    max_tokens: maxTokens,
+                    stream: true,
+                    messages: [
+                        { role: 'user', content: prompt }
+                    ]
+                })
+            });
+            if (!response.ok || !response.body) return { ok: false };
+            let text = '';
+            await readSseStream(response.body, payload => {
+                const delta = String(payload?.choices?.[0]?.delta?.content || '');
+                if (!delta) return;
+                text += delta;
+                onDelta(delta);
+            });
+            return text.trim()
+                ? { ok: true, provider: 'groq', modelUsed: model, text }
+                : { ok: false };
+        } catch (_) {
+            return { ok: false };
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    async function streamGeminiModel({ apiKey, model, prompt, temperature, maxTokens, timeoutMs, onDelta }) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal,
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{ text: prompt }]
+                        }],
+                        generationConfig: {
+                            temperature,
+                            topK: 40,
+                            topP: 0.95,
+                            maxOutputTokens: maxTokens
+                        }
+                    })
+                }
+            );
+            if (!response.ok || !response.body) return { ok: false };
+            let text = '';
+            await readSseStream(response.body, payload => {
+                const parts = Array.isArray(payload?.candidates?.[0]?.content?.parts)
+                    ? payload.candidates[0].content.parts
+                    : [];
+                const delta = parts.map(part => String(part?.text || '')).join('');
+                if (!delta) return;
+                text += delta;
+                onDelta(delta);
+            });
+            return text.trim()
+                ? { ok: true, provider: 'gemini', modelUsed: model, text }
+                : { ok: false };
+        } catch (_) {
+            return { ok: false };
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    async function readSseStream(body, onPayload) {
+        const reader = body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const events = buffer.split(/\n\n/);
+            buffer = events.pop() || '';
+            for (const eventText of events) {
+                const dataLines = eventText
+                    .split(/\r?\n/)
+                    .filter(line => line.startsWith('data:'))
+                    .map(line => line.slice(5).trim());
+                if (!dataLines.length) continue;
+                const dataText = dataLines.join('\n');
+                if (!dataText || dataText === '[DONE]') continue;
+                try {
+                    const payload = JSON.parse(dataText);
+                    onPayload(payload);
+                } catch (_) {}
+            }
+        }
+        const tail = decoder.decode();
+        if (tail) buffer += tail;
+        if (buffer.trim()) {
+            const dataLines = buffer
+                .split(/\r?\n/)
+                .filter(line => line.startsWith('data:'))
+                .map(line => line.slice(5).trim());
+            const dataText = dataLines.join('\n');
+            if (dataText && dataText !== '[DONE]') {
+                try {
+                    onPayload(JSON.parse(dataText));
+                } catch (_) {}
+            }
+        }
     }
 
     function parseModelText(modelText) {
