@@ -756,15 +756,22 @@ assert.match(SOURCE.appHtml, /trimmed === '\/'/);
 assert.match(SOURCE.appHtml, /getSlashCommandPicker\(\) && trimmed !== ''/);
 assert.match(SOURCE.appHtml, /CHAT_LEGACY_MIGRATION_DONE_KEY/);
 assert.match(SOURCE.appHtml, /CHAT_DELETED_SESSION_IDS_KEY/);
+assert.match(SOURCE.appHtml, /CHAT_DELETED_SESSION_TITLES_KEY/);
 assert.match(SOURCE.appHtml, /function getDeletedChatSessionIds\(\)/);
-assert.match(SOURCE.appHtml, /function rememberDeletedChatSessionId\(sessionId\)/);
+assert.match(SOURCE.appHtml, /function getDeletedChatSessionTitles\(\)/);
+assert.match(SOURCE.appHtml, /function rememberDeletedChatSession\(session\)/);
 assert.match(SOURCE.appHtml, /function markLegacyChatMigrationDone\(\)/);
 assert.match(SOURCE.appHtml, /function hasChatSessionsStorageRecord\(\)/);
 assert.match(SOURCE.appHtml, /function clearLegacyHistoryForDeletedSession\(session\)/);
 assert.match(SOURCE.appHtml, /if \(hasLegacyChatMigrationRun\(\)\) return;/);
 assert.match(SOURCE.appHtml, /getDeletedChatSessionIds\(\)\.has\('legacy_default_chat'\)/);
+assert.match(SOURCE.appHtml, /getDeletedChatSessionTitles\(\)\.has\(normalizeDeletedChatTitle\(legacyTitle\)\)/);
 assert.match(SOURCE.appHtml, /if \(hasChatSessionsStorageRecord\(\)\) \{[\s\S]*markLegacyChatMigrationDone\(\);[\s\S]*return;/);
-assert.match(SOURCE.appHtml, /rememberDeletedChatSessionId\(session\.id\);[\s\S]*clearLegacyHistoryForDeletedSession\(session\);[\s\S]*session\.messages = \[\];[\s\S]*forgetActiveEmptyChatDraft\(\);[\s\S]*saveChatSessions\(\);[\s\S]*if \(wasActiveSession\) startNewChatSession\(\);/);
+assert.match(SOURCE.appHtml, /id="chat-delete-dialog"/);
+assert.match(SOURCE.appHtml, /Delete '\$\{session\.title \|\| 'this chat'\}'/);
+assert.match(SOURCE.appHtml, /rememberDeletedChatSession\(session\);[\s\S]*clearLegacyHistoryForDeletedSession\(session\);[\s\S]*session\.messages = \[\];[\s\S]*forgetActiveEmptyChatDraft\(\);[\s\S]*saveChatSessions\(\);[\s\S]*if \(wasActiveSession\) startNewChatSession\(\);/);
+assert.match(SOURCE.styles, /\.chat-delete-dialog\s*\{/);
+assert.match(SOURCE.styles, /\.help-modal-enhanced \.help-modal-body\s*\{[\s\S]*padding:\s*16px !important/);
 
 console.log('deterministic-checks-ok'); 
 
