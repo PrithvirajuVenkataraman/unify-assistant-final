@@ -19214,34 +19214,78 @@ function hasChatSessionsStorageRecord() {
     }
 }
 
+function getLegacyHistoryStorageKeys() {
+    const keys = new Set([getHistoryStorageKey()]);
+    try {
+        for (let index = 0; index < localStorage.length; index += 1) {
+            const key = String(localStorage.key(index) || '');
+            if (/^unify_history_/i.test(key)) keys.add(key);
+        }
+    } catch (_) {}
+    return Array.from(keys).filter(Boolean);
+}
+
+function getChatSessionDeleteFingerprint(session) {
+    const messages = Array.isArray(session?.messages) ? session.messages : [];
+    const texts = messages
+        .map(item => String(item?.text || '').trim().toLowerCase())
+        .filter(Boolean);
+    const firstUser = messages.find(item => item?.role === 'user' && String(item?.text || '').trim());
+    return {
+        id: String(session?.id || '').trim(),
+        title: normalizeDeletedChatTitle(session?.title),
+        firstUser: String(firstUser?.text || '').trim().toLowerCase(),
+        texts: new Set(texts)
+    };
+}
+
+function legacyHistoryItemMatchesDeletedSession(item, fingerprint) {
+    if (!item || !fingerprint) return false;
+    const user = String(item?.user || '').trim().toLowerCase();
+    const ai = String(item?.ai || '').trim().toLowerCase();
+    const turnId = String(item?.turnId || '').trim();
+    if (fingerprint.id && turnId && turnId === fingerprint.id) return true;
+    if (fingerprint.firstUser && user === fingerprint.firstUser) return true;
+    if (fingerprint.texts?.has?.(user) || fingerprint.texts?.has?.(ai)) return true;
+    if (fingerprint.title && (user.includes(fingerprint.title) || ai.includes(fingerprint.title))) return true;
+    return false;
+}
+
+function filterLegacyHistoryAgainstDeletedTombstones(historyItems) {
+    const deletedTitles = getDeletedChatSessionTitles();
+    const clean = sanitizeConversationHistoryRecords(historyItems);
+    return clean.filter(item => {
+        const title = normalizeDeletedChatTitle(deriveChatTitleFromText(item?.user || item?.ai || ''));
+        const user = normalizeDeletedChatTitle(item?.user);
+        if (title && deletedTitles.has(title)) return false;
+        if (user && deletedTitles.has(user)) return false;
+        return true;
+    });
+}
+
 function clearLegacyHistoryForDeletedSession(session) {
     if (!session) return;
     markLegacyChatMigrationDone();
     try {
-        const historyKey = getHistoryStorageKey();
-        const saved = localStorage.getItem(historyKey);
-        const parsed = saved ? JSON.parse(saved) : [];
-        const clean = sanitizeConversationHistoryRecords(parsed);
-        if (!clean.length || session.id === 'legacy_default_chat') {
-            localStorage.removeItem(historyKey);
-            return;
+        const keys = getLegacyHistoryStorageKeys();
+        const fingerprint = getChatSessionDeleteFingerprint(session);
+        for (const historyKey of keys) {
+            const saved = localStorage.getItem(historyKey);
+            const parsed = saved ? JSON.parse(saved) : [];
+            const clean = sanitizeConversationHistoryRecords(parsed);
+            if (!clean.length || session.id === 'legacy_default_chat') {
+                localStorage.removeItem(historyKey);
+                continue;
+            }
+            const filtered = clean.filter(item => !legacyHistoryItemMatchesDeletedSession(item, fingerprint));
+            if (filtered.length) {
+                localStorage.setItem(historyKey, JSON.stringify(filtered));
+            } else {
+                localStorage.removeItem(historyKey);
+            }
         }
-        const sessionTexts = new Set((session.messages || [])
-            .map(item => String(item?.text || '').trim().toLowerCase())
-            .filter(Boolean));
-        const sessionTitle = String(session.title || '').trim().toLowerCase();
-        const filtered = clean.filter(item => {
-            const user = String(item?.user || '').trim().toLowerCase();
-            const ai = String(item?.ai || '').trim().toLowerCase();
-            if (sessionTexts.has(user) || sessionTexts.has(ai)) return false;
-            if (sessionTitle && (user.includes(sessionTitle) || ai.includes(sessionTitle))) return false;
-            return true;
-        });
-        if (filtered.length) {
-            localStorage.setItem(historyKey, JSON.stringify(filtered));
-        } else {
-            localStorage.removeItem(historyKey);
-        }
+        conversationHistory = sanitizeConversationHistoryRecords(conversationHistory)
+            .filter(item => !legacyHistoryItemMatchesDeletedSession(item, fingerprint));
     } catch (_) {}
 }
 
@@ -19261,9 +19305,18 @@ function migrateLegacyHistoryToChatSession() {
     }
     markLegacyChatMigrationDone();
     try {
-        const legacy = localStorage.getItem(getHistoryStorageKey());
-        const parsed = legacy ? JSON.parse(legacy) : [];
-        const clean = sanitizeConversationHistoryRecords(parsed);
+        const clean = [];
+        for (const historyKey of getLegacyHistoryStorageKeys()) {
+            const legacy = localStorage.getItem(historyKey);
+            const parsed = legacy ? JSON.parse(legacy) : [];
+            const filtered = filterLegacyHistoryAgainstDeletedTombstones(parsed);
+            if (filtered.length) {
+                localStorage.setItem(historyKey, JSON.stringify(filtered));
+                clean.push(...filtered);
+            } else {
+                localStorage.removeItem(historyKey);
+            }
+        }
         if (!clean.length) return;
         const legacyTitle = deriveChatTitleFromText(clean[0]?.user || 'Previous chat');
         if (getDeletedChatSessionTitles().has(normalizeDeletedChatTitle(legacyTitle))) return;
@@ -19666,7 +19719,10 @@ function deleteChatSession(session) {
     session.updatedAt = new Date().toISOString();
     forgetActiveEmptyChatDraft();
     saveChatSessions();
-    if (wasActiveSession) startNewChatSession();
+    if (wasActiveSession) {
+        conversationHistory = [];
+        startNewChatSession();
+    }
     renderChatSidebarList();
 }
 
