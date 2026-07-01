@@ -697,16 +697,32 @@ const visiblePromptSandbox = {
 };
 vm.createContext(visiblePromptSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isInternalPromptText'), visiblePromptSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'sanitizeUserFacingRequestText'), visiblePromptSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'setLastVisibleUserMessage'), visiblePromptSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getLastVisibleUserMessage'), visiblePromptSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'addVisibleInputHistory'), visiblePromptSandbox);
 assert.equal(visiblePromptSandbox.isInternalPromptText('Check whether this answer is accurate and internally consistent.'), true);
 assert.equal(visiblePromptSandbox.setLastVisibleUserMessage('Answer to verify:\nHidden answer'), false);
+const wrappedLearningPrompt = `User asked: "Difference between call by value and call by reference"
+
+Teach this clearly for a beginner.
+
+Rules:
+- Cover any domain.`;
+assert.equal(
+    visiblePromptSandbox.sanitizeUserFacingRequestText(wrappedLearningPrompt),
+    'Difference between call by value and call by reference'
+);
+assert.equal(visiblePromptSandbox.sanitizeUserFacingRequestText('Rules:\n- hidden system prompt'), '');
 assert.equal(visiblePromptSandbox.setLastVisibleUserMessage('What is this phone?'), true);
 assert.equal(visiblePromptSandbox.getLastVisibleUserMessage(), 'What is this phone?');
 visiblePromptSandbox.addVisibleInputHistory('Original user request: secret');
 visiblePromptSandbox.addVisibleInputHistory('What is this phone?');
 assert.deepEqual(visiblePromptSandbox.inputHistory, ['What is this phone?']);
+assert.match(extractFunctionSource(SOURCE.appHtml, 'showResponseRecoveryCard'), /sanitizeUserFacingRequestText\(userMessage\)/);
+assert.doesNotMatch(extractFunctionSource(SOURCE.appHtml, 'showResponseRecoveryCard'), /String\(userMessage \|\| window\.__lastUserMessage/);
+assert.match(extractFunctionSource(SOURCE.appHtml, 'stopActiveGeneration'), /activeRequestController\s*=\s*null/);
+assert.match(extractFunctionSource(SOURCE.appHtml, 'stopActiveGeneration'), /resetAssistantProcessingState\(\)/);
 
 const visionFormatSandbox = {};
 vm.createContext(visionFormatSandbox);
