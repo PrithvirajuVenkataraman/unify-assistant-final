@@ -285,8 +285,17 @@ assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.unsupported).category, '
 assert.equal(classifyFreeLiveIntent('Search the web for recent reviews of the Nothing Phone 3').category, 'web_search');
 assert.equal(classifyFreeLiveIntent('recent reviews of Nothing Phone 3').category, 'web_search');
 assert.equal(classifyFreeLiveIntent('Nothing Phone 3 reviews').category, 'web_search');
+assert.equal(classifyFreeLiveIntent('recent reviews of Framework Laptop 16').category, 'web_search');
+assert.equal(classifyFreeLiveIntent('compare Alpha Fold X vs Beta Fold Y').category, 'web_search');
+assert.equal(classifyFreeLiveIntent('price of Acme Speaker Mini').category, 'web_search');
 assert.equal(classifyFreeLiveIntent('Explain what Nothing OS is').category, 'stable_knowledge');
 assert.equal(searchTest.extractSearchTargetQuery('Search the web for recent reviews of the Nothing Phone 3'), 'recent reviews of the Nothing Phone 3');
+assert.deepEqual(searchTest.buildSearchQueryRewrite('compare Alpha Fold X vs Beta Fold Y'), {
+    query: 'compare Alpha Fold X vs Beta Fold Y',
+    subject: 'Alpha Fold X Beta Fold Y',
+    freshnessNeeded: true,
+    intent: 'comparison'
+});
 assert.deepEqual(searchTest.buildDeterministicSearchQueries('recent reviews of Nothing Phone 3'), [
     'Nothing Phone 3 reviews',
     'Nothing Phone 3 recent reviews',
@@ -302,6 +311,22 @@ assert.equal(searchTest.isRelatedToQuery('Nothing Phone 3 reviews', {
     description: 'Early phone review with camera, battery, display, and Nothing OS impressions.',
     sourceLabel: 'Tech Review'
 }), true);
+assert.equal(searchTest.isRelatedToQuery('recent reviews of Framework Laptop 16', {
+    title: 'Framework design language',
+    description: 'A general page about software frameworks and laptop stands.',
+    sourceLabel: 'Reference'
+}), false);
+assert.equal(searchTest.isRelatedToQuery('recent reviews of Framework Laptop 16', {
+    title: 'Framework Laptop 16 review',
+    description: 'A recent review covering performance, battery, modular parts, and display quality.',
+    sourceLabel: 'Tech Review'
+}), true);
+assert.equal(searchTest.isRelatedToQuery('price of Acme Speaker Mini', {
+    title: 'Acme Speaker Mini price drops this week',
+    description: 'Retail pricing and availability details for the compact speaker model.',
+    sourceLabel: 'Shopping News'
+}), true);
+assert.doesNotMatch(SOURCE.searchApi, /nothing\s+phone|iphone|pixel|galaxy|oneplus/i);
 assert.match(SOURCE.styles, /\.chat-bubble-user\s*\{[\s\S]*background:\s*transparent !important/);
 assert.match(SOURCE.styles, /\.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important/);
 assert.match(SOURCE.styles, /body\.dark \.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important[\s\S]*border:\s*none !important[\s\S]*padding:\s*0 !important/);
