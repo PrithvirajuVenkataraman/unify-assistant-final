@@ -95,6 +95,23 @@
                     }
                 });
             }
+            const routeDecision = classifyRoutingDecision(effectiveMessage, '', {
+                isInternalSummary
+            });
+            const lengthPolicy = buildLengthPolicy(effectiveMessage, '', { isInternalSummary });
+            if (shouldStreamChatRequest(req.body, intent, grounding, routeDecision, isInternalSummary)) {
+                return await handleStreamingChatRequest(res, {
+                    requestId,
+                    timing,
+                    systemPrompt,
+                    contextBlock,
+                    effectiveMessage,
+                    intent,
+                    routeDecision,
+                    lengthPolicy
+                });
+            }
+
             const safetyDecision = await classifySafetyWithGroq(effectiveMessage, { isInternalSummary });
             if (safetyDecision.blocked) {
                 return res.status(200).json({
@@ -111,9 +128,6 @@
                     }
                 });
             }
-            const routeDecision = classifyRoutingDecision(effectiveMessage, '', {
-                isInternalSummary
-            });
 
             // Route path: live_first can pre-load web context before the first model call.
             let preloadedLiveRag = { ragText: '', sources: [] };
@@ -122,19 +136,6 @@
             }
 
             // Pass 1: model-only (no live search) for speed and cost.
-            const lengthPolicy = buildLengthPolicy(effectiveMessage, '', { isInternalSummary });
-            if (shouldStreamChatRequest(req.body, intent, grounding, routeDecision, isInternalSummary)) {
-                return await handleStreamingChatRequest(res, {
-                    requestId,
-                    timing,
-                    systemPrompt,
-                    contextBlock,
-                    effectiveMessage,
-                    intent,
-                    routeDecision,
-                    lengthPolicy
-                });
-            }
             const firstPrompt = composeFinalPrompt(
                 systemPrompt,
                 preloadedLiveRag.ragText,
@@ -271,7 +272,15 @@
         if (grounding) return false;
         if (isInternalSummary) return false;
         if (routeDecision?.strategy && routeDecision.strategy !== 'direct') return false;
+        if (needsPreStreamSafetyReview(body?.message)) return false;
         return true;
+    }
+
+    function needsPreStreamSafetyReview(message) {
+        const text = String(message || '').toLowerCase();
+        if (!text.trim()) return false;
+        return /\b(?:build|make|create|manufacture|assemble|synthesize|weaponize|bypass|evade|steal|hack|phish|exploit|malware|ransomware|keylogger|credential|password|token|kill|poison|bomb|explosive|gun|firearm|self-harm|suicide)\b/.test(text) &&
+            /\b(?:instructions?|steps?|guide|code|script|recipe|how to|method|plan|help me|show me)\b/.test(text);
     }
 
     function writeSse(res, eventName, payload = {}) {
@@ -2463,7 +2472,9 @@
         normalizeResponseStyle,
         resolveContextualLiveQuery,
         resolveRouteEscalation,
-        isCrawl4AiFallbackCandidate
+        isCrawl4AiFallbackCandidate,
+        shouldStreamChatRequest,
+        needsPreStreamSafetyReview
     };
 
     function applyResponseLengthPostCheck(parsedResponse, lengthPolicy, message, clientSystemPrompt) {
