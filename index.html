@@ -2379,7 +2379,12 @@ async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking
     showThinkingIndicator(loadingMessage);
     try {
         const useDirectModel = Boolean(options?.directModel);
-        const response = await (useDirectModel ? askGeminiAI(message) : processUserQuery(message, options));
+        const response = await (useDirectModel
+            ? askGeminiAI(message, {
+                stream: options?.stream === true,
+                displayUserMessage: options?.displayUserMessage || ''
+            })
+            : processUserQuery(message, options));
         if (response?.aborted) {
             hideThinkingIndicator();
             return response;
@@ -4146,7 +4151,7 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
             ? await streamChatCompletion(requestPayload, {
                 signal: controller.signal,
                 latencyTrace,
-                userMessage: normalizedUserMessage
+                userMessage: requestOptions?.displayUserMessage || normalizedUserMessage
             })
             : await window.JarvisApi.postJson('/api/chat-groq', requestPayload, {
                 signal: controller.signal,
@@ -16925,7 +16930,11 @@ Quick recap: ...
 - Avoid jargon unless you define it immediately.
 - Keep it accurate and practical.
 - Teaching depth: ${teachingDepth}. ${teachingRule}`;
-                const learningResponse = await callAIWithTyping(learningPrompt, 'Preparing a clear explanation...', { directModel: true });
+                const learningResponse = await callAIWithTyping(learningPrompt, 'Preparing a clear explanation...', {
+                    directModel: true,
+                    stream: true,
+                    displayUserMessage: text
+                });
                 if (learningResponse?.aborted) return;
                 let learningAnswer = learningResponse.response;
                 if (formulaNeededInLearning && !hasFormulaLikeExpression(learningAnswer)) {
