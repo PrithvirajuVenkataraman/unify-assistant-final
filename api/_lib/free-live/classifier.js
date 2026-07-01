@@ -2,6 +2,12 @@ const ROUTES = Object.freeze(['llm', 'cached_latest', 'live_required', 'clarify'
 
 const CATEGORY_PATTERNS = Object.freeze([
     {
+        category: 'web_search',
+        route: 'live_required',
+        reason: 'explicit_or_product_search_requires_web_sources',
+        pattern: /\b(?:search(?:\s+the\s+web)?|web\s+search|look\s+up|find)\b.+|\b(?:reviews?|hands-on|worth\s+it|good\??|best|vs|compare|comparison|price|available|launched|release(?:d)?)\b.*\b(?:phone|smartphone|laptop|tablet|camera|headphones|earbuds|watch|console|model|device|nothing\s+phone|iphone|pixel|galaxy|oneplus)\b|\b(?:phone|smartphone|laptop|tablet|camera|headphones|earbuds|watch|console|model|device|nothing\s+phone|iphone|pixel|galaxy|oneplus)\b.*\b(?:reviews?|hands-on|worth\s+it|good\??|best|vs|compare|comparison|price|available|launched|release(?:d)?)\b/i
+    },
+    {
         category: 'weather',
         route: 'live_required',
         reason: 'weather_requires_live_source',
@@ -63,6 +69,10 @@ export function classifyFreeLiveIntent(message) {
     const text = normalizeMessage(message);
     if (!text) return strictRoute('clarify', 'clarify', 0.2, ['empty_message']);
 
+    if (isExplicitOrProductSearch(text)) {
+        return strictRoute('live_required', 'web_search', 0.88, ['explicit_or_product_search_requires_web_sources']);
+    }
+
     for (const pattern of UNSUPPORTED_FREE_LIVE_PATTERNS) {
         if (pattern.test(text)) {
             return strictRoute('live_required', 'unsupported_free_live', 0.82, ['no_durable_free_source']);
@@ -113,8 +123,13 @@ function normalizeMessage(message) {
     return String(message || '').replace(/\s+/g, ' ').trim().slice(0, 500);
 }
 
+function isExplicitOrProductSearch(text) {
+    return CATEGORY_PATTERNS[0].pattern.test(text);
+}
+
 export const __test = {
     CATEGORY_PATTERNS,
     UNSUPPORTED_FREE_LIVE_PATTERNS,
+    isExplicitOrProductSearch,
     scorePatterns
 };
