@@ -1293,6 +1293,9 @@ const productReviewSearch = await callHandler(searchHandler, request('/api/searc
 assert.equal(productReviewSearch.statusCode, 200);
 assert.equal(productReviewSearch.body.category, 'web_search');
 assert.equal(productReviewSearch.body.query, 'recent reviews of the Nothing Phone 3');
+assert.equal(productReviewSearch.body.searchRewrite.subject, 'Nothing Phone 3');
+assert.equal(productReviewSearch.body.searchRewrite.intent, 'reviews');
+assert.equal(productReviewSearch.body.searchRewrite.freshnessNeeded, true);
 assert.ok(productReviewSearch.body.results.length >= 1);
 assert.ok(productReviewSearch.body.results.every(item => /nothing phone 3/i.test(`${item.title} ${item.description}`)));
 assert.doesNotMatch(JSON.stringify(productReviewSearch.body.results), /Nothing Was the Same|Everything or Nothing/i);
