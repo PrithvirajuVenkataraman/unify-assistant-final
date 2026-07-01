@@ -150,7 +150,29 @@ export default async function handler(req, res) {
 
     try {
         const limit = clampInt(req.body?.limit || req.body?.maxResults, 8, 1, 20);
+        const mode = normalizeSearchMode(req.body?.mode || req.body?.searchMode || '');
         const route = classifyFreeLiveIntent(query);
+        if (mode === 'classify') {
+            return res.status(200).json({
+                success: true,
+                query,
+                route,
+                searchRequired: route.route !== 'llm',
+                searchSkipped: route.route === 'llm',
+                results: [],
+                provider: 'classifier'
+            });
+        }
+        if (mode === 'auto' && route.route === 'llm') {
+            return res.status(200).json({
+                success: true,
+                query,
+                route,
+                searchRequired: false,
+                searchSkipped: true,
+                ...buildSearchSkippedSummary(query, route)
+            });
+        }
         if (route.route === 'live_required') {
             if (route.category === 'government' || route.category === 'news') {
                 const search = await runVerifiedWebSearch(query, { limit });
@@ -158,6 +180,8 @@ export default async function handler(req, res) {
                     success: true,
                     query,
                     route,
+                    searchRequired: true,
+                    searchSkipped: false,
                     category: route.category,
                     ...search
                 });
@@ -169,6 +193,8 @@ export default async function handler(req, res) {
                 disabled: false,
                 query,
                 route,
+                searchRequired: true,
+                searchSkipped: false,
                 error: unsupported
                     ? {
                         code: search.category === 'unsupported_free_live' ? 'unsupported_free_live' : 'clarification_required',
@@ -191,6 +217,8 @@ export default async function handler(req, res) {
                 success: true,
                 query,
                 route,
+                searchRequired: true,
+                searchSkipped: false,
                 ...search
             });
         }
@@ -199,6 +227,8 @@ export default async function handler(req, res) {
             success: true,
             query,
             route,
+            searchRequired: mode === 'auto',
+            searchSkipped: false,
             ...search
         });
     } catch (error) {
@@ -215,6 +245,31 @@ export default async function handler(req, res) {
             results: []
         });
     }
+}
+
+function normalizeSearchMode(value) {
+    const mode = String(value || '').trim().toLowerCase();
+    if (mode === 'auto' || mode === 'classify') return mode;
+    return 'explicit';
+}
+
+function buildSearchSkippedSummary(query, route) {
+    return {
+        results: [],
+        answer: undefined,
+        answerProvider: undefined,
+        distinctDomains: [],
+        trustedCount: 0,
+        sourceCount: 0,
+        answerEvidenceCount: 0,
+        distinctDomainCount: 0,
+        provider: 'classifier',
+        publicSourceCount: 0,
+        geminiEnhanced: false,
+        warnings: ['Live search skipped because the classifier routed this as stable model knowledge.'],
+        refreshed: false,
+        category: route?.category || 'stable_knowledge'
+    };
 }
 
 export async function runCachedLatestSearch(query, options = {}) {
@@ -1679,7 +1734,7 @@ export const __test = {
     runVerifiedWebSearch,
     searchGdeltNews,
     searchWikidata,
-    searchReddit, 
+    searchReddit,
     searchGovernmentRole,
     parseGovernmentRoleQuery,
     normalizeGovernmentRoleBindings,
