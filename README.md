@@ -111,7 +111,7 @@ The user does not need to provide links. JARVIS searches from the original quest
 - `api/_lib/web-search-core.js`: Legacy self-hosted web-search core.
 - `api/_lib/free-live/classifier.js`: Deterministic prompt classifier for live-capable categories.
 - `api/_lib/free-live/providers.js`: Keyless provider implementations used by live-capable categories.
-- `api/_lib/free-live/source-registry.js`: Registry of live-capable source categories, TTLs, and limits.
+- `api/_lib/free-live/source-registry.js`: Registry of live-capable source categories, TTLs, and limits. 
 - `api/_lib/latest/latest-cache.js`: In-memory latest-item cache.
 - `api/_lib/latest/latest-ingest.js`: Latest-source feed ingestion helper.
 - `api/_lib/latest/latest-sources.js`: Curated latest-source definitions.
