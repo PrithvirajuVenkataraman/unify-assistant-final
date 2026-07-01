@@ -1228,6 +1228,77 @@ assert.equal(governmentSearch.body.answerProvider, 'public_source_result');
 assert.match(governmentSearch.body.answer, new RegExp(LIVE_FIXTURES.government.title));
 globalThis.fetch = ORIGINAL_FETCH;
 
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('en.wikipedia.org/w/api.php')) {
+        return okJson({
+            query: {
+                search: [
+                    { title: 'Nothing Was the Same', snippet: 'Drake studio album.' },
+                    { title: 'James Bond 007: Everything or Nothing', snippet: 'Video game.' }
+                ]
+            }
+        });
+    }
+    if (href.includes('en.wikipedia.org/api/rest_v1/page/summary')) {
+        if (href.includes('Nothing_Was_the_Same')) {
+            return okJson({
+                title: 'Nothing Was the Same',
+                extract: 'Nothing Was the Same is a studio album by Drake released in 2013.',
+                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Nothing_Was_the_Same' } }
+            });
+        }
+        return okJson({
+            title: 'James Bond 007: Everything or Nothing',
+            extract: 'Everything or Nothing is an action-adventure video game.',
+            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/James_Bond_007:_Everything_or_Nothing' } }
+        });
+    }
+    if (href.includes('www.wikidata.org')) {
+        return okJson({ search: [] });
+    }
+    if (href.includes('reddit.com')) {
+        return okJson({ data: { children: [] } });
+    }
+    if (href.includes('api.gdeltproject.org')) {
+        return okJson({
+            articles: [
+                {
+                    title: 'Nothing Was the Same review revisited',
+                    url: 'https://example.com/music/nothing-was-the-same-review',
+                    domain: 'example.com',
+                    seendate: '20260618120000'
+                },
+                {
+                    title: 'Nothing Phone 3 hands-on review',
+                    url: 'https://www.theverge.com/reviews/nothing-phone-3-review',
+                    domain: 'theverge.com',
+                    seendate: '20260618130000'
+                },
+                {
+                    title: 'Nothing Phone 3 review: camera, battery, and design',
+                    url: 'https://www.techradar.com/phones/nothing-phone-3-review',
+                    domain: 'techradar.com',
+                    seendate: '20260618140000'
+                }
+            ]
+        });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const productReviewSearch = await callHandler(searchHandler, request('/api/search', {
+    query: 'Search the web for recent reviews of the Nothing Phone 3',
+    limit: 5
+}));
+assert.equal(productReviewSearch.statusCode, 200);
+assert.equal(productReviewSearch.body.category, 'web_search');
+assert.equal(productReviewSearch.body.query, 'recent reviews of the Nothing Phone 3');
+assert.ok(productReviewSearch.body.results.length >= 1);
+assert.ok(productReviewSearch.body.results.every(item => /nothing phone 3/i.test(`${item.title} ${item.description}`)));
+assert.doesNotMatch(JSON.stringify(productReviewSearch.body.results), /Nothing Was the Same|Everything or Nothing/i);
+assert.doesNotMatch(String(productReviewSearch.body.answer || ''), /Nothing Was the Same|Everything or Nothing/i);
+globalThis.fetch = ORIGINAL_FETCH;
+
 const unsupportedLiveSearch = await callHandler(searchHandler, request('/api/search', { query: LIVE_FIXTURES.unsupported.query, limit: 5 }));
 assert.equal(unsupportedLiveSearch.statusCode, 200);
 assert.notEqual(unsupportedLiveSearch.body.category, 'unsupported_free_live');
