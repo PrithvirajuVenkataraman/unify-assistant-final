@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import currentFactsHandler, { __test as currentFacts } from '../api/current-facts.js';
+import { __test as searchTest } from '../api/search.js';
 import { classifyFreeLiveIntent, routeMessage } from '../api/_lib/latest/router.js';
 import { clearItems, saveItems } from '../api/_lib/latest/latest-cache.js';
 
@@ -281,6 +282,26 @@ assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.disaster).category, 'dis
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.sports).category, 'sports');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.places).category, 'tourism_food_places');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.unsupported).category, 'stable_knowledge');
+assert.equal(classifyFreeLiveIntent('Search the web for recent reviews of the Nothing Phone 3').category, 'web_search');
+assert.equal(classifyFreeLiveIntent('recent reviews of Nothing Phone 3').category, 'web_search');
+assert.equal(classifyFreeLiveIntent('Nothing Phone 3 reviews').category, 'web_search');
+assert.equal(classifyFreeLiveIntent('Explain what Nothing OS is').category, 'stable_knowledge');
+assert.equal(searchTest.extractSearchTargetQuery('Search the web for recent reviews of the Nothing Phone 3'), 'recent reviews of the Nothing Phone 3');
+assert.deepEqual(searchTest.buildDeterministicSearchQueries('recent reviews of Nothing Phone 3'), [
+    'Nothing Phone 3 reviews',
+    'Nothing Phone 3 recent reviews',
+    'Nothing Phone 3 phone review'
+]);
+assert.equal(searchTest.isRelatedToQuery('Nothing Phone 3 reviews', {
+    title: 'Nothing Was the Same',
+    description: 'Drake album released in 2013 with OVO production credits.',
+    sourceLabel: 'Wikipedia'
+}), false);
+assert.equal(searchTest.isRelatedToQuery('Nothing Phone 3 reviews', {
+    title: 'Nothing Phone 3 hands-on review',
+    description: 'Early phone review with camera, battery, display, and Nothing OS impressions.',
+    sourceLabel: 'Tech Review'
+}), true);
 assert.match(SOURCE.styles, /\.chat-bubble-user\s*\{[\s\S]*background:\s*transparent !important/);
 assert.match(SOURCE.styles, /\.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important/);
 assert.match(SOURCE.styles, /body\.dark \.chat-bubble-assistant\s*\{[\s\S]*background:\s*transparent !important[\s\S]*border:\s*none !important[\s\S]*padding:\s*0 !important/);
