@@ -1550,8 +1550,38 @@ function isInternalPromptText(text) {
     return /(Check whether this answer is accurate|Answer to verify:|Original user request:|Return a clear verification report|Retrieved source evidence|Local review flags|User custom reply instructions|Transform this assistant answer|Payload JSON:|Intent: generic_reply|OCR JSON:|Planner JSON:|Critic JSON:)/i.test(value);
 }
 
+function sanitizeUserFacingRequestText(text) {
+    const raw = String(text || '').replace(/\r\n/g, '\n').trim();
+    if (!raw) return '';
+
+    const wrappedDouble = raw.match(/^User asked:\s*"([^"]+)"/i);
+    if (wrappedDouble?.[1]) return wrappedDouble[1].trim();
+
+    const wrappedSingle = raw.match(/^User asked:\s*'([^']+)'/i);
+    if (wrappedSingle?.[1]) return wrappedSingle[1].trim();
+
+    const firstLine = raw.split('\n')[0].trim();
+    if (/^User asked:/i.test(firstLine)) {
+        const plain = firstLine.replace(/^User asked:\s*/i, '').replace(/^["']|["']$/g, '').trim();
+        if (plain && !/^(Teach this clearly|Rules:)/i.test(plain)) return plain;
+    }
+
+    const stopAtInternalBlock = raw.split(/\n\s*(?:Teach this clearly|Rules:|Response length requested:|Response format preference:|Prompt-requested explanation style:|Style requirements:)\b/i)[0].trim();
+    if (stopAtInternalBlock && stopAtInternalBlock !== raw) {
+        const quoted = stopAtInternalBlock.match(/"([^"]+)"/);
+        if (quoted?.[1]) return quoted[1].trim();
+        if (!isInternalPromptText(stopAtInternalBlock)) return stopAtInternalBlock;
+    }
+
+    if (/^(Teach this clearly|Rules:|Answer to verify:|Check whether this answer is accurate|Retrieved source evidence|Payload JSON:|Planner JSON:|Critic JSON:)/i.test(firstLine)) {
+        return '';
+    }
+
+    return isInternalPromptText(raw) ? '' : raw;
+}
+
 function setLastVisibleUserMessage(text) {
-    const value = String(text || '').trim();
+    const value = sanitizeUserFacingRequestText(text);
     if (!value || isInternalPromptText(value)) return false;
     lastVisibleUserMessage = value;
     window.__lastUserMessage = value;
@@ -1561,12 +1591,12 @@ function setLastVisibleUserMessage(text) {
 function getLastVisibleUserMessage() {
     const visible = String(lastVisibleUserMessage || '').trim();
     if (visible && !isInternalPromptText(visible)) return visible;
-    const legacy = String(window.__lastUserMessage || '').trim();
+    const legacy = sanitizeUserFacingRequestText(window.__lastUserMessage || '');
     return legacy && !isInternalPromptText(legacy) ? legacy : '';
 }
 
 function addVisibleInputHistory(text) {
-    const value = String(text || '').trim();
+    const value = sanitizeUserFacingRequestText(text);
     if (!value || isInternalPromptText(value)) return;
     if (!inputHistory.length || inputHistory[inputHistory.length - 1] !== value) {
         inputHistory.push(value);
@@ -1587,7 +1617,12 @@ function retryLastRequest() {
 function showResponseRecoveryCard(userMessage = '') {
     const chatContainer = document.getElementById('chat-container');
     if (!chatContainer || document.getElementById('response-recovery-card')) return;
-    const safeMessage = escapeHtml(String(userMessage || window.__lastUserMessage || 'that request').slice(0, 140));
+    const displayMessage = sanitizeUserFacingRequestText(userMessage) ||
+        getLastVisibleUserMessage() ||
+        sanitizeUserFacingRequestText(window.__lastUserMessage || '') ||
+        'that request';
+    const safeMessage = escapeHtml(displayMessage.slice(0, 140));
+    const canStop = Boolean(activeRequestController && !activeRequestController.signal?.aborted);
     const card = document.createElement('div');
     card.id = 'response-recovery-card';
     card.className = 'chat-row flex justify-start fade-in';
@@ -1596,7 +1631,7 @@ function showResponseRecoveryCard(userMessage = '') {
             <p class="assistant-md-p"><strong>Response paused.</strong> ${safeMessage ? `Last request: ${safeMessage}` : ''}</p>
             <div class="flex flex-wrap gap-2 mt-2">
                 <button type="button" class="memory-action-btn" onclick="retryLastRequest(); document.getElementById('response-recovery-card')?.remove();">Retry</button>
-                <button type="button" class="memory-action-btn" onclick="stopActiveGeneration('manual'); document.getElementById('response-recovery-card')?.remove();">Stop</button>
+                ${canStop ? `<button type="button" class="memory-action-btn" onclick="stopActiveGeneration('manual'); document.getElementById('response-recovery-card')?.remove();">Stop</button>` : ''}
             </div>
         </div>
     `;
@@ -3973,20 +4008,27 @@ async function streamChatCompletion(payload, options = {}) {
         }
     };
 
-    while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split(/\n\n/);
-        buffer = parts.pop() || '';
-        for (const part of parts) {
-            handleEvent(parseSseClientEvent(part));
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split(/\n\n/);
+            buffer = parts.pop() || '';
+            for (const part of parts) {
+                handleEvent(parseSseClientEvent(part));
+            }
         }
-    }
-    const tail = decoder.decode();
-    if (tail) buffer += tail;
-    if (buffer.trim()) {
-        handleEvent(parseSseClientEvent(buffer));
+        const tail = decoder.decode();
+        if (tail) buffer += tail;
+        if (buffer.trim()) {
+            handleEvent(parseSseClientEvent(buffer));
+        }
+    } catch (error) {
+        if (isAbortError(error) && assistantMessageId) {
+            discardStreamingAssistantMessage(assistantMessageId);
+        }
+        throw error;
     }
 
     const finalResponse = String(donePayload?.response || accumulated || '').trim();
@@ -4976,6 +5018,14 @@ let showRoutingDebugBadge = false;
             toggleSendButton();
         }
 
+        function resetAssistantProcessingState() {
+            assistantProcessingDepth = 0;
+            window.dispatchEvent(new CustomEvent('jarvis:assistant-processing', {
+                detail: { active: false, depth: 0 }
+            }));
+            toggleSendButton();
+        }
+
         function isAssistantProcessing() {
             return assistantProcessingDepth > 0;
         }
@@ -5105,11 +5155,18 @@ let showRoutingDebugBadge = false;
                 try {
                     controller.abort();
                 } catch (e) {}
+                if (activeRequestController === controller) {
+                    activeRequestController = null;
+                }
             }
             stopActiveTypewriterAnimations();
             stopConverseSpeech();
             clearResponseRecoveryPrompt();
             hideThinkingIndicator();
+            document.getElementById('response-recovery-card')?.remove();
+            if (hadRequest || hadTypewriter) {
+                resetAssistantProcessingState();
+            }
             toggleSendButton();
             if (reason === 'manual') showTemporaryMessage('Response stopped.');
         }
@@ -7197,6 +7254,20 @@ let showRoutingDebugBadge = false;
             const turn = getConversationTurn(turnId);
             speakConverseReply(cleanText, turn);
             return messageId;
+        }
+
+        function discardStreamingAssistantMessage(messageId) {
+            const id = String(messageId || '').trim();
+            if (!id) return;
+            const meta = getAssistantMessageMeta(id);
+            const turnId = String(meta?.turnId || '').trim();
+            const turn = getConversationTurn(turnId);
+            if (turn) {
+                turn.assistantMessageIds = turn.assistantMessageIds.filter(item => item !== id);
+            }
+            assistantMessageMeta.delete(id);
+            const row = findAssistantMessageRow(id);
+            if (row?.parentNode) row.parentNode.removeChild(row);
         }
 
         function escapeHtml(text) {
