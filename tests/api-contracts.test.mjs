@@ -633,6 +633,22 @@ assert.ok(!publicSearch.body.results.some(item => item.sourceType === 'reference
 assert.ok(!publicSearch.body.results.some(item => item.sourceType === 'archive_lookup'));
 globalThis.fetch = ORIGINAL_FETCH;
 
+globalThis.fetch = async (url) => {
+    throw new Error(`auto classifier should not fetch ${String(url)}`);
+};
+const autoStableSearch = await callHandler(searchHandler, request('/api/search', {
+    query: 'explain transformer attention',
+    limit: 5,
+    mode: 'auto'
+}));
+assert.equal(autoStableSearch.statusCode, 200);
+assert.equal(autoStableSearch.body.success, true);
+assert.equal(autoStableSearch.body.searchSkipped, true);
+assert.equal(autoStableSearch.body.searchRequired, false);
+assert.equal(autoStableSearch.body.provider, 'classifier');
+assert.equal(autoStableSearch.body.results.length, 0);
+globalThis.fetch = ORIGINAL_FETCH;
+
 const presidentQuery = roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction);
 const chiefMinisterQuery = roleQuery(ROLE_FIXTURES.chiefMinister.role, ROLE_FIXTURES.chiefMinister.jurisdiction, '');
 const ceoQuery = roleQuery(ROLE_FIXTURES.ceo.role, ROLE_FIXTURES.ceo.jurisdiction);
