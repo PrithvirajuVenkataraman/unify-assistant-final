@@ -124,17 +124,17 @@ option {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--ui-border);
-    border-radius: 12px;
-    background: var(--ui-surface);
+    border: none;
+    border-radius: 0;
+    background: transparent;
     color: var(--ui-text);
-    box-shadow: var(--ui-shadow-sm);
+    box-shadow: none;
     cursor: pointer;
 }
 
 .chat-sidebar-toggle:hover,
 .chat-sidebar-toggle:focus-visible {
-    border-color: var(--ui-primary);
+    background: transparent;
     outline: none;
 }
 
@@ -646,6 +646,9 @@ option {
 .memory-manager-search button,
 .memory-manager-toolbar button,
 .memory-manager-actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border-radius: 11px;
     font-weight: 800;
 }
@@ -764,6 +767,21 @@ option {
         max-height: calc(100dvh - 20px);
         border-radius: 16px;
         padding: 14px;
+    }
+
+    .memory-manager-search {
+        grid-template-columns: 1fr 54px;
+    }
+
+    .memory-manager-search button {
+        width: 54px;
+        height: 54px;
+        padding: 0;
+        place-self: center;
+    }
+
+    .memory-manager-toolbar {
+        justify-content: center;
     }
 
     .memory-manager-item {
