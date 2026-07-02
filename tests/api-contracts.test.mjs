@@ -343,12 +343,15 @@ const verifyGrounded = chatTest.buildGroundedUserMessage(
     'selection_verify',
     validSelection.value.grounding
 );
-assert.match(verifyGrounded, /Verdict: likely accurate, partly accurate, unsupported, or incorrect/i);
+assert.match(verifyGrounded, /Verdict: Accurate, Inaccurate, Outdated, Unverified, or Misleading/i);
+assert.match(verifyGrounded, /Claims checked:/i);
 assert.match(verifyGrounded, /Evidence used:/i);
 assert.match(verifyGrounded, /How checked:/i);
 assert.match(verifyGrounded, /Claims needing live\/source verification:/i);
 assert.match(verifyGrounded, /Corrected answer:/i);
 assert.match(APP_HTML_SOURCE, /function buildVerificationResponseInstructions/);
+assert.match(APP_HTML_SOURCE, /Verdict: Accurate, Inaccurate, Outdated, Unverified, or Misleading/);
+assert.match(APP_HTML_SOURCE, /If newer retrieved evidence contradicts a once-true claim/);
 assert.match(APP_HTML_SOURCE, /Evidence used:/);
 assert.match(APP_HTML_SOURCE, /How checked:/);
 assert.match(APP_HTML_SOURCE, /Claims needing live\/source verification:/);
@@ -1626,7 +1629,7 @@ globalThis.fetch = async (url, init) => {
             return okJson({
                 choices: [{
                     message: {
-                        content: 'Verdict: unsupported.\nEvidence used: No retrieved source evidence was available.\nHow checked: Source verification could not be completed.\nClaims needing live/source verification: The answer needs source verification.\nCorrected answer: Not enough evidence.\nSources: Source verification unavailable.'
+                        content: 'Verdict: unsupported.\nClaims checked: Current claim - live verification required yes - no retrieved evidence supplied.\nEvidence used: No retrieved source evidence was available.\nHow checked: Source verification could not be completed.\nClaims needing live/source verification: The answer needs source verification.\nCorrected answer: Not enough evidence.\nSources: Source verification unavailable.'
                     }
                 }]
             });
@@ -1637,7 +1640,7 @@ globalThis.fetch = async (url, init) => {
         return okJson({
             choices: [{
                 message: {
-                    content: 'Verdict: likely accurate.\nEvidence used: The supplied source supports the answer.\nHow checked: Compared the answer with retrieved evidence.\nClaims needing live/source verification: None.\nCorrected answer: Not needed.\nSources:\n1. [Test Source](https://example.com/fact)'
+                    content: 'Verdict: likely accurate.\nClaims checked: Historical claim - live verification required no - Test Source.\nEvidence used: The supplied source supports the answer.\nHow checked: Compared the answer with retrieved evidence.\nClaims needing live/source verification: None.\nCorrected answer: Not needed.\nSources:\n1. [Test Source](https://example.com/fact)'
                 }
             }]
         });
@@ -1665,6 +1668,7 @@ assert.equal(verifyAnswerChat.body.intent, 'verify_answer');
 assert.equal(verifyAnswerChat.body.routing.strategy, 'verify_answer_fast_path');
 assert.equal(verifyAnswerChat.body.webEscalation.reason, 'verify_answer_fast_path');
 assert.equal(verifyAnswerChat.body.quality.performed, false);
+assert.match(verifyAnswerChat.body.response, /^Verdict: Accurate/m);
 assert.match(verifyAnswerChat.body.response, /\[Test Source\]\(https:\/\/example\.com\/fact\)/);
 assert.equal(verifyModelCalls, 1);
 assert.equal(verifyUnexpectedNetworkCalls, 0);
@@ -1681,6 +1685,7 @@ const noSourceVerifyChat = await callHandler(chatHandler, request('/api/chat-gro
 }));
 assert.equal(noSourceVerifyChat.statusCode, 200);
 assert.equal(noSourceVerifyChat.body.routing.strategy, 'verify_answer_fast_path');
+assert.match(noSourceVerifyChat.body.response, /^Verdict: Unverified/m);
 assert.match(noSourceVerifyChat.body.response, /Source verification unavailable/);
 assert.equal(noSourceVerifyChat.body.quality.externalVerification, false);
 assert.equal(verifyModelCalls, 2);
@@ -1688,7 +1693,7 @@ assert.equal(chatTest.normalizeVerifyGrounding({
     sourceAnswer: 'A',
     evidenceSources: [{ title: 'Bad', url: 'javascript:alert(1)' }]
 }).evidenceSources.length, 0);
-assert.match(chatTest.ensureVerificationSourcesSection('Verdict: unsupported.', ['1. [A](https://example.com/a)']), /Sources:\n1\. \[A\]\(https:\/\/example\.com\/a\)/);
+assert.match(chatTest.ensureVerificationSourcesSection('Verdict: Unverified.', ['1. [A](https://example.com/a)']), /Sources:\n1\. \[A\]\(https:\/\/example\.com\/a\)/);
 globalThis.fetch = ORIGINAL_FETCH;
 delete process.env.GROQ_API_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
