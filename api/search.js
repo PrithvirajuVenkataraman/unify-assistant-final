@@ -744,6 +744,7 @@ export function parseGovernmentRoleQuery(query) {
     if (!raw) return null;
     const roleEntry = GOVERNMENT_ROLE_ALIASES.find(item => item.pattern.test(raw));
     if (!roleEntry) return null;
+    const dateIntent = parseStructuredDateWindow(raw);
 
     const roleTextMatch = raw.match(roleEntry.pattern);
     const roleText = String(roleTextMatch?.[0] || roleEntry.role).trim();
@@ -772,12 +773,13 @@ export function parseGovernmentRoleQuery(query) {
         role: roleEntry.role,
         roleText,
         jurisdiction,
-        property: roleEntry.property
+        property: roleEntry.property,
+        ...(dateIntent?.hasDate ? { dateIntent } : {})
     };
 }
 
 function cleanGovernmentRoleJurisdiction(value) {
-    return String(value || '')
+    return stripDatePhrasesFromText(value)
         .replace(/\b(current|latest|present|incumbent|official|government|leader|office|holder|name|country|state|province)\b$/gi, ' ')
         .replace(/^[,:\s]+|[,:\s?!.]+$/g, '')
         .replace(/\s*,\s*/g, ' ')
@@ -792,16 +794,19 @@ function buildGovernmentRoleSparql(intent, jurisdictionId, limit = 3) {
     const directProperty = ['P35', 'P6', 'P169'].includes(intent.property) ? intent.property : '';
     const directBranch = directProperty
         ? `{
-  wd:${qid} wdt:${directProperty} ?holder.
+  wd:${qid} p:${directProperty} ?statement.
+  ?statement ps:${directProperty} ?holder.
+  OPTIONAL { ?statement pq:P580 ?start. }
+  OPTIONAL { ?statement pq:P582 ?end. }
   BIND("${escapeSparqlString(intent.role)}" AS ?officeLabel)
-  BIND("wdt:${directProperty}" AS ?claimType)
+  BIND("p:${directProperty}" AS ?claimType)
 }`
         : '';
     const p39Branch = intent.organizationRole ? '' : `{
     ?holder p:P39 ?statement.
     ?statement ps:P39 ?office.
-    FILTER NOT EXISTS { ?statement pq:P582 ?end. }
     OPTIONAL { ?statement pq:P580 ?start. }
+    OPTIONAL { ?statement pq:P582 ?end. }
     ?office rdfs:label ?officeLabel.
     FILTER(LANG(?officeLabel) = "en")
     FILTER(CONTAINS(LCASE(STR(?officeLabel)), "${roleFilter}"))
@@ -816,7 +821,7 @@ function buildGovernmentRoleSparql(intent, jurisdictionId, limit = 3) {
   }`;
     const branches = [directBranch, p39Branch].filter(Boolean).join(' UNION ');
     return `
-SELECT ?holder ?holderLabel ?office ?officeLabel ?start ?article ?claimType WHERE {
+SELECT ?holder ?holderLabel ?office ?officeLabel ?start ?end ?article ?claimType WHERE {
   ${branches}
   OPTIONAL {
     ?article schema:about ?holder;
@@ -830,9 +835,10 @@ LIMIT ${clampInt(limit, 3, 1, 6)}`;
 
 function normalizeGovernmentRoleBindings(data, intent, jurisdiction, query) {
     const bindings = Array.isArray(data?.results?.bindings) ? data.results.bindings : [];
-    return bindings
+    const normalized = bindings
         .map((binding, index) => normalizeGovernmentRoleBinding(binding, intent, jurisdiction, query, index))
         .filter(item => item.title && item.url);
+    return filterGovernmentRoleResultsByDate(normalized, intent?.dateIntent);
 }
 
 function normalizeGovernmentRoleBinding(binding, intent, jurisdiction, query, index) {
@@ -842,10 +848,12 @@ function normalizeGovernmentRoleBinding(binding, intent, jurisdiction, query, in
     const officeLabel = bindingValue(binding?.officeLabel) || intent.role;
     const article = bindingValue(binding?.article);
     const startDate = normalizeWikidataDate(bindingValue(binding?.start));
+    const endDate = normalizeWikidataDate(bindingValue(binding?.end));
     const url = holderId ? `https://www.wikidata.org/wiki/${holderId}` : holderUri;
     const description = [
-        holderName && jurisdiction?.label ? `${holderName} is listed by Wikidata as current ${officeLabel} for ${jurisdiction.label}.` : '',
+        holderName && jurisdiction?.label ? `${holderName} is listed by Wikidata as ${officeLabel} for ${jurisdiction.label}.` : '',
         startDate ? `Start date: ${startDate}.` : '',
+        endDate ? `End date: ${endDate}.` : '',
         article ? `Wikipedia: ${article}` : ''
     ].filter(Boolean).join(' ');
     return {
@@ -857,10 +865,10 @@ function normalizeGovernmentRoleBinding(binding, intent, jurisdiction, query, in
         sourceType: 'structured_reference',
         sourceLabel: 'Wikidata structured role claim',
         date: startDate,
-        freshness: 'current_structured_claim',
+        freshness: endDate ? 'historical_structured_claim' : 'current_structured_claim',
         position: index + 1,
         trusted: true,
-        qualitySignals: ['structured_entity_data', 'current_office_claim', 'trusted_source'],
+        qualitySignals: ['structured_entity_data', endDate ? 'dated_structured_claim' : 'current_office_claim', 'trusted_source'],
         evidenceLevel: 'structured_claim',
         role: intent.role,
         jurisdiction: jurisdiction?.label || intent.jurisdiction,
@@ -868,8 +876,138 @@ function normalizeGovernmentRoleBinding(binding, intent, jurisdiction, query, in
         wikidataId: holderId,
         wikipediaUrl: article || '',
         startDate,
+        endDate,
+        ...(intent?.dateIntent ? { dateIntent: intent.dateIntent } : {}),
         query
     };
+}
+
+export function parseStructuredDateWindow(query) {
+    const raw = String(query || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return { hasDate: false };
+    const month = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+    const dayMonthYear = new RegExp(`\\b(?:on|as of|at|by)\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s+${month}\\s*,?\\s*(\\d{4})\\b`, 'i');
+    const monthDayYear = new RegExp(`\\b(?:on|as of|at|by)\\s+${month}\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s*,?\\s*(\\d{4})\\b`, 'i');
+    const range = raw.match(/\b(?:between|from)\s+(\d{4})\s+(?:and|to|through|-)\s+(\d{4})\b/i);
+    if (range) {
+        const a = Number.parseInt(range[1], 10);
+        const b = Number.parseInt(range[2], 10);
+        if (isValidYear(a) && isValidYear(b)) {
+            const startYear = Math.min(a, b);
+            const endYear = Math.max(a, b);
+            return {
+                hasDate: true,
+                kind: 'range',
+                label: `${startYear}-${endYear}`,
+                startDate: `${startYear}-01-01`,
+                endDate: `${endYear}-12-31`,
+                startYear,
+                endYear
+            };
+        }
+    }
+    let exact = raw.match(dayMonthYear);
+    if (exact) {
+        const iso = buildIsoDate(Number.parseInt(exact[3], 10), monthIndex(exact[2]) + 1, Number.parseInt(exact[1], 10));
+        if (iso) return { hasDate: true, kind: 'exact', label: formatDateLabel(iso), startDate: iso, endDate: iso };
+    }
+    exact = raw.match(monthDayYear);
+    if (exact) {
+        const iso = buildIsoDate(Number.parseInt(exact[3], 10), monthIndex(exact[1]) + 1, Number.parseInt(exact[2], 10));
+        if (iso) return { hasDate: true, kind: 'exact', label: formatDateLabel(iso), startDate: iso, endDate: iso };
+    }
+    const asOfYear = raw.match(/\b(?:as of|by)\s+(\d{4})\b/i);
+    if (asOfYear && isValidYear(Number.parseInt(asOfYear[1], 10))) {
+        const year = Number.parseInt(asOfYear[1], 10);
+        return { hasDate: true, kind: 'as_of_year', label: String(year), startDate: `${year}-12-31`, endDate: `${year}-12-31`, year };
+    }
+    const beforeYear = raw.match(/\bbefore\s+(\d{4})\b/i);
+    if (beforeYear && isValidYear(Number.parseInt(beforeYear[1], 10))) {
+        const year = Number.parseInt(beforeYear[1], 10);
+        return { hasDate: true, kind: 'before', label: `before ${year}`, startDate: '0001-01-01', endDate: `${year - 1}-12-31`, year };
+    }
+    const afterYear = raw.match(/\bafter\s+(\d{4})\b/i);
+    if (afterYear && isValidYear(Number.parseInt(afterYear[1], 10))) {
+        const year = Number.parseInt(afterYear[1], 10);
+        return { hasDate: true, kind: 'after', label: `after ${year}`, startDate: `${year + 1}-01-01`, endDate: '9999-12-31', year };
+    }
+    const yearMatch = raw.match(/\b(?:in|during|for)\s+(\d{4})\b/i);
+    if (yearMatch && isValidYear(Number.parseInt(yearMatch[1], 10))) {
+        const year = Number.parseInt(yearMatch[1], 10);
+        return { hasDate: true, kind: 'year', label: String(year), startDate: `${year}-01-01`, endDate: `${year}-12-31`, year };
+    }
+    return { hasDate: false };
+}
+
+function stripDatePhrasesFromText(value) {
+    const month = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+    return String(value || '')
+        .replace(/\b(?:between|from)\s+\d{4}\s+(?:and|to|through|-)\s+\d{4}\b/gi, ' ')
+        .replace(new RegExp(`\\b(?:on|as of|at|by)\\s+\\d{1,2}(?:st|nd|rd|th)?\\s+${month}\\s*,?\\s*\\d{4}\\b`, 'gi'), ' ')
+        .replace(new RegExp(`\\b(?:on|as of|at|by)\\s+${month}\\s+\\d{1,2}(?:st|nd|rd|th)?\\s*,?\\s*\\d{4}\\b`, 'gi'), ' ')
+        .replace(/\b(?:in|during|for|as of|by|before|after)\s+\d{4}\b/gi, ' ');
+}
+
+function filterGovernmentRoleResultsByDate(results, dateIntent = null) {
+    const list = Array.isArray(results) ? results : [];
+    if (!dateIntent?.hasDate) {
+        const current = list
+            .filter(item => !item.endDate)
+            .sort(compareRoleClaimsForCurrent);
+        return (current.length ? current : [...list].sort(compareRoleClaimsForCurrent))
+            .map((item, index) => ({ ...item, position: index + 1 }));
+    }
+    const filtered = list
+        .filter(item => roleClaimOverlapsWindow(item, dateIntent))
+        .sort(compareRoleClaimsForDateWindow);
+    return filtered.map((item, index) => ({ ...item, position: index + 1, dateIntent }));
+}
+
+export function roleClaimOverlapsWindow(item, dateIntent) {
+    if (!dateIntent?.hasDate) return true;
+    const windowStart = compactDateNumber(dateIntent.startDate);
+    const windowEnd = compactDateNumber(dateIntent.endDate);
+    if (!windowStart || !windowEnd) return false;
+    const claimStart = compactDateNumber(item?.startDate) || 1;
+    const claimEnd = compactDateNumber(item?.endDate) || 99991231;
+    return claimStart <= windowEnd && claimEnd >= windowStart;
+}
+
+function compareRoleClaimsForCurrent(a, b) {
+    return (compactDateNumber(b?.startDate) || 0) - (compactDateNumber(a?.startDate) || 0);
+}
+
+function compareRoleClaimsForDateWindow(a, b) {
+    return (compactDateNumber(a?.startDate) || 0) - (compactDateNumber(b?.startDate) || 0);
+}
+
+function compactDateNumber(value) {
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return 0;
+    return Number(`${match[1]}${match[2]}${match[3]}`);
+}
+
+function isValidYear(year) {
+    return Number.isInteger(year) && year >= 1 && year <= 9999;
+}
+
+function monthIndex(value) {
+    const key = String(value || '').slice(0, 3).toLowerCase();
+    return ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].indexOf(key);
+}
+
+function buildIsoDate(year, month, day) {
+    if (!isValidYear(year) || month < 1 || month > 12 || day < 1 || day > 31) return '';
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return '';
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function formatDateLabel(isoDate) {
+    const [year, month, day] = String(isoDate || '').split('-');
+    if (!year || !month || !day) return String(isoDate || '');
+    const monthName = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(month) - 1] || month;
+    return `${Number(day)} ${monthName} ${year}`;
 }
 
 function scoreWikidataEntityCandidate(query, item, index) {
@@ -1152,20 +1290,9 @@ function buildSourceDerivedAnswer(results, metadata = {}) {
     }
     const roleIntent = parseGovernmentRoleQuery(query);
     const structuredRole = list
-        .find(item => item?.evidenceLevel === 'structured_claim' && item?.holderName && item?.role && item?.jurisdiction && item?.url);
-    if (structuredRole) {
-        const holder = String(structuredRole.holderName || '').trim();
-        const role = String(structuredRole.role || '').trim();
-        const jurisdiction = String(structuredRole.jurisdiction || '').trim();
-        const url = String(structuredRole.url || '').trim();
-        if (holder && role && jurisdiction && url) {
-            const startDate = String(structuredRole.startDate || '').trim();
-            const startText = startDate ? ` Start date: ${startDate}.` : '';
-            return {
-                answer: `${holder} is listed by Wikidata as current ${role} for ${jurisdiction}.${startText}`,
-                provider: 'wikidata_structured_claim'
-            };
-        }
+        .filter(item => item?.evidenceLevel === 'structured_claim' && item?.holderName && item?.role && item?.jurisdiction && item?.url);
+    if (structuredRole.length) {
+        return buildStructuredRoleAnswer(structuredRole, roleIntent);
     }
     const officialRole = list
         .find(item => item?.evidenceLevel === 'official_current_holder' && item?.holderName && item?.role && item?.jurisdiction && item?.url);
@@ -1214,6 +1341,66 @@ function buildSourceDerivedAnswer(results, metadata = {}) {
         return sourceAnswer(`${title}${description ? `: ${description}` : ''}`, 'public_source_result');
     }
     return {};
+}
+
+function buildStructuredRoleAnswer(results, roleIntent = null) {
+    const list = (Array.isArray(results) ? results : [])
+        .filter(item => item?.holderName && item?.role && item?.jurisdiction && item?.url);
+    const top = list[0];
+    if (!top) return {};
+    const role = String(top.role || roleIntent?.role || '').trim();
+    const jurisdiction = String(top.jurisdiction || roleIntent?.jurisdiction || '').trim();
+    if (!role || !jurisdiction) return {};
+    const dateIntent = top.dateIntent || roleIntent?.dateIntent || null;
+    if (dateIntent?.hasDate) {
+        const prefix = buildDateSpecificAnswerPrefix(dateIntent);
+        const holdersWithRanges = list.slice(0, 4).map(item => {
+            const holder = String(item.holderName || '').trim();
+            const range = formatClaimDateRange(item);
+            return { holder, range };
+        }).filter(item => item.holder);
+        if (!holdersWithRanges.length) return {};
+        if (holdersWithRanges.length === 1) {
+            const { holder, range } = holdersWithRanges[0];
+            const detail = range ? ` Source dates: ${range}.` : '';
+            return {
+                answer: `${prefix}, the ${role} of ${jurisdiction} was ${holder}.${detail}`,
+                provider: 'wikidata_dated_structured_claim'
+            };
+        }
+        const values = holdersWithRanges
+            .map(item => item.range ? `${item.holder} (${item.range})` : item.holder)
+            .join('; ');
+        return {
+            answer: `${prefix}, the ${role} of ${jurisdiction} had these matching Wikidata claims: ${values}.`,
+            provider: 'wikidata_dated_structured_claim'
+        };
+    }
+    const holder = String(top.holderName || '').trim();
+    if (!holder) return {};
+    const startDate = String(top.startDate || '').trim();
+    const startText = startDate ? ` Start date: ${startDate}.` : '';
+    const today = new Date().toISOString().slice(0, 10);
+    return {
+        answer: `As of ${today}, ${holder} is listed by Wikidata as current ${role} for ${jurisdiction}.${startText}`,
+        provider: 'wikidata_structured_claim'
+    };
+}
+
+function buildDateSpecificAnswerPrefix(dateIntent) {
+    if (dateIntent?.kind === 'exact') return `On ${dateIntent.label}`;
+    if (dateIntent?.kind === 'range') return `Between ${dateIntent.label}`;
+    if (dateIntent?.kind === 'before' || dateIntent?.kind === 'after') return `For ${dateIntent.label}`;
+    return `In ${dateIntent?.label || 'that period'}`;
+}
+
+function formatClaimDateRange(item) {
+    const start = String(item?.startDate || '').trim();
+    const end = String(item?.endDate || '').trim();
+    if (start && end) return `${start} to ${end}`;
+    if (start) return `${start} onward`;
+    if (end) return `until ${end}`;
+    return '';
 }
 
 function sourceAnswer(text, provider) {
@@ -1735,7 +1922,7 @@ function buildSearchQueryRewrite(query) {
     return {
         query: target,
         subject,
-        freshnessNeeded: isCurrentTopicSearchQuery(target) || /\b(?:latest|recent|current|newest|today|now|breaking)\b/i.test(target),
+        freshnessNeeded: isCurrentTopicSearchQuery(target) || isDatedChangingFactSearchQuery(target) || /\b(?:latest|recent|current|newest|today|now|breaking)\b/i.test(target),
         intent
     };
 }
@@ -1757,12 +1944,19 @@ function buildDeterministicSearchQueries(query) {
 function isCurrentTopicSearchQuery(query) {
     const text = String(query || '').toLowerCase();
     const hasFreshOrReviewSignal = /\b(reviews?|hands-on|worth\s+it|vs|compare|comparison|price|available|availability|launched)\b/.test(text);
-    return hasFreshOrReviewSignal && extractSearchSubject(query).split(/\s+/).filter(Boolean).length >= 2;
+    return (hasFreshOrReviewSignal || isDatedChangingFactSearchQuery(query)) && extractSearchSubject(query).split(/\s+/).filter(Boolean).length >= 2;
+}
+
+function isDatedChangingFactSearchQuery(query) {
+    const text = String(query || '').toLowerCase();
+    if (!parseStructuredDateWindow(text).hasDate) return false;
+    return /\b(won|winner|champion|champions|rankings?|standings?|captain|coach|ceo|chair(?:person|man)?|president|prime minister|chief minister|mayor|governor|latest|newest|last|movie|film|song|album|release|released|launched|price|value)\b/.test(text);
 }
 
 function extractSearchSubject(query) {
     const text = normalizeSearchQuery(query)
-        .replace(/\b(?:latest|recent|current|newest|reviews?|review|hands-on|worth\s+it|good|best|price|available|availability|launched|released?|compare|comparison|vs)\b/gi, ' ')
+        .replace(/\b(?:latest|recent|current|newest|reviews?|review|hands-on|worth\s+it|good|best|price|available|availability|launched|released?|winner|won|champion|rankings?|standings?|compare|comparison|vs)\b/gi, ' ')
+        .replace(/\b(?:in|during|as of|by|before|after)\s+\d{4}\b/gi, ' ')
         .replace(/\b(?:of|for|about|on|the|is|are|should|i|buy|get|now|today|live|exact|rate)\b/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -1909,6 +2103,8 @@ export const __test = {
     searchReddit,
     searchGovernmentRole,
     parseGovernmentRoleQuery,
+    parseStructuredDateWindow,
+    roleClaimOverlapsWindow,
     normalizeGovernmentRoleBindings,
     isValidCitationSource,
     buildSourceDerivedAnswer,
