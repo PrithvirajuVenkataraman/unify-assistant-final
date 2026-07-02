@@ -34,7 +34,8 @@ const LOOKUP_ONLY_SOURCE_TYPES = new Set([
 
 const COMMON_QUERY_TERMS = new Set([
     'who', 'what', 'when', 'where', 'which', 'current', 'latest', 'present',
-    'the', 'of', 'for', 'in', 'is', 'are', 'and', 'or', 'official', 'source'
+    'the', 'of', 'for', 'in', 'is', 'are', 'and', 'or', 'official', 'source',
+    'tell', 'me', 'about', 'facts', 'fact', 'answer', 'please'
 ]);
 
 const GOVERNMENT_ROLE_ALIASES = Object.freeze([
@@ -2186,13 +2187,36 @@ function hasCrawl4AiConfig() {
 function isRelatedToQuery(query, item) {
     const discovery = parseDiscoveryFactQuery(query);
     if (discovery) return isDiscoveryAnswerSource(discovery, item);
+    if (/^free_/i.test(String(item?.sourceType || ''))) return true;
     const terms = tokenize(query).filter(term => !COMMON_QUERY_TERMS.has(term));
     if (!terms.length) return true;
     const hay = `${item?.title || ''} ${item?.description || ''} ${item?.sourceLabel || ''}`.toLowerCase();
     if (isCurrentTopicSearchQuery(query)) {
         return isRelatedCurrentTopicSource(query, hay);
     }
-    return terms.some(term => hay.includes(term));
+    if (/^(trusted_news|public_news)$/i.test(String(item?.sourceType || '')) && item?.date) {
+        return terms.some(term => hay.includes(term));
+    }
+    return isStrongGenericQuerySourceMatch(query, hay);
+}
+
+function isStrongGenericQuerySourceMatch(query, haystack) {
+    const subject = extractSearchSubject(query) || query;
+    const text = String(haystack || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!text) return false;
+    const compactSubject = String(subject || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const subjectTerms = tokenize(subject)
+        .filter(term => !COMMON_QUERY_TERMS.has(term))
+        .filter(term => term.length > 2 || /^\d{4}$/.test(term));
+    const queryTerms = tokenize(query)
+        .filter(term => !COMMON_QUERY_TERMS.has(term))
+        .filter(term => term.length > 2 || /^\d{4}$/.test(term));
+    if (compactSubject && compactSubject.split(/\s+/).length >= 2 && text.includes(compactSubject)) return true;
+    const terms = subjectTerms.length ? subjectTerms : queryTerms;
+    if (!terms.length) return false;
+    const matched = terms.filter(term => text.includes(term));
+    if (terms.length === 1) return terms[0].length >= 4 && matched.length === 1;
+    return matched.length >= Math.min(terms.length, Math.max(2, Math.ceil(terms.length * 0.67)));
 }
 
 function isRelatedCurrentTopicSource(query, haystack) {
