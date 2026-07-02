@@ -673,9 +673,30 @@ assert.equal(autoStableSearch.body.provider, 'classifier');
 assert.equal(autoStableSearch.body.results.length, 0);
 globalThis.fetch = ORIGINAL_FETCH;
 
+const datedSportsRoute = await callHandler(searchHandler, request('/api/search', {
+    query: 'Who won IPL in 2023?',
+    limit: 5,
+    mode: 'classify'
+}));
+assert.equal(datedSportsRoute.statusCode, 200);
+assert.equal(datedSportsRoute.body.searchRequired, true);
+assert.equal(datedSportsRoute.body.route.category, 'sports');
+
+const datedEntertainmentRoute = await callHandler(searchHandler, request('/api/search', {
+    query: "What was Vijay's latest movie in 2023?",
+    limit: 5,
+    mode: 'classify'
+}));
+assert.equal(datedEntertainmentRoute.statusCode, 200);
+assert.equal(datedEntertainmentRoute.body.searchRequired, true);
+assert.equal(datedEntertainmentRoute.body.route.category, 'web_search');
+assert.ok(datedEntertainmentRoute.body.route.reasons.includes('dated_changing_fact_requires_public_source'));
+
 const presidentQuery = roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction);
 const chiefMinisterQuery = roleQuery(ROLE_FIXTURES.chiefMinister.role, ROLE_FIXTURES.chiefMinister.jurisdiction, '');
 const ceoQuery = roleQuery(ROLE_FIXTURES.ceo.role, ROLE_FIXTURES.ceo.jurisdiction);
+const datedChiefMinisterQuery = `Who was the ${ROLE_FIXTURES.chiefMinister.role} of ${ROLE_FIXTURES.chiefMinister.jurisdiction} in 2024?`;
+const datedCeoQuery = `Who was ${ROLE_FIXTURES.ceo.role} of ${ROLE_FIXTURES.ceo.jurisdiction} in 2023?`;
 assert.deepEqual(searchTest.parseGovernmentRoleQuery(presidentQuery), {
     role: 'president',
     roleText: 'president',
@@ -694,6 +715,24 @@ assert.deepEqual(searchTest.parseGovernmentRoleQuery(ceoQuery), {
     jurisdiction: ROLE_FIXTURES.ceo.jurisdiction,
     property: 'P169'
 });
+assert.deepEqual(searchTest.parseStructuredDateWindow('who won IPL in 2023'), {
+    hasDate: true,
+    kind: 'year',
+    label: '2023',
+    startDate: '2023-01-01',
+    endDate: '2023-12-31',
+    year: 2023
+});
+assert.equal(searchTest.parseGovernmentRoleQuery(datedChiefMinisterQuery).jurisdiction, ROLE_FIXTURES.chiefMinister.jurisdiction);
+assert.equal(searchTest.parseGovernmentRoleQuery(datedChiefMinisterQuery).dateIntent.year, 2024);
+assert.equal(searchTest.roleClaimOverlapsWindow({
+    startDate: '2022-05-06',
+    endDate: ''
+}, searchTest.parseStructuredDateWindow(datedChiefMinisterQuery)), true);
+assert.equal(searchTest.roleClaimOverlapsWindow({
+    startDate: '2018-01-01',
+    endDate: '2022-05-05'
+}, searchTest.parseStructuredDateWindow(datedChiefMinisterQuery)), false);
 assert.equal(searchTest.isValidCitationSource({
     title: `Britannica search: ${chiefMinisterQuery}`,
     url: `https://www.britannica.com/search?query=${encodeURIComponent(chiefMinisterQuery)}`,
@@ -847,6 +886,48 @@ globalThis.fetch = async (url) => {
         return okJson({ search: [] });
     }
     if (href.includes('query.wikidata.org/sparql')) {
+        return okJson(wikidataRolePayload([
+            {
+                holder: 'Q100099',
+                holderLabel: 'Previous Minister',
+                officeLabel: ROLE_FIXTURES.chiefMinister.officeLabel,
+                start: '2018-01-01T00:00:00Z',
+                end: '2022-05-05T00:00:00Z',
+                article: 'https://en.wikipedia.org/wiki/Previous_Minister'
+            },
+            {
+                holder: ROLE_FIXTURES.chiefMinister.holderId,
+                holderLabel: ROLE_FIXTURES.chiefMinister.holder,
+                officeLabel: ROLE_FIXTURES.chiefMinister.officeLabel,
+                start: ROLE_FIXTURES.chiefMinister.start,
+                article: ROLE_FIXTURES.chiefMinister.article
+            }
+        ]));
+    }
+    if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
+    if (href.includes('api.gdeltproject.org')) return okJson({ articles: [] });
+    if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
+    throw new Error(`unexpected URL ${href}`);
+};
+const datedRoleSearch = await callHandler(searchHandler, request('/api/search', { query: datedChiefMinisterQuery, limit: 5 }));
+assert.equal(datedRoleSearch.statusCode, 200);
+assert.equal(datedRoleSearch.body.answerProvider, 'wikidata_dated_structured_claim');
+assert.match(datedRoleSearch.body.answer, /^In 2024,/);
+assert.match(datedRoleSearch.body.answer, new RegExp(escapeRegExp(ROLE_FIXTURES.chiefMinister.holder)));
+assert.doesNotMatch(datedRoleSearch.body.answer, /Previous Minister/);
+assert.equal(datedRoleSearch.body.results[0].holderName, ROLE_FIXTURES.chiefMinister.holder);
+globalThis.fetch = ORIGINAL_FETCH;
+
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('www.wikidata.org/w/api.php')) {
+        const search = new URL(href).searchParams.get('search') || '';
+        if (search.includes(ROLE_FIXTURES.chiefMinister.jurisdiction)) {
+            return okJson({ search: [{ id: ROLE_FIXTURES.chiefMinister.jurisdictionId, label: ROLE_FIXTURES.chiefMinister.jurisdiction, description: ROLE_FIXTURES.chiefMinister.jurisdictionDescription }] });
+        }
+        return okJson({ search: [] });
+    }
+    if (href.includes('query.wikidata.org/sparql')) {
         return okJson(wikidataRolePayload({
             holder: ROLE_FIXTURES.chiefMinister.holderId,
             holderLabel: ROLE_FIXTURES.chiefMinister.alternateHolder,
@@ -983,6 +1064,48 @@ assert.equal(ceoSearch.statusCode, 200);
 assert.equal(ceoSearch.body.results[0].holderName, ROLE_FIXTURES.ceo.holder);
 assert.equal(ceoSearch.body.results[0].role, 'ceo');
 assert.equal(ceoSearch.body.results[0].jurisdiction, ROLE_FIXTURES.ceo.jurisdiction);
+globalThis.fetch = ORIGINAL_FETCH;
+
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('www.wikidata.org/w/api.php')) {
+        const search = new URL(href).searchParams.get('search') || '';
+        if (search.includes(ROLE_FIXTURES.ceo.jurisdiction)) {
+            return okJson({ search: [{ id: ROLE_FIXTURES.ceo.jurisdictionId, label: ROLE_FIXTURES.ceo.jurisdiction, description: ROLE_FIXTURES.ceo.jurisdictionDescription }] });
+        }
+        return okJson({ search: [] });
+    }
+    if (href.includes('query.wikidata.org/sparql')) {
+        return okJson(wikidataRolePayload([
+            {
+                holder: 'Q100098',
+                holderLabel: 'Previous Executive',
+                officeLabel: ROLE_FIXTURES.ceo.officeLabel,
+                start: '2020-01-01T00:00:00Z',
+                end: '2023-12-31T00:00:00Z',
+                article: 'https://en.wikipedia.org/wiki/Previous_Executive'
+            },
+            {
+                holder: ROLE_FIXTURES.ceo.holderId,
+                holderLabel: ROLE_FIXTURES.ceo.holder,
+                officeLabel: ROLE_FIXTURES.ceo.officeLabel,
+                start: ROLE_FIXTURES.ceo.start,
+                article: ROLE_FIXTURES.ceo.article
+            }
+        ]));
+    }
+    if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
+    if (href.includes('api.gdeltproject.org')) return okJson({ articles: [] });
+    if (href.includes('reddit.com/search.json')) return okJson({ data: { children: [] } });
+    throw new Error(`unexpected URL ${href}`);
+};
+const datedCeoSearch = await callHandler(searchHandler, request('/api/search', { query: datedCeoQuery, limit: 5 }));
+assert.equal(datedCeoSearch.statusCode, 200);
+assert.equal(datedCeoSearch.body.answerProvider, 'wikidata_dated_structured_claim');
+assert.match(datedCeoSearch.body.answer, /^In 2023,/);
+assert.match(datedCeoSearch.body.answer, /Previous Executive/);
+assert.doesNotMatch(datedCeoSearch.body.answer, new RegExp(escapeRegExp(ROLE_FIXTURES.ceo.holder)));
+assert.equal(datedCeoSearch.body.results[0].holderName, 'Previous Executive');
 globalThis.fetch = ORIGINAL_FETCH;
 
 globalThis.fetch = async (url) => {
@@ -1626,16 +1749,18 @@ function textResponse(payload, status = 200, contentType = 'text/html; charset=u
     };
 }
 
-function wikidataRolePayload({ holder, holderLabel, officeLabel, start = '', article = '' }) {
+function wikidataRolePayload(input) {
+    const items = Array.isArray(input) ? input : [input];
     return {
         results: {
-            bindings: [{
+            bindings: items.map(({ holder, holderLabel, officeLabel, start = '', end = '', article = '' }) => ({
                 holder: { type: 'uri', value: `http://www.wikidata.org/entity/${holder}` },
                 holderLabel: { type: 'literal', value: holderLabel },
                 officeLabel: { type: 'literal', value: officeLabel },
                 ...(start ? { start: { type: 'literal', value: start } } : {}),
+                ...(end ? { end: { type: 'literal', value: end } } : {}),
                 ...(article ? { article: { type: 'uri', value: article } } : {})
-            }]
+            }))
         }
     };
 }
