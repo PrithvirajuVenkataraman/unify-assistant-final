@@ -89,6 +89,10 @@ export function classifyFreeLiveIntent(message) {
         return strictRoute('live_required', 'web_search', 0.82, ['current_topic_search_requires_web_sources']);
     }
 
+    if (isDatedChangingFactSearch(text)) {
+        return strictRoute('live_required', 'web_search', 0.84, ['dated_changing_fact_requires_public_source']);
+    }
+
     const llmScore = scorePatterns(text, LLM_PATTERNS, 0.28);
     if (llmScore >= 0.28) {
         return strictRoute('llm', 'stable_knowledge', Math.min(0.9, Math.max(0.42, llmScore)), ['default_or_stable_knowledge']);
@@ -144,8 +148,23 @@ function isImplicitCurrentTopicSearch(text) {
     return contentTokens.length >= 2;
 }
 
+function isDatedChangingFactSearch(text) {
+    const normalized = normalizeMessage(text);
+    if (!hasDateWindowSignal(normalized)) return false;
+    if (/\b(?:who|what|which|when)\b/i.test(normalized) &&
+        /\b(?:won|winner|champion|champions|rank(?:ing|ings)?|standing|standings|captain|coach|ceo|chair(?:person|man)?|president|prime minister|chief minister|mayor|governor|latest|newest|last|movie|film|song|album|release|released|launched|price|value)\b/i.test(normalized)) {
+        return true;
+    }
+    return /\b(?:as of|during|before|after|between|from)\b/i.test(normalized) &&
+        /\b(?:holder|leader|head|winner|champion|ranking|release|price|ceo|captain|coach)\b/i.test(normalized);
+}
+
+function hasDateWindowSignal(text) {
+    return /\b(?:in|during|as of|on|by|before|after|between|from)\s+(?:\d{4}|(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{4})\b/i.test(String(text || ''));
+}
+
 function tokenizeForIntent(text) {
-    return String(text || '').toLowerCase().match(/[a-z0-9]{2,}/g) || []; 
+    return String(text || '').toLowerCase().match(/[a-z0-9]{2,}/g) || [];
 }
 
 function isIntentStopword(token) {
@@ -157,5 +176,6 @@ export const __test = {
     UNSUPPORTED_FREE_LIVE_PATTERNS,
     isExplicitOrProductSearch,
     isImplicitCurrentTopicSearch,
+    isDatedChangingFactSearch,
     scorePatterns
 };
