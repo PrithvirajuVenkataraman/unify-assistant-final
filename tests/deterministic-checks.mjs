@@ -322,6 +322,16 @@ assert.equal(searchTest.isRelatedToQuery('Nothing Phone 3 reviews', {
     description: 'Early phone review with camera, battery, display, and Nothing OS impressions.',
     sourceLabel: 'Tech Review'
 }), true);
+assert.equal(searchTest.isRelatedToQuery('Who is the CM of Tamil Nadu', {
+    title: 'SteamOS',
+    description: "SteamOS is a gaming-focused operating system released by Valve that incorporates the company's storefront.",
+    sourceLabel: 'Wikipedia'
+}), false);
+assert.equal(searchTest.isRelatedToQuery('Who is the CM of Tamil Nadu', {
+    title: 'Chief Minister of Tamil Nadu',
+    description: 'The chief minister is the head of government of Tamil Nadu.',
+    sourceLabel: 'Wikipedia'
+}), true);
 assert.equal(searchTest.isRelatedToQuery('recent reviews of Framework Laptop 16', {
     title: 'Framework design language',
     description: 'A general page about software frameworks and laptop stands.',
