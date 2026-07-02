@@ -1516,6 +1516,64 @@ globalThis.fetch = ORIGINAL_FETCH;
 delete process.env.GEMINI_API_KEY;
 
 process.env.GEMINI_API_KEY = 'test-gemini-key';
+process.env.NVIDIA_API_KEY = 'test-nvidia-key';
+let nvidiaEmbeddingCalls = 0;
+globalThis.fetch = async (url, init = {}) => {
+    const href = String(url);
+    if (href.includes('integrate.api.nvidia.com/v1/embeddings')) {
+        nvidiaEmbeddingCalls += 1;
+        assert.match(String(init?.headers?.Authorization || ''), /^Bearer test-nvidia-key$/);
+        const body = JSON.parse(String(init?.body || '{}'));
+        const count = Array.isArray(body.input) ? body.input.length : 0;
+        return okJson({
+            model: 'nvidia/nv-embedcode-7b-v1',
+            data: Array.from({ length: count }, (_, index) => ({
+                index,
+                embedding: index === 0 ? [1, 0, 0] : [0.95, 0.05, 0]
+            }))
+        });
+    }
+    if (href.includes('generativelanguage.googleapis.com')) {
+        return okJson({
+            candidates: [{
+                content: {
+                    parts: [{
+                        text: '{"verified":true,"confidence":0.95,"answer":"Alex Rivera is the current civic leader of Example City.","evidenceIndexes":[0],"conflict":false,"reason":"Embedding-ranked evidence supports it."}'
+                    }]
+                }
+            }]
+        });
+    }
+    if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
+    if (href.includes('www.wikidata.org')) return okJson({ search: [] });
+    if (href.includes('reddit.com')) return okJson({ data: { children: [] } });
+    if (href.includes('api.gdeltproject.org')) {
+        return okJson({
+            articles: [{
+                title: 'Example City official page lists Alex Rivera as current civic leader',
+                url: 'https://www.example.gov/leader',
+                domain: 'example.gov',
+                seendate: '20260702120000'
+            }]
+        });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const embeddingRagSearch = await callHandler(searchHandler, request('/api/search', {
+    query: 'Who is the current civic leader of Example City?',
+    mode: 'rag',
+    limit: 5
+}));
+assert.equal(embeddingRagSearch.statusCode, 200);
+assert.equal(embeddingRagSearch.body.verified, true);
+assert.equal(embeddingRagSearch.body.embeddingEnhanced, true);
+assert.equal(embeddingRagSearch.body.embeddingModel, 'nvidia/nv-embedcode-7b-v1');
+assert.ok(nvidiaEmbeddingCalls >= 1);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GEMINI_API_KEY;
+delete process.env.NVIDIA_API_KEY;
+
+process.env.GEMINI_API_KEY = 'test-gemini-key';
 globalThis.fetch = async (url) => {
     const href = String(url);
     if (href.includes('generativelanguage.googleapis.com')) {
