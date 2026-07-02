@@ -408,8 +408,16 @@
         const sourceBlock = formatVerifyEvidenceSources(sources, evidenceWarning);
         const verificationPrompt = [
             'You are verifying one previous assistant answer. Do not answer the original user request from scratch.',
+            'Primary responsibility: verify claims against the newest supplied retrieved evidence.',
+            'Separate historical facts from present-day facts. For each claim classify it as Historical or Current, state whether live verification is required, and cite the retrieved evidence used.',
+            'Any claim containing current, today, now, presently, incumbent, latest, live, or as of today must be verified using supplied live/retrieved sources whenever available.',
+            'Never downgrade a current claim to "partly accurate" because it was historically true. If newer evidence contradicts it, use Inaccurate or Outdated and explicitly state "The answer is outdated."',
+            'If no live evidence is available for a current claim, use Unverified. Do not assume it remains true because it was historically correct.',
+            'Prefer the newest authoritative sources over secondary sources when both are supplied.',
+            'Never write "as of the latest available information", "appears to be", or "likely" unless directly supported by retrieved evidence.',
             'Return a concise verification report with exactly these sections:',
-            'Verdict: likely accurate, partly accurate, unsupported, or incorrect.',
+            'Verdict: Accurate, Inaccurate, Outdated, Unverified, or Misleading.',
+            'Claims checked: bullet each claim with Historical or Current, live verification required yes/no, and retrieved evidence used.',
             'Evidence used: summarize only the answer text, local flags, and supplied retrieved evidence.',
             'How checked: concise rationale, no hidden chain-of-thought.',
             'Claims needing live/source verification: list unsupported claims, or "None identified from supplied evidence."',
@@ -440,7 +448,7 @@
         finalParsed = {
             ...finalParsed,
             intent: 'verify_answer',
-            response: ensureVerificationSourcesSection(finalParsed.response || finalParsed.text || '', sources, evidenceWarning),
+            response: normalizeVerificationVerdictLabels(ensureVerificationSourcesSection(finalParsed.response || finalParsed.text || '', sources, evidenceWarning), sources),
             action: null
         };
 
@@ -503,7 +511,8 @@
 
     function buildVerifyUnavailableReport(answer, warning = '') {
         return [
-            'Verdict: unsupported.',
+            'Verdict: Unverified.',
+            'Claims checked: Current or factual claims could not be verified because no usable retrieved source evidence was supplied.',
             `Evidence used: I reviewed the supplied answer text${warning ? ` and the retrieval warning: ${warning}` : ', but no usable retrieved source evidence was available'}.`,
             'How checked: Source verification could not be completed from the supplied evidence, so I cannot confirm the factual claims.',
             'Claims needing live/source verification: Any factual claims in the answer still need source verification.',
@@ -535,6 +544,35 @@
         return out;
     }
 
+    function normalizeVerificationVerdictLabels(text, sources = []) {
+        const hasLiveEvidence = Array.isArray(sources) && sources.some(source => /^https?:\/\//i.test(String(source?.url || source || '')));
+        let out = String(text || '').trim();
+        if (!out) return buildVerifyUnavailableReport('', '');
+        out = out.replace(/^(\s*Verdict:\s*)likely accurate\b/im, '$1Accurate');
+        out = out.replace(/^(\s*Verdict:\s*)incorrect\b/im, '$1Inaccurate');
+        out = out.replace(/^(\s*Verdict:\s*)unsupported\b/im, '$1Unverified');
+        out = out.replace(/^(\s*Verdict:\s*)partly accurate\b/im, '$1Misleading');
+        out = out.replace(/^(\s*Verdict:\s*)(?:accurate|inaccurate|outdated|unverified|misleading)\b/im, match => {
+            const [, prefix = 'Verdict: '] = match.match(/^(\s*Verdict:\s*)/i) || [];
+            const value = match.replace(/^(\s*Verdict:\s*)/i, '').trim().toLowerCase();
+            const normalized = {
+                accurate: 'Accurate',
+                inaccurate: 'Inaccurate',
+                outdated: 'Outdated',
+                unverified: 'Unverified',
+                misleading: 'Misleading'
+            }[value] || 'Unverified';
+            return `${prefix}${normalized}`;
+        });
+        if (!hasLiveEvidence && /\b(current|today|now|presently|incumbent|latest|live|as of today)\b/i.test(out)) {
+            out = out.replace(/^(\s*Verdict:\s*)(Accurate|Misleading|Inaccurate|Outdated)\b/im, '$1Unverified');
+        }
+        if (!/^\s*Verdict:\s*(Accurate|Inaccurate|Outdated|Unverified|Misleading)\b/im.test(out)) {
+            out = `Verdict: Unverified.\n${out}`;
+        }
+        return out;
+    }
+
     function buildGroundedUserMessage(message, intent, grounding) {
         const action = String(intent || 'chat');
         if (action === 'verify_answer') return String(message || '').trim();
@@ -549,7 +587,8 @@
             verify: [
                 'Check the selected claim for internal consistency and clearly distinguish uncertainty from verified fact.',
                 'Return a clear verification report with these exact sections:',
-                'Verdict: likely accurate, partly accurate, unsupported, or incorrect.',
+                'Verdict: Accurate, Inaccurate, Outdated, Unverified, or Misleading.',
+                'Claims checked: bullet each claim with Historical or Current, live verification required yes/no, and retrieved evidence used.',
                 'Evidence used: summarize the selected text and source answer supplied in this request.',
                 'How checked: give a concise rationale for the verdict without revealing hidden chain-of-thought.',
                 'Claims needing live/source verification: list claims that cannot be verified from the supplied evidence.',
