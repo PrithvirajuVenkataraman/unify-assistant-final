@@ -13,6 +13,7 @@ const SOURCE = Object.freeze({
     styles: fs.readFileSync(new URL('../styles.css', import.meta.url), 'utf8'),
     apiIndex: fs.readFileSync(new URL('../api/index.js', import.meta.url), 'utf8'),
     searchApi: fs.readFileSync(new URL('../api/search.js', import.meta.url), 'utf8'),
+    embeddingsApi: fs.readFileSync(new URL('../api/_lib/embeddings.js', import.meta.url), 'utf8'),
     visionApi: fs.readFileSync(new URL('../api/vision.js', import.meta.url), 'utf8'),
     chatGroqApi: fs.readFileSync(new URL('../api/chat-groq.js', import.meta.url), 'utf8'),
     speechInput: fs.readFileSync(new URL('../app/speech-input.js', import.meta.url), 'utf8') 
@@ -292,6 +293,11 @@ assert.equal(classifyFreeLiveIntent('Explain what Nothing OS is').category, 'sta
 assert.match(SOURCE.searchApi, /mode === 'rag'/);
 assert.match(SOURCE.searchApi, /runEvidenceFirstWebRag\(query,\s*\{\s*limit\s*\}\)/);
 assert.match(SOURCE.searchApi, /skipStructuredRoles:\s*true/);
+assert.match(SOURCE.searchApi, /rankRagResultsWithEmbeddings\(normalizedQuery,\s*allResults\)/);
+assert.match(SOURCE.searchApi, /embeddingEnhanced:\s*embeddingUsed/);
+assert.match(SOURCE.embeddingsApi, /NVIDIA_API_KEY/);
+assert.match(SOURCE.embeddingsApi, /integrate\.api\.nvidia\.com\/v1\/embeddings/);
+assert.doesNotMatch(SOURCE.appHtml, /NVIDIA_API_KEY|integrate\.api\.nvidia\.com\/v1\/embeddings/);
 assert.match(SOURCE.appHtml, /mode:\s*'rag'/);
 assert.match(SOURCE.appHtml, /answerData\?\.verified === true/);
 assert.equal(searchTest.extractSearchTargetQuery('Search the web for recent reviews of the Nothing Phone 3'), 'recent reviews of the Nothing Phone 3');
