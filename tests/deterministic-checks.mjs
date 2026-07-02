@@ -289,6 +289,11 @@ assert.equal(classifyFreeLiveIntent('recent reviews of Framework Laptop 16').cat
 assert.equal(classifyFreeLiveIntent('compare Alpha Fold X vs Beta Fold Y').category, 'web_search');
 assert.equal(classifyFreeLiveIntent('price of Acme Speaker Mini').category, 'web_search');
 assert.equal(classifyFreeLiveIntent('Explain what Nothing OS is').category, 'stable_knowledge');
+assert.match(SOURCE.searchApi, /mode === 'rag'/);
+assert.match(SOURCE.searchApi, /runEvidenceFirstWebRag\(query,\s*\{\s*limit\s*\}\)/);
+assert.match(SOURCE.searchApi, /skipStructuredRoles:\s*true/);
+assert.match(SOURCE.appHtml, /mode:\s*'rag'/);
+assert.match(SOURCE.appHtml, /answerData\?\.verified === true/);
 assert.equal(searchTest.extractSearchTargetQuery('Search the web for recent reviews of the Nothing Phone 3'), 'recent reviews of the Nothing Phone 3');
 assert.deepEqual(searchTest.buildSearchQueryRewrite('compare Alpha Fold X vs Beta Fold Y'), {
     query: 'compare Alpha Fold X vs Beta Fold Y',
@@ -428,10 +433,10 @@ assert.doesNotMatch(SOURCE.searchApi, /profile_form_cm/);
 assert.match(SOURCE.searchApi, /function buildSourceDerivedAnswer\(results, metadata = \{\}\)/);
 assert.match(SOURCE.appHtml, /const directAnswer = cleanLiveAnswerText\(String\(answerData\?\.answer/);
 assert.match(SOURCE.appHtml, /const answerEvidenceCount = Number\(answerData\?\.answerEvidenceCount \|\| 0\)/);
-assert.match(SOURCE.appHtml, /if \(directAnswer && answerEvidenceCount > 0 && answerResults\.length\)/);
+assert.match(SOURCE.appHtml, /if \(\(!failClosed \|\| answerData\?\.verified === true\) && directAnswer && answerEvidenceCount > 0 && answerResults\.length\)/);
 assert.match(SOURCE.appHtml, /function isCurrentRoleHolderLiveQuery\(text, liveIntent = null, entityIntent = null\)/);
 assert.match(SOURCE.appHtml, /function isPublicSourceSearchAllowedWhenLiveDisabled\(text, liveIntent = null, entityIntent = null\)/);
-assert.match(SOURCE.appHtml, /failClosed = roleHolderQuery \|\| \(forceFailClosed && shouldRequireVerifiedSources\(query, intent, entityIntent\)\)/);
+assert.match(SOURCE.appHtml, /failClosed = roleHolderQuery \|\| shouldRequireVerifiedSources\(query, intent, entityIntent\)/);
 assert.match(SOURCE.appHtml, /const publicSourceAllowed = isPublicSourceSearchAllowedWhenLiveDisabled\(initialQuery, initialIntent, initialEntityIntent\)/);
 assert.match(SOURCE.appHtml, /if \(!LIVE_RETRIEVAL_ENABLED && !publicSourceAllowed\)/);
 assert.doesNotMatch(SOURCE.appHtml, /async function fetchLiveSearchJson\(query, options = \{\}\)\s*\{\s*if \(!LIVE_RETRIEVAL_ENABLED\)/);
@@ -439,7 +444,7 @@ assert.match(SOURCE.appHtml, /const shouldDelayAssistantRender = false/);
 assert.doesNotMatch(SOURCE.appHtml, /setManagedTimeout\(startAssistantRender, 500\)/);
 assert.match(SOURCE.appHtml, /startAssistantRender\(\);/);
 assert.match(SOURCE.appHtml, /return addChatMessage\(finalText, false, null, \{/);
-assert.match(SOURCE.appHtml, /if \(roleHolderQuery\) \{[\s\S]*evidenceLevel === 'structured_claim'[\s\S]*Current holder not verified/);
+assert.match(SOURCE.appHtml, /if \(shouldRequireVerifiedSources\(pipeline\.userText, pipeline\.intent, pipeline\.entityIntent\)\) \{[\s\S]*mode:\s*'rag'[\s\S]*Verified Web RAG[\s\S]*badge:\s*'Unverified'/);
 
 const stackSandbox = {};
 vm.createContext(stackSandbox);
