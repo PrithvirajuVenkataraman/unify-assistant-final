@@ -3669,9 +3669,22 @@ async function resolveFinalAssistantAnswer(userMessage, answerText) {
 async function publishResolvedModelMessage(userMessage, answerText, options = {}) {
     const label = options?.label || 'Model answer';
     const historyText = options?.historyText || null;
-    const finalized = await resolveFinalAssistantAnswer(userMessage, answerText);
+    const rawAnswer = String(answerText || '').trim();
+    const streamedMessageId = String(options?.existingAssistantMessageId || '').trim();
+    const fastFinalizeStreamed = options?.fastFinalizeStreamed === true &&
+        streamedMessageId &&
+        rawAnswer &&
+        !requiresLiveSourceAnswer(userMessage) &&
+        !asksUserToProvideSources(rawAnswer) &&
+        !isLowSignalModelAnswer(rawAnswer);
+    const finalized = fastFinalizeStreamed
+        ? (sanitizeWeakModelAnswer(rawAnswer, userMessage) || rawAnswer)
+        : await resolveFinalAssistantAnswer(userMessage, answerText);
     const safeText = String(finalized || '').trim();
-    if (!safeText) return false;
+    if (!safeText) {
+        if (streamedMessageId) discardStreamingAssistantMessage(streamedMessageId);
+        return false;
+    }
     const messageMeta = {
         routing: options?.routing || null,
         detached: options?.detached === true
@@ -3679,13 +3692,18 @@ async function publishResolvedModelMessage(userMessage, answerText, options = {}
     if (Object.prototype.hasOwnProperty.call(options || {}, 'turnId')) {
         messageMeta.turnId = options.turnId;
     }
-    const assistantMessageId = options?.existingAssistantMessageId
-        ? String(options.existingAssistantMessageId)
+    const assistantMessageId = streamedMessageId
+        ? streamedMessageId
         : addModelAssistantMessage(safeText, label, messageMeta);
-    if (assistantMessageId && options?.existingAssistantMessageId) {
+    if (assistantMessageId && streamedMessageId) {
         finalizeStreamingAssistantMessage(assistantMessageId, safeText, {
             ...messageMeta,
             userMessage
+        });
+        logLatencyTrace('assistant_final_render', {
+            messageId: assistantMessageId,
+            streamed: true,
+            chars: safeText.length
         });
     }
     saveToHistory(userMessage, historyText || safeText, {
@@ -3944,6 +3962,7 @@ async function streamChatCompletion(payload, options = {}) {
     const signal = options?.signal;
     const latencyTrace = options?.latencyTrace || {};
     const userMessage = String(options?.userMessage || payload?.message || '').trim();
+    let firstDeltaLogged = false;
     const response = await fetch('/api/chat-groq', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3986,6 +4005,15 @@ async function streamChatCompletion(payload, options = {}) {
             const delta = String(event.data?.text || '');
             if (!delta) return;
             accumulated += delta;
+            if (!firstDeltaLogged) {
+                firstDeltaLogged = true;
+                latencyTrace.firstDeltaAt = performance.now();
+                logLatencyTrace('chat_first_delta', {
+                    requestId: latencyTrace.requestId || '',
+                    deltaMs: Math.round(latencyTrace.firstDeltaAt - (latencyTrace.apiStartedAt || latencyTrace.submittedAt || latencyTrace.firstDeltaAt)),
+                    totalMs: Math.round(latencyTrace.firstDeltaAt - (latencyTrace.submittedAt || latencyTrace.firstDeltaAt))
+                });
+            }
             const id = ensureStreamMessage();
             updateStreamingAssistantMessage(id, accumulated, { userMessage });
             return;
@@ -4041,6 +4069,7 @@ async function streamChatCompletion(payload, options = {}) {
     logLatencyTrace('chat_stream_complete', {
         requestId: latencyTrace.requestId || donePayload?.requestId || '',
         chars: finalResponse.length,
+        totalMs: Math.round(performance.now() - (latencyTrace.submittedAt || performance.now())),
         serverTiming: donePayload?.timing || null,
         quality: donePayload?.quality || null
     });
@@ -4147,6 +4176,10 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
                 grounding: requestOptions?.grounding || null
             };
         latencyTrace.apiStartedAt = performance.now();
+        logLatencyTrace('chat_api_start', {
+            requestId: latencyTrace.requestId,
+            stream: requestOptions?.stream === true
+        });
         const data = requestOptions?.stream === true
             ? await streamChatCompletion(requestPayload, {
                 signal: controller.signal,
@@ -7989,6 +8022,10 @@ async function sendTextInput(submission = {}) {
                 requestId: `send_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
                 submittedAt: performance.now()
             };
+            logLatencyTrace('chat_submit', {
+                requestId: sendTrace.requestId,
+                source: String(submission?.source || 'text')
+            });
             closeComposerActionsMenu();
             closeSlashCommandPicker();
             const input = document.getElementById('text-input');
@@ -16698,7 +16735,11 @@ Steps:
 
 If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`;
 
-                const recipeResponse = await callAIWithTyping(recipePrompt, 'Preparing recipe...', { directModel: true });
+                const recipeResponse = await callAIWithTyping(recipePrompt, 'Preparing recipe...', {
+                    directModel: true,
+                    stream: true,
+                    displayUserMessage: text
+                });
                 if (recipeResponse?.aborted) return;
                 const recipeText = String(recipeResponse?.response || '').trim();
                 const shouldUseRecipeFallback = !recipeText ||
@@ -16719,6 +16760,9 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
                     finalRecipe = fallbackRecipe && !isLikelyIncompleteRecipe(fallbackRecipe) ? fallbackRecipe : '';
                 }
                 if (!finalRecipe) {
+                    if (recipeResponse?.assistantMessageId) {
+                        discardStreamingAssistantMessage(recipeResponse.assistantMessageId);
+                    }
                     await deliverApiReply('recipe_unavailable', {
                         dish: extractRequestedDish(normalizedRecipeRequest) || '',
                         userMessage: normalizedRecipeRequest
@@ -16728,9 +16772,12 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
                     });
                     return;
                 }
-                addModelAssistantMessage(finalRecipe, 'Model answer');
-                await prepareApiReply('recipe_ready', {}, 'Here is the recipe.');
-                saveToHistory(text, finalRecipe);
+                await publishResolvedModelMessage(text, finalRecipe, {
+                    label: 'Model answer',
+                    routing: recipeResponse?.routing || null,
+                    existingAssistantMessageId: recipeResponse?.assistantMessageId || '',
+                    fastFinalizeStreamed: true
+                });
                 return;
             }
 
@@ -16772,13 +16819,20 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
             if (answerPath === 'support_intro') {
                 supportConversationMode = true;
                 const introPrompt = buildSupportConversationPrompt(text);
-                const supportIntro = await callAIWithTyping(introPrompt, 'I am here with you...', { directModel: true });
+                const supportIntro = await callAIWithTyping(introPrompt, 'I am here with you...', {
+                    directModel: true,
+                    stream: true,
+                    displayUserMessage: text
+                });
                 if (supportIntro?.aborted) return;
                 const introText = supportIntro?.response || await buildOfflineSupportReply(text);
                 const finalIntro = `${introText}\n\nYou can stay in this mode and talk naturally. Say "stop support mode" whenever you want to leave it.`;
-                addModelAssistantMessage(finalIntro, 'Support conversation');
-                await prepareApiReply('support_presence', {}, "I'm here with you.");
-                saveToHistory(text, finalIntro);
+                await publishResolvedModelMessage(text, finalIntro, {
+                    label: 'Support conversation',
+                    routing: supportIntro?.routing || null,
+                    existingAssistantMessageId: supportIntro?.assistantMessageId || '',
+                    fastFinalizeStreamed: true
+                });
                 return;
             }
 
@@ -16797,12 +16851,19 @@ If the user asks for Andhra-style, Hyderabadi, Tamil, etc., respect that style.`
             if (answerPath === 'support_continue') {
                 supportConversationMode = true;
                 const supportPrompt = buildSupportConversationPrompt(text);
-                const supportReply = await callAIWithTyping(supportPrompt, 'I am here with you...', { directModel: true });
+                const supportReply = await callAIWithTyping(supportPrompt, 'I am here with you...', {
+                    directModel: true,
+                    stream: true,
+                    displayUserMessage: text
+                });
                 if (supportReply?.aborted) return;
                 const supportText = supportReply?.response || await buildOfflineSupportReply(text);
-                addModelAssistantMessage(supportText, 'Support conversation', { routing: supportReply?.routing || null });
-                await prepareApiReply('support_presence', {}, "I'm here with you.");
-                saveToHistory(text, supportText);
+                await publishResolvedModelMessage(text, supportText, {
+                    label: 'Support conversation',
+                    routing: supportReply?.routing || null,
+                    existingAssistantMessageId: supportReply?.assistantMessageId || '',
+                    fastFinalizeStreamed: true
+                });
                 return;
             }
 
@@ -16890,12 +16951,18 @@ Respond in a debate style that is:
 - Concise, practical, and specific
 
 Do not use repetitive filler or generic wording.`;
-                const debateResponse = await callAIWithTyping(debatePrompt, 'Preparing a focused response...', { directModel: true });
+                const debateResponse = await callAIWithTyping(debatePrompt, 'Preparing a focused response...', {
+                    directModel: true,
+                    stream: true,
+                    displayUserMessage: text
+                });
                 if (debateResponse?.aborted) return;
                 await publishResolvedModelMessage(text, debateResponse.response, {
                     label: 'Model answer',
                     summaryText: "Here is a focused response.",
-                    routing: debateResponse?.routing || null
+                    routing: debateResponse?.routing || null,
+                    existingAssistantMessageId: debateResponse?.assistantMessageId || '',
+                    fastFinalizeStreamed: true
                 });
                 return;
             }
@@ -16961,7 +17028,9 @@ Quick recap: ...
                 await publishResolvedModelMessage(text, learningAnswer, {
                     label: 'Model answer',
                     summaryText: "Here is a clear explanation.",
-                    routing: learningResponse?.routing || null
+                    routing: learningResponse?.routing || null,
+                    existingAssistantMessageId: learningResponse?.assistantMessageId || '',
+                    fastFinalizeStreamed: true
                 });
                 return;
             }
@@ -17446,9 +17515,16 @@ STRICTLY AVOID:
 If the user asks for 1 day, return only Day 1.
 If user asks for 2 days, provide both days with balanced pacing.`;
                 
-                const aiResponse = await callAIWithTyping(itineraryPrompt, '[Plan] Planning your itinerary...', { directModel: true });
+                const aiResponse = await callAIWithTyping(itineraryPrompt, '[Plan] Planning your itinerary...', {
+                    directModel: true,
+                    stream: true,
+                    displayUserMessage: text
+                });
                 if (aiResponse?.aborted) return;
                 if (/\bfallback\b/i.test(String(aiResponse?.intent || ''))) {
+                    if (aiResponse?.assistantMessageId) {
+                        discardStreamingAssistantMessage(aiResponse.assistantMessageId);
+                    }
                     await deliverApiReply('itinerary_retry_prompt', {
                         reason: aiResponse.intent
                     }, {
@@ -17461,6 +17537,9 @@ If user asks for 2 days, provide both days with balanced pacing.`;
                     text
                 );
                 if (!itineraryAnswer) {
+                    if (aiResponse?.assistantMessageId) {
+                        discardStreamingAssistantMessage(aiResponse.assistantMessageId);
+                    }
                     await deliverApiReply('itinerary_retry_prompt', {
                         reason: 'empty_response'
                     }, {
@@ -17468,8 +17547,12 @@ If user asks for 2 days, provide both days with balanced pacing.`;
                     });
                     return;
                 }
-                addModelAssistantMessage(itineraryAnswer, 'Itinerary plan', { routing: aiResponse?.routing || null });
-                saveToHistory(text, itineraryAnswer);
+                await publishResolvedModelMessage(text, itineraryAnswer, {
+                    label: 'Itinerary plan',
+                    routing: aiResponse?.routing || null,
+                    existingAssistantMessageId: aiResponse?.assistantMessageId || '',
+                    fastFinalizeStreamed: true
+                });
                 return; 
             }
             
@@ -17522,12 +17605,18 @@ Example for Tamil Nadu region:
 
 DO NOT make up dish names! Only include dishes you're 100% sure exist in that region.`;
                 
-                const aiResponse = await callAIWithTyping(specialtyPrompt, 'Assistant is thinking...', { directModel: true });
+                const aiResponse = await callAIWithTyping(specialtyPrompt, 'Assistant is thinking...', {
+                    directModel: true,
+                    stream: true,
+                    displayUserMessage: text
+                });
                 if (aiResponse?.aborted) return;
                 await publishResolvedModelMessage(text, aiResponse.response, {
                     label: 'Model answer',
                     summaryText: "Let me tell you about the local food specialties!",
-                    routing: aiResponse?.routing || null
+                    routing: aiResponse?.routing || null,
+                    existingAssistantMessageId: aiResponse?.assistantMessageId || '',
+                    fastFinalizeStreamed: true
                 });
                 return; 
             }
