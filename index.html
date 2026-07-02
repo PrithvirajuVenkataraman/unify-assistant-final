@@ -6665,12 +6665,17 @@ let showRoutingDebugBadge = false;
         function buildVerificationResponseInstructions(scope = 'answer') {
             return [
                 'Return a clear verification report with these exact sections:',
-                'Verdict: likely accurate, partly accurate, unsupported, or incorrect.',
+                'Verdict: Accurate, Inaccurate, Outdated, Unverified, or Misleading.',
+                'Claims checked: bullet each claim with Historical or Current, live verification required yes/no, and retrieved evidence used.',
                 `Evidence used: summarize the ${scope} text, any source links already present, local review flags, and retrieved context supplied in this request.`,
                 'How checked: give a concise rationale for the verdict without revealing hidden chain-of-thought.',
                 'Claims needing live/source verification: list claims that cannot be verified from the supplied evidence.',
                 'Corrected answer: include only if the original is wrong or incomplete.',
-                'Sources: include every usable retrieved source as a markdown link in the form 1. [Title](https://example.com).'
+                'Sources: include every usable retrieved source as a markdown link in the form 1. [Title](https://example.com).',
+                'Rules: current, today, now, presently, incumbent, latest, live, and as-of-today claims require retrieved live evidence.',
+                'If no live evidence is available for a current claim, use Verdict: Unverified.',
+                'If newer retrieved evidence contradicts a once-true claim, use Verdict: Outdated and state "The answer is outdated."',
+                'Do not write "as of the latest available information", "appears to be", or "likely" unless directly supported by retrieved evidence.'
             ].join('\n');
         }
 
