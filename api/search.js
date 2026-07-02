@@ -153,6 +153,25 @@ export default async function handler(req, res) {
     try {
         const limit = clampInt(req.body?.limit || req.body?.maxResults, 8, 1, 20);
         const mode = normalizeSearchMode(req.body?.mode || req.body?.searchMode || '');
+        if (mode === 'rag') {
+            const search = await runEvidenceFirstWebRag(query, { limit });
+            return res.status(200).json({
+                success: true,
+                query,
+                originalQuery: originalQuery === query ? undefined : originalQuery,
+                searchRewrite: rewrite,
+                route: {
+                    route: 'live_required',
+                    category: 'web_rag',
+                    confidence: 0.95,
+                    reasons: ['evidence_first_web_rag']
+                },
+                searchRequired: true,
+                searchSkipped: false,
+                category: 'web_rag',
+                ...search
+            });
+        }
         const route = await resolveRetrievalRoute(originalQuery || query, classifyFreeLiveIntent(originalQuery || query), {
             useModelClassifier: mode === 'auto'
         });
@@ -265,6 +284,7 @@ export default async function handler(req, res) {
 
 function normalizeSearchMode(value) {
     const mode = String(value || '').trim().toLowerCase();
+    if (mode === 'rag' || mode === 'web_rag') return 'rag';
     if (mode === 'auto' || mode === 'classify') return mode;
     return 'explicit';
 }
@@ -380,7 +400,9 @@ export async function searchPublicSources(query, options = {}) {
     const normalizedQuery = normalizeSearchQuery(query);
     if (!normalizedQuery) return [];
     const limit = clampInt(options.limit, 8, 1, 20);
-    const governmentRoleResults = await searchGovernmentRole(normalizedQuery, { limit: Math.min(3, limit) }).catch(() => []);
+    const governmentRoleResults = options.skipStructuredRoles === true
+        ? []
+        : await searchGovernmentRole(normalizedQuery, { limit: Math.min(3, limit) }).catch(() => []);
     const deterministicQueries = buildDeterministicSearchQueries(normalizedQuery);
     const plannedQueries = Array.isArray(options.plannedQueries) && options.plannedQueries.length
         ? options.plannedQueries
@@ -630,6 +652,130 @@ export async function runVerifiedWebSearch(query, options = {}) {
     });
 }
 
+export async function runEvidenceFirstWebRag(query, options = {}) {
+    const normalizedQuery = normalizeSearchQuery(query);
+    const limit = clampInt(options.limit, 8, 1, 20);
+    if (!normalizedQuery) {
+        return buildUnverifiedRagSummary(normalizedQuery, [], ['Empty query.']);
+    }
+
+    const planning = await buildGeminiSearchPlan(normalizedQuery).catch(error => ({
+        queries: [],
+        warning: `gemini_query_planning_failed:${String(error?.code || error?.message || 'unknown')}`
+    }));
+    const phases = buildWebRagQueryPhases(normalizedQuery, planning.queries);
+    const warnings = planning.warning ? [planning.warning] : [];
+    const seen = new Set();
+    let allResults = [];
+    let finalGate = null;
+    let finalAnswer = null;
+    let finalPhase = 0;
+
+    for (let i = 0; i < phases.length; i += 1) {
+        const phaseQueries = phases[i];
+        const phaseResults = await searchPublicSources(normalizedQuery, {
+            limit,
+            plannedQueries: phaseQueries,
+            skipStructuredRoles: true
+        }).catch(error => {
+            warnings.push(`rag_phase_${i + 1}_failed:${String(error?.code || error?.message || 'unknown')}`);
+            return [];
+        });
+        for (const item of phaseResults) {
+            const key = normalizeResultKey(item);
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            allResults.push(item);
+        }
+        allResults = rankSources(normalizedQuery, dedupeSearchResults(allResults)
+            .filter(item => isValidCitationSource(item, normalizedQuery)))
+            .slice(0, Math.max(limit, 8));
+        finalGate = evaluateWebRagEvidence(normalizedQuery, allResults);
+        finalPhase = i + 1;
+        if (finalGate.pass) {
+            finalAnswer = await buildGroundedRagAnswer(normalizedQuery, allResults, finalGate)
+                .catch(error => {
+                    warnings.push(`rag_answer_failed:${String(error?.code || error?.message || 'unknown')}`);
+                    return null;
+                });
+            if (finalAnswer?.verified && finalAnswer.answer) break;
+        }
+    }
+
+    const results = allResults.slice(0, limit);
+    const gate = finalGate || evaluateWebRagEvidence(normalizedQuery, results);
+    if (!finalAnswer?.verified || !finalAnswer.answer) {
+        return {
+            provider: 'web_rag',
+            answerProvider: 'web_rag_unverified',
+            answer: gate.conflict
+                ? 'Retrieved sources conflict, so I cannot verify this confidently.'
+                : 'I could not verify this from retrieved sources.',
+            verified: false,
+            confidence: gate.confidence,
+            evidenceUsed: [],
+            results,
+            sourceCount: results.length,
+            answerEvidenceCount: gate.evidence.length,
+            distinctDomains: Array.from(new Set(results.map(item => item.domain).filter(Boolean))),
+            distinctDomainCount: new Set(results.map(item => item.domain).filter(Boolean)).size,
+            trustedCount: results.filter(item => item.trusted || item.sourceType === 'official_source').length,
+            publicSourceCount: results.length,
+            geminiEnhanced: false,
+            ragPhaseCount: finalPhase,
+            warnings: Array.from(new Set([...warnings, gate.reason].filter(Boolean)))
+        };
+    }
+
+    const evidencePool = gate.evidence.length ? gate.evidence : results;
+    const evidence = selectEvidenceByIndexes(evidencePool, finalAnswer.evidenceIndexes).slice(0, 6);
+    return {
+        provider: 'web_rag',
+        answerProvider: 'web_rag_grounded',
+        answer: finalAnswer.answer,
+        verified: true,
+        confidence: Math.max(gate.confidence, Number(finalAnswer.confidence) || 0),
+        evidenceUsed: evidence.map(item => ({
+            title: item.title,
+            url: item.url,
+            domain: item.domain,
+            date: item.date || '',
+            sourceType: item.sourceType || ''
+        })),
+        results,
+        sourceCount: results.length,
+        answerEvidenceCount: evidence.length || gate.evidence.length,
+        distinctDomains: Array.from(new Set(results.map(item => item.domain).filter(Boolean))),
+        distinctDomainCount: new Set(results.map(item => item.domain).filter(Boolean)).size,
+        trustedCount: results.filter(item => item.trusted || item.sourceType === 'official_source').length,
+        publicSourceCount: results.length,
+        geminiEnhanced: Boolean(finalAnswer.modelAssisted),
+        ragPhaseCount: finalPhase,
+        warnings: Array.from(new Set(warnings.filter(Boolean)))
+    };
+}
+
+function buildUnverifiedRagSummary(query, results = [], warnings = []) {
+    return {
+        provider: 'web_rag',
+        answerProvider: 'web_rag_unverified',
+        answer: 'I could not verify this from retrieved sources.',
+        verified: false,
+        confidence: 0,
+        evidenceUsed: [],
+        results,
+        sourceCount: results.length,
+        answerEvidenceCount: 0,
+        distinctDomains: [],
+        distinctDomainCount: 0,
+        trustedCount: 0,
+        publicSourceCount: results.length,
+        geminiEnhanced: false,
+        ragPhaseCount: 0,
+        warnings
+    };
+}
+
 export async function searchGoogleNewsRss(query = '', options = {}) {
     return searchGdeltNews(query, options);
 }
@@ -780,6 +926,8 @@ export function parseGovernmentRoleQuery(query) {
 
 function cleanGovernmentRoleJurisdiction(value) {
     return stripDatePhrasesFromText(value)
+        .replace(/^\s*(?:who|what)\s+(?:is|was|are|were)\s+(?:the\s+)?/i, ' ')
+        .replace(/^\s*(?:the|a|an)\s+/i, ' ')
         .replace(/\b(current|latest|present|incumbent|official|government|leader|office|holder|name|country|state|province)\b$/gi, ' ')
         .replace(/^[,:\s]+|[,:\s?!.]+$/g, '')
         .replace(/\s*,\s*/g, ' ')
@@ -1479,6 +1627,141 @@ function normalizeLatestCacheResult(item) {
     };
 }
 
+function buildWebRagQueryPhases(query, plannedQueries = []) {
+    const normalized = normalizeSearchQuery(query);
+    const rewrite = buildSearchQueryRewrite(normalized);
+    const subject = rewrite.subject || extractSearchSubject(normalized) || normalized;
+    const broad = Array.from(new Set([
+        normalized,
+        ...buildDeterministicSearchQueries(normalized),
+        ...plannedQueries.map(item => normalizeSearchQuery(item)).filter(Boolean)
+    ].filter(Boolean))).slice(0, 5);
+    const officialReference = Array.from(new Set([
+        `${normalized} official source`,
+        `${subject} official`,
+        `${normalized} Wikipedia Wikidata`,
+        `${subject} current source`
+    ].map(normalizeSearchQuery).filter(Boolean))).slice(0, 5);
+    return [
+        [normalized],
+        broad,
+        officialReference
+    ].filter(phase => phase.length);
+}
+
+function evaluateWebRagEvidence(query, results = []) {
+    const evidence = (Array.isArray(results) ? results : [])
+        .filter(item => isValidCitationSource(item, query))
+        .filter(item => isRelatedToQuery(query, item));
+    const domains = Array.from(new Set(evidence.map(item => item.domain).filter(Boolean)));
+    const strong = evidence.filter(isStrongRagEvidenceSource);
+    const dated = evidence.filter(item => String(item.date || '').trim());
+    const conflict = hasObviousRagConflict(evidence);
+    const confidence = Math.min(0.99, (strong.length ? 0.74 : 0) + (domains.length >= 2 ? 0.16 : 0) + (dated.length ? 0.05 : 0));
+    const pass = !conflict && (strong.length >= 1 || domains.length >= 2) && evidence.length >= 1;
+    return {
+        pass,
+        conflict,
+        confidence: pass ? Math.max(0.86, confidence) : Math.min(0.6, confidence),
+        evidence,
+        reason: conflict
+            ? 'Retrieved sources conflict.'
+            : pass
+                ? ''
+                : 'Insufficient authoritative retrieved evidence.'
+    };
+}
+
+function isStrongRagEvidenceSource(item) {
+    const sourceType = String(item?.sourceType || '').trim();
+    const domain = String(item?.domain || '').toLowerCase();
+    if (item?.evidenceLevel === 'structured_claim') return true;
+    if (sourceType === 'official_source' && item?.pageFetched) return true;
+    if (item?.trusted && !/reddit|archive\.(today|ph|is)/i.test(domain)) return true;
+    return /(?:\.gov$|\.gov\.|\.go\.|gov\.|wikipedia\.org$|wikidata\.org$|bbc\.com$|reuters\.com$|apnews\.com$|thehindu\.com$)/i.test(domain);
+}
+
+function hasObviousRagConflict(evidence = []) {
+    const values = (Array.isArray(evidence) ? evidence : [])
+        .map(item => String(item?.description || item?.title || '').toLowerCase())
+        .filter(Boolean);
+    if (values.length < 2) return false;
+    return values.some(value => /\b(no longer|former|replaced by|successor|stepped down|resigned)\b/.test(value)) &&
+        values.some(value => /\b(current|incumbent|serving|serves as|present)\b/.test(value));
+}
+
+async function buildGroundedRagAnswer(query, results, gate) {
+    const evidence = gate.evidence.slice(0, 8);
+    if (!evidence.length) return null;
+    if (!hasGeminiKey()) return null;
+    const compact = evidence.map((item, index) => ({
+        index,
+        title: item.title,
+        description: item.description,
+        url: item.url,
+        domain: item.domain,
+        sourceType: item.sourceType,
+        sourceLabel: item.sourceLabel,
+        date: item.date || ''
+    }));
+    const prompt = `Return strict JSON only.
+Task: answer the user question using ONLY retrieved evidence.
+Rules:
+- If the evidence directly supports one answer, set verified true and answer concisely.
+- If evidence is missing, weak, irrelevant, or conflicting, set verified false.
+- Do not use model memory. Do not guess. Do not tell the user to check elsewhere.
+- For current/date-sensitive claims, require direct support from the evidence.
+- Cite evidence by returning evidenceIndexes from the provided index values.
+User question: ${JSON.stringify(query)}
+Evidence JSON: ${JSON.stringify(compact)}
+JSON shape: {"verified":true,"confidence":0.0,"answer":"...","evidenceIndexes":[0],"conflict":false,"reason":"..."}`;
+    const json = await callGeminiJson(prompt, { maxOutputTokens: 700, temperature: 0 });
+    const verified = json?.verified === true && Number(json?.confidence) >= 0.86;
+    const answer = sanitizeRagAnswerText(json?.answer || '');
+    const evidenceIndexes = Array.isArray(json?.evidenceIndexes)
+        ? json.evidenceIndexes.map(Number).filter(Number.isInteger)
+        : [];
+    if (!verified || !answer || !evidenceIndexes.length) {
+        return {
+            verified: false,
+            confidence: Number(json?.confidence) || 0,
+            answer: '',
+            evidenceIndexes: [],
+            modelAssisted: true,
+            reason: String(json?.reason || '').trim()
+        };
+    }
+    return {
+        verified: true,
+        confidence: Math.min(0.99, Math.max(0.86, Number(json?.confidence) || 0.86)),
+        answer,
+        evidenceIndexes,
+        modelAssisted: true,
+        reason: String(json?.reason || '').trim()
+    };
+}
+
+function sanitizeRagAnswerText(value) {
+    const clean = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return '';
+    if (/\b(check|consult|look up)\b.{0,40}\b(latest|official|source|news|website)\b/i.test(clean)) return '';
+    if (/\b(i am not sure|not certain|cannot verify|can't verify|unable to verify)\b/i.test(clean)) return '';
+    return clean.endsWith('.') ? clean : `${clean}.`;
+}
+
+function selectEvidenceByIndexes(results, indexes = []) {
+    const selected = [];
+    const used = new Set();
+    for (const index of indexes) {
+        const item = results[index];
+        if (!item?.url || used.has(item.url)) continue;
+        used.add(item.url);
+        selected.push(item);
+    }
+    if (selected.length) return selected;
+    return (Array.isArray(results) ? results : []).filter(isStrongRagEvidenceSource).slice(0, 3);
+}
+
 async function buildGeminiSearchPlan(query) {
     if (!hasGeminiKey()) return { queries: [], enhanced: false };
     const prompt = `Return strict JSON only.
@@ -2098,6 +2381,7 @@ export const __test = {
     getSerperKeyFingerprint,
     normalizeSerperResults,
     runVerifiedWebSearch,
+    runEvidenceFirstWebRag,
     searchGdeltNews,
     searchWikidata,
     searchReddit,
