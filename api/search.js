@@ -7,6 +7,7 @@ import { searchItems } from './_lib/latest/latest-cache.js';
 import { ingestLatestSources } from './_lib/latest/latest-ingest.js';
 import { runFreeLiveSearch } from './_lib/free-live/providers.js';
 import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
+import { rankTextsByEmbedding, chunkTextForEmbedding, hasNvidiaEmbeddingKey } from './_lib/embeddings.js';
 
 const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
 const WIKIPEDIA_SEARCH_URL = 'https://en.wikipedia.org/w/api.php';
@@ -670,6 +671,8 @@ export async function runEvidenceFirstWebRag(query, options = {}) {
     let finalGate = null;
     let finalAnswer = null;
     let finalPhase = 0;
+    let embeddingUsed = false;
+    let embeddingModel = '';
 
     for (let i = 0; i < phases.length; i += 1) {
         const phaseQueries = phases[i];
@@ -690,6 +693,15 @@ export async function runEvidenceFirstWebRag(query, options = {}) {
         allResults = rankSources(normalizedQuery, dedupeSearchResults(allResults)
             .filter(item => isValidCitationSource(item, normalizedQuery)))
             .slice(0, Math.max(limit, 8));
+        const embeddingRank = await rankRagResultsWithEmbeddings(normalizedQuery, allResults).catch(error => {
+            warnings.push(`nvidia_embedding_ranking_failed:${String(error?.status || error?.message || 'unknown')}`);
+            return { available: false, ranked: allResults, model: '' };
+        });
+        if (embeddingRank.available) {
+            embeddingUsed = true;
+            embeddingModel = embeddingRank.model || embeddingModel;
+            allResults = embeddingRank.ranked.slice(0, Math.max(limit, 8));
+        }
         finalGate = evaluateWebRagEvidence(normalizedQuery, allResults);
         finalPhase = i + 1;
         if (finalGate.pass) {
@@ -722,6 +734,8 @@ export async function runEvidenceFirstWebRag(query, options = {}) {
             trustedCount: results.filter(item => item.trusted || item.sourceType === 'official_source').length,
             publicSourceCount: results.length,
             geminiEnhanced: false,
+            embeddingEnhanced: embeddingUsed,
+            embeddingModel: embeddingModel || undefined,
             ragPhaseCount: finalPhase,
             warnings: Array.from(new Set([...warnings, gate.reason].filter(Boolean)))
         };
@@ -750,6 +764,8 @@ export async function runEvidenceFirstWebRag(query, options = {}) {
         trustedCount: results.filter(item => item.trusted || item.sourceType === 'official_source').length,
         publicSourceCount: results.length,
         geminiEnhanced: Boolean(finalAnswer.modelAssisted),
+        embeddingEnhanced: embeddingUsed,
+        embeddingModel: embeddingModel || undefined,
         ragPhaseCount: finalPhase,
         warnings: Array.from(new Set(warnings.filter(Boolean)))
     };
@@ -1669,6 +1685,60 @@ function evaluateWebRagEvidence(query, results = []) {
             : pass
                 ? ''
                 : 'Insufficient authoritative retrieved evidence.'
+    };
+}
+
+async function rankRagResultsWithEmbeddings(query, results = []) {
+    if (!hasNvidiaEmbeddingKey() || !Array.isArray(results) || results.length < 1) {
+        return { available: false, ranked: results, model: '' };
+    }
+    const chunkItems = [];
+    for (const item of results.slice(0, 12)) {
+        const sourceText = [
+            item.title,
+            item.description,
+            item.extractedText,
+            item.text
+        ].filter(Boolean).join('. ');
+        const chunks = chunkTextForEmbedding(sourceText, { maxChunks: 3, maxChars: 1200 });
+        chunks.forEach((chunk, chunkIndex) => {
+            chunkItems.push({
+                title: item.title,
+                description: item.description,
+                url: item.url,
+                domain: item.domain,
+                sourceType: item.sourceType,
+                sourceLabel: item.sourceLabel,
+                date: item.date || '',
+                trusted: item.trusted,
+                evidenceLevel: item.evidenceLevel,
+                qualitySignals: item.qualitySignals || [],
+                text: chunk,
+                chunkIndex
+            });
+        });
+    }
+    const rankedChunks = await rankTextsByEmbedding(query, chunkItems);
+    if (!rankedChunks.available) return { available: false, ranked: results, model: rankedChunks.model || '' };
+    const byUrl = new Map();
+    for (const chunk of rankedChunks.ranked) {
+        const key = String(chunk.url || '').trim();
+        if (!key || byUrl.has(key)) continue;
+        const source = results.find(item => item.url === key) || chunk;
+        byUrl.set(key, {
+            ...source,
+            embeddingScore: chunk.embeddingScore,
+            embeddingChunk: chunk.text
+        });
+    }
+    const ranked = [
+        ...byUrl.values(),
+        ...results.filter(item => item?.url && !byUrl.has(item.url))
+    ];
+    return {
+        available: true,
+        ranked,
+        model: rankedChunks.model
     };
 }
 
