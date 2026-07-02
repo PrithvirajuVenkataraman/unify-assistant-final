@@ -700,6 +700,18 @@ const chiefMinisterQuery = roleQuery(ROLE_FIXTURES.chiefMinister.role, ROLE_FIXT
 const ceoQuery = roleQuery(ROLE_FIXTURES.ceo.role, ROLE_FIXTURES.ceo.jurisdiction);
 const datedChiefMinisterQuery = `Who was the ${ROLE_FIXTURES.chiefMinister.role} of ${ROLE_FIXTURES.chiefMinister.jurisdiction} in 2024?`;
 const datedCeoQuery = `Who was ${ROLE_FIXTURES.ceo.role} of ${ROLE_FIXTURES.ceo.jurisdiction} in 2023?`;
+assert.deepEqual(searchTest.parseGovernmentRoleQuery(`Who is the ${ROLE_FIXTURES.chiefMinister.jurisdiction} CM?`), {
+    role: 'chief minister',
+    roleText: 'CM',
+    jurisdiction: ROLE_FIXTURES.chiefMinister.jurisdiction,
+    property: 'P39'
+});
+assert.deepEqual(searchTest.parseGovernmentRoleQuery(`Who is the president of the ${ROLE_FIXTURES.president.jurisdiction}?`), {
+    role: 'president',
+    roleText: 'president',
+    jurisdiction: ROLE_FIXTURES.president.jurisdiction,
+    property: 'P35'
+});
 assert.deepEqual(searchTest.parseGovernmentRoleQuery(presidentQuery), {
     role: 'president',
     roleText: 'president',
@@ -1451,6 +1463,84 @@ assert.ok(productReviewSearch.body.results.every(item => /nothing phone 3/i.test
 assert.doesNotMatch(JSON.stringify(productReviewSearch.body.results), /Nothing Was the Same|Everything or Nothing/i);
 assert.doesNotMatch(String(productReviewSearch.body.answer || ''), /Nothing Was the Same|Everything or Nothing/i);
 globalThis.fetch = ORIGINAL_FETCH;
+
+process.env.GEMINI_API_KEY = 'test-gemini-key';
+let ragGeminiCalls = 0;
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('generativelanguage.googleapis.com')) {
+        ragGeminiCalls += 1;
+        if (ragGeminiCalls === 1) {
+            return okJson({
+                candidates: [{ content: { parts: [{ text: '{"queries":["current civic leader of Example City official source"]}' }] } }]
+            });
+        }
+        return okJson({
+            candidates: [{
+                content: {
+                    parts: [{
+                        text: '{"verified":true,"confidence":0.94,"answer":"Alex Rivera is the current civic leader of Example City.","evidenceIndexes":[0],"conflict":false,"reason":"Official source directly states the current leader."}'
+                    }]
+                }
+            }]
+        });
+    }
+    if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
+    if (href.includes('www.wikidata.org')) return okJson({ search: [] });
+    if (href.includes('reddit.com')) return okJson({ data: { children: [] } });
+    if (href.includes('api.gdeltproject.org')) {
+        return okJson({
+            articles: [{
+                title: 'Example City official page lists Alex Rivera as current civic leader',
+                url: 'https://www.example.gov/leader',
+                domain: 'example.gov',
+                seendate: '20260702120000'
+            }]
+        });
+    }
+    throw new Error(`unexpected URL ${href}`);
+};
+const verifiedRagSearch = await callHandler(searchHandler, request('/api/search', {
+    query: 'Who is the current civic leader of Example City?',
+    mode: 'rag',
+    limit: 5
+}));
+assert.equal(verifiedRagSearch.statusCode, 200);
+assert.equal(verifiedRagSearch.body.category, 'web_rag');
+assert.equal(verifiedRagSearch.body.provider, 'web_rag');
+assert.equal(verifiedRagSearch.body.verified, true);
+assert.equal(verifiedRagSearch.body.answerProvider, 'web_rag_grounded');
+assert.match(verifiedRagSearch.body.answer, /Alex Rivera/);
+assert.ok(verifiedRagSearch.body.evidenceUsed.some(item => item.url === 'https://www.example.gov/leader'));
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GEMINI_API_KEY;
+
+process.env.GEMINI_API_KEY = 'test-gemini-key';
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('generativelanguage.googleapis.com')) {
+        return okJson({
+            candidates: [{ content: { parts: [{ text: '{"queries":["unrelated query"],"verified":false}' }] } }]
+        });
+    }
+    if (href.includes('en.wikipedia.org/w/api.php')) return okJson({ query: { search: [] } });
+    if (href.includes('www.wikidata.org')) return okJson({ search: [] });
+    if (href.includes('reddit.com')) return okJson({ data: { children: [] } });
+    if (href.includes('api.gdeltproject.org')) return okJson({ articles: [] });
+    throw new Error(`unexpected URL ${href}`);
+};
+const unverifiedRagSearch = await callHandler(searchHandler, request('/api/search', {
+    query: 'Who is the current civic leader of Empty Source City?',
+    mode: 'rag',
+    limit: 5
+}));
+assert.equal(unverifiedRagSearch.statusCode, 200);
+assert.equal(unverifiedRagSearch.body.provider, 'web_rag');
+assert.equal(unverifiedRagSearch.body.verified, false);
+assert.equal(unverifiedRagSearch.body.answerProvider, 'web_rag_unverified');
+assert.match(unverifiedRagSearch.body.answer, /I could not verify this from retrieved sources/);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GEMINI_API_KEY;
 
 const unsupportedLiveSearch = await callHandler(searchHandler, request('/api/search', { query: LIVE_FIXTURES.unsupported.query, limit: 5 }));
 assert.equal(unsupportedLiveSearch.statusCode, 200);
