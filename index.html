@@ -8427,6 +8427,7 @@ async function fetchLiveSearchJson(query, options = {}) {
             answer: Boolean(options.answer),
             domain: options.domain || '',
             factType: options.factType || '',
+            mode: options.mode || options.searchMode || '',
             mustContain: Array.isArray(options.mustContain) ? options.mustContain : []
         })
     });
@@ -15212,32 +15213,35 @@ async function handleUniversalEntityFactQuery(userText, liveIntent = null) {
         try { controller.abort(); } catch (_) {}
     }, TRUST_FIRST_RELIABILITY_POLICY.verificationBudgetMs);
     try { 
-        if (roleHolderQuery) {
+        if (shouldRequireVerifiedSources(pipeline.userText, pipeline.intent, pipeline.entityIntent)) {
             const searchData = await fetchLiveSearchJson(pipeline.userText, {
                 signal: controller.signal,
                 maxResults: 8,
                 answer: true,
+                mode: 'rag',
                 domain: pipeline.intent.domain || '',
                 factType: pipeline.intent.factType || ''
             });
             const directAnswer = cleanLiveAnswerText(String(searchData?.answer || '').trim());
             const answerResults = Array.isArray(searchData?.results) ? searchData.results.filter(Boolean) : [];
-            const structuredResults = answerResults.filter(item => item?.evidenceLevel === 'structured_claim' && item?.holderName);
             const answerEvidenceCount = Number(searchData?.answerEvidenceCount || 0);
-            if (directAnswer && answerEvidenceCount > 0 && structuredResults.length) {
-                const sourceLines = structuredResults
+            if (searchData?.verified === true && directAnswer && answerEvidenceCount > 0 && answerResults.length) {
+                const evidenceResults = Array.isArray(searchData?.evidenceUsed) && searchData.evidenceUsed.length
+                    ? searchData.evidenceUsed
+                    : answerResults;
+                const sourceLines = evidenceResults
                     .slice(0, 5)
                     .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
                     .join('\n');
-                const finalMsg = `${directAnswer}\n\n${buildSourceMetaBlock(structuredResults)}\n\nSources:\n${sourceLines}`;
-                addVerifiedAssistantMessage(finalMsg, 'Structured current holder');
+                const finalMsg = `${directAnswer}\n\n${buildSourceMetaBlock(evidenceResults)}\n\nSources:\n${sourceLines}`;
+                addVerifiedAssistantMessage(finalMsg, 'Verified Web RAG');
                 saveToHistory(pipeline.userText, finalMsg);
                 return true;
             }
             return publishStrictVerificationClarification(pipeline, {
                 sources: answerResults,
-                summaryText: 'I could not verify the current office holder from structured current-holder evidence.',
-                badge: 'Current holder not verified'
+                summaryText: searchData?.answer || 'I could not verify this from retrieved sources.',
+                badge: 'Unverified'
             });
         }
 
@@ -15457,7 +15461,7 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
         const forceFailClosed = Boolean(options?.forceFailClosed);
         const roleHolderQuery = isCurrentRoleHolderLiveQuery(query, intent, entityIntent);
         liveRiskLevel = getRiskTierForQuery(query, intent, entityIntent);
-        failClosed = roleHolderQuery || (forceFailClosed && shouldRequireVerifiedSources(query, intent, entityIntent));
+        failClosed = roleHolderQuery || shouldRequireVerifiedSources(query, intent, entityIntent) || (forceFailClosed && shouldRequireVerifiedSources(query, intent, entityIntent));
         const directFactQuery = intent.directFact || isSportsLiveResultQuery(query);
         const conciseFactQuery = isConciseDirectFactQuery(query);
         const queries = buildLiveSearchQueries(query, intent);
@@ -15520,6 +15524,7 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
                 signal: controller.signal,
                 maxResults: 8,
                 answer: true,
+                mode: failClosed ? 'rag' : '',
                 domain: intent.domain || '',
                 factType: intent.factType || '',
                 mustContain: getLiveSearchMustContainHints(intent, query)
@@ -15527,7 +15532,7 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
             const directAnswer = cleanLiveAnswerText(String(answerData?.answer || '').trim());
             const answerResults = Array.isArray(answerData?.results) ? answerData.results.filter(Boolean) : [];
             const answerEvidenceCount = Number(answerData?.answerEvidenceCount || 0);
-            if (directAnswer && answerEvidenceCount > 0 && answerResults.length) {
+            if ((!failClosed || answerData?.verified === true) && directAnswer && answerEvidenceCount > 0 && answerResults.length) {
                 const sourceLines = answerResults
                     .slice(0, 5)
                     .map((r, i) => `${i + 1}. [${r.title}](${r.url})`)
@@ -15555,6 +15560,17 @@ async function handleLiveRetrievalQuery(userText, options = {}) {
                 saveToHistory(userText, finalMsg);
                 hideThinkingIndicator();
                 return true;
+            }
+            if (failClosed && answerData?.verified !== true) {
+                return publishStrictVerificationClarification({
+                    userText: query,
+                    intent,
+                    entityIntent
+                }, {
+                    sources: answerResults,
+                    summaryText: answerData?.answer || 'I could not verify this from retrieved sources.',
+                    badge: 'Unverified'
+                });
             }
             logRoutingDebug('handler fallback: live_retrieval search_answer_empty', query, {
                 selectedHandler: 'handleLiveRetrievalQuery',
