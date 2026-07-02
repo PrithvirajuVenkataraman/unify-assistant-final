@@ -1600,6 +1600,64 @@ assert.match(unverifiedRagSearch.body.answer, /I could not verify this from retr
 globalThis.fetch = ORIGINAL_FETCH;
 delete process.env.GEMINI_API_KEY;
 
+process.env.GEMINI_API_KEY = 'test-gemini-key';
+globalThis.fetch = async (url) => {
+    const href = String(url);
+    if (href.includes('generativelanguage.googleapis.com')) {
+        return okJson({
+            candidates: [{ content: { parts: [{ text: '{"queries":["SteamOS","UK singles chart","KDE neon"]}' }] } }]
+        });
+    }
+    if (href.includes('en.wikipedia.org/w/api.php')) {
+        return okJson({
+            query: {
+                search: [
+                    { title: 'SteamOS', snippet: 'Gaming-focused operating system by Valve.' },
+                    { title: 'UK singles chart', snippet: 'Music chart in the United Kingdom.' },
+                    { title: 'KDE neon', snippet: 'Linux distribution based on Ubuntu.' }
+                ]
+            }
+        });
+    }
+    if (href.includes('en.wikipedia.org/api/rest_v1/page/summary')) {
+        if (href.includes('SteamOS')) {
+            return okJson({
+                title: 'SteamOS',
+                extract: 'SteamOS is a gaming-focused operating system released by Valve.',
+                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/SteamOS' } }
+            });
+        }
+        if (href.includes('UK_singles_chart')) {
+            return okJson({
+                title: 'UK singles chart',
+                extract: 'The UK singles chart ranks songs in the United Kingdom.',
+                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/UK_singles_chart' } }
+            });
+        }
+        return okJson({
+            title: 'KDE neon',
+            extract: 'KDE neon is a Linux distribution based on Ubuntu.',
+            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/KDE_neon' } }
+        });
+    }
+    if (href.includes('www.wikidata.org')) return okJson({ search: [] });
+    if (href.includes('reddit.com')) return okJson({ data: { children: [] } });
+    if (href.includes('api.gdeltproject.org')) return okJson({ articles: [] });
+    throw new Error(`unexpected URL ${href}`);
+};
+const irrelevantRagSearch = await callHandler(searchHandler, request('/api/search', {
+    query: 'WHO IS THE CM OF TAMIL NADU',
+    mode: 'rag',
+    limit: 5
+}));
+assert.equal(irrelevantRagSearch.statusCode, 200);
+assert.equal(irrelevantRagSearch.body.verified, false);
+assert.equal(irrelevantRagSearch.body.answerProvider, 'web_rag_unverified');
+assert.match(irrelevantRagSearch.body.answer, /I could not verify this from retrieved sources/);
+assert.doesNotMatch(String(irrelevantRagSearch.body.answer || ''), /SteamOS|KDE neon|UK singles/i);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GEMINI_API_KEY;
+
 const unsupportedLiveSearch = await callHandler(searchHandler, request('/api/search', { query: LIVE_FIXTURES.unsupported.query, limit: 5 }));
 assert.equal(unsupportedLiveSearch.statusCode, 200);
 assert.notEqual(unsupportedLiveSearch.body.category, 'unsupported_free_live');
