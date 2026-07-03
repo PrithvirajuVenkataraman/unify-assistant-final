@@ -359,6 +359,27 @@ option {
     font-weight: 650;
 }
 
+.chat-session-snippet {
+    display: block;
+    margin-top: 4px;
+    color: rgba(255, 255, 255, 0.52);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-row-search-hit {
+    animation: chat-row-search-hit 1.4s ease;
+}
+
+@keyframes chat-row-search-hit {
+    0%, 100% { filter: none; }
+    20% { filter: drop-shadow(0 0 16px rgba(88, 166, 255, 0.48)); }
+}
+
 .chat-session-more {
     width: 30px;
     height: 30px;
@@ -1214,6 +1235,10 @@ option {
 .composer-plus-btn:hover {
     background: #eef2f7;
     color: var(--ui-text);
+}
+
+#input-bar-inner.composer-has-mode {
+    box-shadow: inset 0 0 0 1px rgba(88, 166, 255, 0.45);
 }
 
 .composer-plus-btn.is-open {
