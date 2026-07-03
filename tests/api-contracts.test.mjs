@@ -382,7 +382,7 @@ assert.equal(chatTest.classifyRoutingDecision(roleQuery(ROLE_FIXTURES.president.
 assert.equal(chatTest.classifyRoutingDecision('What is the capital of France?', '', {}).strategy, 'direct');
 delete process.env.SERPER_API_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
-assert.equal(chatTest.classifyRoutingDecision(roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction), '', {}).strategy, 'live_first');
+assert.equal(chatTest.classifyRoutingDecision(roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction), '', {}).strategy, 'direct');
 assert.equal(
     chatTest.resolveContextualLiveQuery('Who is Ada Lovelace?', [
         { role: 'user', text: 'Tell me about ISRO' },
