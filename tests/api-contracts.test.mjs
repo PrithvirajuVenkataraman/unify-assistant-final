@@ -136,6 +136,8 @@ const LIVE_FIXTURES = Object.freeze({
 
 const ORIGINAL_SERPER_API_KEY = process.env.SERPER_API_KEY;
 const ORIGINAL_SERPER_KEY = process.env.SERPER_KEY;
+const ORIGINAL_EXA_API_KEY = process.env.EXA_API_KEY;
+const ORIGINAL_EXA_KEY = process.env.EXA_KEY;
 const ORIGINAL_LIVE_RETRIEVAL_ENABLED = process.env.LIVE_RETRIEVAL_ENABLED;
 const ORIGINAL_GROQ_API_KEY = process.env.GROQ_API_KEY;
 const ORIGINAL_GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
@@ -149,6 +151,8 @@ const ORIGINAL_WEB_SEARCH_ENABLED = process.env.WEB_SEARCH_ENABLED;
 const ORIGINAL_FETCH = globalThis.fetch; 
 delete process.env.SERPER_API_KEY;
 delete process.env.SERPER_KEY;
+delete process.env.EXA_API_KEY;
+delete process.env.EXA_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
 delete process.env.GROQ_API_KEY;
 delete process.env.GEMINI_API_KEY;
