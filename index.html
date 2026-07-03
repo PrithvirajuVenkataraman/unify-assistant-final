@@ -6740,8 +6740,17 @@ let showRoutingDebugBadge = false;
             }
         }
 
-        async function buildVerificationEvidenceBundle(originalQuestion) {
-            const query = String(originalQuestion || '').replace(/\s+/g, ' ').trim();
+        function buildVerificationSearchQuery(originalQuestion, answerText = '') {
+            const original = String(originalQuestion || '').replace(/\s+/g, ' ').trim();
+            const answer = String(answerText || '').replace(/\s+/g, ' ').trim();
+            return [original && original !== 'the previous question' ? original : '', answer]
+                .filter(Boolean)
+                .join(' ')
+                .slice(0, 420);
+        }
+
+        async function buildVerificationEvidenceBundle(originalQuestion, answerText = '') {
+            const query = buildVerificationSearchQuery(originalQuestion, answerText);
             if (!query || query === 'the previous question') {
                 return { query, sources: [], warning: 'No original user question was available for source lookup.' };
             }
@@ -6752,7 +6761,8 @@ let showRoutingDebugBadge = false;
                 const searchData = await withVerificationTimeout(
                     fetchLiveSearchJson(query, {
                         maxResults: 5,
-                        answer: false,
+                        answer: true,
+                        mode: 'rag',
                         signal: searchController.signal
                     }),
                     6000,
@@ -6761,7 +6771,18 @@ let showRoutingDebugBadge = false;
                 if (searchData?.timeout) {
                     return { query, sources: [], warning: 'Source lookup timed out before usable results were returned.' };
                 }
+                if (searchData?.verified !== true) {
+                    return {
+                        query,
+                        sources: [],
+                        warning: searchData?.answer || 'Strict source lookup could not verify this claim from retrieved evidence.'
+                    };
+                }
+                const evidenceUrls = new Set((Array.isArray(searchData?.evidenceUsed) ? searchData.evidenceUsed : [])
+                    .map(item => String(item?.url || '').trim())
+                    .filter(Boolean));
                 results = (Array.isArray(searchData?.results) ? searchData.results : [])
+                    .filter(item => !evidenceUrls.size || evidenceUrls.has(String(item?.url || '').trim()))
                     .filter(isUsableVerificationSource)
                     .slice(0, 5);
             } catch (error) {
@@ -6857,7 +6878,7 @@ let showRoutingDebugBadge = false;
             const controller = beginAbortableRequest();
             try {
                 showThinkingIndicator('Checking sources...');
-                const evidenceBundle = await buildVerificationEvidenceBundle(originalQuestion);
+                const evidenceBundle = await buildVerificationEvidenceBundle(originalQuestion, meta.text);
                 const evidenceBlock = formatVerificationEvidenceForPrompt(evidenceBundle);
                 const verificationPrompt = [
                     hidden,
