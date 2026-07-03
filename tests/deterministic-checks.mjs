@@ -749,6 +749,8 @@ visiblePromptSandbox.addVisibleInputHistory('What is this phone?');
 assert.deepEqual(visiblePromptSandbox.inputHistory, ['What is this phone?']);
 assert.match(extractFunctionSource(SOURCE.appHtml, 'showResponseRecoveryCard'), /sanitizeUserFacingRequestText\(userMessage\)/);
 assert.doesNotMatch(extractFunctionSource(SOURCE.appHtml, 'showResponseRecoveryCard'), /String\(userMessage \|\| window\.__lastUserMessage/);
+assert.doesNotMatch(SOURCE.appHtml, /Response paused|Last request|response-recovery-title|response-recovery-btn/);
+assert.doesNotMatch(SOURCE.styles, /response-recovery-panel|response-recovery-title|response-recovery-btn/);
 assert.match(extractFunctionSource(SOURCE.appHtml, 'stopActiveGeneration'), /activeRequestController\s*=\s*null/);
 assert.match(extractFunctionSource(SOURCE.appHtml, 'stopActiveGeneration'), /resetAssistantProcessingState\(\)/);
 
