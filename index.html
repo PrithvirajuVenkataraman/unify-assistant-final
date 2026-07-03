@@ -1625,28 +1625,12 @@ function retryLastRequest() {
 } 
 
 function showResponseRecoveryCard(userMessage = '') {
-    const chatContainer = document.getElementById('chat-container');
-    if (!chatContainer || document.getElementById('response-recovery-card')) return;
     const displayMessage = sanitizeUserFacingRequestText(userMessage) ||
         getLastVisibleUserMessage() ||
         sanitizeUserFacingRequestText(window.__lastUserMessage || '') ||
         '';
-    const canStop = Boolean(activeRequestController && !activeRequestController.signal?.aborted);
-    const card = document.createElement('div');
-    card.id = 'response-recovery-card';
-    card.dataset.retryPrompt = displayMessage.slice(0, 240);
-    card.className = 'chat-row flex justify-start fade-in';
-    card.innerHTML = `
-        <div class="response-recovery-panel">
-            <div class="response-recovery-title">Response paused</div>
-            <div class="response-recovery-actions">
-                <button type="button" class="response-recovery-btn primary" onclick="retryLastRequest(); document.getElementById('response-recovery-card')?.remove();">Retry</button>
-                ${canStop ? `<button type="button" class="response-recovery-btn secondary" onclick="stopActiveGeneration('manual'); document.getElementById('response-recovery-card')?.remove();">Stop</button>` : ''}
-            </div>
-        </div>
-    `;
-    chatContainer.appendChild(card);
-    maybeAutoScroll(chatContainer);
+    if (displayMessage) setLastVisibleUserMessage(displayMessage);
+    return false;
 }
 
 function showFailureFallbackCard(userMessage) {
