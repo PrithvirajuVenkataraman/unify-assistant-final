@@ -1876,7 +1876,7 @@ const verifyAnswerChat = await callHandler(chatHandler, request('/api/chat-groq'
 assert.equal(verifyAnswerChat.statusCode, 200);
 assert.equal(verifyAnswerChat.body.intent, 'verify_answer');
 assert.equal(verifyAnswerChat.body.routing.strategy, 'verify_answer_fast_path');
-assert.equal(verifyAnswerChat.body.webEscalation.reason, 'verify_answer_fast_path');
+assert.equal(verifyAnswerChat.body.webEscalation.reason, 'verify_answer_supplied_evidence');
 assert.equal(verifyAnswerChat.body.quality.performed, false);
 assert.match(verifyAnswerChat.body.response, /^Verdict: Accurate/m);
 assert.match(verifyAnswerChat.body.response, /\[Test Source\]\(https:\/\/example\.com\/fact\)/);
