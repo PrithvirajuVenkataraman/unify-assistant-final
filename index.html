@@ -3995,6 +3995,7 @@ async function streamChatCompletion(payload, options = {}) {
         });
         return assistantMessageId;
     };
+    ensureStreamMessage();
     const handleEvent = event => {
         if (!event?.event) return;
         if (event.event === 'delta') {
@@ -4011,13 +4012,13 @@ async function streamChatCompletion(payload, options = {}) {
                 });
             }
             const id = ensureStreamMessage();
-            updateStreamingAssistantMessage(id, accumulated, { userMessage });
+            updateStreamingAssistantMessage(id, accumulated, { userMessage, streaming: true });
             return;
         }
         if (event.event === 'correction') {
             accumulated = String(event.data?.text || accumulated || '');
             const id = ensureStreamMessage();
-            updateStreamingAssistantMessage(id, accumulated, { userMessage });
+            updateStreamingAssistantMessage(id, accumulated, { userMessage, streaming: true });
             return;
         }
         if (event.event === 'done') {
@@ -7043,7 +7044,9 @@ let showRoutingDebugBadge = false;
             const shouldDelayAssistantRender = false;
             if (!isUser) hideThinkingIndicator();
             const rawDisplayText = normalizeUiTokens(String(text ?? ''));
+            const allowEmptyAssistant = !isUser && meta?.allowEmpty === true;
             if (isUser && !rawDisplayText.trim()) return;
+            if (!isUser && !rawDisplayText.trim() && !allowEmptyAssistant) return '';
             const displayText = isUser || /<(iframe|div|img|table)\s/i.test(rawDisplayText)
                 ? rawDisplayText
                 : ensureCompleteAssistantResponse(rawDisplayText);
@@ -7079,7 +7082,7 @@ let showRoutingDebugBadge = false;
                 // Check if message contains HTML elements (like iframes, divs)
                 const hasHtmlContent = /<(iframe|div|img|table)\s/i.test(displayText);
 
-                const readableText = formatAssistantTextForReadability(displayText);
+                const readableText = allowEmptyAssistant ? '' : formatAssistantTextForReadability(displayText);
 
                 // Render markdown-rich assistant text for professional readability.
                 let formattedText;
@@ -7089,7 +7092,7 @@ let showRoutingDebugBadge = false;
                         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
                     formattedText = formattedText.replace(/\n(?![^<]*>)/g, '<br>');
                 } else {
-                    formattedText = renderAssistantMarkdown(readableText, linkClass);
+                    formattedText = allowEmptyAssistant ? '<span class="streaming-placeholder">Thinking</span>' : renderAssistantMarkdown(readableText, linkClass);
                 }
                 formattedText = sanitizeAssistantMarkup(formattedText);
 
@@ -7221,7 +7224,7 @@ let showRoutingDebugBadge = false;
                     typeCharacter();
                 } else {
                     const textElement = messageDiv.querySelector('.typewriter-text');
-                    textElement.classList.remove('is-streaming');
+                    textElement.classList.toggle('is-streaming', allowEmptyAssistant);
                     textElement.innerHTML = formattedText;
                 }
                 if (!isUser) {
@@ -7259,6 +7262,7 @@ let showRoutingDebugBadge = false;
             return addChatMessage('', false, false, {
                 ...meta,
                 sourceType: 'model',
+                allowEmpty: true,
                 skipRecord: true
             });
         }
@@ -7270,7 +7274,7 @@ let showRoutingDebugBadge = false;
                 .find(row => row.dataset.messageId === id) || null;
         }
 
-        function renderAssistantTextIntoElement(textElement, text) {
+        function renderAssistantTextIntoElement(textElement, text, options = {}) {
             if (!textElement) return;
             const isDarkTheme = document.body.classList.contains('dark');
             const linkClass = isDarkTheme
@@ -7278,7 +7282,7 @@ let showRoutingDebugBadge = false;
                 : 'text-indigo-700 hover:text-indigo-900 underline font-medium';
             const readableText = formatAssistantTextForReadability(String(text || ''));
             const formatted = sanitizeAssistantMarkup(renderAssistantMarkdown(readableText, linkClass));
-            textElement.classList.remove('is-streaming');
+            textElement.classList.toggle('is-streaming', options?.streaming === true);
             textElement.innerHTML = formatted;
         }
 
@@ -7286,7 +7290,7 @@ let showRoutingDebugBadge = false;
             const row = findAssistantMessageRow(messageId);
             if (!row) return;
             const textElement = row.querySelector('.assistant-message-text');
-            renderAssistantTextIntoElement(textElement, text);
+            renderAssistantTextIntoElement(textElement, text, { streaming: meta?.streaming === true });
             const cleanText = String(text || '').trim();
             const existing = getAssistantMessageMeta(messageId) || {};
             const turnId = String(existing.turnId || meta?.turnId || activeResponseRenderContext?.turnId || '').trim();
@@ -7307,7 +7311,7 @@ let showRoutingDebugBadge = false;
         function finalizeStreamingAssistantMessage(messageId, text, meta = {}) {
             const cleanText = String(text || '').trim();
             if (!messageId || !cleanText) return '';
-            updateStreamingAssistantMessage(messageId, cleanText, meta);
+            updateStreamingAssistantMessage(messageId, cleanText, { ...meta, streaming: false });
             const turnId = String(meta?.turnId || getAssistantMessageMeta(messageId)?.turnId || activeResponseRenderContext?.turnId || '').trim();
             chatHistory.push({ text: cleanText, isUser: false });
             recordActiveChatMessage('assistant', cleanText, turnId);
@@ -20116,7 +20120,7 @@ function showThinkingIndicator(message = 'Thinking') {
     const phase = resolveThinkingPhase(statusText);
     const visualMode = phase.key === 'searching' ? 'ring' : 'dots';
     const visualModeClass = visualMode === 'ring' ? 'assistant-thinking-ring-mode' : 'assistant-thinking-dots';
-    const phaseLabel = phase.key === 'searching' ? 'SEARCHING' : phase.label;
+    const phaseLabel = phase.key === 'searching' ? 'Searching' : phase.label;
     const searchLabelClass = phase.key === 'searching' ? 'assistant-thinking-text is-searching' : 'assistant-thinking-text';
     if (!row) {
         row = document.createElement('div');
@@ -20164,7 +20168,7 @@ function resolveThinkingPhase(message = '') {
     if (/\b(final|finaliz|polish|format)\b/.test(lower)) {
         return { key: 'finalizing', label: 'Finalizing' };
     }
-    return { key: 'reasoning', label: 'Reasoning' };
+    return { key: 'thinking', label: 'Thinking' };
 }
 
 function hideThinkingIndicator() {
@@ -21413,7 +21417,7 @@ function addTravelHintsToPlan(places){
         return {
             ...place,
             travelFromPreviousKm: null,
-            travelMinutes: 15,
+            travelMinutes: 15, 
             travelMode: "drive",
             travelHint: "Transit - ~15 min"
         };
