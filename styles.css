@@ -2778,12 +2778,29 @@ body.dark .response-action-btn {
     font-weight: 700 !important;
     color: var(--ui-text-muted) !important;
     line-height: 1.2;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    letter-spacing: 0;
+    text-transform: none;
 }
 
 .assistant-thinking-text.is-searching {
     color: #ffffff !important;
+}
+
+.streaming-placeholder {
+    color: rgba(255, 255, 255, 0.58);
+    font-weight: 700;
+}
+
+.streaming-placeholder::after,
+.assistant-message-text.is-streaming::after {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 1.05em;
+    margin-left: 3px;
+    transform: translateY(2px);
+    border-right: 2px solid currentColor;
+    animation: jarvis-stream-caret 0.85s steps(2, start) infinite;
 }
 
 .professional-thinking-dots {
@@ -2807,6 +2824,11 @@ body.dark .response-action-btn {
         opacity: 1;
         transform: translateY(-1px);
     }
+}
+
+@keyframes jarvis-stream-caret {
+    0%, 48% { opacity: 1; }
+    49%, 100% { opacity: 0; }
 }
 
 @keyframes jarvis-thinking-ring {
