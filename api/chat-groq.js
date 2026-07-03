@@ -10,8 +10,7 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 
     function isLiveRetrievalConfigured() {
         const flag = String(process.env.LIVE_RETRIEVAL_ENABLED || '').trim().toLowerCase();
-        if (['0', 'false', 'no', 'off'].includes(flag)) return false;
-        return true;
+        return ['1', 'true', 'yes', 'on'].includes(flag);
     }
 
     export default async function handler(req, res) {
