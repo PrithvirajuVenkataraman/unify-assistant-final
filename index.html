@@ -112,6 +112,16 @@
             </div>
         </section>
     </div>
+    <div id="text-input-dialog-backdrop" class="text-input-dialog-backdrop hidden" role="presentation" onclick="if (event.target === this) closeTextInputDialog(null)">
+        <section class="text-input-dialog" role="dialog" aria-modal="true" aria-labelledby="text-input-dialog-title">
+            <h2 id="text-input-dialog-title">Edit message</h2>
+            <textarea id="text-input-dialog-value" rows="4" aria-label="Edit message"></textarea>
+            <div class="text-input-dialog-actions">
+                <button type="button" class="text-input-dialog-btn secondary" onclick="closeTextInputDialog(null)">Cancel</button>
+                <button type="button" class="text-input-dialog-btn primary" onclick="submitTextInputDialog()">Save</button>
+            </div>
+        </section>
+    </div>
     <section id="voice-conversation-screen" class="voice-conversation-screen hidden" aria-hidden="true" aria-label="Voice conversation">
         <div class="voice-conversation-topbar">
             <button type="button" class="voice-screen-icon-btn" onclick="closeVoiceConversationScreen()" aria-label="Close voice conversation">
@@ -316,9 +326,9 @@
 })();
 
 const TRUST_LEVEL = {VERIFIED: 'verified', GENERATED: 'generated'};
-const LIVE_RETRIEVAL_ENABLED = globalThis.JARVIS_LIVE_RETRIEVAL_ENABLED !== false;
+const LIVE_RETRIEVAL_ENABLED = globalThis.JARVIS_LIVE_RETRIEVAL_ENABLED === true;
 const STRUCTURED_CURRENT_FACTS_ENABLED = globalThis.JARVIS_STRUCTURED_CURRENT_FACTS_ENABLED === true;
-const LIVE_DISABLED_MESSAGE = 'Live search and current updates are temporarily disabled. I can answer from general knowledge, but I cannot verify real-time facts right now.';
+const LIVE_DISABLED_MESSAGE = 'Live search is off for now.';
 const SUPPORT_MODE_HINTS = {
     balanced: 'Be clear, practical, and warm. Keep a neutral supportive tone.',
     supportive: 'Use an empathetic and motivating tone while staying concrete and direct.',
@@ -1620,18 +1630,18 @@ function showResponseRecoveryCard(userMessage = '') {
     const displayMessage = sanitizeUserFacingRequestText(userMessage) ||
         getLastVisibleUserMessage() ||
         sanitizeUserFacingRequestText(window.__lastUserMessage || '') ||
-        'that request';
-    const safeMessage = escapeHtml(displayMessage.slice(0, 140));
+        '';
     const canStop = Boolean(activeRequestController && !activeRequestController.signal?.aborted);
     const card = document.createElement('div');
     card.id = 'response-recovery-card';
+    card.dataset.retryPrompt = displayMessage.slice(0, 240);
     card.className = 'chat-row flex justify-start fade-in';
     card.innerHTML = `
-        <div class="chat-bubble-assistant assistant-message-text">
-            <p class="assistant-md-p"><strong>Response paused.</strong> ${safeMessage ? `Last request: ${safeMessage}` : ''}</p>
-            <div class="flex flex-wrap gap-2 mt-2">
-                <button type="button" class="memory-action-btn" onclick="retryLastRequest(); document.getElementById('response-recovery-card')?.remove();">Retry</button>
-                ${canStop ? `<button type="button" class="memory-action-btn" onclick="stopActiveGeneration('manual'); document.getElementById('response-recovery-card')?.remove();">Stop</button>` : ''}
+        <div class="response-recovery-panel">
+            <div class="response-recovery-title">Response paused</div>
+            <div class="response-recovery-actions">
+                <button type="button" class="response-recovery-btn primary" onclick="retryLastRequest(); document.getElementById('response-recovery-card')?.remove();">Retry</button>
+                ${canStop ? `<button type="button" class="response-recovery-btn secondary" onclick="stopActiveGeneration('manual'); document.getElementById('response-recovery-card')?.remove();">Stop</button>` : ''}
             </div>
         </div>
     `;
@@ -2422,7 +2432,7 @@ async function processUserQuery(text, options = {}) {
         riskLevel,
         broadFactualWeb
     });
-    if (isExplicitWebSearchRequest(t)) {
+    if (LIVE_RETRIEVAL_ENABLED && isExplicitWebSearchRequest(t)) {
         logRoutingDebug('processUserQuery -> live_retrieval explicit_web', t, {
             selectedHandler: 'handleLiveRetrievalQuery',
             normalizedQuery: normalizeExplicitWebSearchQuery(t),
@@ -2433,7 +2443,7 @@ async function processUserQuery(text, options = {}) {
         await handleLiveRetrievalQuery(normalizeExplicitWebSearchQuery(t));
         return { intent: 'live_retrieval' };
     }
-    if (isStrictLatestQuery(t)) {
+    if (LIVE_RETRIEVAL_ENABLED && isStrictLatestQuery(t)) {
         logRoutingDebug('processUserQuery -> strict_latest', t, {
             selectedHandler: 'handleStrictLatestQuery',
             liveIntent,
@@ -2454,7 +2464,7 @@ async function processUserQuery(text, options = {}) {
         return await askGeminiAI(t);
     }
 
-    if (isHeadlineListQuery(t) || shouldUseNewsEndpointForCurrentQuery(t) || isNewsworthyLiveTopic(t)) {
+    if (LIVE_RETRIEVAL_ENABLED && (isHeadlineListQuery(t) || shouldUseNewsEndpointForCurrentQuery(t) || isNewsworthyLiveTopic(t))) {
         logRoutingDebug('processUserQuery -> news', t, {
             selectedHandler: 'fetchAndDisplayNews',
             liveIntent,
@@ -2465,7 +2475,7 @@ async function processUserQuery(text, options = {}) {
         return { intent: 'news' };
     }
 
-    if (broadFactualWeb) {
+    if (LIVE_RETRIEVAL_ENABLED && broadFactualWeb) {
         if (entityIntent?.isEntityFact) {
             logRoutingDebug('processUserQuery -> entity_fact broad_factual', t, {
                 selectedHandler: 'handleUniversalEntityFactQuery',
@@ -2489,6 +2499,7 @@ async function processUserQuery(text, options = {}) {
     }
 
     if (
+        LIVE_RETRIEVAL_ENABLED &&
         riskLevel !== 'low_risk' &&
         (isCurrentInfoQuery(t) || isLiveRetrievalQuery(t) || isUniversalEntityFactQuestion(t) || isProfileOrIdentityQuery(t))
     ) {
@@ -3646,11 +3657,12 @@ function asksUserToProvideSources(text) {
 }
 
 async function resolveFinalAssistantAnswer(userMessage, answerText) {
-    if (requiresLiveSourceAnswer(userMessage)) {
-        return LIVE_DISABLED_MESSAGE;
-    }
     if (asksUserToProvideSources(answerText)) {
-        if (!LIVE_RETRIEVAL_ENABLED) return LIVE_DISABLED_MESSAGE;
+        if (!LIVE_RETRIEVAL_ENABLED) {
+            const cleanAnswer = sanitizeWeakModelAnswer(answerText, userMessage);
+            if (cleanAnswer) return cleanAnswer;
+            return String(answerText || '').trim();
+        }
     }
     const safeAnswer = sanitizeWeakModelAnswer(answerText, userMessage);
     if (safeAnswer) return safeAnswer;
@@ -16518,7 +16530,7 @@ function detectInputLanguageHint(text) {
                 if (handled) return;
             }
 
-            if (liveSourceRequired) {
+            if (LIVE_RETRIEVAL_ENABLED && liveSourceRequired) {
                 logRoutingDebug('processCommand -> live_source_required', cleanText, {
                     selectedHandler: 'handleLiveRetrievalQuery',
                     answerPath,
@@ -16532,7 +16544,7 @@ function detectInputLanguageHint(text) {
                 if (handled) return;
             }
 
-            if (isStrictLatestQuery(cleanText)) {
+            if (LIVE_RETRIEVAL_ENABLED && isStrictLatestQuery(cleanText)) {
                 logRoutingDebug('processCommand -> strict_latest', cleanText, {
                     selectedHandler: 'handleStrictLatestQuery',
                     answerPath,
@@ -16554,7 +16566,7 @@ function detectInputLanguageHint(text) {
                 if (handled) return;
             }
 
-            if (answerPath === 'entity_fact') {
+            if (LIVE_RETRIEVAL_ENABLED && answerPath === 'entity_fact') {
                 const entityFactIntent = classification.liveIntent;
                 logRoutingDebug('processCommand -> entity_fact', cleanText, {
                     selectedHandler: 'handleUniversalEntityFactQuery',
@@ -16577,6 +16589,7 @@ function detectInputLanguageHint(text) {
             }
 
             if (answerPath !== 'entity_fact' &&
+                LIVE_RETRIEVAL_ENABLED &&
                 hybridMode === 'verify_first' &&
                 !isStableBiographyQuestion(cleanText) &&
                 fallbackEntityIntent?.isEntityFact) {
@@ -16591,7 +16604,7 @@ function detectInputLanguageHint(text) {
                 if (handled) return;
             }
 
-            if (answerPath === 'current_info') {
+            if (LIVE_RETRIEVAL_ENABLED && answerPath === 'current_info') {
                 logRoutingDebug('processCommand -> current_info', cleanText, {
                     selectedHandler: 'current_info_router',
                     answerPath,
@@ -16642,7 +16655,7 @@ function detectInputLanguageHint(text) {
                 if (handled) return;
             }
 
-            if (answerPath === 'web_search') {
+            if (LIVE_RETRIEVAL_ENABLED && answerPath === 'web_search') {
                 const normalizedWebQuery = normalizeExplicitWebSearchQuery(cleanText);
                 logRoutingDebug('processCommand -> web_search', cleanText, {
                     selectedHandler: 'handleLiveRetrievalQuery',
@@ -16655,7 +16668,7 @@ function detectInputLanguageHint(text) {
                 if (handled) return;
             }
 
-            if (answerPath === 'broad_factual_web') {
+            if (LIVE_RETRIEVAL_ENABLED && answerPath === 'broad_factual_web') {
                 logRoutingDebug('processCommand -> broad_factual_web', cleanText, {
                     selectedHandler: fallbackEntityIntent?.isEntityFact ? 'handleUniversalEntityFactQuery' : 'handleLiveRetrievalQuery',
                     answerPath,
@@ -16690,12 +16703,12 @@ function detectInputLanguageHint(text) {
                 if (handled) return;
             }
 
-            if (answerPath === 'news') {
+            if (LIVE_RETRIEVAL_ENABLED && answerPath === 'news') {
                 await fetchAndDisplayNews(cleanText);
                 return;
             }
 
-            if (answerPath === 'live_retrieval') {
+            if (LIVE_RETRIEVAL_ENABLED && answerPath === 'live_retrieval') {
                 if (!liveSourceRequired && hybridMode === 'answer_then_cite') {
                     const handled = await handleAnswerThenCiteQuery(cleanText, classification);
                     if (handled) return;
@@ -19184,10 +19197,47 @@ function hideTypingIndicator() {
     }
 }
 
+let textInputDialogResolver = null;
+
+function openTextInputDialog(options = {}) {
+    const backdrop = document.getElementById('text-input-dialog-backdrop');
+    const title = document.getElementById('text-input-dialog-title');
+    const input = document.getElementById('text-input-dialog-value');
+    if (!backdrop || !title || !input) return Promise.resolve(null);
+    title.textContent = String(options.title || 'Edit message');
+    input.value = String(options.value || '');
+    input.setAttribute('aria-label', String(options.label || options.title || 'Edit message'));
+    backdrop.classList.remove('hidden');
+    return new Promise(resolve => {
+        textInputDialogResolver = resolve;
+        setTimeout(() => {
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
+        }, 0);
+    });
+}
+
+function closeTextInputDialog(value) {
+    const backdrop = document.getElementById('text-input-dialog-backdrop');
+    backdrop?.classList.add('hidden');
+    const resolver = textInputDialogResolver;
+    textInputDialogResolver = null;
+    if (resolver) resolver(value);
+}
+
+function submitTextInputDialog() {
+    const input = document.getElementById('text-input-dialog-value');
+    closeTextInputDialog(input ? input.value : '');
+}
+
 async function editMessage(button) {
     const currentRaw = button?.dataset?.message ? decodeURIComponent(button.dataset.message) : '';
     const currentText = currentRaw || button?.closest('.chat-bubble-user')?.querySelector('p')?.innerText || '';
-    const edited = window.prompt('Edit your message:', currentText);
+    const edited = await openTextInputDialog({
+        title: 'Edit message',
+        label: 'Edit message',
+        value: currentText
+    });
     if (edited === null) return;
 
     const nextText = edited.trim();
