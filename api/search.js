@@ -18,6 +18,7 @@ const REDDIT_SEARCH_URL = 'https://www.reddit.com/search.json';
 const BRITANNICA_SEARCH_URL = 'https://www.britannica.com/search';
 const ARCHIVE_TODAY_SEARCH_URL = 'https://archive.today/search/';
 const GDELT_DOC_URL = 'https://api.gdeltproject.org/api/v2/doc/doc';
+const EXA_SEARCH_URL = 'https://api.exa.ai/search';
 const GEMINI_GENERATE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const SEARCH_TIMEOUT_MS = 8_000;
 const PUBLIC_SOURCE_TIMEOUT_MS = 5_000;
@@ -622,6 +623,52 @@ export async function searchSerper(query, options = {}) {
     return normalizeSerperResults(data, normalizedQuery).slice(0, limit);
 }
 
+export async function searchExa(query, options = {}) {
+    const apiKey = getExaApiKey();
+    if (!apiKey) return [];
+
+    const normalizedQuery = normalizeSearchQuery(query);
+    if (!normalizedQuery) return [];
+
+    const limit = clampInt(options.limit, 8, 1, 20);
+    const plannedQueries = Array.isArray(options.plannedQueries)
+        ? options.plannedQueries.map(item => normalizeSearchQuery(item)).filter(Boolean)
+        : [];
+    const querySet = Array.from(new Set([normalizedQuery, ...plannedQueries])).slice(0, 4);
+    const settled = await Promise.allSettled(querySet.map(async (candidate, queryIndex) => {
+        const response = await fetchWithTimeout(EXA_SEARCH_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': apiKey
+            },
+            body: JSON.stringify({
+                query: candidate,
+                type: 'auto',
+                numResults: Math.min(limit, 10),
+                contents: {
+                    text: { maxCharacters: 3000 },
+                    summary: true
+                }
+            })
+        }, SEARCH_TIMEOUT_MS);
+        if (!response.ok) {
+            const detail = await response.text().catch(() => '');
+            throw createSearchError({
+                code: `exa_status_${response.status}`,
+                httpStatus: response.status,
+                publicMessage: `Exa search failed${detail ? `: ${sanitizeProviderDetail(detail)}` : '.'}`,
+                retryable: response.status >= 500 || response.status === 429
+            });
+        }
+        const data = await response.json();
+        return normalizeExaResults(data, normalizedQuery, queryIndex);
+    }));
+
+    return dedupeSearchResults(settled.flatMap(result => result.status === 'fulfilled' ? result.value : []))
+        .slice(0, limit);
+}
+
 export async function runVerifiedWebSearch(query, options = {}) {
     const limit = clampInt(options.limit, 8, 1, 20);
     const planning = await buildGeminiSearchPlan(query).catch(error => ({
@@ -677,6 +724,13 @@ export async function runEvidenceFirstWebRag(query, options = {}) {
 
     for (let i = 0; i < phases.length; i += 1) {
         const phaseQueries = phases[i];
+        const exaResults = await searchExa(normalizedQuery, {
+            limit,
+            plannedQueries: phaseQueries
+        }).catch(error => {
+            warnings.push(`exa_phase_${i + 1}_failed:${String(error?.code || error?.message || 'unknown')}`);
+            return [];
+        });
         const phaseResults = await searchPublicSources(normalizedQuery, {
             limit,
             plannedQueries: phaseQueries,
@@ -685,7 +739,7 @@ export async function runEvidenceFirstWebRag(query, options = {}) {
             warnings.push(`rag_phase_${i + 1}_failed:${String(error?.code || error?.message || 'unknown')}`);
             return [];
         });
-        for (const item of phaseResults) {
+        for (const item of [...exaResults, ...phaseResults]) {
             const key = normalizeResultKey(item);
             if (!key || seen.has(key)) continue;
             seen.add(key);
@@ -1394,6 +1448,40 @@ function normalizeSerperItem(item, query, index) {
         trusted: isTrustedLiveSource(domain),
         qualitySignals: [
             'serper',
+            isTrustedLiveSource(domain) ? 'trusted_domain' : ''
+        ].filter(Boolean),
+        query
+    };
+}
+
+function normalizeExaResults(data, query, queryIndex = 0) {
+    const results = Array.isArray(data?.results) ? data.results : [];
+    return results
+        .map((item, index) => normalizeExaItem(item, query, (queryIndex * 20) + index))
+        .filter(item => item.title && item.url);
+}
+
+function normalizeExaItem(item, query, index) {
+    const url = String(item?.url || '').trim();
+    const domain = getDomainFromUrl(url);
+    const text = String(item?.text || item?.highlights?.join(' ') || '').replace(/\s+/g, ' ').trim();
+    const summary = String(item?.summary || item?.content || item?.snippet || '').replace(/\s+/g, ' ').trim();
+    const description = (summary || text || String(item?.title || '')).slice(0, 520);
+    return {
+        title: String(item?.title || domain || 'Exa result').replace(/\s+/g, ' ').trim(),
+        description,
+        text: text.slice(0, 4000),
+        url,
+        domain,
+        source: domain || 'Exa',
+        sourceType: isTrustedLiveSource(domain) ? 'exa_trusted_web' : 'exa_web',
+        sourceLabel: domain ? `${domain} via Exa` : 'Exa',
+        date: String(item?.publishedDate || item?.published_date || item?.date || '').trim(),
+        freshness: String(item?.publishedDate || item?.published_date || item?.date || '').trim() ? 'dated' : 'unknown',
+        position: index + 1,
+        trusted: isTrustedLiveSource(domain),
+        qualitySignals: [
+            'exa_search',
             isTrustedLiveSource(domain) ? 'trusted_domain' : ''
         ].filter(Boolean),
         query
@@ -2174,7 +2262,7 @@ export function isValidCitationSource(source, query = '') {
     if (sourceType === 'official_source' && !item.pageFetched) return false;
     if (item.evidenceLevel === 'structured_claim') return true;
     if (sourceType === 'official_source') return Boolean(item.exactShortcutMatch) || isRelatedToQuery(query, item);
-    if (/^(encyclopedia|structured_reference|trusted_news|public_news|cached_latest|free_)/.test(sourceType)) {
+    if (/^(encyclopedia|structured_reference|trusted_news|public_news|cached_latest|free_|exa_)/.test(sourceType)) {
         return isRelatedToQuery(query, item);
     }
     return false;
@@ -2449,6 +2537,10 @@ function getSerperApiKey() {
     return String(process.env.SERPER_API_KEY || process.env.SERPER_KEY || '').trim();
 }
 
+function getExaApiKey() {
+    return String(process.env.EXA_API_KEY || process.env.EXA_KEY || '').trim();
+}
+
 function getGeminiApiKey() {
     return String(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
 }
@@ -2474,6 +2566,8 @@ export const __test = {
     createSerperStatusError,
     getSerperKeyFingerprint,
     normalizeSerperResults,
+    normalizeExaResults,
+    searchExa,
     runVerifiedWebSearch,
     runEvidenceFirstWebRag,
     searchGdeltNews,
