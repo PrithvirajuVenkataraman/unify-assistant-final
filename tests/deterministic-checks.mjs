@@ -12,6 +12,7 @@ const SOURCE = Object.freeze({
     appHtml: fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8'),
     styles: fs.readFileSync(new URL('../styles.css', import.meta.url), 'utf8'),
     apiIndex: fs.readFileSync(new URL('../api/index.js', import.meta.url), 'utf8'),
+    diagnosticsApi: fs.readFileSync(new URL('../api/diagnostics.js', import.meta.url), 'utf8'),
     searchApi: fs.readFileSync(new URL('../api/search.js', import.meta.url), 'utf8'),
     embeddingsApi: fs.readFileSync(new URL('../api/_lib/embeddings.js', import.meta.url), 'utf8'),
     visionApi: fs.readFileSync(new URL('../api/vision.js', import.meta.url), 'utf8'),
@@ -432,7 +433,7 @@ assert.match(SOURCE.readme, /Verification/);
 assert.doesNotMatch(SOURCE.readme, /OCR Uploads/);
 assert.doesNotMatch(SOURCE.readme, /OCR_MAX_FILE_BYTES/);
 assert.doesNotMatch(SOURCE.readme, /Vercel-safe 3 MB decoded file limit/);
-assert.doesNotMatch(SOURCE.readme, /Environment Variables|Local Testing|npm run dev|CRAWL4AI_URL/);
+assert.doesNotMatch(SOURCE.readme, /Local Testing|npm run dev/);
 assert.match(SOURCE.appHtml, /localStorage when memory persistence is enabled/);
 assert.doesNotMatch(SOURCE.appHtml, /id="upload-file-btn"/);
 assert.doesNotMatch(SOURCE.appHtml, /id="document-upload-input"/);
@@ -750,6 +751,23 @@ assert.deepEqual(visiblePromptSandbox.inputHistory, ['What is this phone?']);
 assert.match(extractFunctionSource(SOURCE.appHtml, 'showResponseRecoveryCard'), /sanitizeUserFacingRequestText\(userMessage\)/);
 assert.doesNotMatch(extractFunctionSource(SOURCE.appHtml, 'showResponseRecoveryCard'), /String\(userMessage \|\| window\.__lastUserMessage/);
 assert.doesNotMatch(SOURCE.appHtml, /Response paused|Last request|response-recovery-title|response-recovery-btn/);
+assert.match(SOURCE.appHtml, /function isWeakAssistantAnswerForRetry/);
+assert.match(SOURCE.appHtml, /chat_weak_answer_retry/);
+assert.match(SOURCE.appHtml, /Understanding/);
+assert.match(SOURCE.appHtml, /Drafting/);
+assert.match(SOURCE.appHtml, /Finalizing/);
+assert.match(SOURCE.appHtml, /function normalizePastedPromptText/);
+assert.match(SOURCE.appHtml, /data-assistant-action="save_memory"/);
+assert.match(SOURCE.appHtml, /function saveAssistantMessageToMemory/);
+assert.match(SOURCE.appHtml, /function getChatSessionSearchSnippet/);
+assert.match(SOURCE.appHtml, /chat-session-snippet/);
+assert.match(SOURCE.appHtml, /function buildLearnedAnswerStyleHint/);
+assert.match(SOURCE.appHtml, /function showDeploymentDiagnostics/);
+assert.match(SOURCE.apiIndex, /diagnosticsHandler/);
+assert.match(SOURCE.diagnosticsApi, /buildDiagnosticsStatus/);
+assert.doesNotMatch(SOURCE.diagnosticsApi, /process\.env\[[^\]]+\][^;]*json/);
+assert.match(SOURCE.readme, /LIVE_RETRIEVAL_ENABLED=true/);
+assert.match(SOURCE.readme, /live search is disabled by default/i);
 assert.doesNotMatch(SOURCE.styles, /response-recovery-panel|response-recovery-title|response-recovery-btn/);
 assert.match(extractFunctionSource(SOURCE.appHtml, 'stopActiveGeneration'), /activeRequestController\s*=\s*null/);
 assert.match(extractFunctionSource(SOURCE.appHtml, 'stopActiveGeneration'), /resetAssistantProcessingState\(\)/);
