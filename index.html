@@ -3634,6 +3634,37 @@ function sanitizeWeakModelAnswer(answerText, userMessage) {
     return raw;
 }
 
+function isWeakAssistantAnswerForRetry(answerText, userMessage = '') {
+    const answer = String(answerText || '').trim();
+    if (!answer) return true;
+    const lower = answer.toLowerCase();
+    if (answer.length < 28 && /\b(sorry|unclear|unsure|not sure|cannot help|can't help)\b/.test(lower)) return true;
+    const weakPatterns = [
+        /\bi'?m not sure\b/,
+        /\bi am not sure\b/,
+        /\bi cannot verify\b/,
+        /\bi can't verify\b/,
+        /\bi do not have enough information\b/,
+        /\bi don't have enough information\b/,
+        /\bcheck (?:online|the internet|latest news|official sources)\b/,
+        /\bconsult (?:a|an|the) (?:professional|expert|official source)\b/,
+        /\bi (?:recommend|suggest) (?:checking|looking)\b/,
+        /\bas an ai\b/,
+        /\bi don'?t have access to\b/,
+        /\bi do not have access to\b/
+    ];
+    if (weakPatterns.some(pattern => pattern.test(lower))) return true;
+    if (isLowSignalModelAnswer(answer)) return true;
+    const user = String(userMessage || '').trim().toLowerCase();
+    return /^(what|who|when|where|why|how|explain|define|tell me)\b/.test(user) &&
+        /\b(can you clarify|provide more context)\b/.test(lower);
+}
+
+function buildWeakAnswerRetryMessage(userMessage) {
+    const text = String(userMessage || '').trim();
+    return `${text}\n\nAnswer the user's request directly. Do not mention uncertainty, model limitations, or checking online unless the answer truly cannot be produced. If a current/live fact is required and live retrieval is unavailable, say only: "I could not verify this from available sources." Otherwise give the best concise answer.`;
+}
+
 function asksUserToProvideSources(text) {
     const t = String(text || '').toLowerCase();
     return /\b(?:provide|share|give|send|paste)\b[\s\S]{0,60}\b(?:source|sources|link|links|url|urls)\b/.test(t) ||
@@ -4100,6 +4131,60 @@ function parseSseClientEvent(rawEvent) {
 
 const USER_PROFILE_STORAGE_KEY = 'jarvis_user_profile';
 const LEGACY_DEFAULT_USER_STORAGE_KEY = 'unify_user_data_default_user';
+const LOCAL_STYLE_LEARNING_KEY = 'jarvis_local_answer_style_learning';
+
+function loadLocalStyleLearning() {
+    try {
+        const raw = localStorage.getItem(LOCAL_STYLE_LEARNING_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return {
+            shorter: Number(parsed.shorter) || 0,
+            simpler: Number(parsed.simpler) || 0,
+            structured: Number(parsed.structured) || 0
+        };
+    } catch (_) {
+        return { shorter: 0, simpler: 0, structured: 0 };
+    }
+}
+
+function saveLocalStyleLearning(next) {
+    try {
+        localStorage.setItem(LOCAL_STYLE_LEARNING_KEY, JSON.stringify({
+            shorter: Math.max(0, Number(next?.shorter) || 0),
+            simpler: Math.max(0, Number(next?.simpler) || 0),
+            structured: Math.max(0, Number(next?.structured) || 0)
+        }));
+    } catch (_) {}
+}
+
+function learnAnswerStyleFromUserMessage(message) {
+    const text = String(message || '').toLowerCase();
+    if (!text) return;
+    const state = loadLocalStyleLearning();
+    let changed = false;
+    if (/\b(make|keep|be)\s+(it\s+)?(short|shorter|brief|concise)\b|\btoo long\b/.test(text)) {
+        state.shorter += 1;
+        changed = true;
+    }
+    if (/\b(explain|say|teach)\s+(it\s+)?(simply|simple|easier)\b|\blike i'?m (?:a )?(?:beginner|kid|new)\b/.test(text)) {
+        state.simpler += 1;
+        changed = true;
+    }
+    if (/\b(step by step|steps|bullets|structured|table)\b/.test(text)) {
+        state.structured += 1;
+        changed = true;
+    }
+    if (changed) saveLocalStyleLearning(state);
+}
+
+function buildLearnedAnswerStyleHint() {
+    const state = loadLocalStyleLearning();
+    const hints = [];
+    if (state.shorter >= 2) hints.push('prefer concise answers unless the user asks for detail');
+    if (state.simpler >= 2) hints.push('use simpler wording and explain jargon briefly');
+    if (state.structured >= 2) hints.push('use light structure when it improves scanability');
+    return hints.length ? `\nLocal answer-style hints: ${hints.join('; ')}. Treat these as soft preferences.` : '';
+}
 
 async function askGeminiAI(userMessage, requestOptions = {}) {
     const normalizedUserMessage = String(userMessage || '').trim();
@@ -4154,9 +4239,10 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
         const relevantSavedMemoryContext = requestOptions?.grounding
             ? ''
             : buildRelevantSavedMemoryContext(normalizedUserMessage);
+        const learnedStyleHint = buildLearnedAnswerStyleHint();
         const effectiveMessage = requestOptions?.grounding
             ? normalizedUserMessage
-            : `${normalizedUserMessage}${relevantSavedMemoryContext}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\nPrompt-requested explanation style: ${activeLearningMode}. ${learningHint}${languageReplyHint}\n${conciseFactHint}\n${directExplainerHint}\n\nStyle requirements: Be specific, avoid repetition, and stay natural.`; 
+            : `${normalizedUserMessage}${relevantSavedMemoryContext}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\nPrompt-requested explanation style: ${activeLearningMode}. ${learningHint}${languageReplyHint}\n${conciseFactHint}\n${directExplainerHint}${learnedStyleHint}\n\nStyle requirements: Be specific, avoid repetition, and stay natural.`; 
 
          
         const requestPayload = { 
@@ -4203,6 +4289,46 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
         if (!data.response && typeof data.text === 'string') {
             data.text = postProcessAssistantResponse(data.text, normalizedUserMessage);
             data.text = sanitizeWeakModelAnswer(data.text, normalizedUserMessage);
+        }
+
+        const resolvedAnswerText = String(data.response || data.text || '').trim();
+        if (!requestOptions?.weakRetry && isWeakAssistantAnswerForRetry(resolvedAnswerText, normalizedUserMessage)) {
+            const retryPayload = {
+                ...requestPayload,
+                message: buildWeakAnswerRetryMessage(normalizedUserMessage) + learnedStyleHint,
+                intent: requestOptions?.intent || 'chat'
+            };
+            logLatencyTrace('chat_weak_answer_retry', {
+                requestId: latencyTrace.requestId,
+                stream: false
+            });
+            showThinkingIndicator('Finalizing');
+            const retryData = await window.JarvisApi.postJson('/api/chat-groq', retryPayload, {
+                signal: controller.signal,
+                timeoutMs: 25000
+            });
+            const retryText = postProcessAssistantResponse(retryData?.response || retryData?.text || '', normalizedUserMessage);
+            const retryClean = sanitizeWeakModelAnswer(retryText, normalizedUserMessage);
+            if (retryClean && !isWeakAssistantAnswerForRetry(retryClean, normalizedUserMessage)) {
+                if (data?.assistantMessageId) {
+                    updateStreamingAssistantMessage(data.assistantMessageId, retryClean, {
+                        userMessage: normalizedUserMessage
+                    });
+                }
+                return {
+                    ...retryData,
+                    response: retryClean,
+                    assistantMessageId: data?.assistantMessageId || retryData?.assistantMessageId || '',
+                    intent: retryData?.intent || 'weak_retry'
+                };
+            }
+            if (!resolvedAnswerText) {
+                if (data?.assistantMessageId) discardStreamingAssistantMessage(data.assistantMessageId);
+                return {
+                    response: 'I could not produce a reliable answer for that request.',
+                    intent: 'weak_retry_fallback'
+                };
+            }
         }
 
         if (!String(data.response || data.text || '').trim()) {
@@ -4851,8 +4977,7 @@ let showRoutingDebugBadge = false;
             } else {
                 input.setSelectionRange?.(input.value.length, input.value.length);
             }
-            autoResizeComposerTextarea();
-            toggleSendButton();
+            handleComposerInput();
         }
 
         function initSlashCommandPicker() {
@@ -4860,6 +4985,7 @@ let showRoutingDebugBadge = false;
             window.__slashCommandPickerInit = true;
             const input = document.getElementById('text-input');
             if (!input) return;
+            input.addEventListener('paste', handleComposerPaste);
             input.addEventListener('keydown', event => {
                 const picker = getSlashCommandPicker();
                 if (picker) {
@@ -5036,6 +5162,7 @@ let showRoutingDebugBadge = false;
         let activeTypewriterTimeouts = new Set();
         let activeTypewriterRuns = new Set();
         let responseRecoveryTimer = null;
+        let thinkingPhaseTimer = null;
 
         function beginAssistantProcessing() {
             assistantProcessingDepth += 1;
@@ -6168,7 +6295,8 @@ let showRoutingDebugBadge = false;
                 ask: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.7-2.5 2-2.5 3.5"></path><path d="M12 17h.01"></path></svg>',
                 verify: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l2 2 4-5"></path><path d="M21 12a9 9 0 1 1-3.4-7"></path><path d="M21 3v6h-6"></path></svg>',
                 edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path></svg>',
-                file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M8 13h8"></path><path d="M8 17h5"></path></svg>'
+                file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M8 13h8"></path><path d="M8 17h5"></path></svg>',
+                memory: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v14l-4-2-4 2-4-2-4 2V5z"></path><path d="M8 7h8"></path><path d="M8 11h6"></path></svg>'
             };
             return icons[name] || icons.dots;
         }
@@ -6222,6 +6350,7 @@ let showRoutingDebugBadge = false;
                         <div id="assistant-action-menu-${safeId}" class="assistant-action-menu hidden" role="menu" data-message-id="${safeId}"> 
                             <button type="button" data-assistant-action="ask" onclick="return handleAssistantActionInline(event, '${safeId}', 'ask')" role="menuitem">${getActionIconSvg('ask')}<span>Ask JARVIS</span></button> 
                             <button type="button" data-assistant-action="verify" onclick="return handleAssistantActionInline(event, '${safeId}', 'verify')" role="menuitem">${getActionIconSvg('verify')}<span>Verify this</span></button> 
+                            <button type="button" data-assistant-action="save_memory" onclick="return handleAssistantActionInline(event, '${safeId}', 'save_memory')" role="menuitem">${getActionIconSvg('memory')}<span>Save to memory</span></button> 
                         </div> 
                     </div>
                 </div>
@@ -6234,6 +6363,7 @@ let showRoutingDebugBadge = false;
             regenerate: regenerateAssistantMessage,
             ask: askJarvisAboutMessage,
             verify: verifyAssistantMessage,
+            save_memory: saveAssistantMessageToMemory,
             copy_clean: copyCleanAssistantMessage,
             copy_sources: copyAssistantMessageWithSources,
             export_markdown: exportAssistantMessageMarkdown,
@@ -6345,6 +6475,46 @@ let showRoutingDebugBadge = false;
             if (!meta?.text) return;
             copyToClipboard(meta.text);
             closeAssistantActionMenus();
+        }
+
+        function buildMemoryKeyFromText(text) {
+            const clean = String(text || '')
+                .replace(/https?:\/\/\S+/g, '')
+                .replace(/[^\w\s-]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .slice(0, 80);
+            const words = clean.split(/\s+/).filter(Boolean).slice(0, 7).join(' ');
+            return normalizeThing(words || 'saved note');
+        }
+
+        async function saveAssistantMessageToMemory(messageId) {
+            const meta = getAssistantMessageMeta(messageId);
+            const rawText = stripSourcesFromAssistantText(meta?.text || '');
+            const suggested = rawText
+                .replace(/\s+/g, ' ')
+                .trim()
+                .slice(0, 700);
+            if (!suggested) {
+                showTemporaryMessage('There is no message text to save.');
+                return;
+            }
+            const confirmed = await openTextInputDialog({
+                title: 'Save to memory',
+                label: 'Memory text',
+                value: suggested
+            });
+            if (confirmed === null) return;
+            const cleanValue = String(confirmed || '').trim();
+            if (!cleanValue) {
+                showTemporaryMessage('Memory cannot be empty.');
+                return;
+            }
+            const key = buildMemoryKeyFromText(cleanValue);
+            memoryStore[key] = createExplicitMemoryRecord(key, cleanValue, 'saved from message', 'note');
+            saveUserData();
+            refreshPrivacyDataSummary();
+            showTemporaryMessage('Saved to memory.');
         }
 
         function stripSourcesFromAssistantText(text) {
@@ -7973,8 +8143,40 @@ ${code}
         }
 
         function handleComposerInput() {
+            const input = document.getElementById('text-input');
+            if (input && input.value.trim() !== '/') {
+                closeSlashCommandPicker();
+            }
+            const inputBar = document.getElementById('input-bar-inner');
+            if (inputBar && input) {
+                inputBar.classList.toggle('composer-has-mode', !!input.dataset.inputSource || input.value.trim() === '/');
+            }
             autoResizeComposerTextarea();
             toggleSendButton();
+        }
+
+        function normalizePastedPromptText(text) {
+            return String(text || '')
+                .replace(/\r\n?/g, '\n')
+                .replace(/[ \t]+\n/g, '\n')
+                .replace(/\n{4,}/g, '\n\n')
+                .replace(/[ \t]{3,}/g, ' ')
+                .trim();
+        }
+
+        function handleComposerPaste(event) {
+            const input = document.getElementById('text-input');
+            const raw = event?.clipboardData?.getData?.('text');
+            if (!input || typeof raw !== 'string') return;
+            const cleaned = normalizePastedPromptText(raw);
+            if (cleaned === raw) return;
+            event.preventDefault();
+            const start = Number(input.selectionStart || 0);
+            const end = Number(input.selectionEnd || start);
+            input.value = `${input.value.slice(0, start)}${cleaned}${input.value.slice(end)}`;
+            const caret = start + cleaned.length;
+            input.setSelectionRange?.(caret, caret);
+            handleComposerInput();
         }
 
         function handleComposerKeydown(event) {
@@ -8043,6 +8245,39 @@ ${code}
             return false;
         }
 
+        function isDiagnosticsCommand(text) {
+            return /^(diagnostics|system diagnostics|show diagnostics|deployment diagnostics)$/i.test(String(text || '').trim());
+        }
+
+        function formatBooleanStatus(value) {
+            return value ? 'Yes' : 'No';
+        }
+
+        async function showDeploymentDiagnostics() {
+            try {
+                showThinkingIndicator('Checking diagnostics');
+                const data = await window.JarvisApi.postJson('/api/diagnostics', {}, { timeoutMs: 12000 });
+                const status = data?.diagnostics || {};
+                const lines = [
+                    'Deployment diagnostics',
+                    '',
+                    `Groq model configured: ${formatBooleanStatus(status.model?.groqConfigured)}`,
+                    `Gemini model configured: ${formatBooleanStatus(status.model?.geminiConfigured)}`,
+                    `Streaming available: ${formatBooleanStatus(status.streaming?.available)}`,
+                    `Vision configured: ${formatBooleanStatus(status.vision?.configured)}`,
+                    `Live search enabled: ${formatBooleanStatus(status.retrieval?.liveSearchEnabled)}`,
+                    `Exa configured: ${formatBooleanStatus(status.retrieval?.exaConfigured)}`,
+                    `NVIDIA reranking configured: ${formatBooleanStatus(status.retrieval?.nvidiaConfigured)}`,
+                    `Crawl4AI configured: ${formatBooleanStatus(status.retrieval?.crawl4aiConfigured)}`
+                ];
+                addChatMessage(lines.join('\n'), false, false, { sourceType: 'tool' });
+            } catch (_) {
+                addChatMessage('Diagnostics are unavailable right now.', false, false, { sourceType: 'tool' });
+            } finally {
+                hideThinkingIndicator();
+            }
+        }
+
 async function sendTextInput(submission = {}) {
             const sendTrace = {
                 requestId: `send_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
@@ -8099,6 +8334,7 @@ async function sendTextInput(submission = {}) {
                 lastSubmissionTimestamp = now;
 
                 const outgoingText = text;
+                learnAnswerStyleFromUserMessage(outgoingText);
                 const normalizedOutgoingText = isLikelyCodeInput(outgoingText)
                     ? outgoingText
                     : normalizeIntentTypos(outgoingText);
@@ -8120,6 +8356,17 @@ async function sendTextInput(submission = {}) {
                 addVisibleInputHistory(outgoingText);
                 inputHistoryIndex = -1;
                 addChatMessage(outgoingText, true, null, { turnId: turn.id });
+
+                if (isDiagnosticsCommand(outgoingText)) {
+                    beginAssistantProcessing();
+                    try {
+                        await showDeploymentDiagnostics();
+                    } finally {
+                        endAssistantProcessing();
+                        restoreResponseRenderContext(previousRenderContext);
+                    }
+                    return;
+                }
 
                 beginAssistantProcessing();
                 showThinkingIndicator('Thinking');
@@ -19270,6 +19517,7 @@ let activeChatSessionMenuId = '';
 let pendingChatDeleteSessionId = '';
 let chatSessionLongPressTimer = null;
 let isRestoringChatSession = false;
+let pendingChatRestoreSearchQuery = '';
 
 const CHAT_SESSIONS_STORAGE_KEY = 'jarvis_chat_sessions_v1';
 const CHAT_ACTIVE_DRAFT_STORAGE_KEY = 'jarvis_active_empty_chat_draft_v1';
@@ -19780,6 +20028,9 @@ function restoreChatSession(sessionId) {
     }
     closeChatSidebar();
     renderChatSidebarList();
+    const query = pendingChatRestoreSearchQuery;
+    pendingChatRestoreSearchQuery = '';
+    if (query) setTimeout(() => scrollToRestoredChatMatch(query), 80);
 }
 
 function searchChatSessionText(session) {
@@ -19787,6 +20038,34 @@ function searchChatSessionText(session) {
         session.title,
         ...(session.messages || []).map(item => item.text)
     ].join(' ').toLowerCase();
+}
+
+function getChatSessionSearchSnippet(session, query) {
+    const q = String(query || '').toLowerCase().trim();
+    if (!q) return '';
+    const messages = Array.isArray(session?.messages) ? session.messages : [];
+    const match = messages.find(item => String(item?.text || '').toLowerCase().includes(q));
+    const text = String(match?.text || '').replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    const lower = text.toLowerCase();
+    const index = Math.max(0, lower.indexOf(q));
+    const start = Math.max(0, index - 42);
+    const end = Math.min(text.length, index + q.length + 56);
+    const prefix = start > 0 ? '...' : '';
+    const suffix = end < text.length ? '...' : '';
+    return `${prefix}${text.slice(start, end)}${suffix}`;
+}
+
+function scrollToRestoredChatMatch(query) {
+    const q = String(query || '').toLowerCase().trim();
+    if (!q) return;
+    const rows = Array.from(document.querySelectorAll('#chat-container .chat-row'));
+    const match = rows.find(row => String(row.textContent || '').toLowerCase().includes(q));
+    if (match) {
+        match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        match.classList.add('chat-row-search-hit');
+        setTimeout(() => match.classList.remove('chat-row-search-hit'), 1400);
+    }
 }
 
 function formatChatSessionDate(value) {
@@ -19813,11 +20092,13 @@ function renderChatSidebarList() {
         list.innerHTML = '<p class="chat-sidebar-empty">No saved chats yet.</p>';
         return;
     }
-    list.innerHTML = sessions.map(session => `
+    list.innerHTML = sessions.map(session => {
+        const snippet = getChatSessionSearchSnippet(session, query);
+        return `
         <div class="chat-session-row ${session.id === activeChatSessionId ? 'is-active' : ''} ${session.pinned ? 'is-pinned' : ''}"
              role="listitem"
              data-chat-id="${escapeHtml(session.id)}"
-             onclick="restoreChatSession('${escapeJsString(session.id)}')"
+             onclick="restoreChatSessionFromSidebar('${escapeJsString(session.id)}')"
              oncontextmenu="openChatSessionMenu(event, '${escapeJsString(session.id)}')"
              onpointerdown="beginChatSessionLongPress(event, '${escapeJsString(session.id)}')"
              onpointerup="cancelChatSessionLongPress()"
@@ -19826,6 +20107,7 @@ function renderChatSidebarList() {
             <div class="chat-session-main">
                 <span class="chat-session-title">${escapeHtml(session.title || 'New chat')}</span>
                 <span class="chat-session-meta">${session.pinned ? 'Pinned' : formatChatSessionDate(session.updatedAt)}</span>
+                ${snippet ? `<span class="chat-session-snippet">${escapeHtml(snippet)}</span>` : ''}
             </div>
             <button type="button" class="chat-session-more" onclick="openChatSessionMenu(event, '${escapeJsString(session.id)}')" aria-label="Chat actions">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
@@ -19835,7 +20117,13 @@ function renderChatSidebarList() {
                 </svg>
             </button>
         </div>
-    `).join('');
+    `;
+    }).join('');
+}
+
+function restoreChatSessionFromSidebar(sessionId) {
+    pendingChatRestoreSearchQuery = String(document.getElementById('chat-sidebar-search-input')?.value || '').trim();
+    restoreChatSession(sessionId);
 }
 
 function escapeJsString(value) {
@@ -20143,6 +20431,7 @@ function showThinkingIndicator(message = 'Thinking') {
             </div>
         `;
         chatContainer.appendChild(row);
+        startThinkingPhaseTimeline(row, phase.key);
     } else {
         const bubble = row.querySelector('.assistant-thinking-bubble');
         if (bubble) bubble.setAttribute('aria-label', statusText);
@@ -20160,6 +20449,31 @@ function showThinkingIndicator(message = 'Thinking') {
     maybeAutoScroll(chatContainer);
 }
 
+function startThinkingPhaseTimeline(row, initialKey = 'thinking') {
+    if (thinkingPhaseTimer) clearInterval(thinkingPhaseTimer);
+    if (!row || initialKey === 'searching') return;
+    row.dataset.thinkingStartedAt = String(Date.now());
+    thinkingPhaseTimer = setInterval(() => {
+        const currentRow = document.getElementById('chat-thinking-indicator');
+        if (!currentRow) {
+            clearInterval(thinkingPhaseTimer);
+            thinkingPhaseTimer = null;
+            return;
+        }
+        const startedAt = Number(currentRow.dataset.thinkingStartedAt || Date.now());
+        const elapsed = Date.now() - startedAt;
+        const label = currentRow.querySelector('[data-thinking-label]');
+        if (!label) return;
+        if (elapsed > 3200) {
+            label.textContent = 'Finalizing';
+        } else if (elapsed > 1100) {
+            label.textContent = 'Drafting';
+        } else {
+            label.textContent = 'Understanding';
+        }
+    }, 250);
+}
+
 function resolveThinkingPhase(message = '') {
     const lower = String(message || '').toLowerCase();
     if (/\b(web search|search|sources?|retriev|fetch)\b/.test(lower)) {
@@ -20168,12 +20482,19 @@ function resolveThinkingPhase(message = '') {
     if (/\b(final|finaliz|polish|format)\b/.test(lower)) {
         return { key: 'finalizing', label: 'Finalizing' };
     }
-    return { key: 'thinking', label: 'Thinking' };
+    if (/\b(draft|generat|answer|write)\b/.test(lower)) {
+        return { key: 'drafting', label: 'Drafting' };
+    }
+    return { key: 'thinking', label: 'Understanding' };
 }
 
 function hideThinkingIndicator() {
     const row = document.getElementById('chat-thinking-indicator');
     if (!row) return;
+    if (thinkingPhaseTimer) {
+        clearInterval(thinkingPhaseTimer);
+        thinkingPhaseTimer = null;
+    }
     row.classList.add('fade-out');
     setTimeout(() => {
         if (row.parentNode) row.parentNode.removeChild(row);
@@ -21417,7 +21738,7 @@ function addTravelHintsToPlan(places){
         return {
             ...place,
             travelFromPreviousKm: null,
-            travelMinutes: 15, 
+            travelMinutes: 15,
             travelMode: "drive",
             travelHint: "Transit - ~15 min"
         };
