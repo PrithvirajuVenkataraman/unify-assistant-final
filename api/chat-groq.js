@@ -1,7 +1,7 @@
     export const config = { maxDuration: 60 };
-    import { applyApiSecurity } from './_lib/security.js';
-    import { runVerifiedWebSearch } from './search.js';
-    import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
+import { applyApiSecurity } from './_lib/security.js';
+import { runEvidenceFirstWebRag, runVerifiedWebSearch } from './search.js';
+import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 
     const MODEL_FETCH_TIMEOUT_MS = 18_000;
     const INTERNAL_FETCH_TIMEOUT_MS = 8_000;
@@ -403,8 +403,34 @@
         const originalRequest = String(grounding.originalRequest || 'unknown').trim();
         const answer = String(grounding.sourceAnswer || grounding.selectedText || '').trim();
         const localReviewFlags = String(grounding.localReviewFlags || 'No local review flags were supplied.').trim();
-        const sources = Array.isArray(grounding.evidenceSources) ? grounding.evidenceSources : [];
-        const evidenceWarning = String(grounding.evidenceWarning || '').trim();
+        let sources = Array.isArray(grounding.evidenceSources) ? grounding.evidenceSources : [];
+        let evidenceWarning = String(grounding.evidenceWarning || '').trim();
+        let retrievalFallbackUsed = false;
+        if (!sources.length) {
+            const fallbackQuery = buildVerificationRagQuery(originalRequest, answer);
+            const fallback = await runEvidenceFirstWebRag(fallbackQuery, { limit: 6 }).catch(error => ({
+                verified: false,
+                results: [],
+                warnings: [`verification_rag_failed:${String(error?.code || error?.message || 'unknown')}`]
+            }));
+            retrievalFallbackUsed = true;
+            if (fallback?.verified && Array.isArray(fallback.results) && fallback.results.length) {
+                const evidenceUrls = new Set((Array.isArray(fallback.evidenceUsed) ? fallback.evidenceUsed : [])
+                    .map(item => String(item?.url || '').trim())
+                    .filter(Boolean));
+                sources = fallback.results
+                    .filter(item => !evidenceUrls.size || evidenceUrls.has(String(item?.url || '').trim()))
+                    .slice(0, 6)
+                    .map(normalizeVerificationRagSource);
+                evidenceWarning = '';
+            } else {
+                evidenceWarning = [
+                    evidenceWarning,
+                    fallback?.answer || 'Strict Web RAG could not verify this from retrieved sources.',
+                    ...(Array.isArray(fallback?.warnings) ? fallback.warnings : [])
+                ].filter(Boolean).join(' ');
+            }
+        }
         const sourceBlock = formatVerifyEvidenceSources(sources, evidenceWarning);
         const verificationPrompt = [
             'You are verifying one previous assistant answer. Do not answer the original user request from scratch.',
@@ -462,13 +488,13 @@
                 mode: CHAT_ROUTER_MODE,
                 strategy: 'verify_answer_fast_path',
                 reason: 'explicit_verify_answer_intent',
-                webEligible: false,
+                webEligible: true,
                 preloadedSources: sources.length
             },
             webEscalation: {
-                considered: false,
-                escalated: false,
-                reason: 'verify_answer_fast_path',
+                considered: true,
+                escalated: retrievalFallbackUsed && sources.length > 0,
+                reason: retrievalFallbackUsed ? 'verify_answer_rag_fallback' : 'verify_answer_supplied_evidence',
                 sourceCount: sources.length,
                 requestType: 'verification'
             },
@@ -482,6 +508,28 @@
                 externalVerification: sources.length > 0
             }
         });
+    }
+
+    function buildVerificationRagQuery(originalRequest, answer) {
+        const original = String(originalRequest || '').replace(/\s+/g, ' ').trim();
+        const claim = String(answer || '').replace(/\s+/g, ' ').trim();
+        const pieces = [
+            original && !/^unknown$/i.test(original) ? original : '',
+            claim
+        ].filter(Boolean);
+        return pieces.join(' ').slice(0, 420) || 'verify current factual claim';
+    }
+
+    function normalizeVerificationRagSource(source = {}) {
+        return {
+            title: String(source.title || 'Source').replace(/\s+/g, ' ').trim().slice(0, 180),
+            url: String(source.url || '').trim(),
+            description: String(source.description || '').replace(/\s+/g, ' ').trim().slice(0, 520),
+            text: String(source.text || source.extractedText || source.description || '').replace(/\s+/g, ' ').trim().slice(0, 3500),
+            sourceType: String(source.sourceType || '').trim(),
+            sourceLabel: String(source.sourceLabel || source.source || source.domain || '').trim(),
+            date: String(source.date || source.publishedAt || '').trim()
+        };
     }
 
     function formatVerifyEvidenceSources(sources, warning = '') {
