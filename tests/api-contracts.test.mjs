@@ -361,6 +361,21 @@ assert.equal(chatTest.shouldStreamChatRequest(
     { strategy: 'direct' },
     false
 ), false);
+assert.equal(chatTest.parseWordCountRequest('Explain photosynthesis in 7 words').mode, 'exact');
+assert.equal(chatTest.parseWordCountRequest('Explain photosynthesis in 7 words').targetWords, 7);
+assert.equal(chatTest.parseWordCountRequest('Explain photosynthesis in 75 words').targetWords, 75);
+assert.equal(chatTest.parseWordCountRequest('Explain photosynthesis about 45 words').mode, 'target');
+assert.equal(chatTest.parseWordCountRequest('Explain photosynthesis under 250 words').mode, 'max');
+assert.equal(chatTest.parseWordCountRequest('Explain photosynthesis in 900 words').targetWords, 900);
+assert.equal(chatTest.parseWordCountRequest('Explain photosynthesis 5-8 words').minWords, 5);
+assert.equal(chatTest.enforceWordSpec(
+    'one two three four five six',
+    { mode: 'exact', targetWords: 4, minWords: 4, maxWords: 4 }
+), 'one two three four.');
+assert.equal(chatTest.enforceWordSpec(
+    'one two',
+    { mode: 'exact', targetWords: 4, minWords: 4, maxWords: 4 }
+), 'one two');
 const grounded = chatTest.buildGroundedUserMessage(
     validSelection.value.message,
     validSelection.value.intent,
@@ -392,6 +407,16 @@ assert.deepEqual(
 );
 assert.equal(chatTest.normalizeResponseStyle('unknown'), 'balanced');
 assert.ok(chatTest.getQualityRiskReasons(SAMPLE.challengedAnswer, SAMPLE.challengedResponse, 'chat').length > 0);
+assert.ok(chatTest.getQualityRiskReasons(
+    'Who is the current CEO of Example Corp?',
+    'According to sources, Jane Doe is the current CEO of Example Corp.',
+    'chat'
+).includes('source_like_claim_without_source'));
+assert.ok(chatTest.getQualityRiskReasons(
+    'Who is the current CEO of Example Corp?',
+    'Jane Doe is the current CEO of Example Corp.',
+    'chat'
+).includes('current_or_date_sensitive_claim'));
 assert.equal(chatTest.getStableFactAnswer('What is the capital of France?'), 'The capital of France is Paris.');
 const capitalReply = await callHandler(chatHandler, request('/api/chat-groq', { message: 'What is the capital of France?' }));
 assert.equal(capitalReply.statusCode, 200);
