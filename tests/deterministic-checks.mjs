@@ -399,7 +399,7 @@ assert.doesNotMatch(SOURCE.appHtml, /Open Maps for current traffic, train\/bus s
 assert.doesNotMatch(SOURCE.readme, /Route and travel help/);
 assert.match(SOURCE.appHtml, /function buildContextCopilotBadgeHtml/);
 assert.match(SOURCE.appHtml, /function shouldShowContextCopilotBadge/);
-assert.match(SOURCE.appHtml, /contextual_follow_up/);
+assert.doesNotMatch(SOURCE.appHtml, /Follow-up understood/);
 assert.match(SOURCE.appHtml, /ambiguous_short_context/);
 assert.match(SOURCE.appHtml, /function buildAmbiguousShortContextReply/);
 assert.match(SOURCE.appHtml, /function createExplicitMemoryRecord/);
@@ -560,13 +560,10 @@ assert.match(SOURCE.chatGroqApi, /\.slice\(0,\s*3\)/);
 assert.match(SOURCE.chatGroqApi, /runVerifiedWebSearch\(query,\s*\{\s*limit:\s*6\s*\}\)/);
 assert.match(SOURCE.chatGroqApi, /extractWithCrawl4Ai\(\{/);
 assert.match(SOURCE.appHtml, /function buildVerificationResponseInstructions/);
-assert.match(SOURCE.appHtml, /Verdict: Accurate, Inaccurate, Outdated, Unverified, or Misleading/);
-assert.match(SOURCE.appHtml, /current, today, now, presently, incumbent, latest, live, and as-of-today claims require retrieved live evidence/);
-assert.match(SOURCE.appHtml, /Evidence used:/);
+assert.match(SOURCE.appHtml, /compact verification note/);
 assert.match(SOURCE.appHtml, /How checked:/);
-assert.match(SOURCE.appHtml, /Claims needing live\/source verification:/);
-assert.match(SOURCE.appHtml, /Corrected answer:/);
-assert.match(SOURCE.appHtml, /Sources: include every usable retrieved source as a markdown link/);
+assert.match(SOURCE.appHtml, /Sources used:/);
+assert.match(SOURCE.appHtml, /Do not include Verdict, Claims checked/);
 assert.match(SOURCE.appHtml, /function buildVerificationSearchQuery\(originalQuestion,\s*answerText = ''\)/);
 assert.match(SOURCE.appHtml, /async function buildVerificationEvidenceBundle\(originalQuestion,\s*answerText = ''\)/);
 assert.match(SOURCE.appHtml, /fetchLiveSearchJson\(query,\s*\{[\s\S]*maxResults:\s*5[\s\S]*answer:\s*true[\s\S]*mode:\s*'rag'/);
@@ -605,6 +602,10 @@ assert.match(SOURCE.chatGroqApi, /runEvidenceFirstWebRag\(fallbackQuery,\s*\{\s*
 assert.match(SOURCE.chatGroqApi, /function buildVerificationRagQuery/);
 assert.match(SOURCE.chatGroqApi, /function normalizeVerifyGrounding/);
 assert.match(SOURCE.chatGroqApi, /function ensureVerificationSourcesSection/);
+assert.match(SOURCE.chatGroqApi, /function normalizeCompactVerificationReport/);
+assert.match(SOURCE.appHtml, /function isAlgebraEquationRequest/);
+assert.match(SOURCE.appHtml, /async function handleAlgebraEquationRequest/);
+assert.doesNotMatch(SOURCE.appHtml, /Follow-up understood:/);
 
 const duplicateSandbox = {
     Date,
