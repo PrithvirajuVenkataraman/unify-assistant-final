@@ -440,14 +440,10 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
             'If no live evidence is available for a current claim, use Unverified. Do not assume it remains true because it was historically correct.',
             'Prefer the newest authoritative sources over secondary sources when both are supplied.',
             'Never write "as of the latest available information", "appears to be", or "likely" unless directly supported by retrieved evidence.',
-            'Return a concise verification report with exactly these sections:',
-            'Verdict: Accurate, Inaccurate, Outdated, Unverified, or Misleading.',
-            'Claims checked: bullet each claim with Historical or Current, live verification required yes/no, and retrieved evidence used.',
-            'Evidence used: summarize only the answer text, local flags, and supplied retrieved evidence.',
-            'How checked: concise rationale, no hidden chain-of-thought.',
-            'Claims needing live/source verification: list unsupported claims, or "None identified from supplied evidence."',
-            'Corrected answer: include only if the original is wrong or materially incomplete.',
-            'Sources: markdown links only from supplied retrieved evidence, or "Source verification unavailable."',
+            'Return a compact verification note with exactly these sections:',
+            'How checked: one short sentence explaining how the answer was checked against supplied evidence, without hidden chain-of-thought.',
+            'Sources used: markdown links only from supplied retrieved evidence, or "No retrieved sources were available."',
+            'Do not include Verdict, Claims checked, Evidence used, Claims needing live/source verification, Corrected answer, or long evidence essays.',
             '',
             `Original user request:\n${originalRequest || 'unknown'}`,
             '',
@@ -473,7 +469,7 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         finalParsed = {
             ...finalParsed,
             intent: 'verify_answer',
-            response: normalizeVerificationVerdictLabels(ensureVerificationSourcesSection(finalParsed.response || finalParsed.text || '', sources, evidenceWarning), sources),
+            response: normalizeCompactVerificationReport(finalParsed.response || finalParsed.text || '', sources, evidenceWarning),
             action: null
         };
 
@@ -558,12 +554,8 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 
     function buildVerifyUnavailableReport(answer, warning = '') {
         return [
-            'Verdict: Unverified.',
-            'Claims checked: Current or factual claims could not be verified because no usable retrieved source evidence was supplied.',
-            `Evidence used: I reviewed the supplied answer text${warning ? ` and the retrieval warning: ${warning}` : ', but no usable retrieved source evidence was available'}.`,
-            'How checked: Source verification could not be completed from the supplied evidence, so I cannot confirm the factual claims.',
-            'Claims needing live/source verification: Any factual claims in the answer still need source verification.',
-            'Sources: Source verification unavailable.'
+            `How checked: I reviewed the answer text${warning ? ` and the retrieval warning, but ${warning}` : ', but no usable retrieved source evidence was available.'}`,
+            'Sources used: No retrieved sources were available.'
         ].join('\n');
     }
 
@@ -581,14 +573,37 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
             return `${index + 1}. [${title}](${url})`;
         });
         const replacement = sourceLines.length
-            ? `Sources:\n${sourceLines.join('\n')}`
-            : 'Sources: Source verification unavailable.';
-        if (/(?:^|\n)\s*Sources:\s*/i.test(out)) {
-            out = out.replace(/(?:^|\n)\s*Sources:\s*[\s\S]*$/i, `\n${replacement}`).trim();
+            ? `Sources used:\n${sourceLines.join('\n')}`
+            : 'Sources used: No retrieved sources were available.';
+        if (/(?:^|\n)\s*Sources(?:\s+used)?:\s*/i.test(out)) {
+            out = out.replace(/(?:^|\n)\s*Sources(?:\s+used)?:\s*[\s\S]*$/i, `\n${replacement}`).trim();
         } else {
             out = `${out}\n\n${replacement}`.trim();
         }
         return out;
+    }
+
+    function normalizeCompactVerificationReport(text, sources = [], warning = '') {
+        const sourceFixed = ensureVerificationSourcesSection(text || buildVerifyUnavailableReport('', warning), sources, warning);
+        const howMatch = sourceFixed.match(/(?:^|\n)\s*How checked:\s*([\s\S]*?)(?=\n\s*(?:Sources(?:\s+used)?|Verdict|Claims checked|Evidence used|Claims needing|Corrected answer):|$)/i);
+        const hasSources = Array.isArray(sources) && sources.some(source => /^https?:\/\//i.test(String(source?.url || source || '')));
+        let how = String(howMatch?.[1] || '').replace(/\s+/g, ' ').trim();
+        if (!how) {
+            how = hasSources
+                ? 'I compared the answer with the retrieved source evidence.'
+                : 'I could not check the answer against retrieved sources because none were available.';
+        }
+        const sourcesMatch = sourceFixed.match(/(?:^|\n)\s*Sources(?:\s+used)?:\s*([\s\S]*)$/i);
+        let sourceText = String(sourcesMatch?.[1] || '').trim();
+        if (!sourceText) {
+            sourceText = hasSources
+                ? formatRequiredVerifySourceLinks(sources)
+                : 'No retrieved sources were available.';
+        }
+        if (!sourceText || /source verification unavailable/i.test(sourceText)) {
+            sourceText = 'No retrieved sources were available.';
+        }
+        return `How checked: ${how}\nSources used: ${sourceText}`;
     }
 
     function normalizeVerificationVerdictLabels(text, sources = []) {
@@ -633,14 +648,9 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
             explain: 'Explain the selected text in the context of the source answer.',
             verify: [
                 'Check the selected claim for internal consistency and clearly distinguish uncertainty from verified fact.',
-                'Return a clear verification report with these exact sections:',
-                'Verdict: Accurate, Inaccurate, Outdated, Unverified, or Misleading.',
-                'Claims checked: bullet each claim with Historical or Current, live verification required yes/no, and retrieved evidence used.',
-                'Evidence used: summarize the selected text and source answer supplied in this request.',
-                'How checked: give a concise rationale for the verdict without revealing hidden chain-of-thought.',
-                'Claims needing live/source verification: list claims that cannot be verified from the supplied evidence.',
-                'Corrected answer: include only if the original is wrong or incomplete.',
-                'Sources: include source links only if they are present in the supplied text; otherwise say source verification unavailable.'
+                'Return only these sections:',
+                'How checked: one short sentence, no hidden chain-of-thought.',
+                'Sources used: include source links only if present in the supplied text; otherwise say no retrieved sources were available.'
             ].join('\n'),
             rewrite: 'Rewrite only the selected text according to the user instruction, preserving its intended meaning.',
             translate: 'Translate only the selected text into the language requested by the user.',
@@ -2554,6 +2564,7 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         normalizeChatRequest,
         normalizeCustomSystemPrompt,
         ensureVerificationSourcesSection,
+        normalizeCompactVerificationReport,
         normalizeVerifyGrounding,
         normalizeResponseStyle,
         resolveContextualLiveQuery,
