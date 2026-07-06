@@ -1,4 +1,5 @@
 import { FREE_LIVE_SOURCES } from './source-registry.js';
+import { cleanQueryTarget, extractQueryTargetMetadata } from '../query-target-cleanup.js';
 
 const OPEN_METEO_GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const OPEN_METEO_FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
@@ -339,8 +340,8 @@ function inferCategory(query) {
 
 function extractLocation(query) {
     const text = String(query || '').replace(/[?.!]+$/g, '').trim();
-    const match = text.match(/\b(?:in|at|for|near)\s+([a-zA-Z][a-zA-Z\s.'-]{1,80})$/i);
-    if (match?.[1]) return match[1].trim();
+    const match = text.match(/\b(?:in|at|for|near|around)\s+([a-zA-Z][a-zA-Z\s.,'-]{1,80})$/i);
+    if (match?.[1]) return cleanQueryTarget(match[1]);
     return '';
 }
 
@@ -371,11 +372,12 @@ function extractSportsLeague(query) {
 }
 
 function extractPlaceTopic(query) {
-    return String(query || '')
+    const text = String(query || '')
         .replace(/\b(latest|current|today|now|near me|open now|best|top|show me|find|search)\b/gi, ' ')
         .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 120);
+        .trim();
+    const match = text.match(/\b(?:in|at|near|around)\s+(.+)$/i);
+    return cleanQueryTarget(match?.[1] || text).slice(0, 120);
 }
 
 function formatCryptoName(id) {
@@ -423,6 +425,8 @@ function clampInt(value, fallback, min, max) {
 }
 
 export const __test = {
+    cleanQueryTarget,
+    extractQueryTargetMetadata,
     extractCryptoId,
     extractLocation,
     extractPlaceTopic,
