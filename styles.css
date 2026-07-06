@@ -517,6 +517,13 @@ option {
     border-color: #ffffff !important;
 }
 
+.chat-delete-dialog .chat-delete-dialog-btn.danger *,
+.text-input-dialog .text-input-dialog-btn.primary * {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    stroke: currentColor;
+}
+
 .text-input-dialog-backdrop {
     position: fixed;
     inset: 0;
@@ -589,7 +596,7 @@ option {
 .text-input-dialog-btn.primary:hover,
 .text-input-dialog-btn.primary:focus-visible {
     background: #ffffff;
-    color: #000000;
+    color: #000000 !important;
     border-color: #ffffff;
 }
 
