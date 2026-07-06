@@ -206,6 +206,10 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
             if (qualityResult.correctedResponse) {
                 finalParsed = { ...finalParsed, response: qualityResult.correctedResponse };
             }
+            finalParsed = await applyResponseLengthFinalCheck(finalParsed, lengthPolicy, effectiveMessage, '', {
+                systemPrompt,
+                contextBlock
+            });
             finalParsed = normalizeAssistantResponseStyle(finalParsed);
             timing.totalMs = Date.now() - timing.startedAt;
             return res.status(200).json({
@@ -339,6 +343,11 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
             let finalText = ensureCompleteAssistantResponse(
                 replaceLongDashes(String(streamResult.text || streamedText || '').trim())
             );
+            let lengthChecked = await applyTextLengthFinalCheck(finalText, lengthPolicy, effectiveMessage, '', {
+                systemPrompt,
+                contextBlock
+            });
+            finalText = lengthChecked.text;
             const qualityStartedAt = Date.now();
             const qualityResult = await reviewAnswerIfNeeded({
                 message: effectiveMessage,
@@ -354,6 +363,13 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
                 finalText = ensureCompleteAssistantResponse(
                     replaceLongDashes(String(qualityResult.correctedResponse || '').trim())
                 );
+                lengthChecked = await applyTextLengthFinalCheck(finalText, lengthPolicy, effectiveMessage, '', {
+                    systemPrompt,
+                    contextBlock
+                });
+                finalText = lengthChecked.text;
+                writeSse(res, 'correction', { text: finalText });
+            } else if (lengthChecked.changed) {
                 writeSse(res, 'correction', { text: finalText });
             }
             timing.totalMs = Date.now() - timing.startedAt;
@@ -2102,6 +2118,24 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         if (/\b(i'?m not sure|not sure|cannot verify|can't verify|could not verify|unable to verify|not enough information|may be|might be|likely|possibly|probably|unclear|unknown|not certain|uncertain)\b/.test(answerText)) {
             reasons.push('model_uncertainty');
         }
+        if (/\b(according to|sources say|source says|reported by|confirmed by|evidence shows|research shows|study found|verified by|cited by)\b/i.test(answerText) &&
+            !/(https?:\/\/|\[[^\]]+\]\(https?:\/\/)/i.test(String(answer || ''))) {
+            reasons.push('source_like_claim_without_source');
+        }
+        if (/\b(current|today|now|presently|incumbent|latest|live|as of today|as of now|this year|this month)\b/i.test(input) &&
+            /\b(is|are|was|were|has|have|serves|served|released|launched|won|announced|appointed|elected)\b/i.test(answerText)) {
+            reasons.push('current_or_date_sensitive_claim');
+        }
+        if (/\b(?:on|as of|in|during)\s+(?:\d{1,2}\s+[A-Z][a-z]+|[A-Z][a-z]+\s+\d{1,2}|(?:19|20)\d{2})\b/.test(String(message || '')) &&
+            /\b[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,4}\b/.test(String(answer || ''))) {
+            reasons.push('dated_named_entity_claim');
+        }
+        if (/\b(who|what|when|where|which|current|latest|founder|ceo|president|minister|captain|coach|winner|invented|discovered|released|launched)\b/i.test(String(message || '')) &&
+            /\b[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){1,4}\b/.test(String(answer || '')) &&
+            /\b(is|are|was|were|became|serves|served|founded|created|invented|discovered|won|released|launched|announced|appointed|elected)\b/i.test(answerText) &&
+            !/(https?:\/\/|\[[^\]]+\]\(https?:\/\/|Sources:\s*)/i.test(String(answer || ''))) {
+            reasons.push('unsupported_named_entity_claim');
+        }
         if (/\b(fallback|service_unavailable|service_error|unknown_general_knowledge_answer|crawl4ai_unavailable|low_confidence)\b/.test(`${String(routeDecision.reason || '')} ${String(webEscalation.reason || '')}`.toLowerCase())) {
             reasons.push('routing_uncertainty');
         }
@@ -2430,38 +2464,46 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         const text = String(message || '');
         if (!text) return null;
 
-        let m = text.match(/\b(\d{2,4})\s*(?:-|to)\s*(\d{2,4})\s+words?\b/i);
+        let m = text.match(/\b(\d{1,4})\s*(?:-|to)\s*(\d{1,4})\s+words?\b/i);
         if (m) {
             const a = Number(m[1]); const b = Number(m[2]);
             if (Number.isFinite(a) && Number.isFinite(b)) {
-                const low = Math.max(20, Math.min(a, b));
+                const low = Math.max(1, Math.min(a, b));
                 const high = Math.max(low, Math.max(a, b));
                 return { mode: 'range', minWords: low, maxWords: high, targetWords: Math.round((low + high) / 2) };
             }
         }
 
-        m = text.match(/\b(?:exactly|strictly|no more no less than)\s+(\d{2,4})\s+words?\b/i) || text.match(/\b(\d{2,4})\s+words?\s+exactly\b/i);
+        m = text.match(/\b(?:exactly|strictly|no more no less than)\s+(\d{1,4})\s+words?\b/i) || text.match(/\b(\d{1,4})\s+words?\s+exactly\b/i);
         if (m) {
             const n = Number(m[1]);
             if (Number.isFinite(n)) return { mode: 'exact', minWords: n, maxWords: n, targetWords: n };
         }
 
-        m = text.match(/\b(?:under|within|at most|no more than|max(?:imum)?(?: of)?)\s+(\d{2,4})\s+words?\b/i);
+        m = text.match(/\b(?:under|within|at most|no more than|max(?:imum)?(?: of)?)\s+(\d{1,4})\s+words?\b/i);
         if (m) {
             const n = Number(m[1]);
-            if (Number.isFinite(n)) return { mode: 'max', minWords: 0, maxWords: Math.max(20, n), targetWords: Math.max(20, Math.round(n * 0.9)) };
+            if (Number.isFinite(n)) return { mode: 'max', minWords: 0, maxWords: Math.max(1, n), targetWords: Math.max(1, Math.round(n * 0.9)) };
         }
 
-        m = text.match(/\b(?:at least|minimum(?: of)?|no less than)\s+(\d{2,4})\s+words?\b/i);
+        m = text.match(/\b(?:at least|minimum(?: of)?|no less than)\s+(\d{1,4})\s+words?\b/i);
         if (m) {
             const n = Number(m[1]);
-            if (Number.isFinite(n)) return { mode: 'min', minWords: Math.max(20, n), maxWords: Math.max(20, Math.round(n * 1.5)), targetWords: Math.max(20, Math.round(n * 1.1)) };
+            if (Number.isFinite(n)) return { mode: 'min', minWords: Math.max(1, n), maxWords: Math.max(1, Math.round(n * 1.5)), targetWords: Math.max(1, Math.round(n * 1.1)) };
         }
 
-        m = text.match(/\b(?:in|around|about|approximately|approx(?:\.|imately)?|roughly)\s+(\d{2,4})\s+words?\b/i) || text.match(/\b(\d{2,4})\s+words?\b/i);
+        m = text.match(/\b(?:around|about|approximately|approx(?:\.|imately)?|roughly)\s+(\d{1,4})\s+words?\b/i);
         if (m) {
             const n = Number(m[1]);
-            if (Number.isFinite(n)) return { mode: 'target', minWords: Math.max(20, Math.round(n * 0.85)), maxWords: Math.max(20, Math.round(n * 1.15)), targetWords: Math.max(20, n) };
+            if (Number.isFinite(n)) return { mode: 'target', minWords: Math.max(1, Math.round(n * 0.85)), maxWords: Math.max(1, Math.round(n * 1.15)), targetWords: Math.max(1, n) };
+        }
+
+        m = text.match(/\b(?:in|within)\s+(\d{1,4})\s+words?\b/i) ||
+            text.match(/\b(?:answer|respond|explain|write|summarize|describe|give(?:\s+me)?)\b[\s\S]{0,60}?\b(?:in\s+)?(\d{1,4})\s+words?\b/i) ||
+            text.match(/\b(\d{1,4})\s+words?\b/i);
+        if (m) {
+            const n = Number(m[1]);
+            if (Number.isFinite(n)) return { mode: 'exact', minWords: n, maxWords: n, targetWords: n };
         }
 
         return null;
@@ -2567,6 +2609,9 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         normalizeCompactVerificationReport,
         normalizeVerifyGrounding,
         normalizeResponseStyle,
+        parseWordCountRequest,
+        enforceWordSpec,
+        countWords,
         resolveContextualLiveQuery,
         resolveRouteEscalation,
         isCrawl4AiFallbackCandidate,
@@ -2585,6 +2630,62 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         return out;
     }
 
+    async function applyResponseLengthFinalCheck(parsedResponse, lengthPolicy, message, clientSystemPrompt, rewriteOptions = {}) {
+        if (!parsedResponse || typeof parsedResponse !== 'object') return parsedResponse;
+        const out = { ...applyResponseLengthPostCheck(parsedResponse, lengthPolicy, message, clientSystemPrompt) };
+        const checked = await applyTextLengthFinalCheck(String(out.response || ''), lengthPolicy, message, clientSystemPrompt, rewriteOptions);
+        out.response = checked.text;
+        return out;
+    }
+
+    async function applyTextLengthFinalCheck(text, lengthPolicy, message, clientSystemPrompt, rewriteOptions = {}) {
+        const original = String(text || '').trim();
+        if (!original || hasStructuredOutputConstraint(clientSystemPrompt, message)) {
+            return { text: original, changed: false };
+        }
+        const wordSpec = lengthPolicy?.wordSpec;
+        if (!wordSpec) return { text: original, changed: false };
+        let out = enforceWordSpec(original, wordSpec);
+        if (shouldRewriteForShortExactWordSpec(out, wordSpec)) {
+            const rewritten = await rewriteToWordSpec(out, wordSpec, message, rewriteOptions);
+            if (rewritten) out = enforceWordSpec(rewritten, wordSpec);
+        }
+        return { text: out, changed: out !== original };
+    }
+
+    function shouldRewriteForShortExactWordSpec(text, spec) {
+        const mode = String(spec?.mode || '');
+        const target = clampInt(spec?.targetWords, 0, 0, 5000);
+        if (mode !== 'exact' || target <= 0) return false;
+        const count = countWords(text);
+        return count > 0 && count < target;
+    }
+
+    async function rewriteToWordSpec(answer, spec, message, options = {}) {
+        const target = clampInt(spec?.targetWords, 0, 0, 5000);
+        if (!target) return '';
+        const prompt = [
+            String(options.systemPrompt || '').trim(),
+            options.contextBlock ? `Recent turns:\n${String(options.contextBlock).slice(-4000)}` : '',
+            `User request:\n${String(message || '').slice(0, 3000)}`,
+            `Current answer:\n${String(answer || '').slice(0, 5000)}`,
+            `Rewrite the current answer to exactly ${target} words.`,
+            'Preserve the same meaning. Do not add unsupported facts. Do not add filler. Return only the rewritten answer.'
+        ].filter(Boolean).join('\n\n');
+        try {
+            const result = await runModelWithFallback(prompt, {
+                instruction: `Rewrite to exactly ${target} words without filler.`,
+                maxTokens: clampInt(Math.round(target * 2.5 + 160), 500, 200, 5000),
+                temperature: 0.4,
+                wordSpec: null
+            });
+            const text = String(result?.parsedResponse?.response || result?.text || '').trim();
+            return text && countWords(text) >= countWords(answer) ? text : '';
+        } catch (_) {
+            return '';
+        }
+    }
+
     function enforceWordSpec(text, spec) {
         const mode = String(spec?.mode || '');
         const target = clampInt(spec?.targetWords, 0, 0, 5000);
@@ -2596,23 +2697,20 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         const count = countWords(out);
         if (mode === 'exact' && target > 0) {
             if (count > target) return trimToWordCount(out, target);
-            if (count < target) return padToWordCount(out, target);
             return out;
         }
         if (mode === 'max' && maxWords > 0 && count > maxWords) {
             return trimToWordCount(out, maxWords);
         }
         if (mode === 'min' && minWords > 0 && count < minWords) {
-            return padToWordCount(out, minWords);
+            return out;
         }
         if (mode === 'range') {
             if (maxWords > 0 && count > maxWords) return trimToWordCount(out, maxWords);
-            if (minWords > 0 && count < minWords) return padToWordCount(out, minWords);
             return out;
         }
         if (mode === 'target') {
             if (maxWords > 0 && count > maxWords) return trimToWordCount(out, maxWords);
-            if (minWords > 0 && count < minWords) return padToWordCount(out, minWords);
         }
         return out;
     }
@@ -2628,18 +2726,4 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         if (tokens.length <= target) return String(text || '').trim();
         const trimmed = tokens.slice(0, target).join(' ').replace(/[,\s]+$/g, '').trim();
         return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
-    }
-
-    function padToWordCount(text, target) {
-        let out = String(text || '').trim();
-        if (!out) return out;
-        const filler = 'Additional details are available on request.';
-        while (countWords(out) < target) {
-            out = `${out} ${filler}`.trim();
-            if (countWords(out) > target) {
-                out = trimToWordCount(out, target);
-                break;
-            }
-        }
-        return out;
     }
