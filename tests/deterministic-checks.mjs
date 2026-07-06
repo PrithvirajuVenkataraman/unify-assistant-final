@@ -771,6 +771,11 @@ assert.match(SOURCE.appHtml, /function showDeploymentDiagnostics/);
 assert.match(SOURCE.apiIndex, /diagnosticsHandler/);
 assert.match(SOURCE.diagnosticsApi, /buildDiagnosticsStatus/);
 assert.doesNotMatch(SOURCE.diagnosticsApi, /process\.env\[[^\]]+\][^;]*json/);
+assert.match(SOURCE.appHtml, /help-modal-back-btn/);
+assert.match(SOURCE.appHtml, /Back to previous screen/);
+assert.match(SOURCE.styles, /\.help-modal-header\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0,\s*1fr\) 44px/);
+assert.match(SOURCE.styles, /@media \(max-width:\s*640px\)[\s\S]*\.help-modal-enhanced/);
+assert.match(SOURCE.styles, /\.custom-system-prompt-input\s*\{[\s\S]*min-height:\s*min\(34vh,\s*220px\)/);
 assert.match(SOURCE.readme, /LIVE_RETRIEVAL_ENABLED=true/);
 assert.match(SOURCE.readme, /live search is disabled by default/i);
 assert.match(SOURCE.readme, /Feedback, Quality Review, and RLAIF/);
@@ -937,7 +942,13 @@ assert.match(SOURCE.styles, /\.chat-delete-dialog\s*\{/);
 assert.match(SOURCE.styles, /\.chat-delete-dialog \.chat-delete-dialog-btn\.danger,[\s\S]*color:\s*#000000 !important/);
 assert.match(SOURCE.styles, /\.chat-delete-dialog \.chat-delete-dialog-btn\.danger \*,[\s\S]*\.text-input-dialog \.text-input-dialog-btn\.primary \*[\s\S]*color:\s*#000000 !important/);
 assert.match(SOURCE.styles, /\.text-input-dialog-btn\.primary,[\s\S]*color:\s*#000000 !important/);
-assert.match(SOURCE.styles, /\.help-modal-enhanced \.help-modal-body\s*\{[\s\S]*padding:\s*16px !important/);
+assert.match(SOURCE.appHtml, /help-modal-back-btn/);
+assert.match(SOURCE.appHtml, /Back to previous screen/);
+assert.match(SOURCE.styles, /\.help-modal-header\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0,\s*1fr\) 44px/);
+assert.match(SOURCE.styles, /\.help-modal-enhanced\s*\{[\s\S]*width:\s*min\(92vw,\s*960px\) !important[\s\S]*max-height:\s*min\(82vh,\s*680px\) !important/);
+assert.match(SOURCE.styles, /\.help-modal-enhanced \.help-modal-body\s*\{[\s\S]*padding:\s*clamp\(14px,\s*2\.4vw,\s*22px\) !important/);
+assert.match(SOURCE.styles, /@media \(max-width:\s*640px\)[\s\S]*\.help-modal-enhanced[\s\S]*width:\s*calc\(100vw - 20px\) !important/);
+assert.match(SOURCE.styles, /@media \(max-width:\s*640px\)[\s\S]*\.custom-system-prompt-input\s*\{[\s\S]*min-height:\s*min\(34vh,\s*220px\)/);
 
 console.log('deterministic-checks-ok'); 
 
