@@ -1560,6 +1560,19 @@ body.dark .composer-action-item:hover {
     position: relative;
 }
 
+button[aria-label^="Close"],
+button[aria-label^="Back"],
+.help-modal-back-btn,
+.help-modal-close-btn,
+.chat-sidebar-close,
+.memory-manager-close,
+.voice-screen-icon-btn,
+.continuous-vision-close,
+.export-format-header button {
+    border-radius: 12px !important;
+    overflow: hidden;
+}
+
 .speech-input-btn {
     flex: 0 0 auto;
     border-radius: 999px !important;
