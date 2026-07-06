@@ -3268,8 +3268,13 @@ button:hover {
     position: sticky !important;
     top: 0 !important;
     z-index: 20 !important;
+    display: grid !important;
+    grid-template-columns: 44px minmax(0, 1fr) 44px !important;
+    align-items: center !important;
+    gap: 12px !important;
 }
 
+.help-modal-back-btn,
 .help-modal-close-btn {
     position: relative !important;
     z-index: 25 !important;
@@ -3282,6 +3287,20 @@ button:hover {
     border: 1px solid rgba(255, 255, 255, 0.45) !important;
 }
 
+.help-modal-title-block {
+    min-width: 0 !important;
+    text-align: center !important;
+}
+
+.help-modal-title-block h2 {
+    margin: 0 !important;
+    font-size: clamp(18px, 2.2vw, 22px) !important;
+    line-height: 1.15 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
 .help-modal-enhanced,
 .help-modal-enhanced *,
 .help-modal-enhanced *::before,
@@ -3292,7 +3311,9 @@ button:hover {
 
 .help-modal-enhanced {
     background: #000000 !important;
-    max-height: min(78vh, 620px) !important;
+    width: min(92vw, 960px) !important;
+    max-width: 960px !important;
+    max-height: min(82vh, 680px) !important;
     border-radius: 12px !important;
 }
 
@@ -3318,6 +3339,7 @@ button:hover {
     color: rgba(255, 255, 255, 0.76) !important;
 }
 
+.help-modal-back-btn,
 .help-modal-close-btn,
 .help-modal-enhanced .memory-action-btn {
     background: #111111 !important;
@@ -3325,6 +3347,7 @@ button:hover {
     border-color: rgba(255, 255, 255, 0.34) !important;
 }
 
+.help-modal-back-btn:hover,
 .help-modal-close-btn:hover,
 .help-modal-enhanced .memory-action-btn:hover,
 .help-response-card:hover,
@@ -3336,45 +3359,89 @@ button:hover {
 
 .help-modal-enhanced .help-modal-header {
     min-height: 0 !important;
-    padding: 14px 16px !important;
+    padding: 12px 16px !important;
 }
 
 .help-modal-enhanced .help-modal-body {
-    padding: 16px !important;
+    padding: clamp(14px, 2.4vw, 22px) !important;
 }
 
 .help-modal-enhanced .help-settings-card {
-    padding: 16px !important;
+    padding: clamp(14px, 2.2vw, 20px) !important;
     border-radius: 10px !important;
+}
+
+.help-modal-enhanced .help-section-heading {
+    align-items: center !important;
+}
+
+.help-modal-enhanced .custom-system-prompt-input {
+    min-height: clamp(150px, 24vh, 260px) !important;
+    max-height: 42vh !important;
+    font-size: clamp(15px, 1.6vw, 16px) !important;
+}
+
+@media (min-width: 900px) {
+    .help-modal-enhanced .help-modal-body {
+        padding: 20px !important;
+    }
+
+    .help-modal-enhanced .help-settings-card {
+        padding: 20px !important;
+    }
 }
 
 @media (max-width: 640px) {
     .help-modal-enhanced {
-        width: calc(100vw - 28px) !important;
-        max-height: min(70vh, 560px) !important;
+        width: calc(100vw - 20px) !important;
+        max-height: min(82vh, 640px) !important;
         margin: 0 auto !important;
+        border-radius: 12px !important;
     }
 
     .help-modal-enhanced .help-modal-header {
-        padding: 12px 14px !important;
+        grid-template-columns: 42px minmax(0, 1fr) 42px !important;
+        gap: 8px !important;
+        padding: 10px 12px !important;
     }
 
     .help-modal-enhanced .help-modal-body {
-        padding: 14px !important;
+        padding: 12px !important;
     }
 
     .help-modal-enhanced .help-settings-card {
-        padding: 14px !important;
+        padding: 12px !important;
     }
 
     .help-section-heading {
         align-items: center;
         margin-bottom: 10px;
+        gap: 10px;
     }
 
     .custom-system-prompt-input {
-        min-height: 142px !important;
-        font-size: 14px !important;
+        min-height: min(34vh, 220px) !important;
+        font-size: 16px !important;
+    }
+
+    .help-modal-back-btn,
+    .help-modal-close-btn {
+        width: 38px !important;
+        height: 38px !important;
+    }
+}
+
+@media (max-width: 380px) {
+    .help-modal-enhanced {
+        width: calc(100vw - 14px) !important;
+    }
+
+    .help-modal-enhanced .help-modal-header {
+        padding: 8px 10px !important;
+    }
+
+    .help-modal-title-block h2 {
+        font-size: 17px !important;
     }
 }
 
