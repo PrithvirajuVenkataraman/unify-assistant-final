@@ -889,6 +889,9 @@ assert.match(SOURCE.appHtml, /for \(const historyKey of getLegacyHistoryStorageK
 assert.match(SOURCE.appHtml, /conversationHistory = sanitizeConversationHistoryRecords\(conversationHistory\)[\s\S]*legacyHistoryItemMatchesDeletedSession\(item, fingerprint\)/);
 assert.match(SOURCE.appHtml, /if \(hasChatSessionsStorageRecord\(\)\) \{[\s\S]*markLegacyChatMigrationDone\(\);[\s\S]*return;/);
 assert.match(SOURCE.appHtml, /id="chat-delete-dialog"/);
+assert.match(SOURCE.appHtml, /id="confirm-action-dialog"/);
+assert.match(SOURCE.appHtml, /function openConfirmActionDialog/);
+assert.doesNotMatch(SOURCE.appHtml, /window\.confirm/);
 assert.match(SOURCE.appHtml, /Delete '\$\{session\.title \|\| 'this chat'\}'/);
 assert.match(SOURCE.appHtml, /rememberDeletedChatSession\(session\);[\s\S]*clearLegacyHistoryForDeletedSession\(session\);[\s\S]*session\.messages = \[\];[\s\S]*forgetActiveEmptyChatDraft\(\);[\s\S]*saveChatSessions\(\);[\s\S]*if \(wasActiveSession\) \{[\s\S]*conversationHistory = \[\];[\s\S]*startNewChatSession\(\);/);
 assert.match(SOURCE.appHtml, /askGeminiAI\(message,\s*\{[\s\S]*stream:\s*options\?\.stream === true[\s\S]*displayUserMessage:\s*options\?\.displayUserMessage/);
@@ -920,6 +923,8 @@ assert.match(SOURCE.chatGroqApi, /if \(shouldStreamChatRequest\(req\.body, inten
 assert.match(SOURCE.chatGroqApi, /function needsPreStreamSafetyReview\(message\)/);
 assert.match(SOURCE.styles, /\.chat-delete-dialog\s*\{/);
 assert.match(SOURCE.styles, /\.chat-delete-dialog \.chat-delete-dialog-btn\.danger,[\s\S]*color:\s*#000000 !important/);
+assert.match(SOURCE.styles, /\.chat-delete-dialog \.chat-delete-dialog-btn\.danger \*,[\s\S]*\.text-input-dialog \.text-input-dialog-btn\.primary \*[\s\S]*color:\s*#000000 !important/);
+assert.match(SOURCE.styles, /\.text-input-dialog-btn\.primary,[\s\S]*color:\s*#000000 !important/);
 assert.match(SOURCE.styles, /\.help-modal-enhanced \.help-modal-body\s*\{[\s\S]*padding:\s*16px !important/);
 
 console.log('deterministic-checks-ok'); 
