@@ -8,6 +8,7 @@ import { ingestLatestSources } from './_lib/latest/latest-ingest.js';
 import { runFreeLiveSearch } from './_lib/free-live/providers.js';
 import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 import { rankTextsByEmbedding, chunkTextForEmbedding, hasNvidiaEmbeddingKey } from './_lib/embeddings.js';
+import { cleanQueryTarget, extractQueryTargetMetadata } from './_lib/query-target-cleanup.js';
 
 const SERPER_SEARCH_URL = 'https://google.serper.dev/search';
 const WIKIPEDIA_SEARCH_URL = 'https://en.wikipedia.org/w/api.php';
@@ -2367,10 +2368,10 @@ function extractSearchTargetQuery(query) {
 }
 
 function cleanSearchTargetPhrase(value) {
-    return normalizeSearchQuery(String(value || '')
+    return cleanQueryTarget(normalizeSearchQuery(String(value || '')
         .replace(/^(?:about|on|for)\s+/i, '')
         .replace(/[?.!]+$/g, '')
-        .trim());
+        .trim()));
 }
 
 function buildSearchQueryRewrite(query) {
@@ -2381,12 +2382,19 @@ function buildSearchQueryRewrite(query) {
         return { query: '', subject: '', freshnessNeeded: false, intent: 'general' };
     }
     const explicit = normalized.match(/^(?:please\s+)?(?:can\s+you\s+|could\s+you\s+)?(?:search(?:\s+the\s+web)?(?:\s+for)?|web\s+search(?:\s+for)?|look\s+up|find(?:\s+me)?|google)\s+(.+)$/i);
-    const target = cleanSearchTargetPhrase(explicit?.[1] || normalized);
+    const rawTarget = normalizeSearchQuery(String(explicit?.[1] || normalized || '')
+        .replace(/^(?:about|on|for)\s+/i, '')
+        .replace(/[?.!]+$/g, '')
+        .trim());
+    const targetMetadata = extractQueryTargetMetadata(rawTarget);
+    const target = targetMetadata.target || cleanSearchTargetPhrase(rawTarget);
     const subject = extractSearchSubject(target);
     const intent = extractSearchIntentTerm(target);
     return {
-        query: target,
+        query: rawTarget || target,
         subject,
+        dateContext: targetMetadata.dateContext,
+        modifiers: targetMetadata.modifiers,
         freshnessNeeded: isCurrentTopicSearchQuery(target) || isDatedChangingFactSearchQuery(target) || /\b(?:latest|recent|current|newest|today|now|breaking)\b/i.test(target),
         intent
     };
@@ -2419,13 +2427,16 @@ function isDatedChangingFactSearchQuery(query) {
 }
 
 function extractSearchSubject(query) {
-    const text = normalizeSearchQuery(query)
-        .replace(/\b(?:latest|recent|current|newest|reviews?|review|hands-on|worth\s+it|good|best|price|available|availability|launched|released?|winner|won|champion|rankings?|standings?|compare|comparison|vs)\b/gi, ' ')
+    const normalized = normalizeSearchQuery(query);
+    const roleMatch = normalized.match(/\b(?:ceo|cfo|cto|chair(?:person|man)?|president|prime minister|chief minister|mayor|governor|captain|coach)\s+(?:of|for|at|in)\s+(.+)$/i);
+    if (roleMatch?.[1]) return cleanQueryTarget(roleMatch[1]);
+    const text = normalized
+        .replace(/\b(?:latest|recent|current|newest|reviews?|review|hands-on|worth\s+it|good|best|price|available|availability|launched|released?|winner|won|champion|rankings?|standings?|compare|comparison|vs|movies?|films?|songs?|albums?|releases?)\b/gi, ' ')
         .replace(/\b(?:in|during|as of|by|before|after)\s+\d{4}\b/gi, ' ')
         .replace(/\b(?:of|for|about|on|the|is|are|should|i|buy|get|now|today|live|exact|rate)\b/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-    return normalizeSearchQuery(text).replace(/\s*\(\s*/g, ' ').replace(/\s*\)\s*/g, '').trim();
+    return cleanQueryTarget(normalizeSearchQuery(text).replace(/\s*\(\s*/g, ' ').replace(/\s*\)\s*/g, '').trim());
 }
 
 function extractSearchIntentTerm(query) {
