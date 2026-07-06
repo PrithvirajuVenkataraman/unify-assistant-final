@@ -112,6 +112,16 @@
             </div>
         </section>
     </div>
+    <div id="confirm-action-dialog-backdrop" class="chat-delete-dialog-backdrop hidden" role="presentation" onclick="if (event.target === this) closeConfirmActionDialog(false)">
+        <section id="confirm-action-dialog" class="chat-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-action-dialog-title">
+            <h2 id="confirm-action-dialog-title">Confirm</h2>
+            <p id="confirm-action-dialog-text">Are you sure?</p>
+            <div class="chat-delete-dialog-actions">
+                <button id="confirm-action-dialog-no" type="button" class="chat-delete-dialog-btn secondary" onclick="closeConfirmActionDialog(false)">No</button>
+                <button id="confirm-action-dialog-yes" type="button" class="chat-delete-dialog-btn danger" onclick="closeConfirmActionDialog(true)">Yes</button>
+            </div>
+        </section>
+    </div>
     <div id="text-input-dialog-backdrop" class="text-input-dialog-backdrop hidden" role="presentation" onclick="if (event.target === this) closeTextInputDialog(null)">
         <section class="text-input-dialog" role="dialog" aria-modal="true" aria-labelledby="text-input-dialog-title">
             <h2 id="text-input-dialog-title">Edit message</h2>
@@ -5589,8 +5599,13 @@ let showRoutingDebugBadge = false;
             window.__helpModalReturnFocus = null;
         }
 
-        function clearSavedMemoryStore() {
-            const ok = window.confirm('Clear all saved memory items for this user?');
+        async function clearSavedMemoryStore() {
+            const ok = await openConfirmActionDialog({
+                title: 'Clear memory',
+                message: 'Clear all saved memory items?',
+                confirmLabel: 'Yes',
+                cancelLabel: 'No'
+            });
             if (!ok) return;
             memoryStore = {};
             saveUserData();
@@ -5598,8 +5613,13 @@ let showRoutingDebugBadge = false;
             showTemporaryMessage('Saved memory cleared.');
         }
 
-        function clearConversationHistoryData() {
-            const ok = window.confirm('Clear this user chat history?');
+        async function clearConversationHistoryData() {
+            const ok = await openConfirmActionDialog({
+                title: 'Clear chat',
+                message: 'Clear this chat history?',
+                confirmLabel: 'Yes',
+                cancelLabel: 'No'
+            });
             if (!ok) return;
             conversationHistory = [];
             conversationContext = [];
@@ -5613,8 +5633,13 @@ let showRoutingDebugBadge = false;
             showTemporaryMessage('Chat history cleared.');
         }
 
-        function clearAllAssistantMemoryData() {
-            const ok = window.confirm('Clear saved memory and chat history for this user?');
+        async function clearAllAssistantMemoryData() {
+            const ok = await openConfirmActionDialog({
+                title: 'Clear all',
+                message: 'Clear saved memory and chat history?',
+                confirmLabel: 'Yes',
+                cancelLabel: 'No'
+            });
             if (!ok) return;
             memoryStore = {};
             conversationHistory = [];
@@ -16397,8 +16422,13 @@ function refreshPrivacyDataSummary() {
     if (panel) panel.innerHTML = buildPrivacyDataSummaryHtml();
 }
 
-function cleanExistingConversationHistory() {
-    const ok = window.confirm('Clean and rewrite existing chat history entries now?');
+async function cleanExistingConversationHistory() {
+    const ok = await openConfirmActionDialog({
+        title: 'Clean history',
+        message: 'Clean and rewrite existing chat history entries?',
+        confirmLabel: 'Yes',
+        cancelLabel: 'No'
+    });
     if (!ok) return;
     try {
         const beforeCount = Array.isArray(conversationHistory) ? conversationHistory.length : 0;
@@ -19368,9 +19398,14 @@ function toggleMemoryManagerPin(key) {
     renderMemoryManagerList();
 }
 
-function deleteMemoryManagerItem(key) {
+async function deleteMemoryManagerItem(key) {
     if (!memoryStore?.[key]) return;
-    const ok = window.confirm(`Delete memory "${key}"?`);
+    const ok = await openConfirmActionDialog({
+        title: 'Delete',
+        message: `Delete '${key}'?`,
+        confirmLabel: 'Yes',
+        cancelLabel: 'No'
+    });
     if (!ok) return;
     delete memoryStore[key];
     saveUserData();
@@ -19498,6 +19533,32 @@ function hideTypingIndicator() {
 }
 
 let textInputDialogResolver = null;
+let confirmActionDialogResolver = null;
+
+function openConfirmActionDialog(options = {}) {
+    const backdrop = document.getElementById('confirm-action-dialog-backdrop');
+    const title = document.getElementById('confirm-action-dialog-title');
+    const text = document.getElementById('confirm-action-dialog-text');
+    const noButton = document.getElementById('confirm-action-dialog-no');
+    const yesButton = document.getElementById('confirm-action-dialog-yes');
+    if (!backdrop || !title || !text) return Promise.resolve(false);
+    title.textContent = String(options.title || 'Confirm');
+    text.textContent = String(options.message || 'Are you sure?');
+    if (noButton) noButton.textContent = String(options.cancelLabel || 'No');
+    if (yesButton) yesButton.textContent = String(options.confirmLabel || 'Yes');
+    backdrop.classList.remove('hidden');
+    return new Promise(resolve => {
+        confirmActionDialogResolver = resolve;
+        setTimeout(() => yesButton?.focus?.(), 0);
+    });
+}
+
+function closeConfirmActionDialog(confirmed = false) {
+    document.getElementById('confirm-action-dialog-backdrop')?.classList.add('hidden');
+    const resolver = confirmActionDialogResolver;
+    confirmActionDialogResolver = null;
+    if (resolver) resolver(confirmed === true);
+}
 
 function openTextInputDialog(options = {}) {
     const backdrop = document.getElementById('text-input-dialog-backdrop');
