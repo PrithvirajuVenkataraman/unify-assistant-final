@@ -4991,9 +4991,15 @@ let showRoutingDebugBadge = false;
 
             modal.innerHTML = `
                 <div class="help-modal-enhanced max-w-3xl w-full">
-                    <div class="help-modal-header p-4 flex justify-between items-start gap-3">
-                        <div>
-                            <h2 id="help-modal-title" class="text-xl font-bold">Help & Options</h2>
+                    <div class="help-modal-header p-4">
+                        <button onclick="closeHelpModal()" class="help-modal-back-btn" aria-label="Back to previous screen">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                                <path d="M19 12H5"></path>
+                                <path d="M12 19l-7-7 7-7"></path>
+                            </svg>
+                        </button>
+                        <div class="help-modal-title-block">
+                            <h2 id="help-modal-title" class="text-xl font-bold">System Instructions</h2>
                         </div>
                         <button onclick="closeHelpModal()" class="help-modal-close-btn" aria-label="Close Help & Options">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -5029,7 +5035,7 @@ let showRoutingDebugBadge = false;
             document.querySelector('.page-shell')?.setAttribute('aria-hidden', 'true');
             document.body.appendChild(modal); 
             syncHelpModalModeButtons(); 
-            modal.querySelector('.help-modal-close-btn')?.focus(); 
+            modal.querySelector('.help-modal-back-btn')?.focus(); 
             modal.addEventListener('keydown', trapModalFocus);
         }
 
