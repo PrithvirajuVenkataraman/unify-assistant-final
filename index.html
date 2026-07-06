@@ -555,10 +555,129 @@ function isMathCalculationRequest(text) {
     const t = String(text || '').toLowerCase().trim();
     if (!t) return false;
     if (/\b(weather|forecast|news|headline|translate|joke|hotel|restaurant)\b/.test(t)) return false;
+    if (isAlgebraEquationRequest(t)) return false;
     if (/\b(calculate|calc|compute|evaluate|solve|scientific calculation|scientific calculator)\b/.test(t)) return true;
     if (/^[\d\s()+\-*/^%.=,]+$/.test(t) && /[+\-*/^%]/.test(t)) return true;
     if (/^(what is|what's)\s+[-+*/^%().,\d\s]+=?$/.test(t)) return true;
     return false;
+}
+
+function normalizeAlgebraText(rawText) {
+    return String(rawText || '')
+        .replace(/\u00d7/g, '*')
+        .replace(/\u00f7/g, '/')
+        .replace(/[\u2212\u2013\u2014]/g, '-')
+        .replace(/[?]/g, ' ? ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function isAlgebraEquationRequest(text) {
+    const t = normalizeAlgebraText(text).toLowerCase();
+    if (!t) return false;
+    if (/\b(weather|forecast|news|headline|translate|joke|hotel|restaurant)\b/.test(t)) return false;
+    const hasVariable = /(?:^|[^a-z])[a-z]\s*(?:[+\-*/=]|\?)|(?:[+\-*/=])\s*[a-z](?:[^a-z]|$)|\b(?:find|solve for|value of)\s+[a-z]\b/i.test(t);
+    const hasEquation = /=/.test(t) || /\b(?:find|solve for|value of|what is)\b/i.test(t);
+    return hasVariable && hasEquation;
+}
+
+function parseLinearExpression(expression, variable) {
+    let expr = normalizeAlgebraText(expression)
+        .replace(/\s+/g, '')
+        .replace(new RegExp(`([0-9.])\\*?${variable}\\b`, 'gi'), `$1${variable}`)
+        .replace(new RegExp(`\\*${variable}\\b`, 'gi'), variable);
+    if (!expr) return null;
+    if (!/^[0-9+\-*/().a-zA-Z]+$/.test(expr)) return null;
+    if (/[()]/.test(expr) || /\//.test(expr) || /\*/.test(expr.replace(new RegExp(`[0-9.]${variable}`, 'gi'), ''))) return null;
+    if (!/^[+\-]/.test(expr)) expr = `+${expr}`;
+    const terms = expr.match(/[+\-][^+\-]+/g) || [];
+    let coefficient = 0;
+    let constant = 0;
+    for (const term of terms) {
+        const sign = term[0] === '-' ? -1 : 1;
+        const body = term.slice(1);
+        if (!body) return null;
+        if (new RegExp(`^\\d*(?:\\.\\d+)?${variable}$`, 'i').test(body)) {
+            const coeffText = body.replace(new RegExp(`${variable}$`, 'i'), '');
+            const coeff = coeffText ? Number(coeffText) : 1;
+            if (!Number.isFinite(coeff)) return null;
+            coefficient += sign * coeff;
+        } else if (/^\d+(?:\.\d+)?$/.test(body)) {
+            constant += sign * Number(body);
+        } else {
+            return null;
+        }
+    }
+    return { coefficient, constant };
+}
+
+function findPrimaryLinearEquation(text) {
+    const normalized = normalizeAlgebraText(text);
+    const lines = normalized.split(/[\n;]/).map(line => line.trim()).filter(Boolean);
+    const candidates = lines.length ? lines : [normalized];
+    for (const candidate of candidates) {
+        if (!/=/.test(candidate) || /\?/.test(candidate.split('=').pop() || '')) continue;
+        const variableMatch = candidate.match(/\b([a-z])\b|([0-9.])([a-z])\b/i);
+        const variable = (variableMatch?.[1] || variableMatch?.[3] || '').toLowerCase();
+        if (!variable) continue;
+        const [left, right] = candidate.split('=').map(part => part.trim());
+        if (!left || !right) continue;
+        const leftLinear = parseLinearExpression(left, variable);
+        const rightLinear = parseLinearExpression(right, variable);
+        if (!leftLinear || !rightLinear) continue;
+        const coefficient = leftLinear.coefficient - rightLinear.coefficient;
+        const constant = rightLinear.constant - leftLinear.constant;
+        if (!Number.isFinite(coefficient) || Math.abs(coefficient) < 1e-12) continue;
+        const value = constant / coefficient;
+        if (!Number.isFinite(value)) continue;
+        return { equation: candidate, variable, value, coefficient, constant };
+    }
+    return null;
+}
+
+function findAlgebraTargetExpression(text, variable) {
+    const normalized = normalizeAlgebraText(text);
+    const targetPatterns = [
+        new RegExp(`(?:what\\s+is|find|value\\s+of)\\s+([^?\\n;=]*${variable}[^?\\n;=]*)`, 'i'),
+        new RegExp(`([^\\n;?=]*${variable}[^\\n;?=]*)\\s*=\\s*\\?`, 'i')
+    ];
+    for (const pattern of targetPatterns) {
+        const match = normalized.match(pattern);
+        if (match?.[1]) {
+            const expr = match[1].replace(/^(?:what\s+is|find|value\s+of)\s+/i, '').trim();
+            if (expr && !/=/.test(expr)) return expr;
+        }
+    }
+    return variable;
+}
+
+function evaluateLinearTargetExpression(expression, variable, value) {
+    const linear = parseLinearExpression(expression, variable);
+    if (!linear) return null;
+    return (linear.coefficient * value) + linear.constant;
+}
+
+function formatAlgebraNumber(value) {
+    return Number(value.toFixed(10)).toString();
+}
+
+async function handleAlgebraEquationRequest(text) {
+    const solved = findPrimaryLinearEquation(text);
+    if (!solved) return false;
+    const targetExpression = findAlgebraTargetExpression(text, solved.variable);
+    const targetValue = evaluateLinearTargetExpression(targetExpression, solved.variable, solved.value);
+    const lines = [
+        `From ${solved.equation}:`,
+        `${formatAlgebraNumber(solved.coefficient)}${solved.variable} = ${formatAlgebraNumber(solved.constant)}`,
+        `${solved.variable} = ${formatAlgebraNumber(solved.value)}`
+    ];
+    if (targetExpression && targetExpression !== solved.variable && Number.isFinite(targetValue)) {
+        lines.push(`${targetExpression} = ${formatAlgebraNumber(targetValue)}`);
+    }
+    const msg = lines.join('\n');
+    addChatMessage(msg, false);
+    saveToHistory(text, msg);
+    return true;
 }
 
 function isStepByStepMathRequest(text) {
@@ -3856,7 +3975,8 @@ Rules:
 }
 
 async function deliverApiReply(intent, data = {}, options = {}) {
-    const reply = await composeApiReply(intent, data, options);
+    const deterministicReply = buildDeterministicApiReply(intent, data);
+    const reply = deterministicReply || await composeApiReply(intent, data, options);
     const fallbackText = String(options?.fallbackText || '').trim();
     const finalText = reply || fallbackText;
     if (!finalText) return '';
@@ -3878,6 +3998,23 @@ async function deliverApiReply(intent, data = {}, options = {}) {
         saveToHistory(options.historyKey, options.historyText || finalText);
     }
     return finalText;
+}
+
+function buildDeterministicApiReply(intent, data = {}) {
+    if (String(intent || '') !== 'location_disambiguation') return '';
+    const options = Array.isArray(data?.options) ? data.options : [];
+    const optionLines = options
+        .map((item, index) => {
+            const label = String(item?.label || item?.name || item?.display_name || item || '').replace(/\s+/g, ' ').trim();
+            if (!label) return '';
+            const number = Number(item?.index) || index + 1;
+            return `${number}. ${label}`;
+        })
+        .filter(Boolean);
+    if (!optionLines.length) return '';
+    const rawInput = String(data?.rawInput || 'that place').replace(/\s+/g, ' ').trim();
+    const instruction = String(data?.replyInstruction || 'Reply with the number or full name.').replace(/\s+/g, ' ').trim();
+    return `I found multiple matches for "${rawInput}":\n\n${optionLines.join('\n')}\n\n${instruction}`;
 }
 
 async function prepareApiReply(intent, data = {}, fallbackText = '') {
@@ -6305,7 +6442,6 @@ let showRoutingDebugBadge = false;
 
         function shouldShowContextCopilotBadge(reason) {
             return [
-                'contextual_follow_up',
                 'conversation_repair',
                 'explicit_thread_resume',
                 'pending_clarification_answer',
@@ -6331,7 +6467,6 @@ let showRoutingDebugBadge = false;
             if (reason === 'explicit_thread_resume') return topic ? `Returned to earlier topic: ${topic}` : 'Returned to earlier topic';
             if (reason === 'pending_clarification_answer') return 'Clarification answer understood';
             if (reason === 'new_intent_low_context_confidence') return 'New topic detected';
-            if (reason === 'contextual_follow_up') return topic ? `Follow-up understood: ${topic}` : 'Follow-up understood';
             return '';
         }
 
@@ -6920,18 +7055,12 @@ let showRoutingDebugBadge = false;
 
         function buildVerificationResponseInstructions(scope = 'answer') {
             return [
-                'Return a clear verification report with these exact sections:',
-                'Verdict: Accurate, Inaccurate, Outdated, Unverified, or Misleading.',
-                'Claims checked: bullet each claim with Historical or Current, live verification required yes/no, and retrieved evidence used.',
-                `Evidence used: summarize the ${scope} text, any source links already present, local review flags, and retrieved context supplied in this request.`,
-                'How checked: give a concise rationale for the verdict without revealing hidden chain-of-thought.',
-                'Claims needing live/source verification: list claims that cannot be verified from the supplied evidence.',
-                'Corrected answer: include only if the original is wrong or incomplete.',
-                'Sources: include every usable retrieved source as a markdown link in the form 1. [Title](https://example.com).',
+                'Return a compact verification note with exactly these sections:',
+                `How checked: one short sentence explaining how the ${scope} was checked against supplied evidence, without hidden chain-of-thought.`,
+                'Sources used: include usable retrieved sources as markdown links in the form 1. [Title](https://example.com), or write "No retrieved sources were available."',
                 'Rules: current, today, now, presently, incumbent, latest, live, and as-of-today claims require retrieved live evidence.',
-                'If no live evidence is available for a current claim, use Verdict: Unverified.',
-                'If newer retrieved evidence contradicts a once-true claim, use Verdict: Outdated and state "The answer is outdated."',
-                'Do not write "as of the latest available information", "appears to be", or "likely" unless directly supported by retrieved evidence.'
+                'If no live evidence is available for a current claim, say only that no retrieved sources were available in How checked.',
+                'Do not include Verdict, Claims checked, Claims needing live/source verification, Corrected answer, or long evidence essays.'
             ].join('\n');
         }
 
@@ -7141,7 +7270,7 @@ let showRoutingDebugBadge = false;
                     '',
                     evidenceBlock,
                     '',
-                    'Return the Sources section using only URLs from the retrieved source evidence. If no retrieved source evidence is available, write "Sources: Source verification unavailable."'
+                    'Return only How checked and Sources used. Use only URLs from the retrieved source evidence. If no retrieved source evidence is available, write "Sources used: No retrieved sources were available."'
                 ].join('\n');
                 showThinkingIndicator('Verifying answer...');
                 const response = await window.JarvisApi.postJson('/api/chat-groq', {
@@ -16722,6 +16851,13 @@ function detectInputLanguageHint(text) {
                 }
                 return;
             }
+            if (isAlgebraEquationRequest(compact)) {
+                logRoutingDebug('processCommand -> algebra equation', compact, {
+                    selectedHandler: 'handleAlgebraEquationRequest'
+                });
+                const handledAlgebra = await handleAlgebraEquationRequest(compact);
+                if (handledAlgebra) return;
+            }
             if (isStepByStepMathRequest(compact)) {
                 logRoutingDebug('processCommand -> math step_by_step', compact, {
                     selectedHandler: 'handleMathStepByStepRequest'
@@ -18396,15 +18532,16 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             if (!raw) return '';
 
             const patterns = [
-                /\b(?:in|at|for|around|near)\s+([A-Za-z][A-Za-z\s.'-]{1,80})(?=\s*(?:today|tomorrow|tonight|now|right now|currently|at the moment|this morning|this afternoon|this evening)?\s*[?.!,]*$)/i,
-                /\b(?:in|at|for|around|near)\s+([A-Za-z][A-Za-z\s.'-]{1,80})(?=\s*,\s*(?:today|tomorrow|tonight|now|right now|currently|at the moment)\b)/i
+                /\b(?:in|at|for|near)\s+([A-Za-z][A-Za-z\s.',-]{1,100})(?=\s*(?:around|about|in|during|for|on|today|tomorrow|tonight|now|right now|currently|at the moment|this morning|this afternoon|this evening|next week|next month|next year)?\b|[?.!,]*$)/i,
+                /\b(?:weather|forecast|temperature|climate|conditions?)\s+(?:in|at|for|near)\s+([A-Za-z][A-Za-z\s.',-]{1,100})/i
             ];
 
             for (const pattern of patterns) {
                 const match = raw.match(pattern);
                 if (!match?.[1]) continue;
                 let location = match[1]
-                    .replace(/\b(?:today|tomorrow|tonight|now|right now|currently|at the moment|this morning|this afternoon|this evening)\b/gi, '')
+                    .replace(/\b(?:around|about|in|during|for|on)\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|summer|winter|spring|autumn|fall|monsoon|rainy season|dry season)\b.*$/i, '')
+                    .replace(/\b(?:today|tomorrow|tonight|now|right now|currently|at the moment|this morning|this afternoon|this evening|next week|next month|next year)\b.*$/gi, '')
                     .replace(/[?.!,;]$/g, '')
                     .trim();
                 location = cleanGenericQueryTarget(location);
@@ -20023,6 +20160,10 @@ function deriveChatTitleFromText(text) {
         .replace(/^(please|hey|hi|hello|jarvis)[,\s]+/i, '')
         .trim();
     if (!cleaned) return 'New chat';
+    const algebra = typeof findPrimaryLinearEquation === 'function' ? findPrimaryLinearEquation(cleaned) : null;
+    if (algebra?.equation) {
+        return `Solve ${algebra.equation}`.slice(0, 60);
+    }
     const withoutQuestion = cleaned.replace(/[?.!,;:]+$/g, '').trim();
     const words = withoutQuestion.split(/\s+/).filter(Boolean).slice(0, 7);
     if (!words.length) return 'New chat';
