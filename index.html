@@ -3284,18 +3284,82 @@ function extractKnowledgeSubject(text) {
     for (const p of patterns) {
         const m = raw.match(p);
         if (m && m[1]) {
-            return m[1]
+            return cleanGenericQueryTarget(m[1]
                 .replace(/^(a|an|the)\s+/i, '')
                 .replace(/\b(company|organization|org|inc|ltd|llc)\b/gi, '')
                 .replace(/[?.!,;]+$/g, '')
-                .trim();
+                .trim());
         }
     }
-    return raw
+    return cleanGenericQueryTarget(raw
         .replace(/^(a|an|the)\s+/i, '')
         .replace(/[?.!,;]+$/g, '')
-        .trim(); 
+        .trim()); 
 } 
+
+function normalizeGenericQueryTargetText(value) {
+    return String(value || '')
+        .replace(/[“”]/g, '"')
+        .replace(/[‘’]/g, "'")
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s"'`]+|[\s"'`]+$/g, '')
+        .trim();
+}
+
+function extractGenericQueryTargetMetadata(value) {
+    const raw = normalizeGenericQueryTargetText(value).replace(/[?.!]+$/g, '').trim();
+    if (!raw) return { target: '', dateContext: '', modifiers: [] };
+    const monthName = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+    const seasonName = '(?:summer|winter|spring|autumn|fall|monsoon|rainy season|dry season)';
+    const relativeDate = '(?:today|tomorrow|tonight|now|right now|currently|this morning|this afternoon|this evening|this week|this month|this year|next week|next month|next year)';
+    const dateContext = [];
+    const modifiers = [];
+    const collect = (regex, bucket) => {
+        for (const match of raw.matchAll(regex)) {
+            const found = normalizeGenericQueryTargetText(match[0]).replace(/^[,;\s]+|[,;\s]+$/g, '');
+            if (found && !bucket.includes(found)) bucket.push(found);
+        }
+    };
+    collect(new RegExp(`\\b(?:around|about|in|during|for|on|as of|by|before|after|from)\\s+(?:the\\s+)?(?:month\\s+of\\s+)?${monthName}(?:\\s+\\d{1,2}(?:st|nd|rd|th)?)?(?:,?\\s+(?:19|20)\\d{2})?\\b`, 'gi'), dateContext);
+    collect(new RegExp(`\\b(?:around|about|in|during|for)\\s+${seasonName}\\b`, 'gi'), dateContext);
+    collect(/\b(?:in|during|for|as of|by|before|after|from)\s+(?:19|20)\d{2}\b/gi, dateContext);
+    collect(/\b(?:on|as of|by)\s+\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s*,?\s+(?:19|20)\d{2}\b/gi, dateContext);
+    collect(new RegExp(`\\b${relativeDate}\\b`, 'gi'), dateContext);
+    collect(/\b(?:with sources?|source links?|for beginners?|for kids|for students|step by step|in detail|briefly|short answer|quick answer)\b/gi, modifiers);
+    collect(/\bfor\s+(?:breakfast|lunch|dinner|brunch|date night|families|kids|students|beginners?)\b/gi, modifiers);
+
+    let target = raw;
+    const stripPatterns = [
+        new RegExp(`\\s*,?\\s+(?:around|about|in|during|for|on|as of|by|before|after|from)\\s+(?:the\\s+)?(?:month\\s+of\\s+)?${monthName}(?:\\s+\\d{1,2}(?:st|nd|rd|th)?)?(?:,?\\s+(?:19|20)\\d{2})?\\s*$`, 'i'),
+        new RegExp(`\\s*,?\\s+(?:around|about|in|during|for)\\s+${seasonName}\\s*$`, 'i'),
+        /\s*,?\s+(?:in|during|for|as of|by|before|after|from)\s+(?:19|20)\d{2}\s*$/i,
+        /\s*,?\s+(?:on|as of|by)\s+\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s*,?\s+(?:19|20)\d{2}\s*$/i,
+        new RegExp(`\\s*,?\\s+${relativeDate}\\s*$`, 'i'),
+        /\s*,?\s+(?:with sources?|source links?|for beginners?|for kids|for students|step by step|in detail|briefly|short answer|quick answer)\s*$/i,
+        /\s*,?\s+for\s+(?:breakfast|lunch|dinner|brunch|date night|families|kids|students|beginners?)\s*$/i
+    ];
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const pattern of stripPatterns) {
+            const next = target.replace(pattern, '').trim();
+            if (next !== target && next) {
+                target = next;
+                changed = true;
+            }
+        }
+    }
+    target = target
+        .replace(/\s+(?:around|about|during|for|in|on|as of|by|before|after|from)\s*$/i, '')
+        .replace(/[?.!,;]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    return { target, dateContext: dateContext.join(', '), modifiers };
+}
+
+function cleanGenericQueryTarget(value) {
+    return extractGenericQueryTargetMetadata(value).target;
+}
 
 function normalizeKnowledgeSubject(subject) {
     const raw = String(subject || '').trim();
@@ -18276,7 +18340,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
             for (const pattern of patterns) {
                 const match = cleanText.match(pattern);
                 if (match && match[1]) {
-                    let location = match[1].trim();
+                    let location = cleanGenericQueryTarget(match[1].trim());
                     location = location.replace(/^(?:the\s+)?(?:weather|forecast|temperature)\s+(?:in|at|for)\s+/i, '').trim();
                     location = location.replace(/[?.!,;]$/g, '').trim();
                     
@@ -18313,6 +18377,7 @@ DO NOT make up dish names! Only include dishes you're 100% sure exist in that re
                     .replace(/\b(?:today|tomorrow|tonight|now|right now|currently|at the moment|this morning|this afternoon|this evening)\b/gi, '')
                     .replace(/[?.!,;]$/g, '')
                     .trim();
+                location = cleanGenericQueryTarget(location);
                 if (!location) continue;
                 const lowerLocation = location.toLowerCase();
                 if (currentLocationKeywords.some(keyword => lowerLocation.includes(keyword))) continue;
