@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import currentFactsHandler, { __test as currentFacts } from '../api/current-facts.js';
 import { __test as searchTest } from '../api/search.js';
+import { __test as freeLiveProviderTest } from '../api/_lib/free-live/providers.js';
+import { cleanQueryTarget, extractQueryTargetMetadata } from '../api/_lib/query-target-cleanup.js';
 import { classifyFreeLiveIntent, routeMessage } from '../api/_lib/latest/router.js';
 import { clearItems, saveItems } from '../api/_lib/latest/latest-cache.js';
 
@@ -308,6 +310,8 @@ assert.equal(searchTest.extractSearchTargetQuery('Search the web for recent revi
 assert.deepEqual(searchTest.buildSearchQueryRewrite('compare Alpha Fold X vs Beta Fold Y'), {
     query: 'compare Alpha Fold X vs Beta Fold Y',
     subject: 'Alpha Fold X Beta Fold Y',
+    dateContext: '',
+    modifiers: [],
     freshnessNeeded: true,
     intent: 'comparison'
 });
@@ -771,6 +775,19 @@ assert.match(SOURCE.readme, /live search is disabled by default/i);
 assert.doesNotMatch(SOURCE.styles, /response-recovery-panel|response-recovery-title|response-recovery-btn/);
 assert.match(extractFunctionSource(SOURCE.appHtml, 'stopActiveGeneration'), /activeRequestController\s*=\s*null/);
 assert.match(extractFunctionSource(SOURCE.appHtml, 'stopActiveGeneration'), /resetAssistantProcessingState\(\)/);
+
+assert.equal(cleanQueryTarget('coorg around july'), 'coorg');
+assert.equal(cleanQueryTarget('Coorg, Karnataka around July'), 'Coorg, Karnataka');
+assert.equal(cleanQueryTarget('Paris, France tomorrow'), 'Paris, France');
+assert.equal(cleanQueryTarget('Mysore during summer'), 'Mysore');
+assert.equal(extractQueryTargetMetadata('OpenAI in 2023').dateContext, 'in 2023');
+assert.equal(freeLiveProviderTest.extractLocation('weather in Testville around July'), 'Testville');
+assert.equal(freeLiveProviderTest.extractLocation('forecast for Paris, France tomorrow'), 'Paris, France');
+assert.equal(freeLiveProviderTest.extractPlaceTopic('best places to visit in Mysore during summer'), 'Mysore');
+assert.equal(searchTest.buildSearchQueryRewrite('recent reviews of Nothing Phone 3').subject, 'Nothing Phone 3');
+assert.equal(searchTest.buildSearchQueryRewrite('who was CEO of OpenAI in 2023').subject, 'OpenAI');
+assert.equal(searchTest.buildSearchQueryRewrite('who was CEO of OpenAI in 2023').dateContext, 'in 2023');
+assert.equal(searchTest.buildSearchQueryRewrite('Vijay latest movie in 2023').subject, 'Vijay');
 
 const visionFormatSandbox = {};
 vm.createContext(visionFormatSandbox);
