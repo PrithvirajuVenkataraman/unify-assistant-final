@@ -1564,6 +1564,7 @@ button[aria-label^="Close"],
 button[aria-label^="Back"],
 .help-modal-back-btn,
 .help-modal-close-btn,
+.help-modal-ok-btn,
 .chat-sidebar-close,
 .memory-manager-close,
 .voice-screen-icon-btn,
@@ -3288,7 +3289,8 @@ button:hover {
 }
 
 .help-modal-back-btn,
-.help-modal-close-btn {
+.help-modal-close-btn,
+.help-modal-ok-btn {
     position: relative !important;
     z-index: 25 !important;
     flex: 0 0 auto !important;
@@ -3298,6 +3300,23 @@ button:hover {
     align-items: center !important;
     justify-content: center !important;
     border: 1px solid rgba(255, 255, 255, 0.45) !important;
+}
+
+.help-modal-ok-btn {
+    min-width: 52px !important;
+    width: auto !important;
+    padding: 0 14px !important;
+    font-size: 13px !important;
+    font-weight: 850 !important;
+    letter-spacing: 0 !important;
+}
+
+.help-modal-ok-btn,
+.help-modal-ok-btn:hover,
+.help-modal-ok-btn:focus-visible {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border-color: #ffffff !important;
 }
 
 .help-modal-title-block {
@@ -3354,6 +3373,7 @@ button:hover {
 
 .help-modal-back-btn,
 .help-modal-close-btn,
+.help-modal-ok-btn,
 .help-modal-enhanced .memory-action-btn {
     background: #111111 !important;
     color: #ffffff !important;
@@ -3362,6 +3382,7 @@ button:hover {
 
 .help-modal-back-btn:hover,
 .help-modal-close-btn:hover,
+.help-modal-ok-btn:hover,
 .help-modal-enhanced .memory-action-btn:hover,
 .help-response-card:hover,
 .help-segmented-control button:hover {
@@ -3438,9 +3459,16 @@ button:hover {
     }
 
     .help-modal-back-btn,
-    .help-modal-close-btn {
+    .help-modal-close-btn,
+    .help-modal-ok-btn {
         width: 38px !important;
         height: 38px !important;
+    }
+
+    .help-modal-ok-btn {
+        min-width: 50px !important;
+        width: auto !important;
+        padding: 0 12px !important;
     }
 }
 
