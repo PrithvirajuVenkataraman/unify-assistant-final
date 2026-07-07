@@ -92,9 +92,11 @@ const FEATURE_CONTRACTS = Object.freeze({
             /let customSystemPrompt = ''/,
             /id="custom-system-prompt-input"/,
             /function setCustomSystemPrompt\(/,
+            /function applyCustomSystemPromptAndClose\(/,
+            /class="help-modal-ok-btn"/,
             /customSystemPrompt/
         ],
-        forbidden: [/class="response-style-card"/]
+        forbidden: [/class="response-style-card"/, /oninput="setCustomSystemPrompt\(this\.value, false\)"/]
     },
     spinnerOnlyLoading: {
         required: [
@@ -944,8 +946,11 @@ assert.match(SOURCE.styles, /\.chat-delete-dialog \.chat-delete-dialog-btn\.dang
 assert.match(SOURCE.styles, /\.text-input-dialog-btn\.primary,[\s\S]*color:\s*#000000 !important/);
 assert.match(SOURCE.appHtml, /help-modal-back-btn/);
 assert.match(SOURCE.appHtml, /Back to previous screen/);
+assert.match(SOURCE.appHtml, /applyCustomSystemPromptAndClose\(\)" class="help-modal-ok-btn" aria-label="Save custom instructions"[\s\S]*OK/);
+assert.doesNotMatch(SOURCE.appHtml, /class="help-modal-close-btn" aria-label="Close Help & Options"/);
 assert.match(SOURCE.styles, /\.help-modal-header\s*\{[\s\S]*grid-template-columns:\s*44px minmax\(0,\s*1fr\) 44px/);
 assert.match(SOURCE.styles, /button\[aria-label\^="Close"\],[\s\S]*button\[aria-label\^="Back"\],[\s\S]*border-radius:\s*12px !important/);
+assert.match(SOURCE.styles, /\.help-modal-ok-btn,[\s\S]*\.help-modal-ok-btn:hover,[\s\S]*\.help-modal-ok-btn:focus-visible\s*\{[\s\S]*background:\s*#ffffff !important[\s\S]*color:\s*#000000 !important/);
 assert.match(SOURCE.styles, /\.help-modal-enhanced\s*\{[\s\S]*width:\s*min\(92vw,\s*960px\) !important[\s\S]*max-height:\s*min\(82vh,\s*680px\) !important/);
 assert.match(SOURCE.styles, /\.help-modal-enhanced \.help-modal-body\s*\{[\s\S]*padding:\s*clamp\(14px,\s*2\.4vw,\s*22px\) !important/);
 assert.match(SOURCE.styles, /@media \(max-width:\s*640px\)[\s\S]*\.help-modal-enhanced[\s\S]*width:\s*calc\(100vw - 20px\) !important/);
