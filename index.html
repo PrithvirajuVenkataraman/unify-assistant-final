@@ -5001,11 +5001,8 @@ let showRoutingDebugBadge = false;
                         <div class="help-modal-title-block">
                             <h2 id="help-modal-title" class="text-xl font-bold">System Instructions</h2>
                         </div>
-                        <button onclick="closeHelpModal()" class="help-modal-close-btn" aria-label="Close Help & Options">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
+                        <button onclick="applyCustomSystemPromptAndClose()" class="help-modal-ok-btn" aria-label="Save custom instructions">
+                            OK
                         </button>
                     </div>
 
@@ -5023,9 +5020,7 @@ let showRoutingDebugBadge = false;
                                 class="custom-system-prompt-input"
                                 rows="5"
                                 maxlength="1200"
-                                placeholder="Example: Reply like ChatGPT. Be concise, structured, direct, and avoid unnecessary endings."
-                                oninput="setCustomSystemPrompt(this.value, false)"
-                                onchange="setCustomSystemPrompt(this.value, true)">${escapeHtml(customSystemPrompt)}</textarea>
+                                placeholder="Example: Reply like ChatGPT. Be concise, structured, direct, and avoid unnecessary endings.">${escapeHtml(customSystemPrompt)}</textarea>
                         </section>
 
                     </div>   
@@ -5660,6 +5655,12 @@ let showRoutingDebugBadge = false;
             window.JarvisState?.setPreferences({ customSystemPrompt });
             saveAssistantModes();
             if (announce) showTemporaryMessage(customSystemPrompt ? 'Custom instructions saved.' : 'Custom instructions cleared.');
+        }
+
+        function applyCustomSystemPromptAndClose() {
+            const input = document.getElementById('custom-system-prompt-input');
+            setCustomSystemPrompt(input ? input.value : customSystemPrompt, true);
+            closeHelpModal();
         }
 
         function resetCustomSystemPrompt() {
