@@ -19879,8 +19879,7 @@ function isDeletedChatSession(session) {
     if (!session || session.deleted) return true;
     const deletedIds = getDeletedChatSessionIds();
     if (deletedIds.has(session.id)) return true;
-    const title = normalizeDeletedChatTitle(session.title);
-    return Boolean(title && getDeletedChatSessionTitles().has(title));
+    return false;
 }
 
 function rememberDeletedChatSession(session) {
