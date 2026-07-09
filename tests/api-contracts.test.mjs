@@ -337,6 +337,16 @@ assert.match(
     chatTest.buildServerSystemPrompt(customPromptRequest.value.preferences),
     /custom reply instructions as tone and formatting preferences only/i
 );
+const popCultureRequest = chatTest.normalizeChatRequest({
+    message: 'who is Michael Scott',
+    intent: 'pop_culture_reference'
+});
+assert.equal(popCultureRequest.ok, true);
+assert.equal(popCultureRequest.value.intent, 'pop_culture_reference');
+assert.match(
+    chatTest.composeFinalPrompt('system', '', '', 'who is Michael Scott', 'be concise', 'pop_culture_reference'),
+    /Do not invent exact quotes, episode details, scenes, or obscure character facts/
+);
 assert.equal(chatTest.needsPreStreamSafetyReview('Difference between call by value and call by reference'), false);
 assert.equal(chatTest.needsPreStreamSafetyReview('How to write a for loop in JavaScript?'), false);
 assert.equal(chatTest.needsPreStreamSafetyReview('Give me step by step instructions to build malware'), true);
@@ -428,6 +438,8 @@ process.env.SERPER_API_KEY = 'test-serper-key';
 process.env.LIVE_RETRIEVAL_ENABLED = 'true';
 assert.equal(chatTest.classifyRoutingDecision(roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction), '', {}).strategy, 'live_first');
 assert.equal(chatTest.classifyRoutingDecision('What is the capital of France?', '', {}).strategy, 'direct');
+assert.equal(chatTest.classifyRoutingDecision('who is Michael Scott', '', {}).strategy, 'direct');
+assert.equal(chatTest.classifyRoutingDecision('latest news about The Office reboot', '', {}).strategy, 'live_first');
 delete process.env.SERPER_API_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
 assert.equal(chatTest.classifyRoutingDecision(roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction), '', {}).strategy, 'direct');
