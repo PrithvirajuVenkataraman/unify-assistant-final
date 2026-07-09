@@ -308,6 +308,12 @@
             </div>
         </div>
         <video id="continuous-vision-video" class="continuous-vision-video hidden" autoplay playsinline muted></video>
+        <div id="paper-answer-overlay" class="paper-answer-overlay hidden" aria-live="polite"></div>
+        <div id="paper-answer-overlay-controls" class="paper-answer-overlay-controls hidden" aria-label="Paper answer overlay controls">
+            <button type="button" onclick="clearPaperAnswerOverlay()">Clear overlay</button>
+            <button type="button" onclick="refreshPaperAnswerOverlay()">Refresh answers</button>
+            <button type="button" onclick="copyPaperAnswerOverlay()">Copy answers</button>
+        </div>
         <div id="continuous-vision-zoom-controls" class="continuous-vision-zoom-controls hidden" aria-label="Live vision zoom controls">
             <button type="button" class="continuous-vision-zoom-btn" onclick="adjustContinuousVisionZoom(-0.25)" aria-label="Zoom out">-</button>
             <input id="continuous-vision-zoom-slider" class="continuous-vision-zoom-slider" type="range" min="1" max="3" step="0.1" value="1" oninput="setContinuousVisionZoomFromSlider(this.value)" aria-label="Live vision zoom">
@@ -20992,6 +20998,12 @@ let isContinuousVisionMinimized = false;
 let continuousVisionRotationDeg = 0;
 let continuousVisionFacingMode = 'environment';
 let continuousVisionZoomState = { value: 1, min: 1, max: 3, step: 0.1, hardware: false };
+let paperAnswerOverlayState = {
+    items: [],
+    summary: '',
+    lastPrompt: '',
+    renderedAt: ''
+};
 
 function updateContinuousVisionStatus(message, state = 'info') {
     const statusEl = document.getElementById('continuous-vision-status');
@@ -21006,6 +21018,129 @@ function queueVisionRetry(text) {
     input.value = String(text || 'What do you see?').trim();
     input.focus();
     toggleSendButton();
+}
+
+function isPaperAnswerOverlayIntent(text) {
+    const t = String(text || '').toLowerCase();
+    return /\b(write|fill|complete|put|place|show)\b[\s\S]{0,50}\b(paper|worksheet|sheet|form|blank|field|answer|answers)\b/.test(t) ||
+        /\b(write answers here|write on the paper|fill this|fill every field|solve and write it|answer every field|complete this form)\b/.test(t);
+}
+
+function normalizePaperOverlayBox(item) {
+    const source = item?.box || item?.bbox || item?.normalizedBox || item?.placement?.box || null;
+    if (!source || typeof source !== 'object') return null;
+    const x = Number(source.x ?? source.left);
+    const y = Number(source.y ?? source.top);
+    const width = Number(source.width ?? source.w ?? (Number(source.right) - x));
+    const height = Number(source.height ?? source.h ?? (Number(source.bottom) - y));
+    if (![x, y, width, height].every(Number.isFinite)) return null;
+    const normalized = { x, y, width, height };
+    if (normalized.x > 1 || normalized.y > 1 || normalized.width > 1 || normalized.height > 1) {
+        normalized.x /= 100;
+        normalized.y /= 100;
+        normalized.width /= 100;
+        normalized.height /= 100;
+    }
+    if (normalized.width <= 0 || normalized.height <= 0) return null;
+    return {
+        x: Math.max(0.02, Math.min(0.92, normalized.x)),
+        y: Math.max(0.04, Math.min(0.9, normalized.y)),
+        width: Math.max(0.06, Math.min(0.8, normalized.width)),
+        height: Math.max(0.04, Math.min(0.32, normalized.height))
+    };
+}
+
+function normalizePaperAnswerOverlayItems(details = {}) {
+    const rawItems = Array.isArray(details?.overlayItems)
+        ? details.overlayItems
+        : (Array.isArray(details?.answers) ? details.answers : []);
+    return rawItems.map((item, index) => {
+        const label = String(item?.label || item?.field || item?.question || `Field ${index + 1}`).replace(/\s+/g, ' ').trim();
+        const answer = String(item?.answer || item?.value || item?.text || '').replace(/\s+/g, ' ').trim();
+        const confidenceValue = Number(item?.confidence);
+        const confidence = Number.isFinite(confidenceValue) ? confidenceValue : 0.65;
+        const lineNumber = Number(item?.lineNumber || item?.line || item?.order || index + 1);
+        return {
+            label: label || `Field ${index + 1}`,
+            answer: answer || 'Unclear',
+            confidence,
+            lineNumber: Number.isFinite(lineNumber) ? lineNumber : index + 1,
+            box: normalizePaperOverlayBox(item)
+        };
+    }).filter(item => item.answer);
+}
+
+function buildPaperAnswerOverlayText(items = paperAnswerOverlayState.items) {
+    return (items || []).map((item, index) => {
+        const label = String(item?.label || `Field ${index + 1}`).trim();
+        const answer = String(item?.answer || '').trim();
+        return `${index + 1}. ${label}: ${answer}`;
+    }).filter(Boolean).join('\n');
+}
+
+function renderPaperAnswerOverlay(details = {}, responseText = '', promptText = '') {
+    const overlay = document.getElementById('paper-answer-overlay');
+    const controls = document.getElementById('paper-answer-overlay-controls');
+    if (!overlay || !controls) return;
+    const items = normalizePaperAnswerOverlayItems(details);
+    paperAnswerOverlayState = {
+        items,
+        summary: String(details?.summary || responseText || '').trim(),
+        lastPrompt: String(promptText || paperAnswerOverlayState.lastPrompt || '').trim(),
+        renderedAt: new Date().toISOString()
+    };
+    if (!items.length) {
+        overlay.innerHTML = '';
+        overlay.className = 'paper-answer-overlay hidden';
+        controls.classList.add('hidden');
+        return;
+    }
+    const withBoxes = items.filter(item => item.box).length;
+    const useFallback = withBoxes < Math.ceil(items.length / 2);
+    overlay.className = `paper-answer-overlay${useFallback ? ' is-fallback' : ''}`;
+    overlay.innerHTML = items.map((item, index) => {
+        const lowConfidence = Number(item.confidence || 0) < 0.55;
+        const safeLabel = escapeHtml(item.label || `Field ${index + 1}`);
+        const safeAnswer = escapeHtml(item.answer || 'Unclear');
+        const rowTop = 10 + (index * Math.max(10, Math.min(17, 78 / Math.max(1, items.length))));
+        const box = item.box;
+        const left = box ? Math.min(88, Math.max(2, (box.x + box.width + 0.015) * 100)) : 8;
+        const top = box ? Math.min(88, Math.max(4, (box.y + Math.min(box.height, 0.08)) * 100)) : rowTop;
+        const style = useFallback ? '' : ` style="left:${left.toFixed(1)}%; top:${top.toFixed(1)}%;"`;
+        return `<div class="paper-answer-chip${lowConfidence ? ' is-low-confidence' : ''}"${style}><small>${safeLabel}</small>${safeAnswer}</div>`;
+    }).join('');
+    overlay.classList.remove('hidden');
+    controls.classList.remove('hidden');
+}
+
+function clearPaperAnswerOverlay() {
+    paperAnswerOverlayState = { items: [], summary: '', lastPrompt: '', renderedAt: '' };
+    const overlay = document.getElementById('paper-answer-overlay');
+    const controls = document.getElementById('paper-answer-overlay-controls');
+    if (overlay) {
+        overlay.innerHTML = '';
+        overlay.className = 'paper-answer-overlay hidden';
+    }
+    controls?.classList.add('hidden');
+}
+
+function refreshPaperAnswerOverlay() {
+    const prompt = paperAnswerOverlayState.lastPrompt || 'write the answers on the paper';
+    if (!isContinuousVisionActive) {
+        showTemporaryMessage('Turn on Live Vision first.');
+        return;
+    }
+    void handleContinuousVisionQuery(prompt);
+}
+
+function copyPaperAnswerOverlay() {
+    const text = buildPaperAnswerOverlayText();
+    if (!text) {
+        showTemporaryMessage('No overlay answers to copy.');
+        return;
+    }
+    copyToClipboard(text);
+    showTemporaryMessage('Paper answers copied.');
 }
 
 function addVisionRecoveryMessage(message, retryText = 'What do you see?') {
@@ -21144,6 +21279,7 @@ async function toggleContinuousVision() {
         if (continuousVisionStream) {
             continuousVisionStream.getTracks().forEach(t => t.stop());
         }
+        clearPaperAnswerOverlay();
         continuousVisionTrack = null;
         videoEl.srcObject = null;
         continuousVisionRotationDeg = 0;
@@ -21281,16 +21417,21 @@ async function handleContinuousVisionQuery(text) {
         const isTranslateIntent = /\b(translate|translation|convert to english|to english|in english|what does this say)\b/i.test(String(text || '')); 
         const isMathSolveIntent = /\b(solve|calculate|evaluate|find x|equation|integral|derivative|differentiate|simplify|factor|algebra|trigonometry|calculus|math problem|word problem|step by step)\b/i.test(String(text || '')); 
         const isWebsiteUiIntent = isWebsiteUiVisionIntent(text); 
-        const visionTask = isMathSolveIntent 
+        const isPaperOverlayIntent = isPaperAnswerOverlayIntent(text);
+        const visionTask = isPaperOverlayIntent
+            ? 'paper_answer_overlay'
+            : (isMathSolveIntent 
             ? 'math_ocr_solve' 
-            : (isTranslateIntent ? 'translate_to_english' : (isTextReadIntent ? 'text_extract' : 'general_vision')); 
-        const visionPrompt = isMathSolveIntent 
+            : (isTranslateIntent ? 'translate_to_english' : (isTextReadIntent ? 'text_extract' : 'general_vision'))); 
+        const visionPrompt = isPaperOverlayIntent
+            ? `Read the visible paper, worksheet, or form. Solve/fill every readable question or blank field the user is asking about, and return overlay-ready answers. If this appears to be a graded exam or active assessment, provide guidance/hints instead of direct final answers. User query: "${text}".`
+            : (isMathSolveIntent 
             ? `Read the math problem from the image and solve it accurately with clear steps. User query: "${text}".` 
             : (isTranslateIntent 
                 ? `Extract all readable text and translate it to English. User query: "${text}".` 
                 : (isWebsiteUiIntent
                     ? `Identify the website, web app, mobile app, or UI shown in the image using only visible evidence. First use visible branding, logo, page title, header, or app chrome. If branding is unclear, inspect visible URL/address-bar/domain/tab text and extract the likely site or app name. Do not guess or use web search. If no brand or URL is visible, describe the UI normally and say the site name is not visible. User query: "${text}". Respond in 1-2 short sentences.`
-                    : `Describe what is relevant to the user query in a professional, concise report. Vision detail preference: ${visionDetailLevel}. Evidence display preference: ${visionShowEvidence ? 'include visible evidence when useful' : 'hide evidence unless needed for uncertainty'}. Focus on the most prominent foreground object first. If it is a phone, tablet, laptop, wearable, or other product, infer the likely brand/model only from visible evidence such as logos, camera layout, ports, buttons, colors, UI, or readable text; say "likely" when uncertain and include the evidence. If readable text is visible, mention it as secondary context. Preserve exact numbers/symbols/equations when text exists. User query: "${text}".`)); 
+                    : `Describe what is relevant to the user query in a professional, concise report. Vision detail preference: ${visionDetailLevel}. Evidence display preference: ${visionShowEvidence ? 'include visible evidence when useful' : 'hide evidence unless needed for uncertainty'}. Focus on the most prominent foreground object first. If it is a phone, tablet, laptop, wearable, or other product, infer the likely brand/model only from visible evidence such as logos, camera layout, ports, buttons, colors, UI, or readable text; say "likely" when uncertain and include the evidence. If readable text is visible, mention it as secondary context. Preserve exact numbers/symbols/equations when text exists. User query: "${text}".`))); 
         const response = await fetch('/api/vision', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -21334,6 +21475,9 @@ async function handleContinuousVisionQuery(text) {
         }
         answer = applyVisionReplyPreferences(answer);
         if (!answer) answer = 'The frame was received, but I could not produce a reliable visual answer.'; 
+        if (visionTask === 'paper_answer_overlay') {
+            renderPaperAnswerOverlay(details, answer, text);
+        }
         recentVisionError = '';
         updateContinuousVisionStatus('Camera ready', 'ready');
         addChatMessage(answer, false);
