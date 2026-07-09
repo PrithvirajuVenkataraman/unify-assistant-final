@@ -347,6 +347,10 @@ assert.match(
     chatTest.composeFinalPrompt('system', '', '', 'who is Michael Scott', 'be concise', 'pop_culture_reference'),
     /Do not invent exact quotes, episode details, scenes, or obscure character facts/
 );
+assert.doesNotMatch(
+    chatTest.composeFinalPrompt('system', '', '', 'who is Ada Lovelace', 'be concise', 'chat'),
+    /Pop-culture reference intent:/
+);
 assert.equal(chatTest.needsPreStreamSafetyReview('Difference between call by value and call by reference'), false);
 assert.equal(chatTest.needsPreStreamSafetyReview('How to write a for loop in JavaScript?'), false);
 assert.equal(chatTest.needsPreStreamSafetyReview('Give me step by step instructions to build malware'), true);
@@ -371,6 +375,13 @@ assert.equal(chatTest.shouldStreamChatRequest(
     { strategy: 'direct' },
     false
 ), false);
+assert.equal(chatTest.shouldStreamChatRequest(
+    { stream: true, message: 'explain the Schmosby reference' },
+    'pop_culture_reference',
+    null,
+    { strategy: 'direct' },
+    false
+), true);
 assert.equal(chatTest.parseWordCountRequest('Explain photosynthesis in 7 words').mode, 'exact');
 assert.equal(chatTest.parseWordCountRequest('Explain photosynthesis in 7 words').targetWords, 7);
 assert.equal(chatTest.parseWordCountRequest('Explain photosynthesis in 75 words').targetWords, 75);
@@ -438,8 +449,12 @@ process.env.SERPER_API_KEY = 'test-serper-key';
 process.env.LIVE_RETRIEVAL_ENABLED = 'true';
 assert.equal(chatTest.classifyRoutingDecision(roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction), '', {}).strategy, 'live_first');
 assert.equal(chatTest.classifyRoutingDecision('What is the capital of France?', '', {}).strategy, 'direct');
-assert.equal(chatTest.classifyRoutingDecision('who is Michael Scott', '', {}).strategy, 'direct');
-assert.equal(chatTest.classifyRoutingDecision('latest news about The Office reboot', '', {}).strategy, 'live_first');
+assert.deepEqual(
+    chatTest.classifyRoutingDecision('explain the Schmosby reference', '', { intent: 'pop_culture_reference' }),
+    { strategy: 'direct', reason: 'pop_culture_reference_stable', webEligible: false }
+);
+assert.equal(chatTest.classifyRoutingDecision('latest news about The Office reboot', '', { intent: 'pop_culture_reference' }).strategy, 'live_first');
+assert.equal(chatTest.classifyRoutingDecision('explain the Schmosby reference with sources', '', { intent: 'pop_culture_reference' }).strategy, 'live_first');
 delete process.env.SERPER_API_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
 assert.equal(chatTest.classifyRoutingDecision(roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction), '', {}).strategy, 'direct');
