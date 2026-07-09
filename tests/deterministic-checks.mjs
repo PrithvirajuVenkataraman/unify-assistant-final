@@ -276,8 +276,8 @@ assert.equal(currentFacts.liveDisabledResponse.success, false);
 assert.equal(routeMessage('guitar strings').route, 'llm');
 assert.equal(routeMessage('guitar chords').route, 'llm');
 assert.equal(routeMessage('explain transformer attention').route, 'llm');
-assert.equal(routeMessage('latest OpenAI news').route, 'cached_latest');
-assert.equal(routeMessage('latest React release').route, 'cached_latest');
+assert.equal(routeMessage('latest Example Labs news').route, 'cached_latest');
+assert.equal(routeMessage('latest Example Framework release').route, 'cached_latest');
 assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.weather).route, 'live_required');
 assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.crypto).route, 'live_required');
 assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.unsupported).route, 'llm');
@@ -288,13 +288,13 @@ assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.disaster).category, 'dis
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.sports).category, 'sports');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.places).category, 'tourism_food_places');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.unsupported).category, 'stable_knowledge');
-assert.equal(classifyFreeLiveIntent('Search the web for recent reviews of the Nothing Phone 3').category, 'web_search');
-assert.equal(classifyFreeLiveIntent('recent reviews of Nothing Phone 3').category, 'web_search');
-assert.equal(classifyFreeLiveIntent('Nothing Phone 3 reviews').category, 'web_search');
-assert.equal(classifyFreeLiveIntent('recent reviews of Framework Laptop 16').category, 'web_search');
+assert.equal(classifyFreeLiveIntent('Search the web for recent reviews of the Nova Phone 3').category, 'web_search');
+assert.equal(classifyFreeLiveIntent('recent reviews of Nova Phone 3').category, 'web_search');
+assert.equal(classifyFreeLiveIntent('Nova Phone 3 reviews').category, 'web_search');
+assert.equal(classifyFreeLiveIntent('recent reviews of Modular Laptop 16').category, 'web_search');
 assert.equal(classifyFreeLiveIntent('compare Alpha Fold X vs Beta Fold Y').category, 'web_search');
 assert.equal(classifyFreeLiveIntent('price of Acme Speaker Mini').category, 'web_search');
-assert.equal(classifyFreeLiveIntent('Explain what Nothing OS is').category, 'stable_knowledge');
+assert.equal(classifyFreeLiveIntent('Explain what Example OS is').category, 'stable_knowledge');
 assert.match(SOURCE.searchApi, /mode === 'rag'/);
 assert.match(SOURCE.searchApi, /runEvidenceFirstWebRag\(query,\s*\{\s*limit\s*\}\)/);
 assert.match(SOURCE.searchApi, /const EXA_SEARCH_URL = 'https:\/\/api\.exa\.ai\/search'/);
@@ -308,7 +308,7 @@ assert.match(SOURCE.embeddingsApi, /integrate\.api\.nvidia\.com\/v1\/embeddings/
 assert.doesNotMatch(SOURCE.appHtml, /NVIDIA_API_KEY|integrate\.api\.nvidia\.com\/v1\/embeddings/);
 assert.match(SOURCE.appHtml, /mode:\s*'rag'/);
 assert.match(SOURCE.appHtml, /answerData\?\.verified === true/);
-assert.equal(searchTest.extractSearchTargetQuery('Search the web for recent reviews of the Nothing Phone 3'), 'recent reviews of the Nothing Phone 3');
+assert.equal(searchTest.extractSearchTargetQuery('Search the web for recent reviews of the Nova Phone 3'), 'recent reviews of the Nova Phone 3');
 assert.deepEqual(searchTest.buildSearchQueryRewrite('compare Alpha Fold X vs Beta Fold Y'), {
     query: 'compare Alpha Fold X vs Beta Fold Y',
     subject: 'Alpha Fold X Beta Fold Y',
@@ -317,38 +317,38 @@ assert.deepEqual(searchTest.buildSearchQueryRewrite('compare Alpha Fold X vs Bet
     freshnessNeeded: true,
     intent: 'comparison'
 });
-assert.deepEqual(searchTest.buildDeterministicSearchQueries('recent reviews of Nothing Phone 3'), [
-    'Nothing Phone 3 reviews',
-    'Nothing Phone 3 recent reviews',
-    'Nothing Phone 3 latest reviews'
+assert.deepEqual(searchTest.buildDeterministicSearchQueries('recent reviews of Nova Phone 3'), [
+    'Nova Phone 3 reviews',
+    'Nova Phone 3 recent reviews',
+    'Nova Phone 3 latest reviews'
 ]);
-assert.equal(searchTest.isRelatedToQuery('Nothing Phone 3 reviews', {
-    title: 'Nothing Was the Same',
-    description: 'Drake album released in 2013 with OVO production credits.',
+assert.equal(searchTest.isRelatedToQuery('Nova Phone 3 reviews', {
+    title: 'Nova Echoes',
+    description: 'A studio album released in 2013 with production credits.',
     sourceLabel: 'Wikipedia'
 }), false);
-assert.equal(searchTest.isRelatedToQuery('Nothing Phone 3 reviews', {
-    title: 'Nothing Phone 3 hands-on review',
-    description: 'Early phone review with camera, battery, display, and Nothing OS impressions.',
+assert.equal(searchTest.isRelatedToQuery('Nova Phone 3 reviews', {
+    title: 'Nova Phone 3 hands-on review',
+    description: 'Early phone review with camera, battery, display, and Example OS impressions.',
     sourceLabel: 'Tech Review'
 }), true);
-assert.equal(searchTest.isRelatedToQuery('Who is the CM of Tamil Nadu', {
-    title: 'SteamOS',
-    description: "SteamOS is a gaming-focused operating system released by Valve that incorporates the company's storefront.",
+assert.equal(searchTest.isRelatedToQuery('Who is the CM of Sample State', {
+    title: 'OrbitOS',
+    description: 'OrbitOS is a gaming-focused operating system released by a platform company.',
     sourceLabel: 'Wikipedia'
 }), false);
-assert.equal(searchTest.isRelatedToQuery('Who is the CM of Tamil Nadu', {
-    title: 'Chief Minister of Tamil Nadu',
-    description: 'The chief minister is the head of government of Tamil Nadu.',
+assert.equal(searchTest.isRelatedToQuery('Who is the CM of Sample State', {
+    title: 'Chief Minister of Sample State',
+    description: 'The chief minister is the head of government of Sample State.',
     sourceLabel: 'Wikipedia'
 }), true);
-assert.equal(searchTest.isRelatedToQuery('recent reviews of Framework Laptop 16', {
+assert.equal(searchTest.isRelatedToQuery('recent reviews of Modular Laptop 16', {
     title: 'Framework design language',
     description: 'A general page about software frameworks and laptop stands.',
     sourceLabel: 'Reference'
 }), false);
-assert.equal(searchTest.isRelatedToQuery('recent reviews of Framework Laptop 16', {
-    title: 'Framework Laptop 16 review',
+assert.equal(searchTest.isRelatedToQuery('recent reviews of Modular Laptop 16', {
+    title: 'Modular Laptop 16 review',
     description: 'A recent review covering performance, battery, modular parts, and display quality.',
     sourceLabel: 'Tech Review'
 }), true);
@@ -534,8 +534,6 @@ assert.doesNotMatch(SOURCE.appHtml, /SITCOM_MOVIE_REFERENCE_CATALOG/);
 assert.doesNotMatch(SOURCE.appHtml, /function detectSitcomMovieReference/);
 assert.doesNotMatch(SOURCE.appHtml, /function buildSitcomMovieReferenceResponse/);
 assert.doesNotMatch(SOURCE.appHtml, /handleSitcomMovieReference/);
-assert.doesNotMatch(SOURCE.appHtml, /Michael Scott/);
-assert.doesNotMatch(SOURCE.appHtml, /Chandler Bing/);
 const popCultureSandbox = {
     isScreenSuggestionRequest(text) {
         return /\b(best|top|recommend|suggest|like)\b/i.test(String(text || '')) &&
@@ -554,16 +552,16 @@ const popCultureSandbox = {
 vm.createContext(popCultureSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isSeriesReferenceJokeRequest'), popCultureSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isPopCultureReferenceQuery'), popCultureSandbox);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Michael Scott'), false);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Michael Scott character'), true);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('explain the Schmosby reference'), true);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('best sitcoms like The Office'), false);
-assert.equal(popCultureSandbox.isSeriesReferenceJokeRequest('make a Friends reference joke'), true);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('make a Friends reference joke'), false);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('latest news about The Office reboot'), false);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Sam Altman'), false);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is the CEO of Microsoft'), false);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who founded OpenAI'), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Jordan Vale'), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Jordan Vale character'), true);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('explain the running nickname reference'), true);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('best sitcoms like Workplace Crew'), false);
+assert.equal(popCultureSandbox.isSeriesReferenceJokeRequest('make a sitcom reference joke'), true);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('make a sitcom reference joke'), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('latest news about Workplace Crew reboot'), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Riley Stone'), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is the CEO of Example Corp'), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who founded Example Labs'), false);
 assert.match(SOURCE.appHtml, /function handlePopCultureReferenceModelQuery/);
 assert.match(SOURCE.appHtml, /intent:\s*'pop_culture_reference'/);
 assert.match(SOURCE.chatGroqApi, /Pop-culture reference intent:/);
@@ -573,10 +571,10 @@ assert.equal(routeMessage('best restaurants in Chennai').route, 'llm');
 
 clearItems();
 saveItems([{
-    title: 'OpenAI announces a new API update',
-    url: 'https://openai.com/news/example-api-update',
-    summary: 'A cached OpenAI update for freshness checks.',
-    source: 'OpenAI News',
+    title: 'Example Labs announces a new API update',
+    url: 'https://example.com/news/example-api-update',
+    summary: 'A cached Example Labs update for freshness checks.',
+    source: 'Example Labs News',
     publishedAt: new Date().toISOString()
 }]);
 
@@ -584,12 +582,12 @@ const currentFactsApi = await callJsonHandler(currentFactsHandler, {
     method: 'POST',
     url: '/api/current-facts',
     headers: { 'content-type': 'application/json' },
-    body: { query: 'latest OpenAI news' }
+    body: { query: 'latest Example Labs news' }
 });
 assert.equal(currentFactsApi.statusCode, 200);
 assert.equal(currentFactsApi.body.disabled, false);
 assert.equal(currentFactsApi.body.resolved, true);
-assert.equal(currentFactsApi.body.sources[0].source, 'OpenAI News');
+assert.equal(currentFactsApi.body.sources[0].source, 'Example Labs News');
 
 assert.match(SOURCE.appHtml, /let responseStyle = 'balanced'/);
 assert.match(SOURCE.appHtml, /\['balanced', 'witty', 'chatty', 'supportive', 'debate'\]/);
@@ -877,14 +875,14 @@ assert.equal(cleanQueryTarget('coorg around july'), 'coorg');
 assert.equal(cleanQueryTarget('Coorg, Karnataka around July'), 'Coorg, Karnataka');
 assert.equal(cleanQueryTarget('Paris, France tomorrow'), 'Paris, France');
 assert.equal(cleanQueryTarget('Mysore during summer'), 'Mysore');
-assert.equal(extractQueryTargetMetadata('OpenAI in 2023').dateContext, 'in 2023');
+assert.equal(extractQueryTargetMetadata('Example Labs in 2023').dateContext, 'in 2023');
 assert.equal(freeLiveProviderTest.extractLocation('weather in Testville around July'), 'Testville');
 assert.equal(freeLiveProviderTest.extractLocation('forecast for Paris, France tomorrow'), 'Paris, France');
 assert.equal(freeLiveProviderTest.extractPlaceTopic('best places to visit in Mysore during summer'), 'Mysore');
-assert.equal(searchTest.buildSearchQueryRewrite('recent reviews of Nothing Phone 3').subject, 'Nothing Phone 3');
-assert.equal(searchTest.buildSearchQueryRewrite('who was CEO of OpenAI in 2023').subject, 'OpenAI');
-assert.equal(searchTest.buildSearchQueryRewrite('who was CEO of OpenAI in 2023').dateContext, 'in 2023');
-assert.equal(searchTest.buildSearchQueryRewrite('Vijay latest movie in 2023').subject, 'Vijay');
+assert.equal(searchTest.buildSearchQueryRewrite('recent reviews of Nova Phone 3').subject, 'Nova Phone 3');
+assert.equal(searchTest.buildSearchQueryRewrite('who was CEO of Example Labs in 2023').subject, 'Example Labs');
+assert.equal(searchTest.buildSearchQueryRewrite('who was CEO of Example Labs in 2023').dateContext, 'in 2023');
+assert.equal(searchTest.buildSearchQueryRewrite('Sample Actor latest movie in 2023').subject, 'Sample Actor');
 
 const visionFormatSandbox = {};
 vm.createContext(visionFormatSandbox);
