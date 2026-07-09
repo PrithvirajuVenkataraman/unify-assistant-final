@@ -554,12 +554,17 @@ const popCultureSandbox = {
 vm.createContext(popCultureSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isSeriesReferenceJokeRequest'), popCultureSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isPopCultureReferenceQuery'), popCultureSandbox);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Michael Scott'), true);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Michael Scott'), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Michael Scott character'), true);
 assert.equal(popCultureSandbox.isPopCultureReferenceQuery('explain the Schmosby reference'), true);
 assert.equal(popCultureSandbox.isPopCultureReferenceQuery('best sitcoms like The Office'), false);
 assert.equal(popCultureSandbox.isSeriesReferenceJokeRequest('make a Friends reference joke'), true);
 assert.equal(popCultureSandbox.isPopCultureReferenceQuery('make a Friends reference joke'), false);
 assert.equal(popCultureSandbox.isPopCultureReferenceQuery('latest news about The Office reboot'), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Sam Altman'), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is the CEO of Microsoft'), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who founded OpenAI'), false);
+assert.match(SOURCE.appHtml, /function handlePopCultureReferenceModelQuery/);
 assert.match(SOURCE.appHtml, /intent:\s*'pop_culture_reference'/);
 assert.match(SOURCE.chatGroqApi, /Pop-culture reference intent:/);
 assert.doesNotMatch(SOURCE.appHtml, /function isRestaurantLookupIntent/);
