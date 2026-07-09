@@ -1871,6 +1871,67 @@ const invalidVisionMime = await callHandler(visionHandler, request('/api/vision'
 assert.equal(invalidVisionMime.statusCode, 415);
 assert.equal(invalidVisionMime.body.error.code, 'unsupported_media_type');
 
+process.env.GEMINI_API_KEY = 'test-gemini-key';
+let paperVisionCalls = 0;
+globalThis.fetch = async (url, init) => {
+    const href = String(url);
+    if (href.includes('generativelanguage.googleapis.com')) {
+        paperVisionCalls += 1;
+        const body = JSON.parse(String(init?.body || '{}'));
+        const prompt = String(body?.contents?.[0]?.parts?.[0]?.text || '');
+        assert.match(prompt, /worksheet\/form filling engine/);
+        assert.match(prompt, /overlayItems/);
+        return okJson({
+            candidates: [{
+                content: {
+                    parts: [{
+                        text: JSON.stringify({
+                            summary: 'Filled two visible fields.',
+                            mode: 'direct_answers',
+                            overlayItems: [
+                                {
+                                    label: 'Name',
+                                    question: 'Name',
+                                    answer: 'Test User',
+                                    confidence: 0.9,
+                                    lineNumber: 1,
+                                    box: { x: 0.2, y: 0.3, width: 0.3, height: 0.08 }
+                                },
+                                {
+                                    label: '2 + 2',
+                                    question: '2 + 2 =',
+                                    answer: '4',
+                                    confidence: 0.88,
+                                    lineNumber: 2
+                                }
+                            ],
+                            unreadableFields: [],
+                            warnings: []
+                        })
+                    }]
+                }
+            }]
+        });
+    }
+    throw new Error(`unexpected paper vision URL ${href}`);
+};
+const paperOverlayVision = await callHandler(visionHandler, request('/api/vision', {
+    task: 'paper_answer_overlay',
+    prompt: 'can you write the answers on the paper?',
+    mimeType: 'image/jpeg',
+    imageBase64: SAMPLE.imageBase64
+}));
+assert.equal(paperOverlayVision.statusCode, 200);
+assert.equal(paperOverlayVision.body.success, true);
+assert.equal(paperOverlayVision.body.task, 'paper_answer_overlay');
+assert.equal(paperOverlayVision.body.details.pipeline, 'paper-answer-overlay');
+assert.equal(paperOverlayVision.body.details.overlayItems.length, 2);
+assert.equal(paperOverlayVision.body.details.overlayItems[0].answer, 'Test User');
+assert.match(paperOverlayVision.body.response, /Paper answer overlay prepared/);
+assert.equal(paperVisionCalls, 1);
+globalThis.fetch = ORIGINAL_FETCH;
+delete process.env.GEMINI_API_KEY;
+
 process.env.GROQ_API_KEY = 'test-groq-key';
 process.env.LIVE_RETRIEVAL_ENABLED = 'true';
 process.env.CRAWL4AI_URL = 'https://crawl4ai.example';
