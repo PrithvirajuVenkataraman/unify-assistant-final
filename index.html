@@ -20161,9 +20161,68 @@ function getActiveChatSession() {
     return session;
 }
 
-function deriveChatTitleFromText(text) {
-    const cleaned = String(text || '')
+function compactChatTitleText(text) {
+    return String(text || '')
+        .replace(/[`*_#>~]/g, ' ')
         .replace(/\s+/g, ' ')
+        .replace(/^[\s"'“”‘’]+|[\s"'“”‘’]+$/g, '')
+        .trim();
+}
+
+function capitalizeChatTitle(text) {
+    const cleaned = compactChatTitleText(text);
+    if (!cleaned) return '';
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+function normalizeChatTitleCandidate(text, options) {
+    options = options || {};
+    let cleaned = compactChatTitleText(text)
+        .replace(/\b(?:please|kindly)\b/gi, ' ')
+        .replace(/\b(?:my|your|our)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/^[?.!,;:\-\s]+|[?.!,;:\-\s]+$/g, '')
+        .trim();
+    if (!cleaned) return 'New chat';
+    const words = cleaned.split(/\s+/).filter(Boolean).slice(0, options.maxWords || 7);
+    if (!words.length) return 'New chat';
+    return capitalizeChatTitle(words.join(' ')).slice(0, 60);
+}
+
+function stripChatTitlePromptFiller(text) {
+    let cleaned = compactChatTitleText(text)
+        .replace(/^(?:please|kindly|hey|hi|hello|jarvis)[,\s]+/i, '')
+        .trim();
+    const fillerPatterns = [
+        /^(?:can|could|would|will)\s+you\s+(?:please\s+)?/i,
+        /^(?:can|could|would)\s+i\s+/i,
+        /^help\s+me\s+(?:to\s+)?/i,
+        /^tell\s+me\s+(?:about\s+)?/i,
+        /^explain\s+(?:to\s+me\s+)?/i,
+        /^give\s+me\s+(?:a\s+|an\s+|the\s+)?/i,
+        /^show\s+me\s+(?:a\s+|an\s+|the\s+)?/i,
+        /^what\s+is\s+(?:a\s+|an\s+|the\s+)?/i,
+        /^what's\s+(?:a\s+|an\s+|the\s+)?/i,
+        /^who\s+is\s+(?:a\s+|an\s+|the\s+)?/i,
+        /^how\s+do\s+i\s+/i,
+        /^how\s+to\s+/i
+    ];
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const pattern of fillerPatterns) {
+            const next = cleaned.replace(pattern, '').trim();
+            if (next !== cleaned) {
+                cleaned = next;
+                changed = true;
+            }
+        }
+    }
+    return cleaned;
+}
+
+function deriveChatTitleFromText(text) {
+    const cleaned = compactChatTitleText(text)
         .replace(/^(please|hey|hi|hello|jarvis)[,\s]+/i, '')
         .trim();
     if (!cleaned) return 'New chat';
@@ -20171,10 +20230,9 @@ function deriveChatTitleFromText(text) {
     if (algebra?.equation) {
         return `Solve ${algebra.equation}`.slice(0, 60);
     }
-    const withoutQuestion = cleaned.replace(/[?.!,;:]+$/g, '').trim();
-    const words = withoutQuestion.split(/\s+/).filter(Boolean).slice(0, 7);
-    if (!words.length) return 'New chat';
-    return words.join(' ').slice(0, 60);
+    const withoutFiller = stripChatTitlePromptFiller(cleaned);
+    const withoutQuestion = withoutFiller.replace(/[?.!,;:]+$/g, '').trim();
+    return normalizeChatTitleCandidate(withoutQuestion);
 }
 
 function isVagueChatTitlePrompt(text) {
@@ -20186,8 +20244,7 @@ function isVagueChatTitlePrompt(text) {
 }
 
 function deriveChatTitleFromAssistantText(text) {
-    let cleaned = String(text || '')
-        .replace(/\s+/g, ' ')
+    let cleaned = compactChatTitleText(text)
         .replace(/^(Likely item|Visible item|Detected text|Readable text)\s*:\s*/i, '')
         .replace(/^I can see\s+/i, '')
         .replace(/^I see\s+/i, '')
@@ -20201,8 +20258,7 @@ function deriveChatTitleFromAssistantText(text) {
         .replace(/[?.!,;:]+$/g, '')
         .replace(/\s+/g, ' ')
         .trim();
-    const words = cleaned.split(/\s+/).filter(Boolean).slice(0, 7);
-    return words.length ? words.join(' ').slice(0, 60) : 'New chat';
+    return normalizeChatTitleCandidate(cleaned);
 }
 
 function deriveChatTitleFromMessages(messages = []) {
@@ -20682,7 +20738,7 @@ function showThinkingIndicator(message = 'Thinking') {
     const phase = resolveThinkingPhase(statusText);
     const visualMode = phase.key === 'searching' ? 'ring' : 'dots';
     const visualModeClass = visualMode === 'ring' ? 'assistant-thinking-ring-mode' : 'assistant-thinking-dots';
-    const phaseLabel = phase.key === 'searching' ? 'Searching' : phase.label;
+    const phaseLabel = phase.label;
     const searchLabelClass = phase.key === 'searching' ? 'assistant-thinking-text is-searching' : 'assistant-thinking-text';
     if (!row) {
         row = document.createElement('div');
@@ -20692,7 +20748,7 @@ function showThinkingIndicator(message = 'Thinking') {
         row.innerHTML = `
             <div class="w-full max-w-3xl">
                 <div class="flex items-start gap-2">
-                    <div class="chat-bubble-assistant assistant-thinking-bubble" role="status" aria-live="polite" aria-label="${escapeHtml(statusText)}">
+                    <div class="chat-bubble-assistant assistant-thinking-bubble" role="status" aria-live="polite" aria-label="${escapeHtml(phaseLabel)}">
                         <span class="assistant-thinking-pulse ${visualModeClass}" aria-hidden="true">
                             <span class="assistant-thinking-dot"></span>
                             <span class="assistant-thinking-dot"></span>
@@ -20708,7 +20764,7 @@ function showThinkingIndicator(message = 'Thinking') {
         startThinkingPhaseTimeline(row, phase.key);
     } else {
         const bubble = row.querySelector('.assistant-thinking-bubble');
-        if (bubble) bubble.setAttribute('aria-label', statusText);
+        if (bubble) bubble.setAttribute('aria-label', phaseLabel);
         const pulse = row.querySelector('.assistant-thinking-pulse');
         if (pulse) {
             pulse.classList.toggle('assistant-thinking-dots', visualMode === 'dots');
@@ -20738,28 +20794,30 @@ function startThinkingPhaseTimeline(row, initialKey = 'thinking') {
         const elapsed = Date.now() - startedAt;
         const label = currentRow.querySelector('[data-thinking-label]');
         if (!label) return;
+        const bubble = currentRow.querySelector('.assistant-thinking-bubble');
+        let nextLabel = 'Understanding your request';
         if (elapsed > 3200) {
-            label.textContent = 'Finalizing';
+            nextLabel = 'Polishing the response';
         } else if (elapsed > 1100) {
-            label.textContent = 'Drafting';
-        } else {
-            label.textContent = 'Understanding';
+            nextLabel = 'Writing the answer';
         }
+        label.textContent = nextLabel;
+        if (bubble) bubble.setAttribute('aria-label', nextLabel);
     }, 250);
 }
 
 function resolveThinkingPhase(message = '') {
     const lower = String(message || '').toLowerCase();
-    if (/\b(web search|search|sources?|retriev|fetch)\b/.test(lower)) {
-        return { key: 'searching', label: 'Searching' };
+    if (/\b(web search|search|sources?|retriev|fetch|look(?:ing)?\s+up|checking verified|checking reliable|checking current)\b/.test(lower)) {
+        return { key: 'searching', label: 'Checking sources' };
     }
     if (/\b(final|finaliz|polish|format)\b/.test(lower)) {
-        return { key: 'finalizing', label: 'Finalizing' };
+        return { key: 'finalizing', label: 'Polishing the response' };
     }
     if (/\b(draft|generat|answer|write)\b/.test(lower)) {
-        return { key: 'drafting', label: 'Drafting' };
+        return { key: 'drafting', label: 'Writing the answer' };
     }
-    return { key: 'thinking', label: 'Understanding' };
+    return { key: 'thinking', label: 'Understanding your request' };
 }
 
 function hideThinkingIndicator() {
