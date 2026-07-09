@@ -455,21 +455,22 @@ function isPopCultureReferenceQuery(text) {
     if (!t) return false;
     if (isSeriesReferenceJokeRequest(raw) || isScreenSuggestionRequest(raw)) return false;
     if (isCurrentInfoQuery(raw) || isStrictLatestQuery(raw) || isExplicitWebSearchRequest(raw)) return false;
+    if (/\b(president|prime minister|pm|ceo|cto|cfo|coo|founder|cofounder|co-founder|governor|mayor|minister|senator|chairman|chairperson|captain|coach|manager|leader|head of|director of)\b/.test(t)) {
+        return false;
+    }
     if (/\b(best|top|recommend|recommendation|suggest|suggestion|similar to|like)\b/.test(t) &&
         /\b(sitcom|show|series|movie|film|episode)\b/.test(t)) {
         return false;
     }
 
-    const screenSignal = /\b(sitcom|show|series|web\s*series|movie|film|character|reference|quote|scene|episode)\b/.test(t);
-    const referenceSignal = /\b(reference|ref|quote|scene|episode|character|inside joke|context|meaning|meme|classic|callback)\b/.test(t);
+    const screenSignal = /\b(sitcom|show|series|web\s*series|movie|film|character)\b/.test(t);
+    const referenceSignal = /\b(reference|ref|quote|scene|episode|inside joke|context|meaning|meme|classic|callback)\b/.test(t);
     const directAskSignal = /^(?:who\s+is|who\s+was|what\s+is|what'?s|what\s+was|explain|tell\s+me\s+about|do\s+you\s+know|what\s+does)\b/.test(t);
-    const popCulturePhraseSignal = /\b(pulling a|doing a|giving .* energy|reminds me of|heard of|recognize)\b/.test(t);
-    const compactWhoIsName = /^who\s+(?:is|was)\s+[a-z][a-z.'-]+(?:\s+[a-z][a-z.'-]+){1,3}\??$/i.test(raw);
+    const popCulturePhraseSignal = /\b(pulling a|doing a|giving .* energy|reminds me of|inside joke|callback|heard of .* reference|recognize .* reference)\b/.test(t);
 
     return (screenSignal && directAskSignal) ||
         (referenceSignal && directAskSignal) ||
-        popCulturePhraseSignal ||
-        (compactWhoIsName && !/\b(president|prime minister|ceo|founder|governor|mayor|minister|captain|coach)\b/.test(t));
+        popCulturePhraseSignal;
 }
 
 function isGeneralJokeRequest(text) {
@@ -856,9 +857,6 @@ function normalizeIntentTypos(text) {
         .replace(/\bwhere\s+am\b[?.!]*$/gi, 'where am I')
         .replace(/\bwhere\s+i\s+am\b/gi, 'where am I')
         .replace(/\bcief\b/gi, 'chief') 
-        .replace(/\brtamil\s*nadu\b/gi, 'Tamil Nadu') 
-        .replace(/\brtamilnadu\b/gi, 'Tamil Nadu') 
-        .replace(/\btamilnadu\b/gi, 'Tamil Nadu') 
         .replace(/\b(my|left|right|the)\s+food\b(?=[^?.!]*(?:hurt|hurts|hurting|pain|paining|ache|aching|swollen|injured|injury))/gi, '$1 foot')
         .replace(/\bfood\s+(hurt|hurts|hurting|pain|paining|ache|aching|swollen|injured|injury)\b/gi, 'foot $1');
 
@@ -867,7 +865,7 @@ function normalizeIntentTypos(text) {
         'image', 'picture', 'photo', 'look', 'like', 'weather', 'forecast',
         'news', 'shopping', 'grocery', 'itinerary', 'hotel',
         'restaurants', 'transport', 'translate', 'translator', 'joke',
-        'calendar', 'budget', 'sync', 'chief', 'minister', 'tamil', 'nadu'
+        'calendar', 'budget', 'sync', 'chief', 'minister'
     ];
 
     return targeted
@@ -2536,13 +2534,12 @@ async function processUserQuery(text, options = {}) {
 
     if (isPopCultureReferenceQuery(t)) {
         logRoutingDebug('processUserQuery -> pop_culture_reference', t, {
-            selectedHandler: 'askGeminiAI',
+            selectedHandler: 'handlePopCultureReferenceModelQuery',
             liveIntent,
             entityIntent,
             riskLevel
         });
-        return await askGeminiAI(t, {
-            intent: 'pop_culture_reference',
+        return await handlePopCultureReferenceModelQuery(t, t, {
             stream: options?.stream === true
         });
     }
@@ -2636,6 +2633,25 @@ async function processUserQuery(text, options = {}) {
     return await askGeminiAI(t, {
         stream: options?.stream === true
     });
+}
+
+async function handlePopCultureReferenceModelQuery(text, historyKey = '', options = {}) {
+    const userText = String(text || '').trim();
+    const resolvedHistoryKey = String(historyKey || userText);
+    const ai = await askGeminiAI(userText, {
+        intent: 'pop_culture_reference',
+        stream: options?.stream === true,
+        displayUserMessage: options?.displayUserMessage || resolvedHistoryKey
+    });
+    if (options?.publish === true && !ai?.aborted) {
+        await publishResolvedModelMessage(resolvedHistoryKey, ai?.response || ai?.text || '', {
+            label: 'Model answer',
+            routing: ai?.routing || null,
+            existingAssistantMessageId: ai?.assistantMessageId || '',
+            fastFinalizeStreamed: options?.stream === true
+        });
+    }
+    return ai;
 }
 
 async function publishLiveDisabledMessage(userText, options = {}) {
@@ -4779,9 +4795,6 @@ let showRoutingDebugBadge = false;
                 .replace(/\bwhere\s+am\b[?.!]*$/gi, 'where am I')
                 .replace(/\bwhere\s+i\s+am\b/gi, 'where am I')
                 .replace(/\bcief\b/gi, 'chief') 
-                .replace(/\brtamil\s*nadu\b/gi, 'Tamil Nadu') 
-                .replace(/\brtamilnadu\b/gi, 'Tamil Nadu') 
-                .replace(/\btamilnadu\b/gi, 'Tamil Nadu') 
                 .replace(/\b(my|left|right|the)\s+food\b(?=[^?.!]*(?:hurt|hurts|hurting|pain|paining|ache|aching|swollen|injured|injury))/gi, '$1 foot')
                 .replace(/\bfood\s+(hurt|hurts|hurting|pain|paining|ache|aching|swollen|injured|injury)\b/gi, 'foot $1');
 
@@ -11523,7 +11536,7 @@ async function handleArtistSongRequest(text) {
         /\b(latest|new|newest|recent|current|most\s+recent)\b/i.test(String(text || ''));
     let lastMusicSnippets = [];
     if (!artist) {
-        const msg = 'Tell me the artist name and I will suggest good songs. Example: "Best songs of AR Rahman".';
+        const msg = 'Tell me the artist name and I will suggest good songs. Example: "Best songs of <artist name>".';
         addChatMessage(msg, false);
         return;
     }
@@ -12994,13 +13007,13 @@ const ROUTING_REGRESSION_CASES = [
     },
     {
         name: 'Stable biography',
-        prompt: 'Who is Donald Trump?',
+        prompt: 'Who is Morgan Vale?',
         expectedPath: 'entity_fact',
         expectedMode: 'verify_first'
     },
     {
         name: 'Profile opinion prompt',
-        prompt: 'What do you think of Sai Abhyankar?',
+        prompt: 'What do you think of Jordan Vale?',
         expectedPath: 'live_retrieval',
         expectedMode: 'verify_first'
     },
@@ -13012,7 +13025,7 @@ const ROUTING_REGRESSION_CASES = [
     },
     {
         name: 'Mixed current topic',
-        prompt: "Tell me about Nvidia's latest earnings",
+        prompt: "Tell me about Example Chip Corp's latest earnings",
         expectedPath: 'current_info',
         expectedMode: 'verify_first'
     },
@@ -13024,13 +13037,13 @@ const ROUTING_REGRESSION_CASES = [
     },
     {
         name: 'Vague factual entity prompt',
-        prompt: 'Tell me about Tesla',
+        prompt: 'Tell me about Example Auto Corp',
         expectedPath: 'live_retrieval',
         expectedMode: 'verify_first'
     },
     {
         name: 'Role office factual prompt',
-        prompt: 'Who is the CEO of Nvidia?',
+        prompt: 'Who is the CEO of Example Chip Corp?',
         expectedPath: 'entity_fact',
         expectedMode: 'verify_first'
     },
@@ -13042,65 +13055,65 @@ const ROUTING_REGRESSION_CASES = [
     },
     {
         name: 'Explicit web search route',
-        prompt: 'Search the web for who is the captain of CSK in IPL 2026 with sources',
+        prompt: 'Search the web for who is the captain of Sample Team in Sample League 2026 with sources',
         expectedPath: 'web_search',
         expectedMode: 'verify_first'
     },
     {
         name: 'Explicit web music route stays tolerant',
-        prompt: 'search the web for sean rolden songs',
+        prompt: 'search the web for jordan vale songs',
         expectedPath: 'artist_song',
         expectedMode: 'tolerant_entertainment',
-        expectedGeneric: { intent: 'search', domain: 'songs', subject: 'sean rolden', route: 'music_catalog' }
+        expectedGeneric: { intent: 'search', domain: 'songs', subject: 'jordan vale', route: 'music_catalog' }
     },
     {
         name: 'Latest artist songs route',
-        prompt: 'latest anirudh songs',
+        prompt: 'latest jordan vale songs',
         expectedPath: 'artist_song',
         expectedMode: 'tolerant_entertainment',
-        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'anirudh', route: 'live_music' }
+        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'jordan vale', route: 'live_music' }
     },
     {
         name: 'New songs by artist route',
-        prompt: 'new songs by anirudh',
+        prompt: 'new songs by jordan vale',
         expectedPath: 'artist_song',
         expectedMode: 'tolerant_entertainment',
-        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'anirudh', route: 'live_music' }
+        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'jordan vale', route: 'live_music' }
     },
     {
         name: 'Recent artist tracks route',
-        prompt: 'anirudh recent tracks',
+        prompt: 'jordan vale recent tracks',
         expectedPath: 'artist_song',
         expectedMode: 'tolerant_entertainment',
-        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'anirudh', route: 'live_music' }
+        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'jordan vale', route: 'live_music' }
     },
     {
         name: 'Top songs artist route',
-        prompt: 'top 10 ar rahman songs',
+        prompt: 'top 10 jordan vale songs',
         expectedPath: 'artist_song',
         expectedMode: 'tolerant_entertainment',
-        expectedGeneric: { intent: 'top', domain: 'songs', subject: 'ar rahman', route: 'music_catalog' }
+        expectedGeneric: { intent: 'top', domain: 'songs', subject: 'jordan vale', route: 'music_catalog' }
     },
     {
         name: 'Latest movie of actor route',
-        prompt: 'latest movie of vijay',
+        prompt: 'latest movie of sample actor',
         expectedPath: 'entity_fact',
         expectedMode: 'verify_first',
-        expectedGeneric: { intent: 'latest', domain: 'movie', subject: 'vijay', route: 'live_entertainment' }
+        expectedGeneric: { intent: 'latest', domain: 'movie', subject: 'sample actor', route: 'live_entertainment' }
     },
     {
-        name: 'Latest Harris Jayaraj song route',
-        prompt: 'what is the latest song of harris jayaraj',
+        name: 'Latest artist song route',
+        prompt: 'what is the latest song of jordan vale',
         expectedPath: 'artist_song',
         expectedMode: 'tolerant_entertainment',
-        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'harris jayaraj', route: 'live_music' }
+        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'jordan vale', route: 'live_music' }
     },
     {
         name: 'Person identity route',
-        prompt: 'who is anirudh',
+        prompt: 'who is jordan vale',
         expectedPath: 'entity_fact',
         expectedMode: 'verify_first',
-        expectedGeneric: { intent: 'explain', domain: 'person', subject: 'anirudh', route: 'entity_profile' }
+        expectedGeneric: { intent: 'explain', domain: 'person', subject: 'jordan vale', route: 'entity_profile' }
     }
 ];
 
@@ -17034,24 +17047,17 @@ function detectInputLanguageHint(text) {
 
             if (answerPath === 'default_model' && classification.flags?.popCultureReference) {
                 logRoutingDebug('processCommand -> pop_culture_reference', cleanText, {
-                    selectedHandler: 'callAIWithTyping',
+                    selectedHandler: 'handlePopCultureReferenceModelQuery',
                     answerPath,
                     hybridMode,
                     classification
                 });
-                const popCultureResponse = await callAIWithTyping(cleanText, 'Assistant is thinking...', {
-                    directModel: true,
-                    intent: 'pop_culture_reference',
+                const popCultureResponse = await handlePopCultureReferenceModelQuery(cleanText, text, {
                     stream: true,
-                    displayUserMessage: text
+                    displayUserMessage: text,
+                    publish: true
                 });
                 if (popCultureResponse?.aborted) return;
-                await publishResolvedModelMessage(text, popCultureResponse?.response || popCultureResponse?.text || '', {
-                    label: 'Model answer',
-                    routing: popCultureResponse?.routing || null,
-                    existingAssistantMessageId: popCultureResponse?.assistantMessageId || '',
-                    fastFinalizeStreamed: true
-                });
                 return;
             }
 
@@ -18145,13 +18151,11 @@ Format:
 
 Include 5-7 REAL signature dishes that represent the local cuisine.
 
-Example for Tamil Nadu region:
-[Food] Famous Tamil Nadu Dishes:
-- Idli & Sambar - Soft steamed rice cakes with lentil stew, breakfast staple
-- Dosa - Crispy rice crepe, served with chutneys and sambar
-- Chettinad Chicken - Fiery red curry with aromatic spices, regional specialty
-- Pongal - Savory rice and lentil dish, comfort food
-- Filter Coffee - Strong South Indian coffee, cultural icon
+Example format:
+[Food] Famous Local Dishes:
+- Dish name - Brief description and what makes it special
+- Dish name - Brief description and what makes it special
+- Dish name - Brief description and what makes it special
 
 [Weather] What Makes It Special:
 [Brief description of the cuisine's characteristics]
