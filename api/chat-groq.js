@@ -95,6 +95,7 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
                 });
             }
             const routeDecision = classifyRoutingDecision(effectiveMessage, '', {
+                intent,
                 isInternalSummary
             });
             const lengthPolicy = buildLengthPolicy(effectiveMessage, '', { isInternalSummary });
@@ -285,7 +286,7 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 
     function shouldStreamChatRequest(body, intent, grounding, routeDecision, isInternalSummary) {
         if (!body || body.stream !== true) return false;
-        if (String(intent || 'chat') !== 'chat') return false;
+        if (!['chat', 'pop_culture_reference'].includes(String(intent || 'chat'))) return false;
         if (grounding) return false;
         if (isInternalSummary) return false;
         if (routeDecision?.strategy && routeDecision.strategy !== 'direct') return false;
@@ -305,10 +306,11 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         res.write(`data: ${JSON.stringify(payload)}\n\n`);
     }
 
-    function composeStreamingPrompt(systemPrompt, contextBlock, message, lengthGuidance = '') {
+    function composeStreamingPrompt(systemPrompt, contextBlock, message, lengthGuidance = '', intent = 'chat') {
         return [
             systemPrompt,
             contextBlock ? `Recent turns:\n${contextBlock}` : '',
+            buildIntentPromptHint(intent),
             `User message: ${message}`,
             lengthGuidance ? `Length guidance:\n${lengthGuidance}` : '',
             'Return only the final assistant answer as natural text.',
@@ -337,7 +339,7 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 
         let streamedText = '';
         try {
-            const prompt = composeStreamingPrompt(systemPrompt, contextBlock, effectiveMessage, lengthPolicy?.instruction || '');
+            const prompt = composeStreamingPrompt(systemPrompt, contextBlock, effectiveMessage, lengthPolicy?.instruction || '', intent);
             const modelStartedAt = Date.now();
             const streamResult = await streamModelWithFallback(prompt, lengthPolicy, delta => {
                 if (!delta) return;
@@ -1278,6 +1280,14 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
                 strategy: 'live_first',
                 reason: 'time_sensitive_query',
                 webEligible: true
+            };
+        }
+
+        if (String(options?.intent || '') === 'pop_culture_reference') {
+            return {
+                strategy: 'direct',
+                reason: 'pop_culture_reference_stable',
+                webEligible: false
             };
         }
 
