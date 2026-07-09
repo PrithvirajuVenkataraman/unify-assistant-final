@@ -2222,6 +2222,8 @@ body.dark .footer-action-btn-primary:hover {
 
 .continuous-vision-preview.is-minimized .continuous-vision-video,
 .continuous-vision-preview.is-minimized .continuous-vision-zoom-controls,
+.continuous-vision-preview.is-minimized .paper-answer-overlay,
+.continuous-vision-preview.is-minimized .paper-answer-overlay-controls,
 .continuous-vision-preview.is-minimized .continuous-vision-status,
 .continuous-vision-preview.is-minimized .continuous-vision-hint {
     display: none !important;
@@ -2233,6 +2235,87 @@ body.dark .footer-action-btn-primary:hover {
     object-fit: cover;
     background: #000000 !important;
     display: block;
+}
+
+.paper-answer-overlay {
+    position: absolute;
+    inset: 44px 8px 104px;
+    pointer-events: none;
+    z-index: 3;
+}
+
+.paper-answer-overlay.hidden,
+.paper-answer-overlay-controls.hidden {
+    display: none !important;
+}
+
+.paper-answer-chip {
+    position: absolute;
+    max-width: min(240px, 62%);
+    padding: 6px 8px;
+    border-radius: 7px;
+    border: 1px solid rgba(14, 165, 233, 0.72);
+    background: rgba(2, 6, 23, 0.84);
+    color: #ffffff;
+    font-size: 12px;
+    line-height: 1.25;
+    font-weight: 750;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+    backdrop-filter: blur(8px);
+}
+
+.paper-answer-chip.is-low-confidence {
+    border-color: rgba(245, 158, 11, 0.82);
+}
+
+.paper-answer-chip small {
+    display: block;
+    margin-bottom: 2px;
+    color: rgba(226, 232, 240, 0.8);
+    font-size: 10px;
+    font-weight: 800;
+}
+
+.paper-answer-overlay.is-fallback {
+    position: static;
+    display: grid;
+    gap: 6px;
+    padding: 8px;
+    background: rgba(2, 6, 23, 0.9);
+    border-top: 1px solid rgba(148, 163, 184, 0.24);
+}
+
+.paper-answer-overlay.is-fallback .paper-answer-chip {
+    position: static;
+    max-width: none;
+}
+
+.paper-answer-overlay-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 7px 8px 0;
+    background: #000000 !important;
+    border-top: 1px solid rgba(148, 163, 184, 0.22);
+    z-index: 4;
+}
+
+.paper-answer-overlay-controls button {
+    border: 1px solid rgba(148, 163, 184, 0.36);
+    border-radius: 7px;
+    background: rgba(15, 23, 42, 0.86);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 7px 9px;
+}
+
+.paper-answer-overlay-controls button:hover,
+.paper-answer-overlay-controls button:focus-visible {
+    border-color: rgba(14, 165, 233, 0.9);
+    background: rgba(14, 165, 233, 0.22);
+    outline: none;
 }
 
 .camera-zoom-controls,
@@ -3031,6 +3114,26 @@ body.dark .response-action-btn {
     .continuous-vision-video {
         max-height: 180px;
         aspect-ratio: 16 / 10;
+    }
+
+    .paper-answer-overlay {
+        inset: 38px 6px 112px;
+    }
+
+    .paper-answer-chip {
+        max-width: 72%;
+        font-size: 11px;
+        padding: 5px 7px;
+    }
+
+    .paper-answer-overlay-controls {
+        padding: 6px;
+        gap: 5px;
+    }
+
+    .paper-answer-overlay-controls button {
+        font-size: 10px;
+        padding: 6px 7px;
     }
 
     .continuous-vision-hint {
