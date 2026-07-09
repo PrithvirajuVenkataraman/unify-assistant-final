@@ -100,7 +100,7 @@ const FEATURE_CONTRACTS = Object.freeze({
     },
     spinnerOnlyLoading: {
         required: [
-            /aria-label="\$\{escapeHtml\(statusText\)\}"/,
+            /aria-label="\$\{escapeHtml\(phaseLabel\)\}"/,
             /class="assistant-thinking-pulse/
         ],
         forbidden: [
@@ -760,9 +760,10 @@ assert.doesNotMatch(extractFunctionSource(SOURCE.appHtml, 'showResponseRecoveryC
 assert.doesNotMatch(SOURCE.appHtml, /Response paused|Last request|response-recovery-title|response-recovery-btn/);
 assert.match(SOURCE.appHtml, /function isWeakAssistantAnswerForRetry/);
 assert.match(SOURCE.appHtml, /chat_weak_answer_retry/);
-assert.match(SOURCE.appHtml, /Understanding/);
-assert.match(SOURCE.appHtml, /Drafting/);
-assert.match(SOURCE.appHtml, /Finalizing/);
+assert.match(SOURCE.appHtml, /Understanding your request/);
+assert.match(SOURCE.appHtml, /Writing the answer/);
+assert.match(SOURCE.appHtml, /Checking sources/);
+assert.match(SOURCE.appHtml, /Polishing the response/);
 assert.match(SOURCE.appHtml, /function normalizePastedPromptText/);
 assert.match(SOURCE.appHtml, /data-assistant-action="save_memory"/);
 assert.match(SOURCE.appHtml, /function saveAssistantMessageToMemory/);
@@ -839,6 +840,10 @@ assert.doesNotMatch(messyVisionText, /\bobjects\b|confidence|textDetected|[{}[\]
 const titleSandbox = {};
 vm.createContext(titleSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'splitReadableSentences'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'compactChatTitleText'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'capitalizeChatTitle'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeChatTitleCandidate'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'stripChatTitlePromptFiller'), titleSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'deriveChatTitleFromText'), titleSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isVagueChatTitlePrompt'), titleSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'deriveChatTitleFromAssistantText'), titleSandbox);
@@ -850,7 +855,20 @@ assert.equal(titleSandbox.deriveChatTitleFromMessages([
 assert.equal(titleSandbox.deriveChatTitleFromMessages([
     { role: 'user', text: 'how do I learn JavaScript fast?' },
     { role: 'assistant', text: 'Start with DOM basics.' }
-]), 'how do I learn JavaScript fast');
+]), 'Learn JavaScript fast');
+assert.equal(titleSandbox.deriveChatTitleFromMessages([
+    { role: 'user', text: 'please tell me about black holes' },
+    { role: 'assistant', text: 'Black holes are regions where gravity is extremely strong.' }
+]), 'Black holes');
+assert.equal(titleSandbox.deriveChatTitleFromMessages([
+    { role: 'user', text: 'can you fix my speech input bug' },
+    { role: 'assistant', text: 'I will inspect the speech input path.' }
+]), 'Fix speech input bug');
+titleSandbox.findPrimaryLinearEquation = () => ({ equation: 'x + 2 = 5' });
+assert.equal(titleSandbox.deriveChatTitleFromMessages([
+    { role: 'user', text: 'please solve x + 2 = 5' },
+    { role: 'assistant', text: 'x = 3.' }
+]), 'Solve x + 2 = 5');
 
 const legacyDeleteSandbox = {
     localStorage: {
@@ -870,6 +888,10 @@ vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeHistoryUserMessa
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeHistoryAssistantMessage'), legacyDeleteSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'sanitizeConversationHistoryRecords'), legacyDeleteSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeDeletedChatTitle'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'compactChatTitleText'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'capitalizeChatTitle'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeChatTitleCandidate'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'stripChatTitlePromptFiller'), legacyDeleteSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'deriveChatTitleFromText'), legacyDeleteSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getLegacyHistoryStorageKeys'), legacyDeleteSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getChatSessionDeleteFingerprint'), legacyDeleteSandbox);
