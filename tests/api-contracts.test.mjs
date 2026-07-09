@@ -1469,30 +1469,33 @@ assert.equal(governmentSearch.body.answerProvider, 'public_source_result');
 assert.match(governmentSearch.body.answer, new RegExp(LIVE_FIXTURES.government.title));
 globalThis.fetch = ORIGINAL_FETCH;
 
+const API_REVIEW_SUBJECT = 'Subject Device 3';
+const UNRELATED_DOC_TITLE = 'Unrelated Archive Entry';
+const UNRELATED_GAME_TITLE = 'Unrelated Game Entry';
 globalThis.fetch = async (url) => {
     const href = String(url);
     if (href.includes('en.wikipedia.org/w/api.php')) {
         return okJson({
             query: {
                 search: [
-                    { title: 'Nova Echoes', snippet: 'Studio album.' },
-                    { title: 'Everything About Nova', snippet: 'Adventure game.' }
+                    { title: UNRELATED_DOC_TITLE, snippet: 'Studio album.' },
+                    { title: UNRELATED_GAME_TITLE, snippet: 'Adventure game.' }
                 ]
             }
         });
     }
     if (href.includes('en.wikipedia.org/api/rest_v1/page/summary')) {
-        if (href.includes('Nova_Echoes')) {
+        if (href.includes(encodeURIComponent(UNRELATED_DOC_TITLE).replace(/%20/g, '_'))) {
             return okJson({
-                title: 'Nova Echoes',
-                extract: 'Nova Echoes is a studio album released in 2013.',
-                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Nova_Echoes' } }
+                title: UNRELATED_DOC_TITLE,
+                extract: `${UNRELATED_DOC_TITLE} is a studio album released in 2013.`,
+                content_urls: { desktop: { page: `https://en.wikipedia.org/wiki/${UNRELATED_DOC_TITLE.replace(/\s+/g, '_')}` } }
             });
         }
         return okJson({
-            title: 'Everything About Nova',
-            extract: 'Everything About Nova is an action-adventure video game.',
-            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Everything_About_Nova' } }
+            title: UNRELATED_GAME_TITLE,
+            extract: `${UNRELATED_GAME_TITLE} is an action-adventure video game.`,
+            content_urls: { desktop: { page: `https://en.wikipedia.org/wiki/${UNRELATED_GAME_TITLE.replace(/\s+/g, '_')}` } }
         });
     }
     if (href.includes('www.wikidata.org')) {
@@ -1505,20 +1508,20 @@ globalThis.fetch = async (url) => {
         return okJson({
             articles: [
                 {
-                    title: 'Nova Echoes review revisited',
-                    url: 'https://example.com/music/nova-echoes-review',
+                    title: `${UNRELATED_DOC_TITLE} review revisited`,
+                    url: 'https://example.com/music/unrelated-review',
                     domain: 'example.com',
                     seendate: '20260618120000'
                 },
                 {
-                    title: 'Nova Phone 3 hands-on review',
-                    url: 'https://reviews.example.com/nova-phone-3-review',
+                    title: `${API_REVIEW_SUBJECT} hands-on review`,
+                    url: 'https://reviews.example.com/subject-device-review',
                     domain: 'reviews.example.com',
                     seendate: '20260618130000'
                 },
                 {
-                    title: 'Nova Phone 3 review: camera, battery, and design',
-                    url: 'https://tech.example.com/phones/nova-phone-3-review',
+                    title: `${API_REVIEW_SUBJECT} review: camera, battery, and design`,
+                    url: 'https://tech.example.com/phones/subject-device-review',
                     domain: 'tech.example.com',
                     seendate: '20260618140000'
                 }
@@ -1528,19 +1531,19 @@ globalThis.fetch = async (url) => {
     throw new Error(`unexpected URL ${href}`);
 };
 const productReviewSearch = await callHandler(searchHandler, request('/api/search', {
-    query: 'Search the web for recent reviews of the Nova Phone 3',
+    query: `Search the web for recent reviews of the ${API_REVIEW_SUBJECT}`,
     limit: 5
 }));
 assert.equal(productReviewSearch.statusCode, 200);
 assert.equal(productReviewSearch.body.category, 'web_search');
-assert.equal(productReviewSearch.body.query, 'recent reviews of the Nova Phone 3');
-assert.equal(productReviewSearch.body.searchRewrite.subject, 'Nova Phone 3');
+assert.equal(productReviewSearch.body.query, `recent reviews of the ${API_REVIEW_SUBJECT}`);
+assert.equal(productReviewSearch.body.searchRewrite.subject, API_REVIEW_SUBJECT);
 assert.equal(productReviewSearch.body.searchRewrite.intent, 'reviews');
 assert.equal(productReviewSearch.body.searchRewrite.freshnessNeeded, true);
 assert.ok(productReviewSearch.body.results.length >= 1);
-assert.ok(productReviewSearch.body.results.every(item => /nova phone 3/i.test(`${item.title} ${item.description}`)));
-assert.doesNotMatch(JSON.stringify(productReviewSearch.body.results), /Nova Echoes|Everything About Nova/i);
-assert.doesNotMatch(String(productReviewSearch.body.answer || ''), /Nova Echoes|Everything About Nova/i);
+assert.ok(productReviewSearch.body.results.every(item => `${item.title} ${item.description}`.toLowerCase().includes(API_REVIEW_SUBJECT.toLowerCase())));
+assert.doesNotMatch(JSON.stringify(productReviewSearch.body.results), new RegExp(`${UNRELATED_DOC_TITLE}|${UNRELATED_GAME_TITLE}`, 'i'));
+assert.doesNotMatch(String(productReviewSearch.body.answer || ''), new RegExp(`${UNRELATED_DOC_TITLE}|${UNRELATED_GAME_TITLE}`, 'i'));
 globalThis.fetch = ORIGINAL_FETCH;
 
 process.env.GEMINI_API_KEY = 'test-gemini-key';
@@ -1680,43 +1683,46 @@ globalThis.fetch = ORIGINAL_FETCH;
 delete process.env.GEMINI_API_KEY;
 
 process.env.GEMINI_API_KEY = 'test-gemini-key';
+const UNRELATED_OS_TITLE = 'Unrelated OS Entry';
+const UNRELATED_CHART_TITLE = 'Unrelated Chart Entry';
+const UNRELATED_SHELL_TITLE = 'Unrelated Shell Entry';
 globalThis.fetch = async (url) => {
     const href = String(url);
     if (href.includes('generativelanguage.googleapis.com')) {
         return okJson({
-            candidates: [{ content: { parts: [{ text: '{"queries":["OrbitOS","Sample singles chart","Neon Shell"]}' }] } }]
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ queries: [UNRELATED_OS_TITLE, UNRELATED_CHART_TITLE, UNRELATED_SHELL_TITLE] }) }] } }]
         });
     }
     if (href.includes('en.wikipedia.org/w/api.php')) {
         return okJson({
             query: {
                 search: [
-                    { title: 'OrbitOS', snippet: 'Gaming-focused operating system by a platform company.' },
-                    { title: 'Sample singles chart', snippet: 'Music chart in a sample market.' },
-                    { title: 'Neon Shell', snippet: 'Desktop distribution based on a sample base.' }
+                    { title: UNRELATED_OS_TITLE, snippet: 'Gaming-focused operating system by a platform company.' },
+                    { title: UNRELATED_CHART_TITLE, snippet: 'Music chart in a sample market.' },
+                    { title: UNRELATED_SHELL_TITLE, snippet: 'Desktop distribution based on a sample base.' }
                 ]
             }
         });
     }
     if (href.includes('en.wikipedia.org/api/rest_v1/page/summary')) {
-        if (href.includes('OrbitOS')) {
+        if (href.includes(UNRELATED_OS_TITLE.replace(/\s+/g, '_'))) {
             return okJson({
-                title: 'OrbitOS',
-                extract: 'OrbitOS is a gaming-focused operating system released by a platform company.',
-                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/OrbitOS' } }
+                title: UNRELATED_OS_TITLE,
+                extract: `${UNRELATED_OS_TITLE} is a gaming-focused operating system released by a platform company.`,
+                content_urls: { desktop: { page: `https://en.wikipedia.org/wiki/${UNRELATED_OS_TITLE.replace(/\s+/g, '_')}` } }
             });
         }
-        if (href.includes('Sample_singles_chart')) {
+        if (href.includes(UNRELATED_CHART_TITLE.replace(/\s+/g, '_'))) {
             return okJson({
-                title: 'Sample singles chart',
-                extract: 'The Sample singles chart ranks songs in a sample market.',
-                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Sample_singles_chart' } }
+                title: UNRELATED_CHART_TITLE,
+                extract: `The ${UNRELATED_CHART_TITLE} ranks songs in a sample market.`,
+                content_urls: { desktop: { page: `https://en.wikipedia.org/wiki/${UNRELATED_CHART_TITLE.replace(/\s+/g, '_')}` } }
             });
         }
         return okJson({
-            title: 'Neon Shell',
-            extract: 'Neon Shell is a desktop distribution based on a sample base.',
-            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Neon_Shell' } }
+            title: UNRELATED_SHELL_TITLE,
+            extract: `${UNRELATED_SHELL_TITLE} is a desktop distribution based on a sample base.`,
+            content_urls: { desktop: { page: `https://en.wikipedia.org/wiki/${UNRELATED_SHELL_TITLE.replace(/\s+/g, '_')}` } }
         });
     }
     if (href.includes('www.wikidata.org')) return okJson({ search: [] });
@@ -1733,7 +1739,7 @@ assert.equal(irrelevantRagSearch.statusCode, 200);
 assert.equal(irrelevantRagSearch.body.verified, false);
 assert.equal(irrelevantRagSearch.body.answerProvider, 'web_rag_unverified');
 assert.match(irrelevantRagSearch.body.answer, /I could not verify this from retrieved sources/);
-assert.doesNotMatch(String(irrelevantRagSearch.body.answer || ''), /OrbitOS|Neon Shell|Sample singles/i);
+assert.doesNotMatch(String(irrelevantRagSearch.body.answer || ''), new RegExp(`${UNRELATED_OS_TITLE}|${UNRELATED_CHART_TITLE}|${UNRELATED_SHELL_TITLE}`, 'i'));
 globalThis.fetch = ORIGINAL_FETCH;
 delete process.env.GEMINI_API_KEY;
 
