@@ -765,7 +765,7 @@ assert.equal(datedSportsRoute.body.searchRequired, true);
 assert.equal(datedSportsRoute.body.route.category, 'sports');
 
 const datedEntertainmentRoute = await callHandler(searchHandler, request('/api/search', {
-    query: "What was Vijay's latest movie in 2023?",
+    query: "What was Sample Actor's latest movie in 2023?",
     limit: 5,
     mode: 'classify'
 }));
