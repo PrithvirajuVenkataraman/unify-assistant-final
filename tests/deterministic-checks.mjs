@@ -882,6 +882,8 @@ assert.equal(titleSandbox.deriveChatTitleFromMessages([
 ]), 'Solve x + 2 = 5');
 
 const legacyDeleteSandbox = {
+    CHAT_DELETED_SESSION_IDS_KEY: 'jarvis_deleted_chat_session_ids_v1',
+    CHAT_DELETED_SESSION_TITLES_KEY: 'jarvis_deleted_chat_session_titles_v1',
     localStorage: {
         data: new Map(),
         get length() { return this.data.size; },
@@ -907,8 +909,15 @@ vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'deriveChatTitleFromText')
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getLegacyHistoryStorageKeys'), legacyDeleteSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getChatSessionDeleteFingerprint'), legacyDeleteSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'legacyHistoryItemMatchesDeletedSession'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getDeletedChatSessionIds'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getDeletedChatSessionTitles'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isDeletedChatSession'), legacyDeleteSandbox);
 legacyDeleteSandbox.localStorage.setItem('unify_history_tester', JSON.stringify([{ user: 'Old legacy question', ai: 'Old answer', turnId: 'turn-a' }]));
 legacyDeleteSandbox.localStorage.setItem('unify_history_other', JSON.stringify([{ user: 'Old legacy question', ai: 'Old answer', turnId: 'turn-b' }]));
+legacyDeleteSandbox.localStorage.setItem('jarvis_deleted_chat_session_titles_v1', JSON.stringify(['repeat title']));
+assert.equal(legacyDeleteSandbox.isDeletedChatSession({ id: 'fresh-chat', title: 'Repeat title', deleted: false }), false);
+legacyDeleteSandbox.localStorage.setItem('jarvis_deleted_chat_session_ids_v1', JSON.stringify(['deleted-chat']));
+assert.equal(legacyDeleteSandbox.isDeletedChatSession({ id: 'deleted-chat', title: 'Different title', deleted: false }), true);
 const legacyFingerprint = legacyDeleteSandbox.getChatSessionDeleteFingerprint({
     id: 'legacy_default_chat',
     title: 'Old legacy question',
