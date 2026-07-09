@@ -1306,9 +1306,40 @@ function isUniversalExplainerRequest(text) {
     if (!t) return false;
     if (isCurrentInfoQuery(t) || isNewsworthyLiveTopic(t) || isLiveRetrievalQuery(t)) return false;
     return /^(what is|what's|who is|who's|tell me about|define|meaning of|explain)\b/.test(t) ||
+        isStableHowExplainerQuery(t) ||
         isChemistryReactionQuery(t) ||
         isPhysicsFormulaQuery(t) ||
         isMathFormulaQuery(t);
+}
+
+function isStableHowExplainerQuery(text) {
+    const t = String(text || '').trim().toLowerCase();
+    if (!t) return false;
+    if (/\b(current|latest|recent|today|right now|live|news|headline|headlines|update|updates|status|papers?|research papers?|sources?|source links?)\b/.test(t)) return false;
+    if (/\b(medical|medicine|medicines|dosage|dose|dosing|symptom|diagnos|treatment|legal|lawyer|contract|financial|investment|tax|self-harm|suicide|emergency)\b/.test(t)) return false;
+    return /^(?:can you\s+)?(?:explain\s+)?how\s+(?:does|do|is|are)?\s*[\w"'.()\- ]{2,90}\s+works?\??$/i.test(t) ||
+        /^(?:can you\s+)?(?:explain\s+)?how\s+(?:does|do)\s+[\w"'.()\- ]{2,90}\s+work\??$/i.test(t);
+}
+
+async function handleFastExplainerQuery(userText, historyKey = '') {
+    showThinkingIndicator('Building explanation...');
+    try {
+        const result = await askGeminiAI(userText, {
+            intent: 'fast_explainer',
+            fastExplainer: true
+        });
+        if (result?.aborted) return true;
+        const answer = String(result?.response || result?.text || '').trim();
+        if (!answer) return false;
+        const assistantMessageId = addModelAssistantMessage(answer, 'Model answer', {
+            routing: result?.routing || null
+        });
+        saveToHistory(historyKey || userText, answer);
+        addFeedbackButtons(historyKey || userText, answer, assistantMessageId);
+        return true;
+    } finally {
+        hideThinkingIndicator();
+    }
 }
 
 function buildConversationRecallSummary(limit = 6) {
@@ -3757,7 +3788,8 @@ function isDirectExplainerQuery(text) {
     if (/\b(current|latest|recent|today|right now|live|news|headline|headlines|update|updates|status)\b/.test(t)) {
         return false;
     }
-    return /^(what\s+is|what's|who\s+is|who's|tell\s+me\s+about|define|meaning\s+of|do\s+you\s+know|what\s+do\s+you\s+know\s+about)\b/.test(t);
+    return /^(what\s+is|what's|who\s+is|who's|tell\s+me\s+about|define|meaning\s+of|do\s+you\s+know|what\s+do\s+you\s+know\s+about)\b/.test(t) ||
+        isStableHowExplainerQuery(t);
 }
 
 function isLowSignalModelAnswer(text) {
@@ -4453,13 +4485,16 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
         const directExplainerHint = isDirectExplainerQuery(normalizedUserMessage)
             ? 'This is a direct explainer/identity query. Do not give research steps or suggestions to search online. Answer directly with concise factual content.'
             : '';
+        const fastExplainerHint = requestOptions?.fastExplainer === true
+            ? 'Fast explainer mode: answer directly from stable general knowledge in 3-6 concise sentences. Do not search, cite sources, mention retrieval, or add generic next steps.'
+            : '';
         const relevantSavedMemoryContext = requestOptions?.grounding
             ? ''
             : buildRelevantSavedMemoryContext(normalizedUserMessage);
         const learnedStyleHint = buildLearnedAnswerStyleHint();
         const effectiveMessage = requestOptions?.grounding
             ? normalizedUserMessage
-            : `${normalizedUserMessage}${relevantSavedMemoryContext}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\nPrompt-requested explanation style: ${activeLearningMode}. ${learningHint}${languageReplyHint}\n${conciseFactHint}\n${directExplainerHint}${learnedStyleHint}\n\nStyle requirements: Be specific, avoid repetition, and stay natural.`; 
+            : `${normalizedUserMessage}${relevantSavedMemoryContext}\n\nResponse length requested: ${responseMode}. ${responseHint}\nResponse format preference: ${formatMode}. ${formatHint}\nPrompt-requested explanation style: ${activeLearningMode}. ${learningHint}${languageReplyHint}\n${conciseFactHint}\n${directExplainerHint}\n${fastExplainerHint}${learnedStyleHint}\n\nStyle requirements: Be specific, avoid repetition, and stay natural.`; 
 
          
         const requestPayload = { 
@@ -4472,7 +4507,7 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
                     responseStyle,
                     customSystemPrompt
                 },
-                intent: requestOptions?.intent || 'chat',
+                intent: requestOptions?.intent || (requestOptions?.fastExplainer === true ? 'fast_explainer' : 'chat'),
                 grounding: requestOptions?.grounding || null
             };
         latencyTrace.apiStartedAt = performance.now();
@@ -4549,6 +4584,19 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
         }
 
         if (!String(data.response || data.text || '').trim()) {
+            if (requestOptions?.fastExplainer === true) {
+                const strictApiFallback = await buildStrictApiKnowledgeFallback(normalizedUserMessage || userMessage);
+                if (strictApiFallback) {
+                    return {
+                        response: strictApiFallback,
+                        intent: 'strict_api_fallback'
+                    };
+                }
+                return {
+                    response: await buildUniversalSoftFallback(normalizedUserMessage || userMessage),
+                    intent: 'soft_fallback'
+                };
+            }
             const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || userMessage);
             if (searchFallback) {
                 return {
@@ -4567,6 +4615,7 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
 
         if (isLowSignalModelAnswer(data.response || data.text) &&
             (isDirectExplainerQuery(normalizedUserMessage) || isConciseDirectFactQuery(normalizedUserMessage))) {
+            if (requestOptions?.fastExplainer === true) return data;
             const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || userMessage);
             if (searchFallback) {
                 return {
@@ -4593,12 +4642,14 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
                 intent: 'local_fallback'
             };
         }
-        const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || userMessage); 
-        if (searchFallback) { 
-            return { 
-                response: searchFallback, 
-                intent: 'search_fallback'
-            };
+        if (requestOptions?.fastExplainer !== true) {
+            const searchFallback = await buildSearchFallbackAnswer(normalizedUserMessage || userMessage); 
+            if (searchFallback) { 
+                return { 
+                    response: searchFallback, 
+                    intent: 'search_fallback'
+                };
+            }
         }
 
         const softFallback = await buildUniversalSoftFallback(normalizedUserMessage || userMessage);
@@ -16957,6 +17008,16 @@ function detectInputLanguageHint(text) {
                 saveToHistory(text, stableFactAnswer);
                 addFeedbackButtons(text, stableFactAnswer, assistantMessageId);
                 return;
+            }
+
+            if (isStableHowExplainerQuery(cleanText) &&
+                !requiresAutoFormula(cleanText) &&
+                !isChemistryReactionQuery(cleanText)) {
+                logRoutingDebug('processCommand -> fast_explainer', cleanText, {
+                    selectedHandler: 'handleFastExplainerQuery'
+                });
+                const handled = await handleFastExplainerQuery(cleanText, text);
+                if (handled) return;
             }
 
             const classification = classifyUserMessage(cleanText);
