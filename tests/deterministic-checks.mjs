@@ -417,7 +417,7 @@ assert.ok(SOURCE.appHtml.includes("char === '.' && /\\d/.test(prev) && /\\d/.tes
 assert.match(SOURCE.appHtml, /if \(isUser && !rawDisplayText\.trim\(\)\) return/);
 assert.doesNotMatch(SOURCE.appHtml, /rawText\.match\(\s*\/\[\^\.\!\?\]\+\[\.\!\?\]\+\/g/);
 assert.match(SOURCE.appHtml, /const targeted = raw[\s\S]*\.replace\(\/\\bcief\\b\/gi, 'chief'\)/);
-assert.match(SOURCE.appHtml, /\.replace\(\/\\brtamilnadu\\b\/gi, 'Tamil Nadu'\)/);
+assert.doesNotMatch(SOURCE.appHtml, /\.replace\(\/\\brtamilnadu\\b\/gi, 'Tamil Nadu'\)/);
 assert.doesNotMatch(SOURCE.appHtml, /customAutocorrectRules/);
 assert.match(SOURCE.readme, /Standout Feature: Context Copilot/);
 assert.match(SOURCE.readme, /local, deterministic, private, and free-for-life/);
