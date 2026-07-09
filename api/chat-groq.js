@@ -140,7 +140,8 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
                 preloadedLiveRag.ragText,
                 contextBlock,
                 effectiveMessage,
-                lengthPolicy.instruction
+                lengthPolicy.instruction,
+                intent
             );
             const modelStartedAt = Date.now();
             const firstPass = await runModelWithFallback(firstPrompt, lengthPolicy);
@@ -179,7 +180,8 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
                         liveRag.ragText,
                         contextBlock,
                         effectiveMessage,
-                        lengthPolicy.instruction
+                        lengthPolicy.instruction,
+                        intent
                     );
                     const secondStartedAt = Date.now();
                     const secondPass = await runModelWithFallback(secondPrompt, lengthPolicy);
@@ -259,11 +261,23 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
     }
 
 
-    function composeFinalPrompt(systemPrompt, ragBlock, contextBlock, message, lengthGuidance = '') {
+    function buildIntentPromptHint(intent) {
+        if (String(intent || '') !== 'pop_culture_reference') return '';
+        return [
+            'Pop-culture reference intent:',
+            '- Answer directly when the character, show, movie, or reference is commonly known.',
+            '- Explain references and sitcom context clearly.',
+            '- Do not invent exact quotes, episode details, scenes, or obscure character facts.',
+            '- Say uncertainty clearly when unsure.'
+        ].join('\n');
+    }
+
+    function composeFinalPrompt(systemPrompt, ragBlock, contextBlock, message, lengthGuidance = '', intent = 'chat') {
         return [
             systemPrompt,
             ragBlock ? `Retrieved context (RAG):\n${ragBlock}` : '',
             contextBlock ? `Recent turns:\n${contextBlock}` : '',
+            buildIntentPromptHint(intent),
             `User message: ${message}`,
             lengthGuidance ? `Length guidance:\n${lengthGuidance}` : ''
         ].filter(Boolean).join('\n\n');
@@ -2351,7 +2365,7 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 
     function normalizeIntent(value) {
         const intent = String(value || 'chat').trim().toLowerCase();
-        return ['chat', 'fast_explainer', 'verify_answer', 'selection_explain', 'selection_verify', 'selection_rewrite', 'selection_translate', 'selection_custom']
+        return ['chat', 'fast_explainer', 'pop_culture_reference', 'verify_answer', 'selection_explain', 'selection_verify', 'selection_rewrite', 'selection_translate', 'selection_custom']
             .includes(intent) ? intent : 'chat';
     }
 
@@ -2603,6 +2617,7 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
     export const __test = {
         buildGroundedUserMessage,
         buildServerSystemPrompt,
+        composeFinalPrompt,
         classifyRoutingDecision,
         getStableFactAnswer,
         getQualityRiskReasons,
