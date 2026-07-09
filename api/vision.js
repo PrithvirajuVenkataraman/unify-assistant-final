@@ -74,6 +74,20 @@ export default async function handler(req, res) {
                 details: result.details
             });
         }
+        if (task === 'paper_answer_overlay') {
+            const result = await runPaperAnswerOverlayPipeline({
+                providers,
+                mimeType: normalizedMimeType,
+                imageBase64,
+                userPrompt: prompt
+            });
+            return res.status(200).json({
+                success: true,
+                task,
+                response: result.response,
+                details: result.details
+            });
+        }
 
         const systemPrompt = buildVisionPrompt(prompt, task);
         const rawText = await callVisionText({
@@ -499,6 +513,148 @@ function shouldEscalateMathOcrSolve(result, userPrompt = '') {
     const confidence = String(details?.ocrConfidence || details?.confidence || '').toLowerCase();
     const ambiguities = Array.isArray(details?.ambiguities) ? details.ambiguities.filter(Boolean) : [];
     return confidence === 'low' || ambiguities.length > 0;
+}
+
+async function runPaperAnswerOverlayPipeline({ providers, mimeType, imageBase64, userPrompt }) {
+    const prompt = [
+        'You are a document OCR and worksheet/form filling engine.',
+        'The user wants answers visually overlaid on the paper/camera preview.',
+        'Return strict JSON only:',
+        '{',
+        '  "summary": "short summary of what was filled",',
+        '  "mode": "direct_answers|guided_hints",',
+        '  "overlayItems": [',
+        '    {',
+        '      "label": "question or field label",',
+        '      "question": "readable question text when available",',
+        '      "answer": "answer text or hint",',
+        '      "confidence": 0.82,',
+        '      "lineNumber": 1,',
+        '      "box": { "x": 0.12, "y": 0.28, "width": 0.32, "height": 0.08 }',
+        '    }',
+        '  ],',
+        '  "unreadableFields": ["field or line that could not be read"],',
+        '  "warnings": ["short warnings about ambiguity or academic-integrity limits"]',
+        '}',
+        'Rules:',
+        '- Fill every readable blank, field, or visible question relevant to the user request.',
+        '- If it appears to be a live graded exam, active test, or assessment, set mode to "guided_hints" and provide hints/steps instead of final answers.',
+        '- Do not guess unreadable text. Put unclear fields in unreadableFields and use answer "Unclear" if needed.',
+        '- Use normalized box coordinates from 0 to 1 when you can estimate where the answer should appear. Put the box near the blank/answer area, not over the question text.',
+        '- If exact coordinates are uncertain, omit box but preserve lineNumber/order.',
+        '- Keep each answer short enough to fit on paper.',
+        `User intent: ${String(userPrompt || 'Write the answers on the paper.').trim()}`
+    ].join('\n');
+
+    const rawText = await callVisionText({
+        providers,
+        systemPrompt: prompt,
+        mimeType,
+        imageBase64
+    });
+    if (!rawText) throw new Error('Paper overlay OCR returned empty response');
+
+    const parsed = extractJsonFromText(rawText) || safeParseJson(rawText) || {};
+    const details = normalizePaperAnswerOverlayDetails(parsed);
+    if (!details.overlayItems.length && !details.unreadableFields.length) {
+        throw new Error('Could not detect readable paper fields for overlay');
+    }
+    return {
+        response: formatPaperAnswerOverlayResponse(details),
+        details
+    };
+}
+
+function normalizePaperAnswerOverlayDetails(data = {}) {
+    const overlayItems = Array.isArray(data?.overlayItems)
+        ? data.overlayItems
+        : (Array.isArray(data?.answers) ? data.answers : []);
+    const normalizedItems = overlayItems.map((item, index) => {
+        const label = String(item?.label || item?.field || item?.question || `Field ${index + 1}`).replace(/\s+/g, ' ').trim();
+        const question = String(item?.question || '').replace(/\s+/g, ' ').trim();
+        const answer = String(item?.answer || item?.value || item?.text || '').replace(/\s+/g, ' ').trim();
+        const confidence = clampUnitNumber(item?.confidence, 0.65);
+        const lineNumberRaw = Number(item?.lineNumber || item?.line || item?.order || index + 1);
+        const box = normalizeOverlayBox(item?.box || item?.bbox || item?.normalizedBox || item?.placement?.box);
+        return {
+            label: label || `Field ${index + 1}`,
+            question,
+            answer: answer || 'Unclear',
+            confidence,
+            lineNumber: Number.isFinite(lineNumberRaw) ? lineNumberRaw : index + 1,
+            ...(box ? { box } : {})
+        };
+    }).filter(item => item.answer);
+    const unreadableFields = Array.isArray(data?.unreadableFields)
+        ? data.unreadableFields.map(item => String(item || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 12)
+        : [];
+    const warnings = Array.isArray(data?.warnings)
+        ? data.warnings.map(item => String(item || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 8)
+        : [];
+    return {
+        pipeline: 'paper-answer-overlay',
+        summary: String(data?.summary || '').replace(/\s+/g, ' ').trim() || `Prepared ${normalizedItems.length} paper overlay answer${normalizedItems.length === 1 ? '' : 's'}.`,
+        mode: String(data?.mode || '').trim() === 'guided_hints' ? 'guided_hints' : 'direct_answers',
+        overlayItems: normalizedItems.slice(0, 24),
+        unreadableFields,
+        warnings
+    };
+}
+
+function clampUnitNumber(value, fallback = 0.65) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.max(0, Math.min(1, number));
+}
+
+function normalizeOverlayBox(box) {
+    if (!box || typeof box !== 'object') return null;
+    let x = Number(box.x ?? box.left);
+    let y = Number(box.y ?? box.top);
+    let width = Number(box.width ?? box.w);
+    let height = Number(box.height ?? box.h);
+    if (!Number.isFinite(width) && Number.isFinite(Number(box.right)) && Number.isFinite(x)) {
+        width = Number(box.right) - x;
+    }
+    if (!Number.isFinite(height) && Number.isFinite(Number(box.bottom)) && Number.isFinite(y)) {
+        height = Number(box.bottom) - y;
+    }
+    if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+    if (x > 1 || y > 1 || width > 1 || height > 1) {
+        x /= 100;
+        y /= 100;
+        width /= 100;
+        height /= 100;
+    }
+    return {
+        x: clampUnitNumber(x, 0),
+        y: clampUnitNumber(y, 0),
+        width: Math.max(0.01, Math.min(1, width)),
+        height: Math.max(0.01, Math.min(1, height))
+    };
+}
+
+function formatPaperAnswerOverlayResponse(details = {}) {
+    const items = Array.isArray(details.overlayItems) ? details.overlayItems : [];
+    const lines = [];
+    lines.push(details.mode === 'guided_hints' ? 'Paper guidance overlay prepared.' : 'Paper answer overlay prepared.');
+    if (details.summary) lines.push(details.summary);
+    if (items.length) {
+        lines.push('');
+        lines.push('Answers:');
+        items.slice(0, 12).forEach((item, index) => {
+            lines.push(`${index + 1}. ${item.label}: ${item.answer}`);
+        });
+    }
+    if (details.unreadableFields?.length) {
+        lines.push('');
+        lines.push(`Unclear: ${details.unreadableFields.join(' | ')}`);
+    }
+    if (details.warnings?.length) {
+        lines.push('');
+        lines.push(`Notes: ${details.warnings.join(' | ')}`);
+    }
+    return lines.join('\n');
 }
 
 async function runMathOcrSolvePipeline({ providers, mimeType, imageBase64, userPrompt }) { 
