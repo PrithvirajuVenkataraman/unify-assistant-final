@@ -501,6 +501,35 @@ assert.equal(routingSandbox.decideAnswerPath({
     }
 }), 'medical_advice');
 assert.equal(routingSandbox.isMedicalAdviceIntent('Could this be a drug interaction or hypertensive crisis?'), true);
+const fastExplainerSandbox = {
+    isCurrentInfoQuery: () => false,
+    isNewsworthyLiveTopic: () => false,
+    isLiveRetrievalQuery: () => false,
+    isChemistryReactionQuery: () => false,
+    isPhysicsFormulaQuery: () => false,
+    isMathFormulaQuery: () => false
+};
+vm.createContext(fastExplainerSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isStableHowExplainerQuery'), fastExplainerSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isUniversalExplainerRequest'), fastExplainerSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isDirectExplainerQuery'), fastExplainerSandbox);
+assert.equal(fastExplainerSandbox.isStableHowExplainerQuery('how RAG works'), true);
+assert.equal(fastExplainerSandbox.isStableHowExplainerQuery('how does RAG work'), true);
+assert.equal(fastExplainerSandbox.isStableHowExplainerQuery('explain how RAG works'), true);
+assert.equal(fastExplainerSandbox.isStableHowExplainerQuery('how do retrieval systems work'), true);
+assert.equal(fastExplainerSandbox.isUniversalExplainerRequest('how RAG works'), true);
+assert.equal(fastExplainerSandbox.isDirectExplainerQuery('how does RAG work'), true);
+assert.equal(fastExplainerSandbox.isStableHowExplainerQuery('latest RAG papers'), false);
+assert.equal(fastExplainerSandbox.isStableHowExplainerQuery('how does medicine dosage work'), false);
+const backendExplainerSandbox = {};
+vm.createContext(backendExplainerSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.chatGroqApi, 'isStableDefinitionQuery'), backendExplainerSandbox);
+assert.equal(backendExplainerSandbox.isStableDefinitionQuery('how RAG works'), true);
+assert.equal(backendExplainerSandbox.isStableDefinitionQuery('how does RAG work'), true);
+assert.equal(backendExplainerSandbox.isStableDefinitionQuery('latest RAG papers'), false);
+assert.equal(backendExplainerSandbox.isStableDefinitionQuery('how does medicine dosage work'), false);
+assert.match(SOURCE.chatGroqApi, /'fast_explainer'/);
+assert.match(SOURCE.appHtml, /fastExplainer:\s*true/);
 assert.doesNotMatch(SOURCE.appHtml, /function isRestaurantLookupIntent/);
 assert.equal(routeMessage('restaurants near me open now').route, 'llm');
 assert.equal(routeMessage('best restaurants in Chennai').route, 'llm');
@@ -1014,7 +1043,7 @@ function extractFunctionSource(source, name) {
     }
     throw new Error(`unterminated function ${name}`);
 }
- 
+
 async function callJsonHandler(handler, req) {
     const res = {
         statusCode: 200,
