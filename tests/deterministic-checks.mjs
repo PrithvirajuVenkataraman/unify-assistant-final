@@ -194,7 +194,7 @@ const FEATURE_CONTRACTS = Object.freeze({
             /new SpeechSynthesisUtterance\(spokenText\)/,
             /return messageId;/
         ]
-    },
+    }, 
     regeneration: {
         required: [
             /let regenerationInProgress = false/,
@@ -530,6 +530,38 @@ assert.equal(backendExplainerSandbox.isStableDefinitionQuery('latest RAG papers'
 assert.equal(backendExplainerSandbox.isStableDefinitionQuery('how does medicine dosage work'), false);
 assert.match(SOURCE.chatGroqApi, /'fast_explainer'/);
 assert.match(SOURCE.appHtml, /fastExplainer:\s*true/);
+assert.doesNotMatch(SOURCE.appHtml, /SITCOM_MOVIE_REFERENCE_CATALOG/);
+assert.doesNotMatch(SOURCE.appHtml, /function detectSitcomMovieReference/);
+assert.doesNotMatch(SOURCE.appHtml, /function buildSitcomMovieReferenceResponse/);
+assert.doesNotMatch(SOURCE.appHtml, /handleSitcomMovieReference/);
+assert.doesNotMatch(SOURCE.appHtml, /Michael Scott/);
+assert.doesNotMatch(SOURCE.appHtml, /Chandler Bing/);
+const popCultureSandbox = {
+    isScreenSuggestionRequest(text) {
+        return /\b(best|top|recommend|suggest|like)\b/i.test(String(text || '')) &&
+            /\b(sitcom|show|series|movie|film)\b/i.test(String(text || ''));
+    },
+    isCurrentInfoQuery(text) {
+        return /\b(current|latest|today|now|news|headline|headlines|update|updates|reboot)\b/i.test(String(text || ''));
+    },
+    isStrictLatestQuery(text) {
+        return /\b(latest|current|today|now|news|headline|headlines|update|updates)\b/i.test(String(text || ''));
+    },
+    isExplicitWebSearchRequest(text) {
+        return /\b(search|web|internet|source|sources)\b/i.test(String(text || ''));
+    }
+};
+vm.createContext(popCultureSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isSeriesReferenceJokeRequest'), popCultureSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isPopCultureReferenceQuery'), popCultureSandbox);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Michael Scott'), true);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('explain the Schmosby reference'), true);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('best sitcoms like The Office'), false);
+assert.equal(popCultureSandbox.isSeriesReferenceJokeRequest('make a Friends reference joke'), true);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('make a Friends reference joke'), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery('latest news about The Office reboot'), false);
+assert.match(SOURCE.appHtml, /intent:\s*'pop_culture_reference'/);
+assert.match(SOURCE.chatGroqApi, /Pop-culture reference intent:/);
 assert.doesNotMatch(SOURCE.appHtml, /function isRestaurantLookupIntent/);
 assert.equal(routeMessage('restaurants near me open now').route, 'llm');
 assert.equal(routeMessage('best restaurants in Chennai').route, 'llm');
