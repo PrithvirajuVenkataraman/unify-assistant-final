@@ -288,12 +288,24 @@ assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.disaster).category, 'dis
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.sports).category, 'sports');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.places).category, 'tourism_food_places');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.unsupported).category, 'stable_knowledge');
-assert.equal(classifyFreeLiveIntent('Search the web for recent reviews of the Nova Phone 3').category, 'web_search');
-assert.equal(classifyFreeLiveIntent('recent reviews of Nova Phone 3').category, 'web_search');
-assert.equal(classifyFreeLiveIntent('Nova Phone 3 reviews').category, 'web_search');
-assert.equal(classifyFreeLiveIntent('recent reviews of Modular Laptop 16').category, 'web_search');
-assert.equal(classifyFreeLiveIntent('compare Alpha Fold X vs Beta Fold Y').category, 'web_search');
-assert.equal(classifyFreeLiveIntent('price of Acme Speaker Mini').category, 'web_search');
+const REVIEW_SUBJECT = 'Subject Device 3';
+const ALT_REVIEW_SUBJECT = 'Subject Laptop 16';
+const PRICE_SUBJECT = 'Subject Speaker Mini';
+const ROLE_SCOPE = 'Sample Region';
+const LEFT_COMPARISON_SUBJECT = 'Subject Fold X';
+const RIGHT_COMPARISON_SUBJECT = 'Object Fold Y';
+const comparisonQuery = `compare ${LEFT_COMPARISON_SUBJECT} vs ${RIGHT_COMPARISON_SUBJECT}`;
+const reviewQuery = `recent reviews of ${REVIEW_SUBJECT}`;
+const directReviewQuery = `${REVIEW_SUBJECT} reviews`;
+const roleQueryText = `Who is the CM of ${ROLE_SCOPE}`;
+const altReviewQuery = `recent reviews of ${ALT_REVIEW_SUBJECT}`;
+const priceQuery = `price of ${PRICE_SUBJECT}`;
+assert.equal(classifyFreeLiveIntent(`Search the web for ${reviewQuery}`).category, 'web_search');
+assert.equal(classifyFreeLiveIntent(reviewQuery).category, 'web_search');
+assert.equal(classifyFreeLiveIntent(directReviewQuery).category, 'web_search');
+assert.equal(classifyFreeLiveIntent(altReviewQuery).category, 'web_search');
+assert.equal(classifyFreeLiveIntent(comparisonQuery).category, 'web_search');
+assert.equal(classifyFreeLiveIntent(priceQuery).category, 'web_search');
 assert.equal(classifyFreeLiveIntent('Explain what Example OS is').category, 'stable_knowledge');
 assert.match(SOURCE.searchApi, /mode === 'rag'/);
 assert.match(SOURCE.searchApi, /runEvidenceFirstWebRag\(query,\s*\{\s*limit\s*\}\)/);
@@ -308,54 +320,54 @@ assert.match(SOURCE.embeddingsApi, /integrate\.api\.nvidia\.com\/v1\/embeddings/
 assert.doesNotMatch(SOURCE.appHtml, /NVIDIA_API_KEY|integrate\.api\.nvidia\.com\/v1\/embeddings/);
 assert.match(SOURCE.appHtml, /mode:\s*'rag'/);
 assert.match(SOURCE.appHtml, /answerData\?\.verified === true/);
-assert.equal(searchTest.extractSearchTargetQuery('Search the web for recent reviews of the Nova Phone 3'), 'recent reviews of the Nova Phone 3');
-assert.deepEqual(searchTest.buildSearchQueryRewrite('compare Alpha Fold X vs Beta Fold Y'), {
-    query: 'compare Alpha Fold X vs Beta Fold Y',
-    subject: 'Alpha Fold X Beta Fold Y',
+assert.equal(searchTest.extractSearchTargetQuery(`Search the web for ${reviewQuery}`), reviewQuery);
+assert.deepEqual(searchTest.buildSearchQueryRewrite(comparisonQuery), {
+    query: comparisonQuery,
+    subject: `${LEFT_COMPARISON_SUBJECT} ${RIGHT_COMPARISON_SUBJECT}`,
     dateContext: '',
     modifiers: [],
     freshnessNeeded: true,
     intent: 'comparison'
 });
-assert.deepEqual(searchTest.buildDeterministicSearchQueries('recent reviews of Nova Phone 3'), [
-    'Nova Phone 3 reviews',
-    'Nova Phone 3 recent reviews',
-    'Nova Phone 3 latest reviews'
+assert.deepEqual(searchTest.buildDeterministicSearchQueries(reviewQuery), [
+    `${REVIEW_SUBJECT} reviews`,
+    `${REVIEW_SUBJECT} recent reviews`,
+    `${REVIEW_SUBJECT} latest reviews`
 ]);
-assert.equal(searchTest.isRelatedToQuery('Nova Phone 3 reviews', {
-    title: 'Nova Echoes',
-    description: 'A studio album released in 2013 with production credits.',
-    sourceLabel: 'Wikipedia'
-}), false);
-assert.equal(searchTest.isRelatedToQuery('Nova Phone 3 reviews', {
-    title: 'Nova Phone 3 hands-on review',
-    description: 'Early phone review with camera, battery, display, and Example OS impressions.',
-    sourceLabel: 'Tech Review'
-}), true);
-assert.equal(searchTest.isRelatedToQuery('Who is the CM of Sample State', {
-    title: 'OrbitOS',
-    description: 'OrbitOS is a gaming-focused operating system released by a platform company.',
-    sourceLabel: 'Wikipedia'
-}), false);
-assert.equal(searchTest.isRelatedToQuery('Who is the CM of Sample State', {
-    title: 'Chief Minister of Sample State',
-    description: 'The chief minister is the head of government of Sample State.',
-    sourceLabel: 'Wikipedia'
-}), true);
-assert.equal(searchTest.isRelatedToQuery('recent reviews of Modular Laptop 16', {
-    title: 'Framework design language',
-    description: 'A general page about software frameworks and laptop stands.',
+assert.equal(searchTest.isRelatedToQuery(directReviewQuery, {
+    title: 'Unrelated Archive',
+    description: 'A general historical entry that does not mention the requested subject.',
     sourceLabel: 'Reference'
 }), false);
-assert.equal(searchTest.isRelatedToQuery('recent reviews of Modular Laptop 16', {
-    title: 'Modular Laptop 16 review',
-    description: 'A recent review covering performance, battery, modular parts, and display quality.',
-    sourceLabel: 'Tech Review'
+assert.equal(searchTest.isRelatedToQuery(directReviewQuery, {
+    title: `${REVIEW_SUBJECT} hands-on review`,
+    description: `Early review with performance, battery, display, and software impressions for ${REVIEW_SUBJECT}.`,
+    sourceLabel: 'Review Source'
 }), true);
-assert.equal(searchTest.isRelatedToQuery('price of Acme Speaker Mini', {
-    title: 'Acme Speaker Mini price drops this week',
-    description: 'Retail pricing and availability details for the compact speaker model.',
-    sourceLabel: 'Shopping News'
+assert.equal(searchTest.isRelatedToQuery(roleQueryText, {
+    title: 'Unrelated Operating System',
+    description: 'A gaming-focused operating system released by a platform company.',
+    sourceLabel: 'Reference'
+}), false);
+assert.equal(searchTest.isRelatedToQuery(roleQueryText, {
+    title: `Chief Minister of ${ROLE_SCOPE}`,
+    description: `The chief minister is the head of government of ${ROLE_SCOPE}.`,
+    sourceLabel: 'Reference'
+}), true);
+assert.equal(searchTest.isRelatedToQuery(altReviewQuery, {
+    title: 'Generic design language',
+    description: 'A general page about software frameworks and product stands.',
+    sourceLabel: 'Reference'
+}), false);
+assert.equal(searchTest.isRelatedToQuery(altReviewQuery, {
+    title: `${ALT_REVIEW_SUBJECT} review`,
+    description: `A recent review covering performance, battery, modular parts, and display quality for ${ALT_REVIEW_SUBJECT}.`,
+    sourceLabel: 'Review Source'
+}), true);
+assert.equal(searchTest.isRelatedToQuery(priceQuery, {
+    title: `${PRICE_SUBJECT} price drops this week`,
+    description: `Retail pricing and availability details for ${PRICE_SUBJECT}.`,
+    sourceLabel: 'Shopping Source'
 }), true);
 assert.doesNotMatch(SOURCE.searchApi, /nothing\s+phone|iphone|pixel|galaxy|oneplus/i);
 assert.match(SOURCE.styles, /\.chat-bubble-user\s*\{[\s\S]*background:\s*transparent !important/);
@@ -879,7 +891,7 @@ assert.equal(extractQueryTargetMetadata('Example Labs in 2023').dateContext, 'in
 assert.equal(freeLiveProviderTest.extractLocation('weather in Testville around July'), 'Testville');
 assert.equal(freeLiveProviderTest.extractLocation('forecast for Paris, France tomorrow'), 'Paris, France');
 assert.equal(freeLiveProviderTest.extractPlaceTopic('best places to visit in Mysore during summer'), 'Mysore');
-assert.equal(searchTest.buildSearchQueryRewrite('recent reviews of Nova Phone 3').subject, 'Nova Phone 3');
+assert.equal(searchTest.buildSearchQueryRewrite(reviewQuery).subject, REVIEW_SUBJECT);
 assert.equal(searchTest.buildSearchQueryRewrite('who was CEO of Example Labs in 2023').subject, 'Example Labs');
 assert.equal(searchTest.buildSearchQueryRewrite('who was CEO of Example Labs in 2023').dateContext, 'in 2023');
 assert.equal(searchTest.buildSearchQueryRewrite('Sample Actor latest movie in 2023').subject, 'Sample Actor');
