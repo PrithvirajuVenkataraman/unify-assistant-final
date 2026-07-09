@@ -338,13 +338,13 @@ assert.match(
     /custom reply instructions as tone and formatting preferences only/i
 );
 const popCultureRequest = chatTest.normalizeChatRequest({
-    message: 'who is Michael Scott',
+    message: 'who is Jordan Vale character',
     intent: 'pop_culture_reference'
 });
 assert.equal(popCultureRequest.ok, true);
 assert.equal(popCultureRequest.value.intent, 'pop_culture_reference');
 assert.match(
-    chatTest.composeFinalPrompt('system', '', '', 'who is Michael Scott', 'be concise', 'pop_culture_reference'),
+    chatTest.composeFinalPrompt('system', '', '', 'who is Jordan Vale character', 'be concise', 'pop_culture_reference'),
     /Do not invent exact quotes, episode details, scenes, or obscure character facts/
 );
 assert.doesNotMatch(
@@ -376,7 +376,7 @@ assert.equal(chatTest.shouldStreamChatRequest(
     false
 ), false);
 assert.equal(chatTest.shouldStreamChatRequest(
-    { stream: true, message: 'explain the Schmosby reference' },
+    { stream: true, message: 'explain the running nickname reference' },
     'pop_culture_reference',
     null,
     { strategy: 'direct' },
@@ -450,11 +450,11 @@ process.env.LIVE_RETRIEVAL_ENABLED = 'true';
 assert.equal(chatTest.classifyRoutingDecision(roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction), '', {}).strategy, 'live_first');
 assert.equal(chatTest.classifyRoutingDecision('What is the capital of France?', '', {}).strategy, 'direct');
 assert.deepEqual(
-    chatTest.classifyRoutingDecision('explain the Schmosby reference', '', { intent: 'pop_culture_reference' }),
+    chatTest.classifyRoutingDecision('explain the running nickname reference', '', { intent: 'pop_culture_reference' }),
     { strategy: 'direct', reason: 'pop_culture_reference_stable', webEligible: false }
 );
-assert.equal(chatTest.classifyRoutingDecision('latest news about The Office reboot', '', { intent: 'pop_culture_reference' }).strategy, 'live_first');
-assert.equal(chatTest.classifyRoutingDecision('explain the Schmosby reference with sources', '', { intent: 'pop_culture_reference' }).strategy, 'live_first');
+assert.equal(chatTest.classifyRoutingDecision('latest news about Workplace Crew reboot', '', { intent: 'pop_culture_reference' }).strategy, 'live_first');
+assert.equal(chatTest.classifyRoutingDecision('explain the running nickname reference with sources', '', { intent: 'pop_culture_reference' }).strategy, 'live_first');
 delete process.env.SERPER_API_KEY;
 delete process.env.LIVE_RETRIEVAL_ENABLED;
 assert.equal(chatTest.classifyRoutingDecision(roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction), '', {}).strategy, 'direct');
@@ -668,16 +668,16 @@ assert.equal(cacheMissFacts.statusCode, 200);
 assert.equal(cacheMissFacts.body.resolved, false);
 assert.equal(cacheMissFacts.body.error.code, 'cache_miss');
 saveItems([{
-    title: 'OpenAI ships a cached update',
-    url: 'https://openai.com/news/cached-update',
+    title: 'Example Labs ships a cached update',
+    url: 'https://example.com/news/cached-update',
     summary: 'Cached article for current facts.',
-    source: 'OpenAI News',
+    source: 'Example Labs News',
     publishedAt: new Date().toISOString()
 }]);
-const cachedFacts = await callHandler(currentFactsHandler, request('/api/current-facts', { query: 'latest OpenAI news' }));
+const cachedFacts = await callHandler(currentFactsHandler, request('/api/current-facts', { query: 'latest Example Labs news' }));
 assert.equal(cachedFacts.statusCode, 200);
 assert.equal(cachedFacts.body.resolved, true);
-assert.equal(cachedFacts.body.sources[0].source, 'OpenAI News');
+assert.equal(cachedFacts.body.sources[0].source, 'Example Labs News');
 clearItems();
 
 globalThis.fetch = async (url) => {
@@ -1288,19 +1288,19 @@ globalThis.fetch = ORIGINAL_FETCH;
 
 clearItems();
 saveItems([{
-    title: 'React 19.2 release notes',
-    url: 'https://react.dev/blog/2026/06/01/react-19-2',
-    summary: 'A cached React release article.',
-    source: 'React Blog',
+    title: 'Example Framework 19.2 release notes',
+    url: 'https://example.com/blog/2026/06/01/example-framework-19-2',
+    summary: 'A cached Example Framework release article.',
+    source: 'Example Framework Blog',
     publishedAt: new Date().toISOString()
 }]);
-const cachedLatestSearch = await callHandler(searchHandler, request('/api/search', { query: 'latest React release', limit: 5 }));
+const cachedLatestSearch = await callHandler(searchHandler, request('/api/search', { query: 'latest Example Framework release', limit: 5 }));
 assert.equal(cachedLatestSearch.statusCode, 200);
 assert.equal(cachedLatestSearch.body.success, true);
 assert.equal(cachedLatestSearch.body.provider, 'latest_cache');
-assert.equal(cachedLatestSearch.body.results[0].sourceLabel, 'React Blog');
+assert.equal(cachedLatestSearch.body.results[0].sourceLabel, 'Example Framework Blog');
 assert.equal(cachedLatestSearch.body.answerProvider, 'latest_cache_source');
-assert.match(cachedLatestSearch.body.answer, /React 19\.2 release notes/);
+assert.match(cachedLatestSearch.body.answer, /Example Framework 19\.2 release notes/);
 clearItems();
 
 globalThis.fetch = async (url) => {
@@ -1475,24 +1475,24 @@ globalThis.fetch = async (url) => {
         return okJson({
             query: {
                 search: [
-                    { title: 'Nothing Was the Same', snippet: 'Drake studio album.' },
-                    { title: 'James Bond 007: Everything or Nothing', snippet: 'Video game.' }
+                    { title: 'Nova Echoes', snippet: 'Studio album.' },
+                    { title: 'Everything About Nova', snippet: 'Adventure game.' }
                 ]
             }
         });
     }
     if (href.includes('en.wikipedia.org/api/rest_v1/page/summary')) {
-        if (href.includes('Nothing_Was_the_Same')) {
+        if (href.includes('Nova_Echoes')) {
             return okJson({
-                title: 'Nothing Was the Same',
-                extract: 'Nothing Was the Same is a studio album by Drake released in 2013.',
-                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Nothing_Was_the_Same' } }
+                title: 'Nova Echoes',
+                extract: 'Nova Echoes is a studio album released in 2013.',
+                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Nova_Echoes' } }
             });
         }
         return okJson({
-            title: 'James Bond 007: Everything or Nothing',
-            extract: 'Everything or Nothing is an action-adventure video game.',
-            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/James_Bond_007:_Everything_or_Nothing' } }
+            title: 'Everything About Nova',
+            extract: 'Everything About Nova is an action-adventure video game.',
+            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Everything_About_Nova' } }
         });
     }
     if (href.includes('www.wikidata.org')) {
@@ -1505,21 +1505,21 @@ globalThis.fetch = async (url) => {
         return okJson({
             articles: [
                 {
-                    title: 'Nothing Was the Same review revisited',
-                    url: 'https://example.com/music/nothing-was-the-same-review',
+                    title: 'Nova Echoes review revisited',
+                    url: 'https://example.com/music/nova-echoes-review',
                     domain: 'example.com',
                     seendate: '20260618120000'
                 },
                 {
-                    title: 'Nothing Phone 3 hands-on review',
-                    url: 'https://www.theverge.com/reviews/nothing-phone-3-review',
-                    domain: 'theverge.com',
+                    title: 'Nova Phone 3 hands-on review',
+                    url: 'https://reviews.example.com/nova-phone-3-review',
+                    domain: 'reviews.example.com',
                     seendate: '20260618130000'
                 },
                 {
-                    title: 'Nothing Phone 3 review: camera, battery, and design',
-                    url: 'https://www.techradar.com/phones/nothing-phone-3-review',
-                    domain: 'techradar.com',
+                    title: 'Nova Phone 3 review: camera, battery, and design',
+                    url: 'https://tech.example.com/phones/nova-phone-3-review',
+                    domain: 'tech.example.com',
                     seendate: '20260618140000'
                 }
             ]
@@ -1528,19 +1528,19 @@ globalThis.fetch = async (url) => {
     throw new Error(`unexpected URL ${href}`);
 };
 const productReviewSearch = await callHandler(searchHandler, request('/api/search', {
-    query: 'Search the web for recent reviews of the Nothing Phone 3',
+    query: 'Search the web for recent reviews of the Nova Phone 3',
     limit: 5
 }));
 assert.equal(productReviewSearch.statusCode, 200);
 assert.equal(productReviewSearch.body.category, 'web_search');
-assert.equal(productReviewSearch.body.query, 'recent reviews of the Nothing Phone 3');
-assert.equal(productReviewSearch.body.searchRewrite.subject, 'Nothing Phone 3');
+assert.equal(productReviewSearch.body.query, 'recent reviews of the Nova Phone 3');
+assert.equal(productReviewSearch.body.searchRewrite.subject, 'Nova Phone 3');
 assert.equal(productReviewSearch.body.searchRewrite.intent, 'reviews');
 assert.equal(productReviewSearch.body.searchRewrite.freshnessNeeded, true);
 assert.ok(productReviewSearch.body.results.length >= 1);
-assert.ok(productReviewSearch.body.results.every(item => /nothing phone 3/i.test(`${item.title} ${item.description}`)));
-assert.doesNotMatch(JSON.stringify(productReviewSearch.body.results), /Nothing Was the Same|Everything or Nothing/i);
-assert.doesNotMatch(String(productReviewSearch.body.answer || ''), /Nothing Was the Same|Everything or Nothing/i);
+assert.ok(productReviewSearch.body.results.every(item => /nova phone 3/i.test(`${item.title} ${item.description}`)));
+assert.doesNotMatch(JSON.stringify(productReviewSearch.body.results), /Nova Echoes|Everything About Nova/i);
+assert.doesNotMatch(String(productReviewSearch.body.answer || ''), /Nova Echoes|Everything About Nova/i);
 globalThis.fetch = ORIGINAL_FETCH;
 
 process.env.GEMINI_API_KEY = 'test-gemini-key';
@@ -1684,39 +1684,39 @@ globalThis.fetch = async (url) => {
     const href = String(url);
     if (href.includes('generativelanguage.googleapis.com')) {
         return okJson({
-            candidates: [{ content: { parts: [{ text: '{"queries":["SteamOS","UK singles chart","KDE neon"]}' }] } }]
+            candidates: [{ content: { parts: [{ text: '{"queries":["OrbitOS","Sample singles chart","Neon Shell"]}' }] } }]
         });
     }
     if (href.includes('en.wikipedia.org/w/api.php')) {
         return okJson({
             query: {
                 search: [
-                    { title: 'SteamOS', snippet: 'Gaming-focused operating system by Valve.' },
-                    { title: 'UK singles chart', snippet: 'Music chart in the United Kingdom.' },
-                    { title: 'KDE neon', snippet: 'Linux distribution based on Ubuntu.' }
+                    { title: 'OrbitOS', snippet: 'Gaming-focused operating system by a platform company.' },
+                    { title: 'Sample singles chart', snippet: 'Music chart in a sample market.' },
+                    { title: 'Neon Shell', snippet: 'Desktop distribution based on a sample base.' }
                 ]
             }
         });
     }
     if (href.includes('en.wikipedia.org/api/rest_v1/page/summary')) {
-        if (href.includes('SteamOS')) {
+        if (href.includes('OrbitOS')) {
             return okJson({
-                title: 'SteamOS',
-                extract: 'SteamOS is a gaming-focused operating system released by Valve.',
-                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/SteamOS' } }
+                title: 'OrbitOS',
+                extract: 'OrbitOS is a gaming-focused operating system released by a platform company.',
+                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/OrbitOS' } }
             });
         }
-        if (href.includes('UK_singles_chart')) {
+        if (href.includes('Sample_singles_chart')) {
             return okJson({
-                title: 'UK singles chart',
-                extract: 'The UK singles chart ranks songs in the United Kingdom.',
-                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/UK_singles_chart' } }
+                title: 'Sample singles chart',
+                extract: 'The Sample singles chart ranks songs in a sample market.',
+                content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Sample_singles_chart' } }
             });
         }
         return okJson({
-            title: 'KDE neon',
-            extract: 'KDE neon is a Linux distribution based on Ubuntu.',
-            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/KDE_neon' } }
+            title: 'Neon Shell',
+            extract: 'Neon Shell is a desktop distribution based on a sample base.',
+            content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Neon_Shell' } }
         });
     }
     if (href.includes('www.wikidata.org')) return okJson({ search: [] });
@@ -1725,7 +1725,7 @@ globalThis.fetch = async (url) => {
     throw new Error(`unexpected URL ${href}`);
 };
 const irrelevantRagSearch = await callHandler(searchHandler, request('/api/search', {
-    query: 'WHO IS THE CM OF TAMIL NADU',
+    query: 'WHO IS THE CM OF SAMPLE STATE',
     mode: 'rag',
     limit: 5
 }));
@@ -1733,7 +1733,7 @@ assert.equal(irrelevantRagSearch.statusCode, 200);
 assert.equal(irrelevantRagSearch.body.verified, false);
 assert.equal(irrelevantRagSearch.body.answerProvider, 'web_rag_unverified');
 assert.match(irrelevantRagSearch.body.answer, /I could not verify this from retrieved sources/);
-assert.doesNotMatch(String(irrelevantRagSearch.body.answer || ''), /SteamOS|KDE neon|UK singles/i);
+assert.doesNotMatch(String(irrelevantRagSearch.body.answer || ''), /OrbitOS|Neon Shell|Sample singles/i);
 globalThis.fetch = ORIGINAL_FETCH;
 delete process.env.GEMINI_API_KEY;
 
