@@ -1600,7 +1600,11 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         const t = String(text || '').toLowerCase().trim();
         if (!t) return false;
         if (/\b(latest|today|current|right now|breaking|news|update|updates|score|price|rate)\b/.test(t)) return false;
-        return /^(what is|what's|define|meaning of|explain)\b/.test(t) || /\bdefinition of\b/.test(t);
+        if (/\b(medical|medicine|medicines|dosage|dose|dosing|symptom|diagnos|treatment|legal|lawyer|contract|financial|investment|tax|self-harm|suicide|emergency)\b/.test(t)) return false;
+        return /^(what is|what's|define|meaning of|explain)\b/.test(t) ||
+            /^(?:can you\s+)?(?:explain\s+)?how\s+(?:does|do|is|are)?\s*[\w"'.()\- ]{2,90}\s+works?\??$/i.test(t) ||
+            /^(?:can you\s+)?(?:explain\s+)?how\s+(?:does|do)\s+[\w"'.()\- ]{2,90}\s+work\??$/i.test(t) ||
+            /\bdefinition of\b/.test(t);
     }
 
     function isWebCheckCandidateQuery(text) {
@@ -2347,7 +2351,7 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 
     function normalizeIntent(value) {
         const intent = String(value || 'chat').trim().toLowerCase();
-        return ['chat', 'verify_answer', 'selection_explain', 'selection_verify', 'selection_rewrite', 'selection_translate', 'selection_custom']
+        return ['chat', 'fast_explainer', 'verify_answer', 'selection_explain', 'selection_verify', 'selection_rewrite', 'selection_translate', 'selection_custom']
             .includes(intent) ? intent : 'chat';
     }
 
