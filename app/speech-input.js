@@ -1,0 +1,494 @@
+const ERROR_MESSAGES = { 
+    'not-allowed': 'Microphone permission was denied. Allow microphone access in your browser settings.', 
+    'service-not-allowed': 'Speech recognition is blocked by the browser or device policy. Language support depends on your browser and device; try English or another language.', 
+    'audio-capture': 'No working microphone was found.', 
+    network: 'Speech recognition could not reach the recognition service. Language support depends on your browser and device; try English or another language.', 
+    'no-speech': 'No speech was detected. If this repeats, try English or another browser-supported language.' 
+}; 
+const enqueueMicrotask = globalThis.queueMicrotask || (callback => Promise.resolve().then(callback)); 
+const TEXT_ONLY_LANGUAGE_NOTICE = 'Non-English languages are supported by text translation only. Voice input uses English transcription.';
+const CONVERSE_DUPLICATE_WINDOW_MS = 8000;
+const DEFAULT_CONVERSE_SILENCE_MS = 800;
+const DEFAULT_CONVERSE_MAX_WAIT_MS = 2800;
+
+function normalizeVoiceInputLanguage(language = '') {
+    const value = String(language || '').trim();
+    return value === 'en-IN' ? 'en-IN' : 'en-US';
+}
+
+export function createSpeechInputController(options = {}) { 
+    const Recognition = options.Recognition;
+    const callbacks = {
+        onInterim: options.onInterim || (() => {}),
+        onFinal: options.onFinal || (() => {}),
+        onState: options.onState || (() => {}),
+        onError: options.onError || (() => {})
+    };
+    let recognition = null;
+    let activeSession = null;
+    let recognitionSessionId = 0;
+    let mode = 'idle';
+    let converseEnabled = false;
+    let processing = false;
+    let submissionsInFlight = 0;
+    let intentionalStop = false;
+    let restartRequested = false;
+    let restartQueued = false;
+    let currentInterim = '';
+    let language = normalizeVoiceInputLanguage(options.language || 'en-US'); 
+    const converseSilenceMs = Math.max(1, Number(options.converseSilenceMs) || DEFAULT_CONVERSE_SILENCE_MS);
+    const converseMaxWaitMs = Math.max(converseSilenceMs, Number(options.converseMaxWaitMs) || DEFAULT_CONVERSE_MAX_WAIT_MS);
+    let converseBuffer = null;
+    const submittedResultIds = new Set();
+    const recentConverseSubmissions = new Map();
+
+    function getState() {
+        return {
+            supported: typeof Recognition === 'function',
+            mode,
+            converseEnabled,
+            listening: Boolean(recognition),
+            processing,
+            interruptible: converseEnabled && processing,
+            recognitionSessionId,
+            submittedResultIds: [...submittedResultIds],
+            restartRequested
+        };
+    }
+
+    function emitState() {
+        const state = getState();
+        callbacks.onState(state);
+        try {
+            globalThis.dispatchEvent?.(new CustomEvent('jarvis:speech-state', { detail: state }));
+        } catch {}
+    }
+
+    function clearInterim() {
+        currentInterim = '';
+        callbacks.onInterim('', getState());
+    }
+
+    function clearConverseBuffer() {
+        if (converseBuffer?.silenceTimer) clearTimeout(converseBuffer.silenceTimer);
+        if (converseBuffer?.maxTimer) clearTimeout(converseBuffer.maxTimer);
+        converseBuffer = null;
+    }
+
+    function rememberSubmittedResult(resultId) {
+        submittedResultIds.add(resultId);
+        if (submittedResultIds.size <= 100) return;
+        const oldest = submittedResultIds.values().next().value;
+        submittedResultIds.delete(oldest);
+    }
+
+    function shouldSubmitConverseTranscript(text, transcriptId) {
+        const normalized = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        if (!normalized) return false;
+        const now = Date.now();
+        for (const [key, createdAt] of recentConverseSubmissions) {
+            if (now - createdAt > CONVERSE_DUPLICATE_WINDOW_MS) recentConverseSubmissions.delete(key);
+        }
+        const key = `${normalized}:${String(transcriptId || '')}`;
+        if (recentConverseSubmissions.has(key) || recentConverseSubmissions.has(normalized)) return false;
+        recentConverseSubmissions.set(key, now);
+        recentConverseSubmissions.set(normalized, now);
+        return true;
+    }
+
+    async function submitConverseTranscript(buffer, completeReason = 'silence') {
+        const finalText = buffer.parts.join(' ').replace(/\s+/g, ' ').trim();
+        const transcriptId = buffer.resultIds.join('|');
+        if (!finalText || !shouldSubmitConverseTranscript(finalText, transcriptId)) return;
+        submissionsInFlight += 1;
+        try {
+            await callbacks.onFinal(finalText, {
+                autoSubmit: true,
+                interrupt: processing,
+                mode: 'converse',
+                source: 'converse',
+                transcriptFinal: true,
+                transcriptCompleteReason: completeReason,
+                sessionId: buffer.sessionId,
+                transcriptId
+            });
+        } finally {
+            submissionsInFlight = Math.max(0, submissionsInFlight - 1);
+            if (!recognition) requestConverseRestart();
+        }
+    }
+
+    function flushConverseBuffer(completeReason = 'silence') {
+        const buffer = converseBuffer;
+        if (!buffer) return;
+        clearConverseBuffer();
+        void submitConverseTranscript(buffer, completeReason);
+    }
+
+    function queueConverseTranscript(session, finalText, finalResultIds) {
+        if (!finalText || activeSession !== session || session.closed) return;
+        if (!converseBuffer || converseBuffer.sessionId !== session.id) {
+            clearConverseBuffer();
+            converseBuffer = {
+                sessionId: session.id,
+                parts: [],
+                resultIds: [],
+                startedAt: Date.now(),
+                silenceTimer: null,
+                maxTimer: null
+            };
+            converseBuffer.maxTimer = setTimeout(() => flushConverseBuffer('max_wait'), converseMaxWaitMs);
+        }
+        converseBuffer.parts.push(finalText);
+        converseBuffer.resultIds.push(...finalResultIds);
+        if (converseBuffer.silenceTimer) clearTimeout(converseBuffer.silenceTimer);
+        converseBuffer.silenceTimer = setTimeout(() => flushConverseBuffer('silence'), converseSilenceMs);
+    }
+
+    function stopRecognition(reason = 'manual') {
+        restartRequested = converseEnabled && reason !== 'disabled';
+        if (!recognition) return;
+        intentionalStop = true;
+        if (mode === 'converse') flushConverseBuffer('manual');
+        if (activeSession) activeSession.closed = true;
+        clearInterim();
+        try {
+            recognition.stop();
+        } catch {
+            try {
+                recognition.abort();
+            } catch {}
+        }
+    }
+
+    function requestConverseRestart() {
+        if (recognition) {
+            restartRequested = false;
+            return;
+        }
+        restartRequested = Boolean(converseEnabled);
+        if (!restartRequested || submissionsInFlight || recognition || restartQueued) return;
+        restartQueued = true;
+        enqueueMicrotask(() => {
+            restartQueued = false;
+            if (converseEnabled && !recognition) {
+                restartRequested = false;
+                startRecognition('converse');
+            }
+        });
+    }
+
+    function startRecognition(nextMode) {
+        if (typeof Recognition !== 'function') {
+            callbacks.onError('Speech recognition is not supported in this browser.');
+            emitState();
+            return false;
+        }
+        if (recognition || (processing && nextMode !== 'converse')) return false;
+
+        const instance = new Recognition();
+        const session = {
+            id: ++recognitionSessionId,
+            instance,
+            closed: false
+        };
+        recognition = instance;
+        activeSession = session;
+        mode = nextMode;
+        intentionalStop = false;
+        restartRequested = false;
+        instance.lang = language;
+        instance.interimResults = true;
+        instance.continuous = true;
+        instance.maxAlternatives = 1;
+
+        instance.onstart = emitState;
+        instance.onresult = async event => {
+            if (activeSession !== session || session.closed) return;
+            let interim = '';
+            const finalParts = [];
+            const finalResultIds = [];
+            for (let index = event.resultIndex || 0; index < event.results.length; index += 1) {
+                const result = event.results[index];
+                const transcript = String(result?.[0]?.transcript || '').trim();
+                if (!transcript) continue;
+                if (result.isFinal) {
+                    const resultId = `${session.id}:${index}:${transcript.toLowerCase().replace(/\s+/g, ' ')}`;
+                    if (submittedResultIds.has(resultId)) continue;
+                    rememberSubmittedResult(resultId);
+                    finalResultIds.push(resultId);
+                    finalParts.push(transcript);
+                } else {
+                    interim += `${transcript} `;
+                }
+            }
+            currentInterim = interim.trim();
+            const bufferedFinal = nextMode === 'converse' && converseBuffer?.sessionId === session.id
+                ? converseBuffer.parts.join(' ').trim()
+                : '';
+            const visibleInterim = [bufferedFinal, currentInterim].filter(Boolean).join(' ').trim();
+            callbacks.onInterim(visibleInterim, getState());
+            try {
+                globalThis.dispatchEvent?.(new CustomEvent('jarvis:speech-transcript', {
+                    detail: { text: currentInterim, final: false, mode: nextMode }
+                }));
+            } catch {}
+            const finalText = finalParts.join(' ').trim();
+            if (!finalText) return;
+            try {
+                globalThis.dispatchEvent?.(new CustomEvent('jarvis:speech-transcript', {
+                    detail: { text: finalText, final: true, mode: nextMode }
+                }));
+            } catch {}
+            const transcriptId = finalResultIds.join('|');
+
+            if (nextMode === 'converse') {
+                queueConverseTranscript(session, finalText, finalResultIds);
+                return;
+            }
+
+            callbacks.onFinal(finalText, {
+                autoSubmit: false,
+                mode: nextMode,
+                sessionId: session.id,
+                transcriptId
+            });
+        };
+        instance.onerror = event => {
+            if (activeSession !== session) return;
+            const code = String(event?.error || 'unknown');
+            if (code !== 'aborted' || !intentionalStop) {
+                clearInterim();
+                if (['not-allowed', 'service-not-allowed', 'audio-capture', 'network'].includes(code)) {
+                    converseEnabled = false;
+                    mode = 'idle';
+                    restartRequested = false;
+                    session.closed = true;
+                    stopRecognition('disabled');
+                }
+                callbacks.onError(ERROR_MESSAGES[code] || `Speech recognition failed (${code}).`);
+            }
+        };
+        instance.onend = () => {
+            if (activeSession !== session) return;
+            recognition = null;
+            activeSession = null;
+            session.closed = true;
+            intentionalStop = false;
+            clearInterim();
+            if (mode === 'converse') flushConverseBuffer('manual');
+            if (mode === 'dictation') mode = 'idle';
+            emitState();
+            requestConverseRestart();
+        };
+
+        try {
+            instance.start();
+            emitState();
+            return true;
+        } catch (error) {
+            recognition = null;
+            activeSession = null;
+            session.closed = true;
+            mode = 'idle';
+            clearInterim();
+            clearConverseBuffer();
+            callbacks.onError(String(error?.message || 'Could not start speech recognition.'));
+            emitState();
+            return false;
+        }
+    }
+
+    function toggleDictation() {
+        if (mode === 'dictation' && recognition) {
+            stopRecognition();
+            return false;
+        }
+        if (converseEnabled) stop({ disableConverse: true });
+        return startRecognition('dictation');
+    }
+
+    function toggleConverse() {
+        if (converseEnabled) {
+            stop({ disableConverse: true });
+            return false;
+        }
+        converseEnabled = true;
+        mode = 'converse';
+        emitState();
+        if (!processing) startRecognition('converse');
+        return true;
+    }
+
+    function setProcessing(active) {
+        processing = Boolean(active);
+        if (processing && !converseEnabled) {
+            if (recognition) stopRecognition('processing');
+        } else if (!processing) {
+            requestConverseRestart();
+        }
+        emitState();
+    }
+
+    function stop({ disableConverse = false } = {}) {
+        if (disableConverse) converseEnabled = false;
+        restartRequested = false;
+        if (mode === 'converse') flushConverseBuffer('manual');
+        stopRecognition(disableConverse ? 'disabled' : 'manual');
+        if (!converseEnabled) mode = 'idle';
+        clearInterim();
+        emitState();
+    }
+
+    function setLanguage(nextLanguage) { 
+        const normalized = normalizeVoiceInputLanguage(nextLanguage || ''); 
+        if (!normalized) return language; 
+        language = normalized; 
+        clearInterim();
+        if (recognition) {
+            stopRecognition('language_change');
+        } else {
+            requestConverseRestart();
+        }
+        return language;
+    }
+
+    return {
+        getState,
+        setLanguage,
+        toggleDictation,
+        toggleConverse,
+        setProcessing,
+        stop
+    };
+}
+
+export function installSpeechInputUI(options = {}) {
+    const input = document.getElementById('text-input');
+    const vttButton = document.getElementById('voice-to-text-btn');
+    const status = document.getElementById('speech-input-status');
+    if (!input || !vttButton) return null;
+
+    const Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
+    let committedText = '';
+
+    function setStatusText(message = '') {
+        if (!status) return;
+        status.classList.remove('speech-listening-status');
+        status.textContent = message;
+    }
+
+    function setListeningStatus() {
+        if (!status) return;
+        status.classList.add('speech-listening-status');
+        status.innerHTML = 'Listening<span class="speech-listening-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>';
+    }
+
+    const savedLanguage = globalThis.localStorage?.getItem?.('jarvis_voice_input_language');
+    const controller = createSpeechInputController({
+        Recognition,
+        language: savedLanguage || navigator.language || 'en-US',
+        onInterim(text, state) {
+            input.value = [committedText, text].filter(Boolean).join(' ').trim();
+            if (state?.mode === 'dictation' && state.listening && status) {
+                if (text) {
+                    setStatusText('Listening');
+                } else {
+                    setListeningStatus();
+                }
+            }
+            options.onComposerChanged?.();
+        },
+        async onFinal(text, event) {
+            if (event.autoSubmit) {
+                const outgoing = text;
+                committedText = '';
+                input.value = outgoing;
+                input.dataset.inputSource = 'converse';
+                options.onComposerChanged?.();
+                await options.onSubmit?.({
+                    source: 'converse',
+                    preserveTranscript: true,
+                    interrupt: event.interrupt === true,
+                    transcriptFinal: event.transcriptFinal === true,
+                    transcriptCompleteReason: event.transcriptCompleteReason || '',
+                    transcriptId: event.transcriptId,
+                    recognitionSessionId: event.sessionId
+                });
+            } else {
+                committedText = [committedText, text].filter(Boolean).join(' ').trim();
+                input.value = committedText;
+                input.dataset.inputSource = 'vtt';
+                options.onComposerChanged?.();
+                input.focus();
+            }
+        },
+        onState(state) {
+            vttButton.classList.toggle('is-listening', state.mode === 'dictation' && state.listening);
+            vttButton.setAttribute('aria-pressed', state.mode === 'dictation' && state.listening ? 'true' : 'false');
+            vttButton.disabled = !state.supported || state.processing || state.converseEnabled;
+            input.placeholder = state.converseEnabled
+                ? (state.processing ? 'Thinking' : 'Listening...')
+                : (state.mode === 'dictation' && state.listening ? 'Listening...' : 'Ask anything...');
+            if (status) {
+                if (!state.supported) {
+                    setStatusText('Voice input is unavailable in this browser.');
+                } else if (state.converseEnabled) {
+                    setStatusText(state.processing ? 'Thinking' : 'Listening...');
+                } else if (state.mode === 'dictation' && state.listening) {
+                    setListeningStatus();
+                } else {
+                    setStatusText('');
+                }
+            }
+            options.onStateChanged?.(state);
+        },
+        onError(message) {
+            setStatusText(message);
+            options.onError?.(message);
+        }
+    });
+    const toggleConverseController = controller.toggleConverse;
+
+    globalThis.toggleVoiceToText = () => {
+        committedText = input.value.trim();
+        return controller.toggleDictation();
+    };
+    globalThis.toggleConverseMode = () => {
+        const wasConverseEnabled = controller.getState().converseEnabled;
+        committedText = '';
+        input.value = '';
+        delete input.dataset.inputSource;
+        options.onComposerChanged?.();
+        const toggled = toggleConverseController();
+        if (wasConverseEnabled) {
+            globalThis.stopActiveGeneration?.('converse_stop');
+        }
+        return toggled;
+    };
+    globalThis.JarvisSpeechInput = controller;
+    globalThis.JarvisSpeechInput.toggleConverse = globalThis.toggleConverseMode;
+    globalThis.syncVttUiState = () => controller.getState();
+    globalThis.setVoiceInputLanguage = language => { 
+        const requested = String(language || '').trim();
+        const selected = controller.setLanguage(language); 
+        try { 
+            globalThis.localStorage?.setItem?.('jarvis_voice_input_language', selected); 
+        } catch {} 
+        if (requested && requested !== selected) {
+            setStatusText(TEXT_ONLY_LANGUAGE_NOTICE);
+        }
+        return selected; 
+    }; 
+    vttButton.addEventListener('click', globalThis.toggleVoiceToText);
+    globalThis.addEventListener('jarvis:assistant-processing', event => {
+        controller.setProcessing(Boolean(event.detail?.active));
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && controller.getState().listening) {
+            controller.stop({ disableConverse: true });
+        }
+    });
+    controller.setProcessing(false);
+    return controller;
+}
