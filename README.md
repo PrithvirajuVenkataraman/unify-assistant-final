@@ -35,6 +35,16 @@ When a user sends a short follow-up, Context Copilot checks whether it clearly b
 
 This short-term state is temporary conversation context. It is used to build compact model context, but it is not treated as permanent memory.
 
+## Saved Chats And Topic Memory
+
+Saved chats are separate conversation sessions. Each chat stores its own messages, title, timestamps, and restored context. Opening a saved chat rebuilds Context Copilot from that chat's messages only, so different chat topics stay separated.
+
+Starting a new chat resets the active short-term conversation state. Normal chat context from one saved chat should not leak into another saved chat.
+
+Chat titles are generated from the first substantive user and assistant turns, not from startup greetings or wake phrases like `Hey Jarvis`. Manual renames are preserved and block future auto-title updates.
+
+Long-term memory is different from saved chat context. Explicitly saved memory can be recalled across chats when relevant, but ordinary chat turns remain scoped to their own saved chat.
+
 ## Long-Term Memory
 
 Long-term memory is local and explicit-only. JARVIS saves memory only when the user asks it to remember something or uses a clear memory-style phrase.
@@ -83,11 +93,20 @@ The user does not need to provide links. JARVIS searches from the original quest
 - Browser APIs: localStorage, Web Speech, camera, microphone, and geolocation permissions where needed.
 - Optional extraction: Crawl4AI fallback through the server.
 
+## Environment
+
+Live search is disabled by default. Live/source-backed retrieval is controlled server-side. Use `LIVE_RETRIEVAL_ENABLED=true` with the configured search/model keys when running source-backed current-fact flows.
+
+## Feedback, Quality Review, and RLAIF
+
+Local feedback, answer quality review, and RLAIF-style signals are used only inside this app workflow. They do not train Groq, Gemini, Exa, NVIDIA, or any underlying model.
+
+For response length controls, prompts like `in n words` and `under n words` are treated as explicit word-count requirements.
+
 ## Project Map
 
 - `index.html`: Main application UI and browser-side assistant workflows.
 - `package.json`: Project metadata, scripts, dependency list, and Vercel function settings.
-- `README.md`: Project overview and file map.
 - `styles.css`: App shell, chat layout, thinking indicator, mobile behavior, Live Vision preview, controls, and visual polish.
 - `science-format.js`: Browser-safe formatter for scientific notation, chemistry text, units, and speech-friendly science output.
 - `vercel.json`: Vercel routing and deployment settings.
@@ -111,7 +130,7 @@ The user does not need to provide links. JARVIS searches from the original quest
 - `api/_lib/web-search-core.js`: Legacy self-hosted web-search core.
 - `api/_lib/free-live/classifier.js`: Deterministic prompt classifier for live-capable categories.
 - `api/_lib/free-live/providers.js`: Keyless provider implementations used by live-capable categories.
-- `api/_lib/free-live/source-registry.js`: Registry of live-capable source categories, TTLs, and limits. 
+- `api/_lib/free-live/source-registry.js`: Registry of live-capable source categories, TTLs, and limits.
 - `api/_lib/latest/latest-cache.js`: In-memory latest-item cache.
 - `api/_lib/latest/latest-ingest.js`: Latest-source feed ingestion helper.
 - `api/_lib/latest/latest-sources.js`: Curated latest-source definitions.
@@ -132,4 +151,4 @@ The user does not need to provide links. JARVIS searches from the original quest
 - Chat history, memory, preferences, and feedback are stored in browser localStorage when persistence is enabled.
 - Saved chat actions are managed from the sidebar. Explicit memory items are managed in Memory Manager.
 - Camera, microphone, and location require browser permission.
-- Provider API keys must stay server-side. Do not put them in frontend files.
+- Provider API keys must stay server-side. Do not put them in frontend files. 
