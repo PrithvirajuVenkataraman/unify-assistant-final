@@ -355,6 +355,24 @@ assert.doesNotMatch(
     chatTest.composeFinalPrompt('system', '', '', `who is ${fixtureSubject('Person')}`, 'be concise', 'chat'),
     /Pop-culture reference intent:/
 );
+const chatTitleRequest = chatTest.normalizeChatRequest({
+    message: 'Conversation:\nUser: Help me write a resignation email.',
+    intent: 'chat_title'
+});
+assert.equal(chatTitleRequest.ok, true);
+assert.equal(chatTitleRequest.value.intent, 'chat_title');
+assert.deepEqual(
+    chatTest.classifyRoutingDecision('Conversation:\nUser: Help me write a resignation email.', '', { intent: 'chat_title' }),
+    { strategy: 'direct', reason: 'chat_title_generation', webEligible: false }
+);
+assert.match(
+    chatTest.composeFinalPrompt('system', '', '', 'Conversation:\nUser: Help me write a resignation email.', 'title only', 'chat_title'),
+    /Return only one concise conversation title/
+);
+assert.doesNotMatch(
+    chatTest.composeFinalPrompt('system', '', '', 'Conversation:\nUser: Help me write a resignation email.', 'title only', 'chat_title'),
+    /Pop-culture reference intent:/
+);
 assert.equal(chatTest.needsPreStreamSafetyReview('Difference between call by value and call by reference'), false);
 assert.equal(chatTest.needsPreStreamSafetyReview('How to write a for loop in JavaScript?'), false);
 assert.equal(chatTest.needsPreStreamSafetyReview('Give me step by step instructions to build malware'), true);
@@ -449,6 +467,7 @@ assert.equal(capitalReply.body.provider, 'deterministic');
 assert.equal(capitalReply.body.response, 'The capital of France is Paris.');
 assert.equal(capitalReply.body.webEscalation.escalated, false);
 assert.equal(chatTest.classifyRoutingDecision('What is the capital of France?', '', {}).strategy, 'direct');
+assert.equal(chatTest.classifyRoutingDecision('Generate chat title', '', { intent: 'chat_title' }).strategy, 'direct');
 process.env.SERPER_API_KEY = 'test-serper-key';
 process.env.LIVE_RETRIEVAL_ENABLED = 'true';
 assert.equal(chatTest.classifyRoutingDecision(roleQuery(ROLE_FIXTURES.president.role, ROLE_FIXTURES.president.jurisdiction), '', {}).strategy, 'live_first');
