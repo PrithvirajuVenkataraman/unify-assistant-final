@@ -4960,8 +4960,6 @@ let showRoutingDebugBadge = false;
             window.addEventListener('online', updateOnlineStatus);
             window.addEventListener('offline', updateOnlineStatus);
             updateOnlineStatus();
-            ensureStartupGreeting(false);
-            setTimeout(() => ensureStartupGreeting(false), 900);
             autoResizeComposerTextarea();
 
         };
@@ -22094,6 +22092,8 @@ function endARSession() {
 
 loadChatSessions();
 initializeActiveChatSessionForStartup();
+ensureStartupGreeting(false);
+setTimeout(() => ensureStartupGreeting(false), 900);
 
 </script>
 
