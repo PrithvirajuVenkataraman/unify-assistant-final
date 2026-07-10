@@ -4998,7 +4998,7 @@ let showRoutingDebugBadge = false;
             if (footerDisclaimer) {
                 footerDisclaimer.className = 'mt-2 text-xs text-gray-500 font-medium text-center';
             }
-            syncVttUiState();
+            globalThis.syncVttUiState?.();
         }
 
         function toggleDarkMode() {
