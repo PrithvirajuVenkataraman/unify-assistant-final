@@ -1147,7 +1147,7 @@ function buildJarvisTechStackReply() {
         '',
         'AI models: Groq is tried first when GROQ_API_KEY is configured, with candidates like openai/gpt-oss-120b, openai/gpt-oss-20b, llama-3.3-70b-versatile, and llama-3.1-8b-instant. Gemini is the fallback when GEMINI_API_KEY or GOOGLE_API_KEY is configured, with candidates like gemini-3.5-flash, gemini-2.5-flash, gemini-2.5-flash-lite, and gemini-2.0-flash.',
         '',
-        'Live facts: permanent-free public-source routing through Wikipedia, Wikidata, GDELT, RSS/Atom, official shortcuts, Open-Meteo, CoinGecko, NASA EONET, Wikimedia, OpenStreetMap, Britannica lookup, Reddit discussion lookup, and archive.today snapshot lookup where supported. Crawl4AI can be used as an optional page extractor, and Gemini may help planning, ranking, and snippets. No Serper, Brave, Tavily, paid API, or crawler is required.',
+        'Live facts: permanent-free public-source routing through Wikipedia, Wikidata, GDELT, RSS/Atom, official-source discovery, Open-Meteo, CoinGecko, NASA EONET, Wikimedia, OpenStreetMap, Britannica lookup, Reddit discussion lookup, and archive.today snapshot lookup where supported. Crawl4AI can be used as an optional page extractor, and Gemini may help planning, ranking, and snippets. No Serper, Brave, Tavily, paid API, or crawler is required.',
         '',
         'Memory: device-local memory and chat history are stored in localStorage when memory persistence is enabled. It remembers simple user facts like where you put things, plus local preferences and history. There is no external database.',
         '',
@@ -1730,7 +1730,31 @@ function showResponseRecoveryCard(userMessage = '') {
     return false;
 }
 
-function showFailureFallbackCard(userMessage) {
+function getFallbackFailureReason(error, context) {
+    const details = context || {};
+    const text = `${String(error?.name || '')} ${String(error?.message || error || '')}`.toLowerCase();
+    if (isAbortError(error) || /abort/.test(text)) return 'aborted';
+    if (/timeout|timed out|network|failed to fetch|service unavailable|temporar|rate limit|429|5\d\d/.test(text)) return 'transient_failure';
+    if (details?.emptyAnswer === true) return 'empty_answer';
+    if (details?.weakAnswer === true) return 'weak_answer';
+    return 'non_transient';
+}
+
+function shouldShowFailureFallbackCard(reason, userText) {
+    const r = String(reason || '').trim();
+    if (!['transient_failure', 'empty_answer'].includes(r)) return false;
+    const text = String(userText || '').toLowerCase();
+    if (isCasualConversationQuery(text) || isFastSimpleQuery(text)) return false;
+    if (/\b(what do you mean|clarify|did you mean|not sure|could you provide more context)\b/.test(text)) return false;
+    return true;
+}
+
+function showFailureFallbackCard(userMessage, options = {}) {
+    const reason = String(options?.reason || 'transient_failure');
+    if (!shouldShowFailureFallbackCard(reason, userMessage)) {
+        logRoutingDebug('failure_fallback_card_suppressed', userMessage, { reason });
+        return;
+    }
     const query = encodeURIComponent(userMessage || 'assistant help');
     const mapsUrl = `https://www.google.com/maps/search/${query}`;
     const searchUrl = `https://www.google.com/search?q=${query}`;
@@ -2467,7 +2491,12 @@ async function processTranslatorMode(text) {
 
 let conversationContext = [];
 async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking...', options = {}) {
-    showThinkingIndicator(loadingMessage);
+    if (options?.minimalThinking === true) {
+        const label = String(loadingMessage || 'Thinking').trim();
+        if (label) showThinkingIndicator(label);
+    } else {
+        showThinkingIndicator(loadingMessage);
+    }
     try {
         const useDirectModel = Boolean(options?.directModel);
         const response = await (useDirectModel
@@ -2495,6 +2524,12 @@ async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking
 async function processUserQuery(text, options = {}) {
     const t = String(text || '').trim();
     if (!t) return;
+    if (isFastSimpleQuery(t)) {
+        return await handleFastSimpleQuery(t, {
+            stream: options?.stream === true,
+            displayUserMessage: options?.displayUserMessage || t
+        });
+    }
     if (isArtistSongRequest(t)) {
         logRoutingDebug('processUserQuery -> artist_song', t, { selectedHandler: 'handleArtistSongRequest' });
         await handleArtistSongRequest(t);
@@ -3487,20 +3522,7 @@ function cleanGenericQueryTarget(value) {
 
 function normalizeKnowledgeSubject(subject) {
     const raw = String(subject || '').trim();
-    if (!raw) return '';
-    const typoMap = {
-        gujya: 'gujiya',
-        gujhia: 'gujiya',
-        biriyani: 'biryani',
-        hydrabad: 'hyderabad',
-        bengluru: 'bengaluru',
-        tamill: 'tamil',
-        jilebi: 'jalebi',
-        jilabi: 'jalebi',
-        jelabi: 'jalebi',
-        'sean rolden': 'sean roldan'
-    };
-    return typoMap[raw.toLowerCase()] || raw;
+    return raw;
 }
 
 async function fetchWikipediaSummaryFallback(subject) {
@@ -4403,14 +4425,17 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
     const hadExistingThinkingIndicator = Boolean(document.getElementById('chat-thinking-indicator'));
     let autoIndicatorShown = false;
     let requestSettled = false;
+    const minimalThinking = requestOptions?.minimalThinking === true || shouldUseMinimalThinking(normalizedUserMessage, requestOptions?.intent || '');
     const autoIndicatorTimer = setTimeout(() => {
         if (requestSettled) return;
         if (hadExistingThinkingIndicator) return;
+        if (minimalThinking) return;
         showThinkingIndicator('Generating answer...');
         autoIndicatorShown = true;
     }, 260);
     try { 
         const engineContext = requestOptions?.grounding
+            || minimalThinking
             ? []
             : (window.JarvisConversation?.buildContext({
                 maxTurns: 12,
@@ -4611,11 +4636,13 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
         }
 
         const softFallback = await buildUniversalSoftFallback(normalizedUserMessage || userMessage);
+        const fallbackReason = getFallbackFailureReason(error);
         if (isLikelyLocationOrTravelQuery(normalizedUserMessage || userMessage)) { 
-            showFailureFallbackCard(normalizedUserMessage || userMessage); 
+            showFailureFallbackCard(normalizedUserMessage || userMessage, { reason: fallbackReason }); 
         } 
         return { 
             response: softFallback,
+            fallbackReason,
             intent: 'soft_fallback'
         }; 
     } finally {
@@ -6376,6 +6403,7 @@ let showRoutingDebugBadge = false;
             const previous = activeResponseRenderContext;
             activeResponseRenderContext = {
                 turnId: String(turn?.id || options?.turnId || ''),
+                source: String(turn?.source || options?.source || ''),
                 replaceMessageId: String(options?.replaceMessageId || ''),
                 isRegeneration: !!options?.isRegeneration,
                 replacementConsumed: false,
@@ -7776,7 +7804,9 @@ function normalizeUiTokens(text) {
         }
 
         function speakConverseReply(text, turn) {
-            if (String(turn?.source || '').toLowerCase() !== 'converse') return;
+            const fallbackTurn = turn || getConversationTurn(activeResponseRenderContext?.turnId);
+            const activeSource = String(fallbackTurn?.source || activeResponseRenderContext?.source || '').toLowerCase();
+            if (activeSource !== 'converse') return;
             if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
                 return;
             }
@@ -10869,10 +10899,7 @@ function sanitizeArtistName(input) {
     if (!cleaned || cleaned.length < 2 || cleaned.length > 80) return '';
     if (!/[a-z]/i.test(cleaned)) return '';
     if (/^(song|songs|track|tracks|music|playlist|top|best|suggest|recommend|give|show|tell|list|me)$/i.test(cleaned)) return '';
-    const knownArtistCorrections = {
-        'sean rolden': 'Sean Roldan'
-    };
-    return knownArtistCorrections[cleaned.toLowerCase()] || cleaned;
+    return cleaned;
 }
 
 function clampSongCount(value, fallback = 5) {
@@ -10882,66 +10909,7 @@ function clampSongCount(value, fallback = 5) {
 }
 
 function getCuratedClassicSongs(language) {
-    const key = String(language || '').toLowerCase().trim();
-    const classics = {
-        tamil: [
-            { song: 'Ilaya Nila', artist: 'SP Balasubrahmanyam', work: 'Payanangal Mudivathillai' },
-            { song: 'Thenpandi Cheemayile', artist: 'Ilaiyaraaja', work: 'Nayakan' },
-            { song: 'Sundari Neeyum', artist: 'SP Balasubrahmanyam, S. Janaki', work: 'Michael Madana Kama Rajan' },
-            { song: 'Poongatru Puthithanathu', artist: 'K. J. Yesudas', work: 'Moondram Pirai' },
-            { song: 'Kanne Kalaimaane', artist: 'K. J. Yesudas', work: 'Moondram Pirai' },
-            { song: 'Nila Kaigirathu', artist: 'Hariharan', work: 'Indira' },
-            { song: 'Anjali Anjali', artist: 'SP Balasubrahmanyam, K. S. Chithra', work: 'Duet' },
-            { song: 'En Iniya Pon Nilave', artist: 'K. J. Yesudas', work: 'Moodu Pani' },
-            { song: 'Valaiyosai', artist: 'SP Balasubrahmanyam, Lata Mangeshkar', work: 'Sathya' },
-            { song: 'Mandram Vandha', artist: 'SP Balasubrahmanyam', work: 'Mouna Ragam' },
-            { song: 'Ooru Sanam', artist: 'SP Balasubrahmanyam, S. Janaki', work: 'Mella Thiranthathu Kadhavu' },
-            { song: 'Rakkamma Kaiya Thattu', artist: 'SP Balasubrahmanyam, Swarnalatha', work: 'Thalapathi' }
-        ],
-        hindi: [
-            { song: 'Lag Ja Gale', artist: 'Lata Mangeshkar', work: 'Woh Kaun Thi?' },
-            { song: 'Ajeeb Dastan Hai Yeh', artist: 'Lata Mangeshkar', work: 'Dil Apna Aur Preet Parai' },
-            { song: 'Pal Pal Dil Ke Paas', artist: 'Kishore Kumar', work: 'Blackmail' },
-            { song: 'Kya Hua Tera Wada', artist: 'Mohammed Rafi', work: 'Hum Kisise Kum Naheen' },
-            { song: 'Chura Liya Hai Tumne Jo Dil Ko', artist: 'Asha Bhosle, Mohammed Rafi', work: 'Yaadon Ki Baaraat' },
-            { song: 'Mere Sapno Ki Rani', artist: 'Kishore Kumar', work: 'Aradhana' },
-            { song: 'Tere Bina Zindagi Se', artist: 'Lata Mangeshkar, Kishore Kumar', work: 'Aandhi' },
-            { song: 'Ek Ajnabee Haseena Se', artist: 'Kishore Kumar', work: 'Ajnabee' },
-            { song: 'Pyaar Deewana Hota Hai', artist: 'Kishore Kumar', work: 'Kati Patang' },
-            { song: 'Yeh Shaam Mastani', artist: 'Kishore Kumar', work: 'Kati Patang' },
-            { song: 'Kabhi Kabhie Mere Dil Mein', artist: 'Mukesh', work: 'Kabhi Kabhie' },
-            { song: 'Aanewala Pal Janewala Hai', artist: 'Kishore Kumar', work: 'Gol Maal' }
-        ],
-        telugu: [
-            { song: 'Aaresukoboyi Paresukunnanu', artist: 'Ghantasala, P. Susheela', work: 'Adavi Ramudu' },
-            { song: 'Sankara Nada Sareera Para', artist: 'S. P. Balasubrahmanyam', work: 'Sankarabharanam' },
-            { song: 'Vedam Anuvanuvuna', artist: 'S. P. Balasubrahmanyam', work: 'Sagara Sangamam' },
-            { song: 'Priya Raagale', artist: 'S. P. Balasubrahmanyam, S. Janaki', work: 'Hello Brother' },
-            { song: 'Ee Velalo Neevu', artist: 'Udit Narayan, Sujatha', work: 'Gulabi' },
-            { song: 'Abbanee Teeyani Debba', artist: 'S. P. Balasubrahmanyam, K. S. Chithra', work: 'Jagadeka Veerudu Athiloka Sundari' },
-            { song: 'Jilibili Palukula', artist: 'S. P. Balasubrahmanyam', work: 'Sitaara' },
-            { song: 'Mounamelanoyi', artist: 'S. P. Balasubrahmanyam, S. Janaki', work: 'Sagara Sangamam' },
-            { song: 'Andamaina Premarani', artist: 'S. P. Balasubrahmanyam, K. S. Chithra', work: 'Premikudu' },
-            { song: 'Keeravani', artist: 'S. P. Balasubrahmanyam, S. Janaki', work: 'Anveshana' },
-            { song: 'Manasuna Mallela', artist: 'S. P. Balasubrahmanyam', work: 'Mallepoovu' },
-            { song: 'Yamaho Nee Yama Yama Andam', artist: 'S. P. Balasubrahmanyam, S. Janaki', work: 'Jagadeka Veerudu Athiloka Sundari' }
-        ],
-        english: [
-            { song: 'Bohemian Rhapsody', artist: 'Queen', work: 'A Night at the Opera' },
-            { song: 'Hotel California', artist: 'Eagles', work: 'Hotel California' },
-            { song: 'Imagine', artist: 'John Lennon', work: 'Imagine' },
-            { song: 'Let It Be', artist: 'The Beatles', work: 'Let It Be' },
-            { song: 'Hey Jude', artist: 'The Beatles', work: 'Single' },
-            { song: 'Billie Jean', artist: 'Michael Jackson', work: 'Thriller' },
-            { song: 'Smells Like Teen Spirit', artist: 'Nirvana', work: 'Nevermind' },
-            { song: 'Sweet Child O Mine', artist: "Guns N' Roses", work: 'Appetite for Destruction' },
-            { song: 'Stairway to Heaven', artist: 'Led Zeppelin', work: 'Led Zeppelin IV' },
-            { song: 'Take On Me', artist: 'a-ha', work: 'Hunting High and Low' },
-            { song: 'Yesterday', artist: 'The Beatles', work: 'Help!' },
-            { song: 'Dancing Queen', artist: 'ABBA', work: 'Arrival' }
-        ]
-    };
-    return Array.isArray(classics[key]) ? classics[key].map(item => ({ ...item })) : [];
+    return [];
 }
 
 function pickClassicSongsForDiscovery(language, count) {
@@ -10996,48 +10964,27 @@ async function handleClassicSongDiscoveryRequest(text) {
         return;
     }
 
-    const grouped = {};
-    intent.languages.forEach(language => {
-        grouped[language] = pickClassicSongsForDiscovery(language, requestedCount);
-    });
+    const prompt = `Suggest classic songs for this request without using any local catalog.
 
-    const reply = formatClassicSongsDiscoveryReply(intent, grouped);
+Request: "${text}"
+Languages: ${intent.languages.join(', ') || 'any'}
+Requested count per language: ${requestedCount}
+
+Rules:
+- Use model knowledge only.
+- Do not invent songs, artists, albums, films, or years.
+- If unsure about an item, omit it.
+- Group by requested language.
+- Keep each item to: song - artist${intent.languages.length ? ' - work/source when commonly known' : ''}.
+- Say when certainty is limited for any obscure request.`;
+    const ai = await askGeminiAI(prompt, {
+        intent: 'chat',
+        stream: false,
+        displayUserMessage: text
+    });
+    const reply = String(ai?.response || ai?.text || '').trim() || 'I could not generate reliable classic song suggestions right now.';
     addModelAssistantMessage(reply, 'Classic discovery');
-    const summary = await composeApiReply('classic_song_discovery', {
-        languages: intent.languages,
-        requestedCount
-    }, {
-        fallbackText: 'Here are some classic songs you can discover.'
-    });
     saveToHistory(text, reply);
-}
-
-function getCuratedSongsForArtist(artist) {
-    const normalized = toCompactLower(artist);
-    if (!normalized) return [];
-
-    const curated = {
-        'ed sheeran': [
-            { song: 'Shape of You', work: 'Divide', reason: 'One of his biggest crossover hits.' },
-            { song: 'Perfect', work: 'Divide', reason: 'A signature romantic ballad.' },
-            { song: 'Thinking Out Loud', work: 'x', reason: 'One of his most recognizable love songs.' },
-            { song: 'Photograph', work: 'x', reason: 'A fan-favorite acoustic pop song.' },
-            { song: 'Castle on the Hill', work: 'Divide', reason: 'A major anthem from his catalog.' },
-            { song: 'Bad Habits', work: '=', reason: 'A huge modern pop single.' },
-            { song: 'Shivers', work: '=', reason: 'Another major upbeat hit.' },
-            { song: 'The A Team', work: '+', reason: 'An early breakout song.' },
-            { song: 'Lego House', work: '+', reason: 'A well-known early Ed Sheeran track.' },
-            { song: 'Afterglow', work: 'Single', reason: 'A popular later-era standalone release.' },
-            { song: 'Galway Girl', work: 'Divide', reason: 'One of his most streamed upbeat songs.' },
-            { song: 'I See Fire', work: 'The Hobbit: The Desolation of Smaug', reason: 'A standout soundtrack song.' }
-        ]
-    };
-
-    return curated[normalized] ? curated[normalized].map(item => ({ ...item })) : [];
-}
-
-function getCuratedLanguageEraHits(language, era) {
-    return [];
 }
 
 function formatLanguageEraHitsReply(intent, eraBuckets, fallback = false) {
@@ -13013,7 +12960,7 @@ const ROUTING_REGRESSION_CASES = [
     },
     {
         name: 'Profile opinion prompt',
-        prompt: 'What do you think of Jordan Vale?',
+        prompt: 'What do you think of this public figure?',
         expectedPath: 'live_retrieval',
         expectedMode: 'verify_first'
     },
@@ -13061,59 +13008,59 @@ const ROUTING_REGRESSION_CASES = [
     },
     {
         name: 'Explicit web music route stays tolerant',
-        prompt: 'search the web for jordan vale songs',
+        prompt: 'search the web for subject artist songs',
         expectedPath: 'artist_song',
         expectedMode: 'tolerant_entertainment',
-        expectedGeneric: { intent: 'search', domain: 'songs', subject: 'jordan vale', route: 'music_catalog' }
+        expectedGeneric: { intent: 'search', domain: 'songs', subject: 'subject artist', route: 'music_catalog' }
     },
     {
         name: 'Latest artist songs route',
-        prompt: 'latest jordan vale songs',
+        prompt: 'latest subject artist songs',
         expectedPath: 'artist_song',
         expectedMode: 'tolerant_entertainment',
-        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'jordan vale', route: 'live_music' }
+        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'subject artist', route: 'live_music' }
     },
     {
         name: 'New songs by artist route',
-        prompt: 'new songs by jordan vale',
+        prompt: 'new songs by subject artist',
         expectedPath: 'artist_song',
         expectedMode: 'tolerant_entertainment',
-        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'jordan vale', route: 'live_music' }
+        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'subject artist', route: 'live_music' }
     },
     {
         name: 'Recent artist tracks route',
-        prompt: 'jordan vale recent tracks',
+        prompt: 'subject artist recent tracks',
         expectedPath: 'artist_song',
         expectedMode: 'tolerant_entertainment',
-        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'jordan vale', route: 'live_music' }
+        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'subject artist', route: 'live_music' }
     },
     {
         name: 'Top songs artist route',
-        prompt: 'top 10 jordan vale songs',
+        prompt: 'top 10 subject artist songs',
         expectedPath: 'artist_song',
         expectedMode: 'tolerant_entertainment',
-        expectedGeneric: { intent: 'top', domain: 'songs', subject: 'jordan vale', route: 'music_catalog' }
+        expectedGeneric: { intent: 'top', domain: 'songs', subject: 'subject artist', route: 'music_catalog' }
     },
     {
         name: 'Latest movie of actor route',
-        prompt: 'latest movie of sample actor',
+        prompt: 'latest movie of subject performer',
         expectedPath: 'entity_fact',
         expectedMode: 'verify_first',
-        expectedGeneric: { intent: 'latest', domain: 'movie', subject: 'sample actor', route: 'live_entertainment' }
+        expectedGeneric: { intent: 'latest', domain: 'movie', subject: 'subject performer', route: 'live_entertainment' }
     },
     {
         name: 'Latest artist song route',
-        prompt: 'what is the latest song of jordan vale',
+        prompt: 'what is the latest song of subject artist',
         expectedPath: 'artist_song',
         expectedMode: 'tolerant_entertainment',
-        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'jordan vale', route: 'live_music' }
+        expectedGeneric: { intent: 'latest', domain: 'songs', subject: 'subject artist', route: 'live_music' }
     },
     {
         name: 'Person identity route',
-        prompt: 'who is jordan vale',
+        prompt: 'who is subject person',
         expectedPath: 'entity_fact',
         expectedMode: 'verify_first',
-        expectedGeneric: { intent: 'explain', domain: 'person', subject: 'jordan vale', route: 'entity_profile' }
+        expectedGeneric: { intent: 'explain', domain: 'person', subject: 'subject person', route: 'entity_profile' }
     }
 ];
 
@@ -16741,7 +16688,7 @@ function detectInputLanguageHint(text) {
             return `Yes ${getPreferredAddress()}, how can I help you with?`;
         }
 
-        function isWakeGreetingText(text) {
+function isWakeGreetingText(text) {
             const compact = String(text || '').trim();
             if (!compact) return false;
             return /^(?:(?:hey|hi|hello|ok|okay)\s+)?jarvis[.!?]*$/i.test(compact) ||
@@ -16770,6 +16717,18 @@ function detectInputLanguageHint(text) {
         }
 
         async function processCommand(text) {
+            const rawCommandText = String(text || '').trim();
+            if (isFastSimpleQuery(rawCommandText)) {
+                logRoutingDebug('processCommand -> fast_simple', rawCommandText, {
+                    selectedHandler: 'handleFastSimpleQuery'
+                });
+                await handleFastSimpleQuery(rawCommandText, {
+                    stream: false,
+                    historyKey: rawCommandText,
+                    turnId: activeResponseRenderContext?.turnId || ''
+                });
+                return;
+            }
             syncConversationPendingState();
             const contextResolution = window.JarvisConversation?.resolve({ message: text }) || null;
             const activeTurnForResolution = getConversationTurn(activeResponseRenderContext?.turnId);
@@ -19413,6 +19372,79 @@ function toggleMemoryPersistence(enabled) {
     saveUserData();
     saveConversationHistory();
     showTemporaryMessage('Memory persistence enabled.');
+}
+
+function normalizeCasualConversationText(text) {
+    return String(text || '')
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s']/gu, ' ')
+        .replace(/\b(?:no|nope|nah|just|generally|actually|i'?m|im|i am|asking|so|well|um|uh|like)\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function isCasualConversationQuery(text) {
+    const t = normalizeCasualConversationText(text);
+    if (!t) return false;
+    if (/^(?:hi|hello|hey|yo|sup|thanks|thank you|good morning|good afternoon|good evening)$/.test(t)) return true;
+    if (/\b(how are you|how are you doing|how you doing|how is your day|how's your day|what'?s up|are you there|you there)\b/.test(t)) return true;
+    if (/^(?:thanks|thank you|thank u|appreciate it)\b/.test(t)) return true;
+    return false;
+}
+
+function buildCasualConversationReply(text) {
+    const t = normalizeCasualConversationText(text);
+    if (/^(?:thanks|thank you|thank u|appreciate it)\b/.test(t)) {
+        return 'You are welcome.';
+    }
+    if (/\b(how are you|how are you doing|how you doing|how is your day|how's your day|what'?s up)\b/.test(t)) {
+        return 'I am doing well, thanks for asking. How can I help?';
+    }
+    if (/\b(are you there|you there)\b/.test(t)) {
+        return 'Yes, I am here.';
+    }
+    return buildWakeGreeting();
+}
+
+function isSimpleStableQuestion(text) {
+    const t = String(text || '').trim();
+    const lower = t.toLowerCase();
+    if (!t || t.length > 120) return false;
+    if (isCasualConversationQuery(t)) return true;
+    if (isExplicitWebSearchRequest(t) || isCurrentInfoQuery(t) || isStrictLatestQuery(t) || isLiveRetrievalQuery(t)) return false;
+    if (isMedicalAdviceIntent(t) || isMedicalEmergencyIntent(t) || isLikelyLocationOrTravelQuery(t)) return false;
+    if (/\b(near me|nearby|museum|museums|restaurant|hotel|open now|directions|map|sources?|cite|latest|current|today|news|price|weather|stock|crypto|ceo|president|prime minister|chief minister|captain|coach)\b/.test(lower)) return false;
+    return /^(?:what\s+is|what'?s|who\s+is|who\s+was|how\s+does|how\s+do|explain|define|tell\s+me\s+about)\s+[\w\s.'-]{2,80}\??$/i.test(t);
+}
+
+function isFastSimpleQuery(text) {
+    return isCasualConversationQuery(text) || isSimpleStableQuestion(text);
+}
+
+function shouldUseMinimalThinking(text, intent = '') {
+    return isFastSimpleQuery(text) || ['fast_simple', 'casual_conversation', 'fast_explainer'].includes(String(intent || ''));
+}
+
+async function handleFastSimpleQuery(text, options = {}) {
+    const userText = String(text || '').trim();
+    if (!userText) return { intent: 'fast_simple' };
+    if (isCasualConversationQuery(userText)) {
+        const reply = buildCasualConversationReply(userText);
+        const messageId = addModelAssistantMessage(reply, 'Model answer', {
+            turnId: options?.turnId,
+            sourceType: 'model'
+        });
+        saveToHistory(options?.historyKey || userText, reply);
+        addFeedbackButtons(userText, reply, messageId);
+        return { response: reply, intent: 'casual_conversation', assistantMessageId: messageId };
+    }
+    return await askGeminiAI(userText, {
+        intent: 'fast_simple',
+        fastExplainer: true,
+        stream: options?.stream === true,
+        displayUserMessage: options?.displayUserMessage || options?.historyKey || userText,
+        minimalThinking: true
+    });
 }
 
 function getMemoryManagerItems(query = '') {
