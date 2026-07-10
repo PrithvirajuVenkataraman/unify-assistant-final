@@ -132,31 +132,6 @@
             </div>
         </section>
     </div>
-    <section id="voice-conversation-screen" class="voice-conversation-screen hidden" aria-hidden="true" aria-label="Voice conversation">
-        <div class="voice-conversation-topbar">
-            <button type="button" class="voice-screen-icon-btn" onclick="closeVoiceConversationScreen()" aria-label="Close voice conversation">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-            </button>
-        </div>
-        <div class="voice-conversation-body">
-            <div id="voice-conversation-orb" class="voice-conversation-orb" aria-hidden="true">
-                <span></span><span></span><span></span><span></span>
-            </div>
-            <p id="voice-conversation-state" class="voice-conversation-state">Voice mode</p>
-            <p id="voice-conversation-detail" class="voice-conversation-detail">Speak naturally. JARVIS can listen, respond, and be interrupted.</p>
-            <div class="voice-conversation-transcript">
-                <span id="voice-conversation-transcript-label">Transcript</span>
-                <strong id="voice-conversation-transcript-text">Waiting for speech...</strong>
-            </div>
-        </div>
-        <div class="voice-conversation-controls">
-            <button type="button" id="voice-screen-stop-btn" class="voice-screen-control danger" onclick="stopVoiceConversationScreen()">Stop</button>
-            <button type="button" id="voice-screen-toggle-btn" class="voice-screen-control primary" onclick="toggleVoiceConversationFromScreen()">Start listening</button>
-        </div>
-    </section>
     <div class="page-shell">
         <div class="app-shell max-w-5xl mx-auto relative z-10 p-6">
             <!-- Header - Enhanced -->
@@ -1731,6 +1706,9 @@ function showResponseRecoveryCard(userMessage = '') {
 }
 
 function getFallbackFailureReason(error, context) {
+    if (globalThis.JarvisFailurePolicy?.getFallbackFailureReason) {
+        return globalThis.JarvisFailurePolicy.getFallbackFailureReason(error, context);
+    }
     const details = context || {};
     const text = `${String(error?.name || '')} ${String(error?.message || error || '')}`.toLowerCase();
     if (isAbortError(error) || /abort/.test(text)) return 'aborted';
@@ -1741,6 +1719,12 @@ function getFallbackFailureReason(error, context) {
 }
 
 function shouldShowFailureFallbackCard(reason, userText) {
+    if (globalThis.JarvisFailurePolicy?.shouldShowFailureFallbackCard) {
+        return globalThis.JarvisFailurePolicy.shouldShowFailureFallbackCard(reason, userText, {
+            fastSimple: isFastSimpleQuery(userText),
+            casual: isCasualConversationQuery(userText)
+        });
+    }
     const r = String(reason || '').trim();
     if (!['transient_failure', 'empty_answer'].includes(r)) return false;
     const text = String(userText || '').toLowerCase();
@@ -1750,9 +1734,12 @@ function shouldShowFailureFallbackCard(reason, userText) {
 }
 
 function showFailureFallbackCard(userMessage, options = {}) {
-    const reason = String(options?.reason || 'transient_failure');
-    if (!shouldShowFailureFallbackCard(reason, userMessage)) {
-        logRoutingDebug('failure_fallback_card_suppressed', userMessage, { reason });
+    const failure = globalThis.JarvisFailurePolicy?.classifyFailure
+        ? globalThis.JarvisFailurePolicy.classifyFailure(options?.failure || options?.error || options?.reason || 'network_timeout', options)
+        : { code: String(options?.reason || 'transient_failure'), userActions: ['retry', 'web_search'], recoverable: true };
+    const reason = String(failure?.code || options?.reason || 'network_timeout');
+    if (!shouldShowFailureFallbackCard(failure, userMessage)) {
+        logRoutingDebug('failure_fallback_card_suppressed', userMessage, { reason, failure });
         return;
     }
     const query = encodeURIComponent(userMessage || 'assistant help');
@@ -1768,11 +1755,12 @@ function showFailureFallbackCard(userMessage, options = {}) {
             <p class="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-2">I hit a temporary issue. Try one of these:</p>
             <div class="flex flex-wrap gap-2">
                 <button onclick="retryLastRequest()" class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold">Retry</button>
-                <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold">Open Maps</a>
-                <a href="${searchUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold">Web Search</a>
+                ${Array.isArray(failure?.userActions) && failure.userActions.includes('maps') ? `<a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold">Open Maps</a>` : ''}
+                ${Array.isArray(failure?.userActions) && failure.userActions.includes('web_search') ? `<a href="${searchUrl}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-xs font-semibold">Web Search</a>` : ''}
             </div>
         </div>
     `;
+    card.dataset.failureCode = reason;
     chatContainer.appendChild(card);
     maybeAutoScroll(chatContainer);
 }
@@ -2503,7 +2491,9 @@ async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking
             ? askGeminiAI(message, {
                 intent: options?.intent || undefined,
                 stream: options?.stream === true,
-                displayUserMessage: options?.displayUserMessage || ''
+                displayUserMessage: options?.displayUserMessage || '',
+                minimalThinking: options?.minimalThinking === true,
+                routeDecision: options?.routeDecision || null
             })
             : processUserQuery(message, options));
         if (response?.aborted) {
@@ -2524,10 +2514,15 @@ async function callAIWithTyping(message, loadingMessage = 'Assistant is thinking
 async function processUserQuery(text, options = {}) {
     const t = String(text || '').trim();
     if (!t) return;
-    if (isFastSimpleQuery(t)) {
+    const frontendRoute = decideFrontendRoute(t, {
+        turnSource: options?.source || options?.turnSource || activeResponseRenderContext?.source || ''
+    });
+    logRoutingDebug('processUserQuery route_decision', t, { frontendRoute });
+    if (frontendRoute.route === 'fast_simple') {
         return await handleFastSimpleQuery(t, {
             stream: options?.stream === true,
-            displayUserMessage: options?.displayUserMessage || t
+            displayUserMessage: options?.displayUserMessage || t,
+            routeDecision: frontendRoute
         });
     }
     if (isArtistSongRequest(t)) {
@@ -3999,7 +3994,16 @@ async function deliverApiReply(intent, data = {}, options = {}) {
     const finalText = reply || fallbackText;
     if (!finalText) return '';
 
-    const responseMeta = { detached: options?.detached === true };
+    const responseMeta = {
+        detached: options?.detached === true,
+        route: options?.route || options?.routeDecision?.route || '',
+        routeReason: options?.routeReason || options?.routeDecision?.reason || '',
+        turnSource: options?.turnSource || activeResponseRenderContext?.source || '',
+        failureCode: options?.failureCode || '',
+        latency: options?.latency || null,
+        sourcePolicy: options?.sourcePolicy || options?.routeDecision?.sourcePolicy || '',
+        routing: options?.routing || null
+    };
     if (Object.prototype.hasOwnProperty.call(options || {}, 'turnId')) {
         responseMeta.turnId = options.turnId;
     }
@@ -4251,7 +4255,11 @@ async function streamChatCompletion(payload, options = {}) {
         if (assistantMessageId) return assistantMessageId;
         assistantMessageId = createStreamingAssistantMessage({
             userMessage,
-            turnId: activeResponseRenderContext?.turnId || ''
+            turnId: activeResponseRenderContext?.turnId || '',
+            route: options?.routeDecision?.route || '',
+            routeReason: options?.routeDecision?.reason || '',
+            turnSource: activeResponseRenderContext?.source || '',
+            sourcePolicy: options?.routeDecision?.sourcePolicy || ''
         });
         return assistantMessageId;
     };
@@ -4288,7 +4296,11 @@ async function streamChatCompletion(payload, options = {}) {
                 const id = ensureStreamMessage();
                 updateStreamingAssistantMessage(id, accumulated, {
                     userMessage,
-                    routing: donePayload.routing || null
+                    routing: donePayload.routing || null,
+                    route: options?.routeDecision?.route || '',
+                    routeReason: options?.routeDecision?.reason || '',
+                    turnSource: activeResponseRenderContext?.source || '',
+                    sourcePolicy: options?.routeDecision?.sourcePolicy || ''
                 });
             }
             return;
@@ -4502,7 +4514,8 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
             ? await streamChatCompletion(requestPayload, {
                 signal: controller.signal,
                 latencyTrace,
-                userMessage: requestOptions?.displayUserMessage || normalizedUserMessage
+                userMessage: requestOptions?.displayUserMessage || normalizedUserMessage,
+                routeDecision: requestOptions?.routeDecision || null
             })
             : await window.JarvisApi.postJson('/api/chat-groq', requestPayload, {
                 signal: controller.signal,
@@ -4608,7 +4621,12 @@ async function askGeminiAI(userMessage, requestOptions = {}) {
             }
         }
 
-        
+        if (requestOptions?.routeDecision && data && typeof data === 'object') {
+            data.frontendRoute = requestOptions.routeDecision;
+            data.route = requestOptions.routeDecision.route || '';
+            data.routeReason = requestOptions.routeDecision.reason || '';
+            data.sourcePolicy = requestOptions.routeDecision.sourcePolicy || '';
+        }
         return data;
     } catch (error) {
         if (isAbortError(error)) {
@@ -4941,13 +4959,6 @@ let showRoutingDebugBadge = false;
             initSlashCommandPicker();
             window.addEventListener('online', updateOnlineStatus);
             window.addEventListener('offline', updateOnlineStatus);
-            window.addEventListener('jarvis:speech-state', event => updateVoiceConversationScreen(event.detail || null));
-            window.addEventListener('jarvis:speech-transcript', event => {
-                const text = String(event.detail?.text || '').trim();
-                const transcriptEl = document.getElementById('voice-conversation-transcript-text');
-                if (text && transcriptEl) transcriptEl.textContent = text;
-            });
-            window.addEventListener('jarvis:assistant-processing', () => updateVoiceConversationScreen());
             updateOnlineStatus();
             ensureStartupGreeting(false);
             setTimeout(() => ensureStartupGreeting(false), 900);
@@ -5396,7 +5407,7 @@ let showRoutingDebugBadge = false;
             if (toggled === false && !window.JarvisSpeechInput?.getState?.().supported) {
                 showTemporaryMessage('Voice input is unavailable in this browser.');
             } else if (toggled === true) {
-                showVoiceConversationScreen(false);
+                unlockConverseSpeechFromGesture();
             }
             toggleSendButton();
         }
@@ -5845,7 +5856,6 @@ let showRoutingDebugBadge = false;
                 closeChatSessionMenu();
                 closeChatSidebar();
                 closeMemoryManager();
-                closeVoiceConversationScreen();
                 closeAssistantActionMenus();
                 closeComposerActionsMenu();
                 window.JarvisSpeechInput?.stop({ disableConverse: true });
@@ -6468,6 +6478,12 @@ let showRoutingDebugBadge = false;
                 sourceType: String(meta?.sourceType || 'default').trim(), 
                 sourceLabel: String(meta?.sourceLabel || meta?.sourceType || 'Assistant answer').trim(), 
                 routing: meta?.routing || null, 
+                route: String(meta?.route || meta?.routing?.route || '').trim(),
+                routeReason: String(meta?.routeReason || meta?.routing?.reason || '').trim(),
+                turnSource: String(meta?.turnSource || meta?.source || activeResponseRenderContext?.source || '').trim(),
+                failureCode: String(meta?.failureCode || '').trim(),
+                latency: meta?.latency && typeof meta.latency === 'object' ? { ...meta.latency } : null,
+                sourcePolicy: String(meta?.sourcePolicy || meta?.routing?.sourcePolicy || '').trim(),
                 riskFlags: Array.isArray(meta?.riskFlags) ? meta.riskFlags : [], 
                 createdAt: Date.now() 
             }; 
@@ -7553,6 +7569,12 @@ let showRoutingDebugBadge = false;
                     sourceType, 
                     sourceLabel, 
                     routing: meta?.routing || null, 
+                    route: meta?.route || meta?.routing?.route || '',
+                    routeReason: meta?.routeReason || meta?.routing?.reason || '',
+                    turnSource: meta?.turnSource || activeResponseRenderContext?.source || '',
+                    failureCode: meta?.failureCode || '',
+                    latency: meta?.latency || null,
+                    sourcePolicy: meta?.sourcePolicy || meta?.routing?.sourcePolicy || '',
                     riskFlags 
                 }); 
                 messageDiv.dataset.messageId = messageId;
@@ -7738,6 +7760,12 @@ let showRoutingDebugBadge = false;
                 sourceType: 'model',
                 sourceLabel: 'Model answer',
                 routing: meta?.routing || existing.routing || null,
+                route: meta?.route || existing.route || '',
+                routeReason: meta?.routeReason || existing.routeReason || '',
+                turnSource: meta?.turnSource || existing.turnSource || activeResponseRenderContext?.source || '',
+                failureCode: meta?.failureCode || existing.failureCode || '',
+                latency: meta?.latency || existing.latency || null,
+                sourcePolicy: meta?.sourcePolicy || existing.sourcePolicy || '',
                 riskFlags: analyzeAnswerRiskFlags(priorUserPrompt, cleanText)
             });
             maybeAutoScroll(document.getElementById('chat-container'));
@@ -7803,11 +7831,77 @@ function normalizeUiTokens(text) {
                 .slice(0, 900);
         }
 
+        const converseStateTracker = globalThis.JarvisConverseState?.createConverseStateTracker
+            ? globalThis.JarvisConverseState.createConverseStateTracker('listening')
+            : null;
+
+        function setConverseUiState(state, reason = '') {
+            const snapshot = converseStateTracker?.setState
+                ? converseStateTracker.setState(state, reason)
+                : { state: String(state || 'listening'), reason: String(reason || ''), updatedAt: Date.now() };
+            window.__jarvisConverseState = snapshot;
+            const status = document.getElementById('speech-input-status');
+            if (status) {
+                if (snapshot.state === 'speaking') status.textContent = 'Speaking';
+                if (snapshot.state === 'recovering') status.textContent = 'Tap to enable voice replies';
+                if (snapshot.state === 'listening') status.textContent = window.JarvisSpeechInput?.getState?.().converseEnabled ? 'Listening...' : '';
+            }
+            logLatencyTrace('converse_state', { state: snapshot.state, reason: snapshot.reason });
+            return snapshot;
+        }
+
+        function showConverseSpeechUnlockPrompt() {
+            let prompt = document.getElementById('converse-speech-unlock');
+            if (!prompt) {
+                prompt = document.createElement('button');
+                prompt.id = 'converse-speech-unlock';
+                prompt.type = 'button';
+                prompt.className = 'fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-white text-black text-sm font-semibold shadow-lg border border-white/20';
+                prompt.textContent = 'Tap to enable voice replies';
+                prompt.addEventListener('click', () => {
+                    try {
+                        const utterance = new SpeechSynthesisUtterance('Voice replies enabled.');
+                        utterance.volume = 0.75;
+                        window.speechSynthesis?.speak?.(utterance);
+                        prompt.remove();
+                        setConverseUiState('listening', 'speech_unlocked');
+                    } catch (error) {
+                        setConverseUiState('recovering', 'speech_unlock_failed');
+                    }
+                });
+                document.body.appendChild(prompt);
+            }
+            prompt.hidden = false;
+        }
+
+        function unlockConverseSpeechFromGesture() {
+            if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) return false;
+            try {
+                const utterance = new SpeechSynthesisUtterance(' ');
+                utterance.volume = 0.01;
+                utterance.rate = 1;
+                window.speechSynthesis.speak(utterance);
+                window.speechSynthesis.cancel();
+                logLatencyTrace('speech_unlock_attempt', { source: 'converse_toggle' });
+                return true;
+            } catch (error) {
+                logLatencyTrace('speech_blocked', { stage: 'unlock', error: String(error?.message || error || '') });
+                showConverseSpeechUnlockPrompt();
+                return false;
+            }
+        }
+
         function speakConverseReply(text, turn) {
             const fallbackTurn = turn || getConversationTurn(activeResponseRenderContext?.turnId);
             const activeSource = String(fallbackTurn?.source || activeResponseRenderContext?.source || '').toLowerCase();
-            if (activeSource !== 'converse') return;
+            if (activeSource !== 'converse') {
+                logLatencyTrace('speech_skipped_no_converse_turn', { source: activeSource || 'unknown' });
+                return;
+            }
             if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+                setConverseUiState('recovering', 'speech_unsupported');
+                logLatencyTrace('speech_blocked', { stage: 'unsupported' });
+                showConverseSpeechUnlockPrompt();
                 return;
             }
             const spokenText = sanitizeTextForConverseSpeech(text);
@@ -7819,11 +7913,18 @@ function normalizeUiTokens(text) {
             utterance.volume = 1;
             utterance.onend = () => {
                 if (activeConverseSpeechUtterance === utterance) activeConverseSpeechUtterance = null;
+                setConverseUiState('listening', 'speech_finished');
+                logLatencyTrace('speech_end', { source: 'converse' });
             };
-            utterance.onerror = () => {
+            utterance.onerror = event => {
                 if (activeConverseSpeechUtterance === utterance) activeConverseSpeechUtterance = null;
+                setConverseUiState('recovering', `speech_blocked:${String(event?.error || 'unknown')}`);
+                logLatencyTrace('speech_blocked', { stage: 'synthesis', error: String(event?.error || 'unknown') });
+                showConverseSpeechUnlockPrompt();
             };
             activeConverseSpeechUtterance = utterance;
+            setConverseUiState('speaking', 'speech_start');
+            logLatencyTrace('speech_start', { source: 'converse', chars: spokenText.length });
             window.speechSynthesis.speak(utterance);
         }
 
@@ -8609,7 +8710,9 @@ async function sendTextInput(submission = {}) {
                     sourceContext: {
                         transcriptId: String(submission?.transcriptId || ''),
                         recognitionSessionId: Number(submission?.recognitionSessionId) || null,
-                        preservedTranscript: preserveTranscript
+                        preservedTranscript: preserveTranscript,
+                        transcriptFinal: submission?.transcriptFinal === true,
+                        transcriptCompleteReason: String(submission?.transcriptCompleteReason || '')
                     }
                 });
                 const previousRenderContext = beginResponseRenderContext(turn);
@@ -16718,14 +16821,23 @@ function isWakeGreetingText(text) {
 
         async function processCommand(text) {
             const rawCommandText = String(text || '').trim();
-            if (isFastSimpleQuery(rawCommandText)) {
+            if (String(activeResponseRenderContext?.source || '').toLowerCase() === 'converse') {
+                setConverseUiState('submitting', 'command_received');
+            }
+            const frontendRoute = decideFrontendRoute(rawCommandText, {
+                turnSource: activeResponseRenderContext?.source || 'text'
+            });
+            logRoutingDebug('processCommand route_decision', rawCommandText, { frontendRoute });
+            if (frontendRoute.route === 'fast_simple') {
                 logRoutingDebug('processCommand -> fast_simple', rawCommandText, {
-                    selectedHandler: 'handleFastSimpleQuery'
+                    selectedHandler: 'handleFastSimpleQuery',
+                    frontendRoute
                 });
                 await handleFastSimpleQuery(rawCommandText, {
                     stream: false,
                     historyKey: rawCommandText,
-                    turnId: activeResponseRenderContext?.turnId || ''
+                    turnId: activeResponseRenderContext?.turnId || '',
+                    routeDecision: frontendRoute
                 });
                 return;
             }
@@ -16765,6 +16877,9 @@ function isWakeGreetingText(text) {
             text = contextResolution?.resolvedMessage || text;
             const lower = text.toLowerCase();
             const compact = String(text || '').trim();
+            if (String(activeResponseRenderContext?.source || '').toLowerCase() === 'converse') {
+                setConverseUiState('responding', 'route_processing');
+            }
 
             if (handlePreferredAddressRequest(compact)) {
                 return;
@@ -19375,6 +19490,9 @@ function toggleMemoryPersistence(enabled) {
 }
 
 function normalizeCasualConversationText(text) {
+    if (globalThis.JarvisFrontendRouting?.normalizeCasualConversationText) {
+        return globalThis.JarvisFrontendRouting.normalizeCasualConversationText(text);
+    }
     return String(text || '')
         .toLowerCase()
         .replace(/[^\p{L}\p{N}\s']/gu, ' ')
@@ -19384,6 +19502,9 @@ function normalizeCasualConversationText(text) {
 }
 
 function isCasualConversationQuery(text) {
+    if (globalThis.JarvisFrontendRouting?.isCasualConversationQuery) {
+        return globalThis.JarvisFrontendRouting.isCasualConversationQuery(text);
+    }
     const t = normalizeCasualConversationText(text);
     if (!t) return false;
     if (/^(?:hi|hello|hey|yo|sup|thanks|thank you|good morning|good afternoon|good evening)$/.test(t)) return true;
@@ -19394,6 +19515,9 @@ function isCasualConversationQuery(text) {
 
 function buildCasualConversationReply(text) {
     const t = normalizeCasualConversationText(text);
+    if (/^do you understand\s+[a-z][a-z\s-]{1,40}\??$/i.test(String(text || '').trim())) {
+        return 'Yes, I can understand Tamil in text. Voice transcription depends on the browser, but you can type or speak and I will do my best.';
+    }
     if (/^(?:thanks|thank you|thank u|appreciate it)\b/.test(t)) {
         return 'You are welcome.';
     }
@@ -19406,7 +19530,14 @@ function buildCasualConversationReply(text) {
     return buildWakeGreeting();
 }
 
+function isLanguageCapabilityQuery(text) {
+    return /^do you understand\s+[a-z][a-z\s-]{1,40}\??$/i.test(String(text || '').trim());
+}
+
 function isSimpleStableQuestion(text) {
+    if (globalThis.JarvisFrontendRouting?.isSimpleStableQuestion) {
+        return globalThis.JarvisFrontendRouting.isSimpleStableQuestion(text, buildFrontendRouteContext(text));
+    }
     const t = String(text || '').trim();
     const lower = t.toLowerCase();
     if (!t || t.length > 120) return false;
@@ -19414,27 +19545,92 @@ function isSimpleStableQuestion(text) {
     if (isExplicitWebSearchRequest(t) || isCurrentInfoQuery(t) || isStrictLatestQuery(t) || isLiveRetrievalQuery(t)) return false;
     if (isMedicalAdviceIntent(t) || isMedicalEmergencyIntent(t) || isLikelyLocationOrTravelQuery(t)) return false;
     if (/\b(near me|nearby|museum|museums|restaurant|hotel|open now|directions|map|sources?|cite|latest|current|today|news|price|weather|stock|crypto|ceo|president|prime minister|chief minister|captain|coach)\b/.test(lower)) return false;
-    return /^(?:what\s+is|what'?s|who\s+is|who\s+was|how\s+does|how\s+do|explain|define|tell\s+me\s+about)\s+[\w\s.'-]{2,80}\??$/i.test(t);
+    return /^(?:what\s+is|what'?s|who\s+is|who\s+was|how\s+does|how\s+do|explain|define|tell\s+me\s+about)\s+[\w\s.'-]{2,80}\??$/i.test(t) ||
+        /^(?:do|can|are|will)\s+you\b|^do\s+you\s+understand\s+[A-Za-z][A-Za-z\s-]{1,40}\??$/i.test(t);
 }
 
 function isFastSimpleQuery(text) {
+    if (globalThis.JarvisFrontendRouting?.isFastSimpleQuery) {
+        return globalThis.JarvisFrontendRouting.isFastSimpleQuery(text, buildFrontendRouteContext(text));
+    }
     return isCasualConversationQuery(text) || isSimpleStableQuestion(text);
 }
 
 function shouldUseMinimalThinking(text, intent = '') {
+    if (globalThis.JarvisFrontendRouting?.shouldUseMinimalThinking) {
+        return globalThis.JarvisFrontendRouting.shouldUseMinimalThinking(text, intent, buildFrontendRouteContext(text));
+    }
     return isFastSimpleQuery(text) || ['fast_simple', 'casual_conversation', 'fast_explainer'].includes(String(intent || ''));
+}
+
+function buildFrontendRouteContext(text, options = {}) {
+    const value = String(text || '').trim();
+    const liveIntent = extractLiveQueryIntent(value);
+    const entityIntent = extractUniversalEntityIntent(value, liveIntent);
+    const risk = getRiskTierForQuery(value, liveIntent, entityIntent);
+    return {
+        turnSource: options?.turnSource || options?.source || activeResponseRenderContext?.source || '',
+        liveIntent,
+        entityIntent,
+        risk,
+        explicitWeb: isExplicitWebSearchRequest(value),
+        strictLatest: isStrictLatestQuery(value),
+        currentInfo: isCurrentInfoQuery(value),
+        liveRetrieval: isLiveRetrievalQuery(value),
+        requiresSources: isExplicitWebSearchRequest(value) || isStrictLatestQuery(value) || isCurrentInfoQuery(value),
+        safetySensitive: isMedicalAdviceIntent(value) || isMedicalEmergencyIntent(value),
+        placeGrounded: isLikelyLocationOrTravelQuery(value) || /\b(museum|museums|landmark|attraction|restaurant|hotel|nearby|near me|open now|places to visit)\b/i.test(value),
+        toolAction: !!options?.toolAction,
+        toolReason: options?.toolReason || '',
+        ambiguousContext: !!options?.ambiguousContext
+    };
+}
+
+function decideFrontendRoute(text, context = {}) {
+    const routeContext = {
+        ...buildFrontendRouteContext(text, context),
+        ...context
+    };
+    if (globalThis.JarvisFrontendRouting?.decideFrontendRoute) {
+        return globalThis.JarvisFrontendRouting.decideFrontendRoute(text, routeContext);
+    }
+    if (isFastSimpleQuery(text)) {
+        return {
+            route: 'fast_simple',
+            reason: isCasualConversationQuery(text) ? 'casual_conversation' : 'simple_stable_question',
+            risk: 'low_risk',
+            requiresSources: false,
+            minimalThinking: true,
+            speakResponse: String(routeContext.turnSource || '').toLowerCase() === 'converse',
+            sourcePolicy: 'none'
+        };
+    }
+    if (routeContext.placeGrounded) {
+        return { route: 'place_grounded', reason: 'place_query_requires_evidence', risk: routeContext.risk || 'medium_risk', requiresSources: true, minimalThinking: false, speakResponse: String(routeContext.turnSource || '').toLowerCase() === 'converse', sourcePolicy: 'place_grounded' };
+    }
+    if (routeContext.requiresSources || routeContext.liveRetrieval) {
+        return { route: 'live_required', reason: 'source_or_freshness_required', risk: routeContext.risk || 'medium_risk', requiresSources: true, minimalThinking: false, speakResponse: String(routeContext.turnSource || '').toLowerCase() === 'converse', sourcePolicy: 'required' };
+    }
+    return { route: 'chat_direct', reason: 'default_direct_chat', risk: routeContext.risk || 'low_risk', requiresSources: false, minimalThinking: false, speakResponse: String(routeContext.turnSource || '').toLowerCase() === 'converse', sourcePolicy: 'none' };
 }
 
 async function handleFastSimpleQuery(text, options = {}) {
     const userText = String(text || '').trim();
     if (!userText) return { intent: 'fast_simple' };
-    if (isCasualConversationQuery(userText)) {
-        const reply = buildCasualConversationReply(userText);
+    if (isCasualConversationQuery(userText) || isLanguageCapabilityQuery(userText)) {
+        const reply = isLanguageCapabilityQuery(userText)
+            ? 'Yes, I can understand Tamil in text. Voice transcription depends on the browser, but you can type or speak and I will do my best.'
+            : buildCasualConversationReply(userText);
         const messageId = addModelAssistantMessage(reply, 'Model answer', {
             turnId: options?.turnId,
-            sourceType: 'model'
+            sourceType: 'model',
+            route: options?.routeDecision?.route || 'fast_simple',
+            routeReason: options?.routeDecision?.reason || 'casual_conversation',
+            turnSource: options?.turnSource || activeResponseRenderContext?.source || '',
+            sourcePolicy: options?.routeDecision?.sourcePolicy || 'none',
+            latency: options?.latency || null
         });
-        saveToHistory(options?.historyKey || userText, reply);
+        saveToHistory(options?.historyKey || userText, reply, { recordContext: false });
         addFeedbackButtons(userText, reply, messageId);
         return { response: reply, intent: 'casual_conversation', assistantMessageId: messageId };
     }
@@ -19443,7 +19639,8 @@ async function handleFastSimpleQuery(text, options = {}) {
         fastExplainer: true,
         stream: options?.stream === true,
         displayUserMessage: options?.displayUserMessage || options?.historyKey || userText,
-        minimalThinking: true
+        minimalThinking: true,
+        routeDecision: options?.routeDecision || decideFrontendRoute(userText)
     });
 }
 
@@ -19621,59 +19818,6 @@ async function deleteMemoryManagerItem(key) {
     refreshPrivacyDataSummary();
 }
 
-function showVoiceConversationScreen(autoStart = false) {
-    const screen = document.getElementById('voice-conversation-screen');
-    if (!screen) return;
-    screen.classList.remove('hidden');
-    screen.setAttribute('aria-hidden', 'false');
-    updateVoiceConversationScreen();
-    if (autoStart && !window.JarvisSpeechInput?.getState?.().converseEnabled) {
-        window.JarvisSpeechInput?.toggleConverse?.();
-    }
-}
-
-function closeVoiceConversationScreen() {
-    const screen = document.getElementById('voice-conversation-screen');
-    if (!screen) return;
-    screen.classList.add('hidden');
-    screen.setAttribute('aria-hidden', 'true');
-}
-
-function stopVoiceConversationScreen() {
-    window.JarvisSpeechInput?.stop?.({ disableConverse: true });
-    stopActiveGeneration('manual');
-    updateVoiceConversationScreen();
-}
-
-function toggleVoiceConversationFromScreen() {
-    const state = window.JarvisSpeechInput?.getState?.() || {};
-    window.JarvisSpeechInput?.toggleConverse?.();
-    if (!state.supported && state.supported === false) showTemporaryMessage('Voice input is unavailable in this browser.');
-    updateVoiceConversationScreen();
-}
-
-function updateVoiceConversationScreen(state = null) {
-    const screen = document.getElementById('voice-conversation-screen');
-    if (!screen) return;
-    const nextState = state || window.JarvisSpeechInput?.getState?.() || {};
-    const isOpen = !screen.classList.contains('hidden');
-    const isListening = !!nextState.listening;
-    const isConverse = !!nextState.converseEnabled;
-    const isProcessing = !!nextState.processing || isAssistantProcessing();
-    screen.classList.toggle('is-listening', isListening && !isProcessing);
-    screen.classList.toggle('is-thinking', isProcessing);
-    const stateEl = document.getElementById('voice-conversation-state');
-    const detailEl = document.getElementById('voice-conversation-detail');
-    const toggleBtn = document.getElementById('voice-screen-toggle-btn');
-    const transcriptEl = document.getElementById('voice-conversation-transcript-text');
-    if (stateEl) stateEl.textContent = isProcessing ? 'JARVIS is thinking' : (isListening ? 'Listening' : (isConverse ? 'Ready to listen' : 'Voice mode'));
-    if (detailEl) detailEl.textContent = isProcessing
-        ? 'Speak anytime to interrupt the response.'
-        : (isConverse ? 'Converse mode is active. Talk naturally.' : 'Start listening to use a full-screen voice conversation.');
-    if (toggleBtn) toggleBtn.textContent = isConverse ? 'Pause listening' : 'Start listening';
-    if (transcriptEl && isOpen && !transcriptEl.textContent.trim()) transcriptEl.textContent = 'Waiting for speech...';
-}
-        
         function saveUserData() {
             if (!persistMemoryToDevice) return;
             try {
