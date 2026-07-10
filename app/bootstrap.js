@@ -18,10 +18,10 @@ globalThis.JarvisConversation = engine;
 globalThis.JarvisApi = Object.freeze({ ApiError, postJson });
 globalThis.JarvisState = createApplicationState();
 globalThis.JarvisStorage = createSafeStorage();
-globalThis.JarvisFrontendRouting = Object.freeze(JarvisFrontendRouting);
-globalThis.JarvisFailurePolicy = Object.freeze(JarvisFailurePolicy);
-globalThis.JarvisPlaceGrounding = Object.freeze(JarvisPlaceGrounding);
-globalThis.JarvisConverseState = Object.freeze(JarvisConverseState);
+globalThis.JarvisFrontendRouting = Object.freeze({ ...JarvisFrontendRouting });
+globalThis.JarvisFailurePolicy = Object.freeze({ ...JarvisFailurePolicy });
+globalThis.JarvisPlaceGrounding = Object.freeze({ ...JarvisPlaceGrounding });
+globalThis.JarvisConverseState = Object.freeze({ ...JarvisConverseState });
 
 function initializeSpeechInput() {
     if (globalThis.JarvisSpeechInput) return;
