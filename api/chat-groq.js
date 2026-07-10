@@ -98,7 +98,7 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
                 intent,
                 isInternalSummary
             });
-            const lengthPolicy = buildLengthPolicy(effectiveMessage, '', { isInternalSummary });
+            const lengthPolicy = buildLengthPolicy(effectiveMessage, '', { isInternalSummary, intent });
             if (shouldStreamChatRequest(req.body, intent, grounding, routeDecision, isInternalSummary)) {
                 return await handleStreamingChatRequest(res, {
                     requestId,
@@ -263,6 +263,16 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 
 
     function buildIntentPromptHint(intent) {
+        if (String(intent || '') === 'chat_title') {
+            return [
+                'Chat title generation intent:',
+                '- Return only one concise conversation title.',
+                '- Use Title Case, 3 to 6 words, and preferably 40 characters or fewer.',
+                '- Do not use quotes, punctuation at the end, markdown, explanations, or prefixes such as Title:.',
+                '- Do not use generic titles like New Chat, Untitled, Conversation, Help, Question, or Chat.',
+                '- Prefer the most significant or final user goal over greetings or small talk.'
+            ].join('\n');
+        }
         if (String(intent || '') !== 'pop_culture_reference') return '';
         return [
             'Pop-culture reference intent:',
@@ -1241,6 +1251,13 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
     }
 
     function classifyRoutingDecision(message, clientSystemPrompt, options = {}) {
+        if (String(options?.intent || '') === 'chat_title') {
+            return {
+                strategy: 'direct',
+                reason: 'chat_title_generation',
+                webEligible: false
+            };
+        }
         if (options?.isInternalSummary || isInternalSummarizerPrompt(message, clientSystemPrompt)) {
             return {
                 strategy: 'direct',
@@ -1690,15 +1707,6 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
     function buildLiveQueries(query) {
         const q = String(query || '').trim();
         if (!q) return [];
-        const lower = q.toLowerCase();
-        if (/\bisro\b/.test(lower)) {
-            return [
-                'ISRO latest mission update press release site:isro.gov.in',
-                'ISRO launch mission statement site:isro.gov.in',
-                'ISRO mission update PSLV GSLV NVS site:isro.gov.in',
-                `${q} Reuters OR The Hindu OR Indian Express`
-            ];
-        }
         return [
             q,
             `latest ${q}`,
@@ -1711,7 +1719,6 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         const list = Array.isArray(results) ? results : [];
         const q = String(query || '').toLowerCase();
         const queryTerms = tokenizeRelevanceTerms(q);
-        const wantsIsro = /\bisro\b/.test(q);
         const currentYear = new Date().getUTCFullYear();
         const seen = new Set();
         const scored = [];
@@ -1724,7 +1731,6 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
             const title = String(item?.title || '');
             const desc = String(item?.description || '');
             const hay = `${title} ${desc}`.toLowerCase();
-            const host = getHost(url);
             const overlap = queryTerms.reduce((acc, term) => acc + (hay.includes(term) ? 1 : 0), 0);
 
             let score = 0;
@@ -1732,20 +1738,6 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
                 score += overlap * 2;
             } else if (queryTerms.length > 0) {
                 score -= 8;
-            }
-            if (wantsIsro) {
-                if (host.endsWith('isro.gov.in')) score += 8;
-                if (/\b(isro|launch|mission|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan)\b/.test(hay)) score += 4;
-                if (/\.pdf($|\?)/i.test(url) && !host.endsWith('isro.gov.in')) score -= 6;
-                if (/\b(aps|unoosa|respond basket)\b/.test(hay)) score -= 7;
-                if (/^isro$/i.test(title.trim())) score -= 6;
-                if (/\/?$/.test(safePathname(url)) && host.endsWith('isro.gov.in')) score -= 5;
-                if (host === 'x.com' || host === 'twitter.com') score -= 4;
-                if (/latest_updates\.html/i.test(url)) score -= 1;
-                if (/\b(update|updates|mission|launch|press release|statement)\b/.test(hay)) score += 3;
-                if (isGenericIsroTitle(title)) score -= 6;
-                if (isGoogleNewsRedirect(url)) score -= 7;
-                if (!/\b(mission|launch|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan)\b/.test(hay)) score -= 2;
             }
 
             if (/\b(latest|today|update|updates|current|now|recent)\b/.test(hay)) score += 2;
@@ -1770,14 +1762,12 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
     }
 
     function rankLeadSources(query, sources) {
-        const wantsIsro = /\bisro\b/i.test(String(query || ''));
         const queryTerms = tokenizeRelevanceTerms(query);
         const list = Array.isArray(sources) ? sources.slice() : [];
         const withScore = list.map(item => {
             const title = String(item?.title || '');
             const desc = String(item?.description || '');
             const url = String(item?.url || '');
-            const host = getHost(url);
             const hay = `${title} ${desc}`.toLowerCase();
             const overlap = queryTerms.reduce((acc, term) => acc + (hay.includes(term) ? 1 : 0), 0);
             let score = 0;
@@ -1785,17 +1775,6 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
                 score += overlap * 2;
             } else if (queryTerms.length > 0) {
                 score -= 6;
-            }
-            if (wantsIsro) {
-                if (host.endsWith('isro.gov.in')) score += 4;
-                if (/\b(update|updates|mission|launch|statement|press|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan)\b/.test(hay)) score += 5;
-                if (/^isro$/i.test(title.trim())) score -= 6;
-                if ((host === 'x.com' || host === 'twitter.com')) score -= 5;
-                if (/latest_updates\.html/i.test(url)) score -= 1;
-                if (/\/?$/.test(safePathname(url)) && host.endsWith('isro.gov.in')) score -= 4;
-                if (isGenericIsroTitle(title)) score -= 7;
-                if (isGoogleNewsRedirect(url)) score -= 7;
-                if (!/\b(mission|launch|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan)\b/.test(hay)) score -= 2;
             }
             return { ...item, __leadScore: score };
         });
@@ -1953,14 +1932,6 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         return explicitSwitch || (hasNamedLikeSignal && containsDistinctEntityHint);
     }
 
-    function safePathname(url) {
-        try {
-            return new URL(String(url || '')).pathname || '/';
-        } catch (_) {
-            return '/';
-        }
-    }
-
     function getHost(url) {
         try {
             return new URL(String(url || '')).hostname.replace(/^www\./i, '').toLowerCase();
@@ -1974,21 +1945,15 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
         return host === 'news.google.com' && /\/rss\/articles\//i.test(String(url || ''));
     }
 
-    function isGenericIsroTitle(title) {
-        const t = String(title || '').trim().toLowerCase();
-        return t === 'isro' || t === 'updates - isro' || t === 'latest updates - isro';
-    }
-
     function shouldUseAsFinalSource(message, item) {
-        const isroMissionQuery = /\bisro\b/i.test(String(message || '')) && /\b(mission|launch|update|latest)\b/i.test(String(message || ''));
         const title = String(item?.title || '');
         const desc = String(item?.description || '');
         const hay = `${title} ${desc}`.toLowerCase();
         const url = String(item?.url || '');
         if (isGoogleNewsRedirect(url)) return false;
-        if (!isroMissionQuery) return true;
-        if (isGenericIsroTitle(title)) return false;
-        return /\b(mission|launch|satellite|pslv|gslv|nvs|aditya|chandrayaan|gaganyaan|statement|press)\b/.test(hay);
+        const queryTerms = tokenizeRelevanceTerms(message);
+        if (!queryTerms.length) return true;
+        return queryTerms.some(term => hay.includes(term));
     }
 
     function isAnswerEvidenceSource(item) {
@@ -2008,9 +1973,6 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
     function normalizeLeadTitle(message, lead) {
         const raw = String(lead?.title || '').trim();
         if (!raw) return 'Latest mission update is currently being tracked from official sources';
-        if (/\bisro\b/i.test(String(message || '')) && isGenericIsroTitle(raw)) {
-            return 'ISRO published fresh mission-related updates on its official channels';
-        }
         return raw;
     }
 
@@ -2375,7 +2337,7 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 
     function normalizeIntent(value) {
         const intent = String(value || 'chat').trim().toLowerCase();
-        return ['chat', 'fast_explainer', 'pop_culture_reference', 'verify_answer', 'selection_explain', 'selection_verify', 'selection_rewrite', 'selection_translate', 'selection_custom']
+        return ['chat', 'fast_explainer', 'chat_title', 'pop_culture_reference', 'verify_answer', 'selection_explain', 'selection_verify', 'selection_rewrite', 'selection_translate', 'selection_custom']
             .includes(intent) ? intent : 'chat';
     }
 
@@ -2547,6 +2509,16 @@ import { extractWithCrawl4Ai } from './_lib/crawl4ai-client.js';
 
     function buildLengthPolicy(message, clientSystemPrompt, options = {}) {
         const internalSummary = Boolean(options?.isInternalSummary);
+        if (String(options?.intent || '') === 'chat_title') {
+            return {
+                instruction: 'Return only the final title, no markdown and no explanation.',
+                maxTokens: 80,
+                temperature: 0.2,
+                wordSpec: null,
+                timeoutMs: 12000,
+                retries: 0
+            };
+        }
         const structured = hasStructuredOutputConstraint(clientSystemPrompt, message);
         if (internalSummary || structured) {
             return { instruction: 'Keep output strictly in the requested machine-readable format.', maxTokens: 900, temperature: 0.3, wordSpec: null };
