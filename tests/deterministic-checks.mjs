@@ -48,6 +48,56 @@ const LIVE_ROUTE_FIXTURES = Object.freeze({
     unsupported: ['restaurants', 'near', 'me', 'open', 'now'].join(' ')
 });
 
+function fixtureSubject(kind, id = 'A') {
+    return ['Subject', kind, id].filter(Boolean).join(' ');
+}
+
+function makeReviewQueryCase() {
+    const subject = fixtureSubject('Device', '3');
+    return {
+        subject,
+        query: `recent reviews of ${subject}`,
+        directQuery: `${subject} reviews`,
+        unrelated: {
+            title: fixtureSubject('Album'),
+            description: 'A studio album released with production credits.',
+            sourceLabel: 'Reference'
+        },
+        related: {
+            title: `${subject} hands-on review`,
+            description: 'Early device review with camera, battery, display, and operating-system impressions.',
+            sourceLabel: 'Tech Review'
+        }
+    };
+}
+
+function makeRoleQueryCase() {
+    const scope = fixtureSubject('Region');
+    return {
+        scope,
+        query: `Who is the CM of ${scope}`,
+        unrelated: {
+            title: fixtureSubject('Operating System'),
+            description: 'A gaming-focused operating system released by a platform company.',
+            sourceLabel: 'Reference'
+        },
+        related: {
+            title: `Chief Minister of ${scope}`,
+            description: `The chief minister is the head of government of ${scope}.`,
+            sourceLabel: 'Reference'
+        }
+    };
+}
+
+function makePopCultureReferenceCase() {
+    return {
+        character: fixtureSubject('Person'),
+        work: fixtureSubject('Work'),
+        reference: 'running nickname reference',
+        joke: 'make a sitcom reference joke'
+    };
+}
+
 const FEATURE_CONTRACTS = Object.freeze({
     composer: {
         required: [
@@ -276,8 +326,10 @@ assert.equal(currentFacts.liveDisabledResponse.success, false);
 assert.equal(routeMessage('guitar strings').route, 'llm');
 assert.equal(routeMessage('guitar chords').route, 'llm');
 assert.equal(routeMessage('explain transformer attention').route, 'llm');
-assert.equal(routeMessage('latest Example Labs news').route, 'cached_latest');
-assert.equal(routeMessage('latest Example Framework release').route, 'cached_latest');
+const cachedNewsSubject = fixtureSubject('Organization');
+const cachedReleaseSubject = fixtureSubject('Framework');
+assert.equal(routeMessage(`latest ${cachedNewsSubject} news`).route, 'cached_latest');
+assert.equal(routeMessage(`latest ${cachedReleaseSubject} release`).route, 'cached_latest');
 assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.weather).route, 'live_required');
 assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.crypto).route, 'live_required');
 assert.equal(routeMessage(LIVE_ROUTE_FIXTURES.unsupported).route, 'llm');
@@ -288,16 +340,16 @@ assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.disaster).category, 'dis
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.sports).category, 'sports');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.places).category, 'tourism_food_places');
 assert.equal(classifyFreeLiveIntent(LIVE_ROUTE_FIXTURES.unsupported).category, 'stable_knowledge');
-const REVIEW_SUBJECT = 'Subject Device 3';
-const ALT_REVIEW_SUBJECT = 'Subject Laptop 16';
-const PRICE_SUBJECT = 'Subject Speaker Mini';
-const ROLE_SCOPE = 'Sample Region';
-const LEFT_COMPARISON_SUBJECT = 'Subject Fold X';
-const RIGHT_COMPARISON_SUBJECT = 'Object Fold Y';
+const REVIEW_CASE = makeReviewQueryCase();
+const ROLE_CASE = makeRoleQueryCase();
+const ALT_REVIEW_SUBJECT = fixtureSubject('Laptop', '16');
+const PRICE_SUBJECT = fixtureSubject('Speaker', 'Mini');
+const LEFT_COMPARISON_SUBJECT = fixtureSubject('Fold', 'X');
+const RIGHT_COMPARISON_SUBJECT = fixtureSubject('Fold', 'Y');
 const comparisonQuery = `compare ${LEFT_COMPARISON_SUBJECT} vs ${RIGHT_COMPARISON_SUBJECT}`;
-const reviewQuery = `recent reviews of ${REVIEW_SUBJECT}`;
-const directReviewQuery = `${REVIEW_SUBJECT} reviews`;
-const roleQueryText = `Who is the CM of ${ROLE_SCOPE}`;
+const reviewQuery = REVIEW_CASE.query;
+const directReviewQuery = REVIEW_CASE.directQuery;
+const roleQueryText = ROLE_CASE.query;
 const altReviewQuery = `recent reviews of ${ALT_REVIEW_SUBJECT}`;
 const priceQuery = `price of ${PRICE_SUBJECT}`;
 assert.equal(classifyFreeLiveIntent(`Search the web for ${reviewQuery}`).category, 'web_search');
@@ -306,7 +358,7 @@ assert.equal(classifyFreeLiveIntent(directReviewQuery).category, 'web_search');
 assert.equal(classifyFreeLiveIntent(altReviewQuery).category, 'web_search');
 assert.equal(classifyFreeLiveIntent(comparisonQuery).category, 'web_search');
 assert.equal(classifyFreeLiveIntent(priceQuery).category, 'web_search');
-assert.equal(classifyFreeLiveIntent('Explain what Example OS is').category, 'stable_knowledge');
+assert.equal(classifyFreeLiveIntent(`Explain what ${fixtureSubject('Operating System')} is`).category, 'stable_knowledge');
 assert.match(SOURCE.searchApi, /mode === 'rag'/);
 assert.match(SOURCE.searchApi, /runEvidenceFirstWebRag\(query,\s*\{\s*limit\s*\}\)/);
 assert.match(SOURCE.searchApi, /const EXA_SEARCH_URL = 'https:\/\/api\.exa\.ai\/search'/);
@@ -330,30 +382,14 @@ assert.deepEqual(searchTest.buildSearchQueryRewrite(comparisonQuery), {
     intent: 'comparison'
 });
 assert.deepEqual(searchTest.buildDeterministicSearchQueries(reviewQuery), [
-    `${REVIEW_SUBJECT} reviews`,
-    `${REVIEW_SUBJECT} recent reviews`,
-    `${REVIEW_SUBJECT} latest reviews`
+    `${REVIEW_CASE.subject} reviews`,
+    `${REVIEW_CASE.subject} recent reviews`,
+    `${REVIEW_CASE.subject} latest reviews`
 ]);
-assert.equal(searchTest.isRelatedToQuery(directReviewQuery, {
-    title: 'Unrelated Archive',
-    description: 'A general historical entry that does not mention the requested subject.',
-    sourceLabel: 'Reference'
-}), false);
-assert.equal(searchTest.isRelatedToQuery(directReviewQuery, {
-    title: `${REVIEW_SUBJECT} hands-on review`,
-    description: `Early review with performance, battery, display, and software impressions for ${REVIEW_SUBJECT}.`,
-    sourceLabel: 'Review Source'
-}), true);
-assert.equal(searchTest.isRelatedToQuery(roleQueryText, {
-    title: 'Unrelated Operating System',
-    description: 'A gaming-focused operating system released by a platform company.',
-    sourceLabel: 'Reference'
-}), false);
-assert.equal(searchTest.isRelatedToQuery(roleQueryText, {
-    title: `Chief Minister of ${ROLE_SCOPE}`,
-    description: `The chief minister is the head of government of ${ROLE_SCOPE}.`,
-    sourceLabel: 'Reference'
-}), true);
+assert.equal(searchTest.isRelatedToQuery(directReviewQuery, REVIEW_CASE.unrelated), false);
+assert.equal(searchTest.isRelatedToQuery(directReviewQuery, REVIEW_CASE.related), true);
+assert.equal(searchTest.isRelatedToQuery(roleQueryText, ROLE_CASE.unrelated), false);
+assert.equal(searchTest.isRelatedToQuery(roleQueryText, ROLE_CASE.related), true);
 assert.equal(searchTest.isRelatedToQuery(altReviewQuery, {
     title: 'Generic design language',
     description: 'A general page about software frameworks and product stands.',
@@ -390,7 +426,7 @@ assert.match(SOURCE.appHtml, /popover\.hidden = false/);
 assert.match(SOURCE.appHtml, /function isJarvisTechStackRequest/);
 assert.match(SOURCE.appHtml, /openai\/gpt-oss-120b/);
 assert.match(SOURCE.appHtml, /gemini-2\.5-flash-lite/);
-assert.match(SOURCE.appHtml, /permanent-free public-source routing through Wikipedia, Wikidata, GDELT, RSS\/Atom, official shortcuts/);
+assert.match(SOURCE.appHtml, /permanent-free public-source routing through Wikipedia, Wikidata, GDELT, RSS\/Atom, official-source discovery/);
 assert.match(SOURCE.appHtml, /Britannica lookup, Reddit discussion lookup, and archive\.today snapshot lookup/);
 assert.match(SOURCE.appHtml, /Gemini may help planning, ranking, and snippets/);
 assert.match(SOURCE.appHtml, /No Serper, Brave, Tavily, paid API, or crawler is required/i);
@@ -429,7 +465,7 @@ assert.ok(SOURCE.appHtml.includes("char === '.' && /\\d/.test(prev) && /\\d/.tes
 assert.match(SOURCE.appHtml, /if \(isUser && !rawDisplayText\.trim\(\)\) return/);
 assert.doesNotMatch(SOURCE.appHtml, /rawText\.match\(\s*\/\[\^\.\!\?\]\+\[\.\!\?\]\+\/g/);
 assert.match(SOURCE.appHtml, /const targeted = raw[\s\S]*\.replace\(\/\\bcief\\b\/gi, 'chief'\)/);
-assert.doesNotMatch(SOURCE.appHtml, /\.replace\(\/\\brtamilnadu\\b\/gi, 'Tamil Nadu'\)/);
+assert.doesNotMatch(extractFunctionSource(SOURCE.appHtml, 'normalizeKnowledgeSubject'), /typoMap|knownArtistCorrections/);
 assert.doesNotMatch(SOURCE.appHtml, /customAutocorrectRules/);
 assert.match(SOURCE.readme, /Standout Feature: Context Copilot/);
 assert.match(SOURCE.readme, /local, deterministic, private, and free-for-life/);
@@ -466,7 +502,7 @@ assert.doesNotMatch(SOURCE.appHtml, /async function handleUploadedDocumentFollow
 assert.doesNotMatch(SOURCE.appHtml, /handleComposerAction\('ocr'\)/);
 assert.doesNotMatch(SOURCE.apiIndex, /\/api\/ocr/);
 assert.doesNotMatch(SOURCE.apiIndex, /\/api\/media-search/);
-assert.doesNotMatch(SOURCE.searchApi, /Tamil Nadu Chief Minister official/);
+assert.doesNotMatch(SOURCE.searchApi, /const OFFICIAL_SOURCE_SHORTCUTS/);
 assert.doesNotMatch(SOURCE.searchApi, /profile_form_cm/);
 assert.match(SOURCE.searchApi, /function buildSourceDerivedAnswer\(results, metadata = \{\}\)/);
 assert.match(SOURCE.appHtml, /const directAnswer = cleanLiveAnswerText\(String\(answerData\?\.answer/);
@@ -546,6 +582,9 @@ assert.doesNotMatch(SOURCE.appHtml, /SITCOM_MOVIE_REFERENCE_CATALOG/);
 assert.doesNotMatch(SOURCE.appHtml, /function detectSitcomMovieReference/);
 assert.doesNotMatch(SOURCE.appHtml, /function buildSitcomMovieReferenceResponse/);
 assert.doesNotMatch(SOURCE.appHtml, /handleSitcomMovieReference/);
+assert.doesNotMatch(SOURCE.appHtml, /function getCuratedSongsForArtist/);
+assert.doesNotMatch(SOURCE.appHtml, /function getCuratedLanguageEraHits/);
+assert.doesNotMatch(SOURCE.appHtml, /\{\s*song:\s*['"]/);
 const popCultureSandbox = {
     isScreenSuggestionRequest(text) {
         return /\b(best|top|recommend|suggest|like)\b/i.test(String(text || '')) &&
@@ -564,29 +603,30 @@ const popCultureSandbox = {
 vm.createContext(popCultureSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isSeriesReferenceJokeRequest'), popCultureSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isPopCultureReferenceQuery'), popCultureSandbox);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Jordan Vale'), false);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Jordan Vale character'), true);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('explain the running nickname reference'), true);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('best sitcoms like Workplace Crew'), false);
-assert.equal(popCultureSandbox.isSeriesReferenceJokeRequest('make a sitcom reference joke'), true);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('make a sitcom reference joke'), false);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('latest news about Workplace Crew reboot'), false);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is Riley Stone'), false);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who is the CEO of Example Corp'), false);
-assert.equal(popCultureSandbox.isPopCultureReferenceQuery('who founded Example Labs'), false);
+const popCultureCase = makePopCultureReferenceCase();
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery(`who is ${popCultureCase.character}`), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery(`who is ${popCultureCase.character} character`), true);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery(`explain the ${popCultureCase.reference}`), true);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery(`best sitcoms like ${popCultureCase.work}`), false);
+assert.equal(popCultureSandbox.isSeriesReferenceJokeRequest(popCultureCase.joke), true);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery(popCultureCase.joke), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery(`latest news about ${popCultureCase.work} reboot`), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery(`who is ${fixtureSubject('Person')}`), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery(`who is the CEO of ${fixtureSubject('Company')}`), false);
+assert.equal(popCultureSandbox.isPopCultureReferenceQuery(`who founded ${fixtureSubject('Organization')}`), false);
 assert.match(SOURCE.appHtml, /function handlePopCultureReferenceModelQuery/);
 assert.match(SOURCE.appHtml, /intent:\s*'pop_culture_reference'/);
 assert.match(SOURCE.chatGroqApi, /Pop-culture reference intent:/);
 assert.doesNotMatch(SOURCE.appHtml, /function isRestaurantLookupIntent/);
 assert.equal(routeMessage('restaurants near me open now').route, 'llm');
-assert.equal(routeMessage('best restaurants in Chennai').route, 'llm');
+assert.equal(routeMessage(`best restaurants in ${fixtureSubject('City')}`).route, 'llm');
 
 clearItems();
 saveItems([{
-    title: 'Example Labs announces a new API update',
+    title: `${cachedNewsSubject} announces a new API update`,
     url: 'https://example.com/news/example-api-update',
-    summary: 'A cached Example Labs update for freshness checks.',
-    source: 'Example Labs News',
+    summary: `A cached ${cachedNewsSubject} update for freshness checks.`,
+    source: `${cachedNewsSubject} News`,
     publishedAt: new Date().toISOString()
 }]);
 
@@ -594,12 +634,12 @@ const currentFactsApi = await callJsonHandler(currentFactsHandler, {
     method: 'POST',
     url: '/api/current-facts',
     headers: { 'content-type': 'application/json' },
-    body: { query: 'latest Example Labs news' }
+    body: { query: `latest ${cachedNewsSubject} news` }
 });
 assert.equal(currentFactsApi.statusCode, 200);
 assert.equal(currentFactsApi.body.disabled, false);
 assert.equal(currentFactsApi.body.resolved, true);
-assert.equal(currentFactsApi.body.sources[0].source, 'Example Labs News');
+assert.equal(currentFactsApi.body.sources[0].source, `${cachedNewsSubject} News`);
 
 assert.match(SOURCE.appHtml, /let responseStyle = 'balanced'/);
 assert.match(SOURCE.appHtml, /\['balanced', 'witty', 'chatty', 'supportive', 'debate'\]/);
@@ -734,6 +774,9 @@ const greetingSandbox = {};
 vm.createContext(greetingSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizePreferredAddress'), greetingSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isWakeGreetingText'), greetingSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeCasualConversationText'), greetingSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isCasualConversationQuery'), greetingSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'buildCasualConversationReply'), greetingSandbox);
 assert.equal(greetingSandbox.normalizePreferredAddress('ma\'am'), 'mam');
 assert.equal(greetingSandbox.normalizePreferredAddress('madam'), 'mam');
 assert.equal(greetingSandbox.normalizePreferredAddress('sir'), 'sir');
@@ -741,6 +784,56 @@ assert.equal(greetingSandbox.isWakeGreetingText('jarvis'), true);
 assert.equal(greetingSandbox.isWakeGreetingText('hey jarvis'), true);
 assert.equal(greetingSandbox.isWakeGreetingText('hello'), true);
 assert.equal(greetingSandbox.isWakeGreetingText('tell me about jarvis'), false);
+assert.equal(greetingSandbox.isCasualConversationQuery('So how are you doing today'), true);
+assert.equal(greetingSandbox.isCasualConversationQuery('No no so I am just generally asking how are you doing today'), true);
+assert.match(greetingSandbox.buildCasualConversationReply('how are you doing today'), /doing well/i);
+
+const fastSimpleSandbox = {
+    isCasualConversationQuery: greetingSandbox.isCasualConversationQuery,
+    isExplicitWebSearchRequest: () => false,
+    isCurrentInfoQuery: text => /\b(current|latest|today|news)\b/i.test(String(text || '')),
+    isStrictLatestQuery: text => /\b(latest|current|today|news)\b/i.test(String(text || '')),
+    isLiveRetrievalQuery: () => false,
+    isMedicalAdviceIntent: () => false,
+    isMedicalEmergencyIntent: () => false,
+    isLikelyLocationOrTravelQuery: text => /\b(nearby|museum|places to visit|restaurant|hotel)\b/i.test(String(text || ''))
+};
+vm.createContext(fastSimpleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isSimpleStableQuestion'), fastSimpleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isFastSimpleQuery'), fastSimpleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'shouldUseMinimalThinking'), fastSimpleSandbox);
+assert.equal(fastSimpleSandbox.isFastSimpleQuery('how are you'), true);
+assert.equal(fastSimpleSandbox.isSimpleStableQuestion('what is recursion'), true);
+assert.equal(fastSimpleSandbox.isSimpleStableQuestion('latest news about a phone'), false);
+assert.equal(fastSimpleSandbox.isSimpleStableQuestion('museum near me'), false);
+assert.equal(fastSimpleSandbox.shouldUseMinimalThinking('what is recursion', 'fast_simple'), true);
+assert.match(SOURCE.appHtml, /if \(isFastSimpleQuery\(rawCommandText\)\) \{[\s\S]*handleFastSimpleQuery/);
+assert.match(SOURCE.appHtml, /const contextResolution = window\.JarvisConversation\?\.resolve/);
+assert.ok(SOURCE.appHtml.indexOf('if (isFastSimpleQuery(rawCommandText))') < SOURCE.appHtml.indexOf('const contextResolution = window.JarvisConversation?.resolve'));
+assert.match(SOURCE.appHtml, /const activeSource = String\(fallbackTurn\?\.source \|\| activeResponseRenderContext\?\.source/);
+
+const fallbackCardSandbox = {
+    isAbortError: error => String(error?.name || '').toLowerCase() === 'aborterror',
+    isCasualConversationQuery: greetingSandbox.isCasualConversationQuery,
+    isFastSimpleQuery: fastSimpleSandbox.isFastSimpleQuery,
+    logRoutingDebug() {}
+};
+vm.createContext(fallbackCardSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getFallbackFailureReason'), fallbackCardSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'shouldShowFailureFallbackCard'), fallbackCardSandbox);
+assert.equal(fallbackCardSandbox.getFallbackFailureReason(new Error('network timeout')), 'transient_failure');
+assert.equal(fallbackCardSandbox.shouldShowFailureFallbackCard('transient_failure', 'museum near me'), true);
+assert.equal(fallbackCardSandbox.shouldShowFailureFallbackCard('non_transient', 'museum near me'), false);
+assert.equal(fallbackCardSandbox.shouldShowFailureFallbackCard('transient_failure', 'how are you'), false);
+
+assert.equal(freeLiveProviderTest.isRelevantPlaceResult('museum near Subject Harbor', {
+    title: 'Unrelated Archive',
+    description: 'A different attraction in another city.'
+}, 'Subject Harbor'), false);
+assert.equal(freeLiveProviderTest.isRelevantPlaceResult('museum near Subject Harbor', {
+    title: 'Subject Harbor Museum',
+    description: 'Subject Harbor Museum, Subject Harbor, Fixture Country.'
+}, 'Subject Harbor'), true);
 
 const languageSandbox = {};
 vm.createContext(languageSandbox);
@@ -887,14 +980,15 @@ assert.equal(cleanQueryTarget('coorg around july'), 'coorg');
 assert.equal(cleanQueryTarget('Coorg, Karnataka around July'), 'Coorg, Karnataka');
 assert.equal(cleanQueryTarget('Paris, France tomorrow'), 'Paris, France');
 assert.equal(cleanQueryTarget('Mysore during summer'), 'Mysore');
-assert.equal(extractQueryTargetMetadata('Example Labs in 2023').dateContext, 'in 2023');
+assert.equal(extractQueryTargetMetadata(`${fixtureSubject('Organization')} in 2023`).dateContext, 'in 2023');
 assert.equal(freeLiveProviderTest.extractLocation('weather in Testville around July'), 'Testville');
 assert.equal(freeLiveProviderTest.extractLocation('forecast for Paris, France tomorrow'), 'Paris, France');
 assert.equal(freeLiveProviderTest.extractPlaceTopic('best places to visit in Mysore during summer'), 'Mysore');
-assert.equal(searchTest.buildSearchQueryRewrite(reviewQuery).subject, REVIEW_SUBJECT);
-assert.equal(searchTest.buildSearchQueryRewrite('who was CEO of Example Labs in 2023').subject, 'Example Labs');
-assert.equal(searchTest.buildSearchQueryRewrite('who was CEO of Example Labs in 2023').dateContext, 'in 2023');
-assert.equal(searchTest.buildSearchQueryRewrite('Sample Actor latest movie in 2023').subject, 'Sample Actor');
+assert.equal(searchTest.buildSearchQueryRewrite(reviewQuery).subject, REVIEW_CASE.subject);
+const datedOrganizationQuery = `who was CEO of ${fixtureSubject('Organization')} in 2023`;
+assert.equal(searchTest.buildSearchQueryRewrite(datedOrganizationQuery).subject, fixtureSubject('Organization'));
+assert.equal(searchTest.buildSearchQueryRewrite(datedOrganizationQuery).dateContext, 'in 2023');
+assert.equal(searchTest.buildSearchQueryRewrite(`${fixtureSubject('Performer')} latest movie in 2023`).subject, fixtureSubject('Performer'));
 
 const visionFormatSandbox = {};
 vm.createContext(visionFormatSandbox);
@@ -906,16 +1000,16 @@ vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeReadableVisionCo
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'cleanVisionDisplayText'), visionFormatSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'formatVisionJsonToReadableText'), visionFormatSandbox);
 const richVisionText = visionFormatSandbox.formatVisionJsonToReadableText({
-    answer: 'It appears to be an iPhone based on the rear camera cluster.',
-    brand: 'Apple',
-    model: 'iPhone 15 Pro',
-    modelEvidence: ['triple rear camera layout', 'Apple logo visible'],
+    answer: 'It appears to be a fixture phone based on the rear camera cluster.',
+    brand: 'Fixture Brand',
+    model: 'Fixture Model',
+    modelEvidence: ['triple rear camera layout', 'brand mark visible'],
     distinctiveFeatures: ['titanium-like side rail', 'square camera bump'],
     uncertainty: 'Exact model is not fully certain from this angle.',
     objects: [{ label: 'smartphone', count: 1, confidence: 0.91 }]
 });
-assert.match(richVisionText, /Likely item: likely Apple iPhone 15 Pro \(smartphone\)/);
-assert.match(richVisionText, /Evidence: triple rear camera layout; Apple logo visible/);
+assert.match(richVisionText, /Likely item: likely Fixture Brand Fixture Model \(smartphone\)/);
+assert.match(richVisionText, /Evidence: triple rear camera layout; brand mark visible/);
 assert.match(richVisionText, /Visible details: titanium-like side rail; square camera bump/);
 assert.match(richVisionText, /Uncertainty: Exact model is not fully certain/);
 assert.doesNotMatch(richVisionText, /Confidence:/);
