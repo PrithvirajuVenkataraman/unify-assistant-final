@@ -198,7 +198,8 @@ export async function searchTourismFoodPlaces(query, options = {}) {
     const results = [
         ...(wiki.status === 'fulfilled' ? wiki.value : []),
         ...(osm.status === 'fulfilled' ? osm.value : [])
-    ].filter(item => isRelevantPlaceResult(query, item, topic))
+    ].map(item => attachPlaceEvidence(query, item, topic))
+        .filter(item => isRelevantPlaceResult(query, item, topic))
         .slice(0, clampInt(options.limit, 8, 1, 20));
     const warnings = [
         'Free place data does not include reliable reviews, rankings, or open-now guarantees.'
@@ -315,19 +316,73 @@ async function searchOsmPlace(topic, query, options = {}) {
 }
 
 export function isRelevantPlaceResult(query, result, topicOverride = '') {
+    const evidence = scorePlaceEvidence(query, result, topicOverride);
+    if (evidence.exactishMatch) return true;
+    if (evidence.evidenceLevel === 'none') return false;
     const topic = normalizePlaceTopic(topicOverride || extractPlaceTopic(query));
-    if (!topic) return false;
+    const topicTokens = topic.split(/\s+/).filter(token => token.length > 2);
+    if (!topicTokens.length) return false;
+    const requiresPlaceType = /\b(museum|museums|temple|park|beach|fort|palace|landmark|attraction|attractions|restaurant|hotel)\b/i.test(String(query || ''));
+    if (requiresPlaceType && evidence.relevanceScore < Math.min(1, 2 / Math.max(topicTokens.length, 1))) return false;
+    return evidence.relevanceScore >= Math.ceil(topicTokens.length * 0.67) / topicTokens.length;
+}
+
+export function scorePlaceEvidence(query, result, topicOverride = '') {
+    const topic = normalizePlaceTopic(topicOverride || extractPlaceTopic(query));
+    if (!topic) return {
+        title: String(result?.title || '').trim(),
+        url: String(result?.url || '').trim(),
+        sourceType: String(result?.sourceType || '').trim(),
+        relevanceScore: 0,
+        exactishMatch: false,
+        evidenceLevel: 'none'
+    };
     const title = normalizePlaceTopic(result?.title || '');
     const description = normalizePlaceTopic(result?.description || '');
     const hay = `${title} ${description}`.trim();
-    if (!hay) return false;
-    if (title === topic || title.includes(topic) || topic.includes(title)) return true;
+    if (!hay) return {
+        title: String(result?.title || '').trim(),
+        url: String(result?.url || '').trim(),
+        sourceType: String(result?.sourceType || '').trim(),
+        relevanceScore: 0,
+        exactishMatch: false,
+        evidenceLevel: 'none'
+    };
+    const exactishMatch = title === topic || title.includes(topic) || topic.includes(title);
     const topicTokens = topic.split(/\s+/).filter(token => token.length > 2);
-    if (!topicTokens.length) return false;
+    if (!topicTokens.length) return {
+        title: String(result?.title || '').trim(),
+        url: String(result?.url || '').trim(),
+        sourceType: String(result?.sourceType || '').trim(),
+        relevanceScore: exactishMatch ? 1 : 0,
+        exactishMatch,
+        evidenceLevel: exactishMatch ? 'strong' : 'none'
+    };
     const overlap = topicTokens.filter(token => hay.includes(token)).length;
     const requiresPlaceType = /\b(museum|museums|temple|park|beach|fort|palace|landmark|attraction|attractions|restaurant|hotel)\b/i.test(String(query || ''));
-    if (requiresPlaceType && overlap < Math.min(2, topicTokens.length)) return false;
-    return overlap >= Math.ceil(topicTokens.length * 0.67);
+    const overlapScore = overlap / topicTokens.length;
+    const relevanceScore = exactishMatch ? Math.max(0.9, overlapScore) : overlapScore;
+    const evidenceLevel = relevanceScore >= 0.9 || (relevanceScore >= 0.67 && !requiresPlaceType)
+        ? 'strong'
+        : (relevanceScore >= 0.5 ? 'weak' : 'none');
+    return {
+        title: String(result?.title || '').trim(),
+        url: String(result?.url || '').trim(),
+        sourceType: String(result?.sourceType || '').trim(),
+        relevanceScore,
+        exactishMatch,
+        evidenceLevel
+    };
+}
+
+function attachPlaceEvidence(query, item, topic) {
+    const evidence = scorePlaceEvidence(query, item, topic);
+    return {
+        ...item,
+        relevanceScore: evidence.relevanceScore,
+        exactishMatch: evidence.exactishMatch,
+        evidenceLevel: evidence.evidenceLevel
+    };
 }
 
 function normalizeResult(item) {
@@ -463,5 +518,6 @@ export const __test = {
     extractPlaceTopic,
     extractSportsLeague,
     isRelevantPlaceResult,
+    scorePlaceEvidence,
     normalizeResult
 };
