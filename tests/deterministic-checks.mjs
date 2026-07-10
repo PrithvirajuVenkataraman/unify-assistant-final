@@ -1066,6 +1066,11 @@ vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'splitReadableSentences'),
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'compactChatTitleText'), titleSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'capitalizeChatTitle'), titleSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeChatTitleCandidate'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isGenericChatTitle'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeGeneratedChatTitle'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isChatTitleIgnorableMessage'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getChatTitleMessages'), titleSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'buildChatTitlePrompt'), titleSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'stripChatTitlePromptFiller'), titleSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'deriveChatTitleFromText'), titleSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isVagueChatTitlePrompt'), titleSandbox);
@@ -1087,6 +1092,18 @@ assert.equal(titleSandbox.deriveChatTitleFromMessages([
     { role: 'user', text: 'can you fix my speech input bug' },
     { role: 'assistant', text: 'I will inspect the speech input path.' }
 ]), 'Fix speech input bug');
+assert.equal(titleSandbox.normalizeGeneratedChatTitle('"Title: python recursion debugging."'), 'Python Recursion Debugging');
+assert.equal(titleSandbox.normalizeGeneratedChatTitle('New Chat', 'Fallback Title'), 'Fallback Title');
+assert.doesNotMatch(titleSandbox.buildChatTitlePrompt([
+    { role: 'assistant', text: 'Hi! How can I help today?', systemGreeting: true },
+    { role: 'user', text: 'Hey Jarvis' },
+    { role: 'user', text: 'Build a chatbot using Next.js and OpenAI.' },
+    { role: 'assistant', text: 'Use Next.js API routes and the OpenAI API.' }
+]), /Hey Jarvis|Hi! How can I help/);
+assert.match(titleSandbox.buildChatTitlePrompt([
+    { role: 'user', text: 'Build a chatbot using Next.js and OpenAI.' },
+    { role: 'assistant', text: 'Use Next.js API routes and the OpenAI API.' }
+]), /Build a chatbot using Next\.js and OpenAI/);
 titleSandbox.findPrimaryLinearEquation = () => ({ equation: 'x + 2 = 5' });
 assert.equal(titleSandbox.deriveChatTitleFromMessages([
     { role: 'user', text: 'please solve x + 2 = 5' },
@@ -1116,6 +1133,8 @@ vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeDeletedChatTitle
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'compactChatTitleText'), legacyDeleteSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'capitalizeChatTitle'), legacyDeleteSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'normalizeChatTitleCandidate'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'isChatTitleIgnorableMessage'), legacyDeleteSandbox);
+vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getChatTitleMessages'), legacyDeleteSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'stripChatTitlePromptFiller'), legacyDeleteSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'deriveChatTitleFromText'), legacyDeleteSandbox);
 vm.runInContext(extractFunctionSource(SOURCE.appHtml, 'getLegacyHistoryStorageKeys'), legacyDeleteSandbox);
