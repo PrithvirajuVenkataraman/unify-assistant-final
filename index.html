@@ -19994,6 +19994,7 @@ let pendingChatDeleteSessionId = '';
 let chatSessionLongPressTimer = null;
 let isRestoringChatSession = false;
 let pendingChatRestoreSearchQuery = '';
+let chatTitleGenerationSequence = 0;
 
 const CHAT_SESSIONS_STORAGE_KEY = 'jarvis_chat_sessions_v1';
 const CHAT_ACTIVE_DRAFT_STORAGE_KEY = 'jarvis_active_empty_chat_draft_v1';
@@ -20394,6 +20395,138 @@ function normalizeChatTitleCandidate(text, options) {
     return capitalizeChatTitle(words.join(' ')).slice(0, 60);
 }
 
+function isGenericChatTitle(title) {
+    const normalized = String(title || '').replace(/[^\w\s-]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    return !normalized || /^(new chat|untitled|conversation|help|question|chat|assistant|jarvis)$/i.test(normalized);
+}
+
+function normalizeGeneratedChatTitle(title, fallback = '') {
+    let cleaned = String(title || '')
+        .replace(/\r?\n/g, ' ')
+        .replace(/^```[\w-]*|```$/g, '')
+        .replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, '')
+        .replace(/^\s*(?:title|conversation|chat)\s*:\s*/i, '')
+        .replace(/^["'“”‘’`]+|["'“”‘’`]+$/g, '')
+        .replace(/[.!?;:,\-–—\s]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!cleaned || isGenericChatTitle(cleaned)) return fallback || '';
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    if (words.length > 8) cleaned = words.slice(0, 6).join(' ');
+    cleaned = cleaned
+        .split(/\s+/)
+        .map(word => /^(?:AI|API|UI|UX|URL|SQL|CSS|HTML|JS|JSON|GPT|iOS)$/i.test(word)
+            ? word.toUpperCase()
+            : word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ')
+        .slice(0, 60)
+        .replace(/[.!?;:,\-–—\s]+$/g, '')
+        .trim();
+    if (isGenericChatTitle(cleaned)) return fallback || '';
+    return cleaned;
+}
+
+function isChatTitleIgnorableMessage(message) {
+    message = message || {};
+    const role = message?.role === 'assistant' ? 'assistant' : 'user';
+    const text = String(message?.text || '').replace(/\s+/g, ' ').trim();
+    const lower = text.toLowerCase();
+    if (!text) return true;
+    if (role === 'assistant' && message?.systemGreeting === true) return true;
+    if (/^(hi|hello|hey|yo|sup|hola|vanakkam|namaste|good morning|good afternoon|good evening|hey jarvis|hi jarvis|hello jarvis|jarvis)$/i.test(lower)) return true;
+    if (/^(yes sir, how can i help|hi! how can i help|hello! how can i help|hey there! how can i help|vanakkam! how can i help|hola, amigo! how can i help)/i.test(lower)) return true;
+    if (/^(thanks|thank you|you are welcome|i am doing well|yes, i am here)\b/i.test(lower)) return true;
+    if (/^did you mean\b/i.test(lower)) return true;
+    return false;
+}
+
+function getChatTitleMessages(messages = []) {
+    return (Array.isArray(messages) ? messages : [])
+        .filter(item => item && !isChatTitleIgnorableMessage(item))
+        .map(item => ({
+            role: item.role === 'assistant' ? 'assistant' : 'user',
+            text: String(item.text || '').replace(/\s+/g, ' ').trim().slice(0, 800)
+        }))
+        .filter(item => item.text)
+        .slice(-8);
+}
+
+function buildChatTitlePrompt(messages = []) {
+    const titleMessages = getChatTitleMessages(messages);
+    const conversation = titleMessages
+        .map(item => `${item.role === 'assistant' ? 'Assistant' : 'User'}: ${item.text}`)
+        .join('\n');
+    return [
+        'You are an expert AI assistant responsible for generating concise, meaningful conversation titles.',
+        'Generate one natural human-written title that summarizes the primary topic or intent.',
+        'Rules:',
+        '- Use Title Case.',
+        '- Keep it between 3 and 6 words.',
+        '- Keep it under 40 characters whenever possible.',
+        '- Do not include quotation marks.',
+        '- Do not end with punctuation.',
+        '- Do not include emojis.',
+        '- Do not include prefixes such as Title:, Conversation:, or Chat:.',
+        '- Do not use generic titles like New Chat, Untitled, Conversation, Help, Question, or Chat.',
+        '- If the conversation evolved, prefer the most significant or final user goal over greetings.',
+        '- Never invent topics not present in the conversation.',
+        '',
+        'Conversation:',
+        conversation || 'No substantive conversation yet.',
+        '',
+        'Output only the title.'
+    ].join('\n');
+}
+
+function shouldGenerateModelChatTitle(session) {
+    if (!session || session.titleEdited === true || session.autoTitle === false) return false;
+    const messages = getChatTitleMessages(session.messages);
+    const userCount = messages.filter(item => item.role === 'user').length;
+    const assistantCount = messages.filter(item => item.role === 'assistant').length;
+    if (!userCount || !assistantCount) return false;
+    return messages.length <= 10 || isGenericChatTitle(session.title);
+}
+
+async function generateModelChatTitle(session, fallbackTitle = '') {
+    const prompt = buildChatTitlePrompt(session?.messages || []);
+    if (!getChatTitleMessages(session?.messages || []).length) return fallbackTitle || '';
+    try {
+        const result = await window.JarvisApi?.postJson?.('/api/chat-groq', {
+            message: prompt,
+            intent: 'chat_title',
+            context: [],
+            preferences: {
+                responseLength: 'short',
+                responseFormat: 'paragraph',
+                responseStyle: 'balanced'
+            }
+        }, {
+            timeoutMs: 14000
+        });
+        return normalizeGeneratedChatTitle(result?.response || result?.text || '', fallbackTitle);
+    } catch (_) {
+        return fallbackTitle || '';
+    }
+}
+
+function scheduleChatTitleGeneration(session) {
+    if (!shouldGenerateModelChatTitle(session)) return;
+    const sequence = ++chatTitleGenerationSequence;
+    const sessionId = String(session.id || '');
+    const fallbackTitle = normalizeGeneratedChatTitle(deriveChatTitleFromMessages(getChatTitleMessages(session.messages)), session.title || '');
+    setTimeout(async () => {
+        const latest = chatSessions.find(item => item.id === sessionId && !item.deleted);
+        if (!latest || latest.titleEdited === true || latest.autoTitle === false) return;
+        if (sequence < chatTitleGenerationSequence - 4) return;
+        const title = await generateModelChatTitle(latest, fallbackTitle);
+        if (!title || latest.titleEdited === true || latest.autoTitle === false) return;
+        latest.title = title;
+        latest.updatedAt = new Date().toISOString();
+        saveChatSessions();
+        renderChatSidebarList();
+    }, 40);
+}
+
 function stripChatTitlePromptFiller(text) {
     let cleaned = compactChatTitleText(text)
         .replace(/^(?:please|kindly|hey|hi|hello|jarvis)[,\s]+/i, '')
@@ -20467,8 +20600,9 @@ function deriveChatTitleFromAssistantText(text) {
 }
 
 function deriveChatTitleFromMessages(messages = []) {
-    const firstUser = messages.find(item => item.role === 'user' && item.text);
-    const firstAssistant = messages.find(item => item.role === 'assistant' && item.text);
+    const titleMessages = getChatTitleMessages(messages);
+    const firstUser = titleMessages.find(item => item.role === 'user' && item.text);
+    const firstAssistant = titleMessages.find(item => item.role === 'assistant' && item.text);
     const userTitle = firstUser ? deriveChatTitleFromText(firstUser.text) : 'New chat';
     if (firstUser && isVagueChatTitlePrompt(firstUser.text) && firstAssistant) {
         const assistantTitle = deriveChatTitleFromAssistantText(firstAssistant.text);
@@ -20495,11 +20629,12 @@ function recordActiveChatMessage(role, text, turnId = '') {
     session.messages = session.messages.slice(-CHAT_SESSION_MAX_MESSAGES);
     session.updatedAt = now;
     if (session.titleEdited !== true && session.autoTitle !== false) {
-        session.title = deriveChatTitleFromMessages(session.messages);
+        session.title = normalizeGeneratedChatTitle(deriveChatTitleFromMessages(session.messages), session.title || 'New chat') || 'New chat';
     }
     forgetActiveEmptyChatDraft();
     saveChatSessions();
     renderChatSidebarList();
+    if (normalizedRole === 'assistant') scheduleChatTitleGeneration(session);
 }
 
 function buildHistoryFromChatSession(session) {
