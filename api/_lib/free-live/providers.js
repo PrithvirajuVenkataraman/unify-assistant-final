@@ -198,10 +198,15 @@ export async function searchTourismFoodPlaces(query, options = {}) {
     const results = [
         ...(wiki.status === 'fulfilled' ? wiki.value : []),
         ...(osm.status === 'fulfilled' ? osm.value : [])
-    ].slice(0, clampInt(options.limit, 8, 1, 20));
-    return summary(results, 'wikimedia+openstreetmap', 'tourism_food_places', [
+    ].filter(item => isRelevantPlaceResult(query, item, topic))
+        .slice(0, clampInt(options.limit, 8, 1, 20));
+    const warnings = [
         'Free place data does not include reliable reviews, rankings, or open-now guarantees.'
-    ]);
+    ];
+    if (!results.length) {
+        warnings.push('No source-backed matching place was found. Do not name specific attractions unless the user clarifies the place or spelling.');
+    }
+    return summary(results, 'wikimedia+openstreetmap', 'tourism_food_places', warnings);
 }
 
 function unsupportedFreeLive(query, category, message = 'No durable permanent-free live source is configured for this request.') {
@@ -309,6 +314,22 @@ async function searchOsmPlace(topic, query, options = {}) {
     }));
 }
 
+export function isRelevantPlaceResult(query, result, topicOverride = '') {
+    const topic = normalizePlaceTopic(topicOverride || extractPlaceTopic(query));
+    if (!topic) return false;
+    const title = normalizePlaceTopic(result?.title || '');
+    const description = normalizePlaceTopic(result?.description || '');
+    const hay = `${title} ${description}`.trim();
+    if (!hay) return false;
+    if (title === topic || title.includes(topic) || topic.includes(title)) return true;
+    const topicTokens = topic.split(/\s+/).filter(token => token.length > 2);
+    if (!topicTokens.length) return false;
+    const overlap = topicTokens.filter(token => hay.includes(token)).length;
+    const requiresPlaceType = /\b(museum|museums|temple|park|beach|fort|palace|landmark|attraction|attractions|restaurant|hotel)\b/i.test(String(query || ''));
+    if (requiresPlaceType && overlap < Math.min(2, topicTokens.length)) return false;
+    return overlap >= Math.ceil(topicTokens.length * 0.67);
+}
+
 function normalizeResult(item) {
     const url = String(item?.url || '').trim();
     return {
@@ -326,6 +347,16 @@ function normalizeResult(item) {
         qualitySignals: Array.isArray(item?.qualitySignals) ? item.qualitySignals.map(String) : ['free_public_source'],
         query: String(item?.query || '').trim()
     };
+}
+
+function normalizePlaceTopic(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\b(?:the|a|an|nearby|near|me|museum|museums|place|places|attraction|attractions|restaurant|restaurants|hotel|hotels|visit|tourist|tourism|in|at|of|for|to)\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function inferCategory(query) {
@@ -431,5 +462,6 @@ export const __test = {
     extractLocation,
     extractPlaceTopic,
     extractSportsLeague,
+    isRelevantPlaceResult,
     normalizeResult
 };
